@@ -1,0 +1,17 @@
+# Arduino and generated build output
+build/
+build-cli-upload/
+*.bin
+*.elf
+*.map
+*.o
+*.d
+
+# Local backups
+*.bak
+
+# Local editor and agent metadata
+.vscode/
+.agents/
+.claude/
+skills-lock.json

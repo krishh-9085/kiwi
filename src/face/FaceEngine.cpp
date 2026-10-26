@@ -1,7 +1,7 @@
-#include "FaceEngine.h"
-#include "AudioEngine.h"
-#include "Config.h"
-#include "AnimationEngine.h"
+#include "face/FaceEngine.h"
+#include "hardware/AudioEngine.h"
+#include "config/AppConfig.h"
+#include "animation/AnimationEngine.h"
 #include <Wire.h>
 #include <WiFi.h>
 #include <Adafruit_GFX.h>

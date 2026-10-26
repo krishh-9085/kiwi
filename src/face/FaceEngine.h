@@ -1,6 +1,6 @@
 #pragma once
 #include <Arduino.h>
-#include "Types.h"
+#include "core/CoreTypes.h"
 
 class Adafruit_SSD1306;
 

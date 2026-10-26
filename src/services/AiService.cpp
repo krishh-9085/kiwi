@@ -1,9 +1,9 @@
-#include "AiService.h"
-#include "AudioEngine.h"
-#include "Config.h"
-#include "FaceEngine.h"
-#include "MemoryService.h"
-#include "WebPortal.h"
+#include "services/AiService.h"
+#include "hardware/AudioEngine.h"
+#include "config/AppConfig.h"
+#include "face/FaceEngine.h"
+#include "services/MemoryService.h"
+#include "web/WebPortal.h"
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
 #include <HTTPClient.h>

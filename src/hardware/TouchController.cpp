@@ -1,9 +1,9 @@
-#include "TouchController.h"
-#include "Config.h"
-#include "AnimationEngine.h"
-#include "AudioEngine.h"
-#include "FaceEngine.h"
-#include "AiService.h"
+#include "hardware/TouchController.h"
+#include "config/AppConfig.h"
+#include "animation/AnimationEngine.h"
+#include "hardware/AudioEngine.h"
+#include "face/FaceEngine.h"
+#include "services/AiService.h"
 #include <WiFi.h>
 #include <esp_sleep.h>
 

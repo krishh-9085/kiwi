@@ -22,18 +22,18 @@
 #include <Arduino.h>
 #include <WiFi.h>
 #include <ESPmDNS.h>
-#include "Config.h"
-#include "Types.h"
-#include "ConfigManager.h"
-#include "AudioEngine.h"
-#include "AnimationEngine.h"
-#include "FaceEngine.h"
-#include "WeatherService.h"
-#include "CircadianEngine.h"
-#include "AiService.h"
-#include "TouchController.h"
-#include "WebPortal.h"
-#include "MemoryService.h"
+#include "config/AppConfig.h"
+#include "core/CoreTypes.h"
+#include "config/ConfigManager.h"
+#include "hardware/AudioEngine.h"
+#include "animation/AnimationEngine.h"
+#include "face/FaceEngine.h"
+#include "services/WeatherService.h"
+#include "behavior/CircadianEngine.h"
+#include "services/AiService.h"
+#include "hardware/TouchController.h"
+#include "web/WebPortal.h"
+#include "services/MemoryService.h"
 
 // ============================================================
 // UI PUMP (Display + Touch + Tone Update)

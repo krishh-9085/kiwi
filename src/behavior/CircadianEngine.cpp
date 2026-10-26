@@ -1,7 +1,7 @@
-#include "CircadianEngine.h"
-#include "Config.h"
-#include "FaceEngine.h"
-#include "AudioEngine.h"
+#include "behavior/CircadianEngine.h"
+#include "config/AppConfig.h"
+#include "face/FaceEngine.h"
+#include "hardware/AudioEngine.h"
 
 void checkCircadianSleep() {
   if (manualSleep) {

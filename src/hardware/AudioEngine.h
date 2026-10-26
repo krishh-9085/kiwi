@@ -1,5 +1,5 @@
 #pragma once
-#include "Types.h"
+#include "core/CoreTypes.h"
 #include <Arduino.h>
 #include <driver/i2s_std.h>
 

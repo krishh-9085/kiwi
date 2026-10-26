@@ -1,6 +1,6 @@
 #pragma once
 #include <Arduino.h>
-#include "Types.h"
+#include "core/CoreTypes.h"
 
 // ---------- Base64 & Text Processing ----------
 void initBase64Lookup();

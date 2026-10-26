@@ -1,7 +1,7 @@
-#include "AnimationEngine.h"
-#include "Config.h"
-#include "DogAnimationFrame.h"
-#include "FaceEngine.h"
+#include "animation/AnimationEngine.h"
+#include "config/AppConfig.h"
+#include "animation/DogAnimationFrames.h"
+#include "face/FaceEngine.h"
 #include <Adafruit_SSD1306.h>
 #include <math.h>
 #include <Preferences.h>

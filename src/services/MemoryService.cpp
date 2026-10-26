@@ -1,6 +1,6 @@
-#include "MemoryService.h"
+#include "services/MemoryService.h"
 #include <Preferences.h>
-#include "Config.h"
+#include "config/AppConfig.h"
 
 static Preferences memPrefs;
 MemoryProfile kiwiMemory = {"", {}, 0, "", 0, false};

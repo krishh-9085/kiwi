@@ -1,5 +1,5 @@
-#include "AudioEngine.h"
-#include "Config.h"
+#include "hardware/AudioEngine.h"
+#include "config/AppConfig.h"
 
 void pumpUI();
 

@@ -1,5 +1,5 @@
-#include "ConfigManager.h"
-#include "Config.h"
+#include "config/ConfigManager.h"
+#include "config/AppConfig.h"
 #include <Preferences.h>
 
 static Preferences prefs;

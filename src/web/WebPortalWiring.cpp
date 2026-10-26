@@ -1,18 +1,18 @@
-#include "WebPortal.h"
-#include "Config.h"
-#include "ConfigManager.h"
-#include "AudioEngine.h"
-#include "FaceEngine.h"
-#include "AiService.h"
-#include "MemoryService.h"
-#include "AnimationEngine.h"
+#include "web/WebPortal.h"
+#include "config/AppConfig.h"
+#include "config/ConfigManager.h"
+#include "hardware/AudioEngine.h"
+#include "face/FaceEngine.h"
+#include "services/AiService.h"
+#include "services/MemoryService.h"
+#include "animation/AnimationEngine.h"
 #include <WiFi.h>
 #include <WebServer.h>
 #include <DNSServer.h>
 #include <Update.h>
 #include <time.h>
 #include <Preferences.h>
-#include "WeatherService.h"
+#include "services/WeatherService.h"
 
 static const char WIRING_PAGE_HTML[] PROGMEM = R"RAWWIRING(<!doctype html>
 <html lang="en"><head>

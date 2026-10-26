@@ -1,6 +1,6 @@
 #pragma once
 #include <Arduino.h>
-#include "Types.h"
+#include "core/CoreTypes.h"
 
 extern TouchSensor touchL;
 extern TouchSensor touchR;

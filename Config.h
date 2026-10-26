@@ -37,7 +37,7 @@ extern const char *NTP_SERVER_2;
 #define MIC_GAIN 2.2f
 #define UPLOAD_BATCH 1024
 #define LLM_MAX_TOKENS 80
-#define TTS_MAX_CHARS 110
+#define TTS_MAX_CHARS 360
 #define NOISE_GATE_THRESHOLD 60
 
 // ============================================================
@@ -71,6 +71,7 @@ extern const char *DEFAULT_OPENAI_STT_MODEL;
 extern const char *DEFAULT_PROMPT;
 extern const char *DEFAULT_LLM_URL;
 extern const char *DEFAULT_LLM_MODEL;
+extern const char *DEFAULT_OPENAI_LLM_URL;
 extern const char *DEFAULT_GROQ_URL;
 extern const char *DEFAULT_GROQ_MODEL;
 

@@ -67,6 +67,13 @@ String utf8Truncate(const String &s, int maxChars) {
   if (i >= s.length())
     return s;
   size_t cut = (lastSpace != (size_t)-1 && lastSpace > 20) ? lastSpace : i;
+  for (size_t p = cut; p > 20; p--) {
+    char c = s[p - 1];
+    if (c == '.' || c == '!' || c == '?' || c == '\n') {
+      cut = p;
+      break;
+    }
+  }
   String r = s.substring(0, cut);
   r.trim();
   return r;
@@ -635,6 +642,75 @@ String askGroq(const String &question) {
   return cleanForSpeech(jsonTextField(resp, "content"));
 }
 
+String askOpenAI(const String &question) {
+  if (!llmKey.length()) {
+    Serial.println("[OPENAI] No API key.");
+    return "";
+  }
+  if (WiFi.status() != WL_CONNECTED) {
+    Serial.println("[OPENAI] No Wi-Fi.");
+    return "";
+  }
+
+  String sys = systemPrompt;
+  sys +=
+      " LANGUAGE RULES: Understand Hindi, Hinglish, and English. Reply in the "
+      "same language as the user. Be lively, specific, concise, and avoid "
+      "generic assistant filler. Normally use 2 to 4 natural sentences.";
+  String memPrompt = getFormattedMemoryPrompt();
+  if (memPrompt.length())
+    sys += " " + memPrompt;
+  sys +=
+      " MEMORY INSTRUCTION: If the user shares a personal fact, silently "
+      "append [MEM: concise fact]. For an upcoming event, also append "
+      "[FOLLOWUP: short question].";
+
+  String body = "{\"model\":\"" + jsonEscape(llmModel) +
+                "\",\"messages\":[{\"role\":\"system\",\"content\":\"" +
+                jsonEscape(sys) + "\"}";
+  for (int i = 0; i < chatHistoryCount; i++) {
+    body += ",{\"role\":\"user\",\"content\":\"" +
+            jsonEscape(chatHistory[i].question) + "\"}";
+    body += ",{\"role\":\"assistant\",\"content\":\"" +
+            jsonEscape(chatHistory[i].answer) + "\"}";
+  }
+  body += ",{\"role\":\"user\",\"content\":\"" + jsonEscape(question) +
+          "\"}],\"max_tokens\":" + String(LLM_MAX_TOKENS) +
+          ",\"temperature\":0.8}";
+
+  WiFiClientSecure client;
+  client.setInsecure();
+  client.setTimeout(10);
+  HTTPClient http;
+  http.setReuse(false);
+  http.setTimeout(12000);
+  http.setConnectTimeout(6000);
+  String endpoint = llmEndpoint;
+  if (endpoint.length() == 0 ||
+      endpoint.indexOf("generativelanguage.googleapis.com") >= 0)
+    endpoint = DEFAULT_OPENAI_LLM_URL;
+  if (!http.begin(client, endpoint)) {
+    Serial.println("[OPENAI] Bad URL.");
+    return "";
+  }
+  http.addHeader("Content-Type", "application/json");
+  http.addHeader("Authorization", "Bearer " + llmKey);
+  uint32_t t0 = millis();
+  int code = http.POST(body);
+  String resp = http.getString();
+  http.end();
+  if (resp.length() > 4096)
+    resp = resp.substring(0, 4096);
+  Serial.printf("[OPENAI] HTTP %d in %.1fs, respLen=%u, heap=%u\n", code,
+                (millis() - t0) / 1000.0f, (unsigned)resp.length(),
+                (unsigned)ESP.getFreeHeap());
+  if (code != 200) {
+    Serial.println(resp.substring(0, 200));
+    return "";
+  }
+  return cleanForSpeech(jsonTextField(resp, "content"));
+}
+
 String askLLM(const String &question) {
   checkChatHistoryTimeout();
   String ans;
@@ -642,6 +718,10 @@ String askLLM(const String &question) {
     Serial.printf("[LLM] Provider = Groq | Memory turns = %d\n",
                   chatHistoryCount);
     ans = askGroq(question);
+  } else if (llmProvider == "openai") {
+    Serial.printf("[LLM] Provider = OpenAI | Memory turns = %d\n",
+                  chatHistoryCount);
+    ans = askOpenAI(question);
   } else {
     Serial.printf("[LLM] Provider = Gemini | Memory turns = %d\n",
                   chatHistoryCount);
@@ -784,8 +864,12 @@ String recordAndTranscribe(uint32_t recordSeconds) {
     part2 += "--" + boundary +
              "\r\n"
              "Content-Disposition: form-data; name=\"prompt\"\r\n\r\n"
-             "Kiwi, hello, namaste, kaisa hai, kaise ho, kya hal hai, suno, bolo, "
-             "mausam, time, jokes, desk robot conversation.\r\n";
+             "Transcribe exactly what is spoken. Do not translate. If the "
+             "speaker uses Hindi, write Hindi in Devanagari script. If the "
+             "speaker uses English, write English in Latin script. If the "
+             "speaker uses Hinglish, preserve the spoken Roman Hinglish. "
+             "Kiwi, hello, namaste, kaisa hai, kaise ho, kya hal hai, suno, "
+             "bolo, mausam, time, jokes, desk robot conversation.\r\n";
   }
 
   String ending = "--" + boundary + "--\r\n";
@@ -830,7 +914,9 @@ String recordAndTranscribe(uint32_t recordSeconds) {
   uint32_t silenceSamples = 0;
   const uint32_t MIN_SPEECH_SAMPLES = SAMPLE_RATE / 2;
   const uint32_t TRAILING_SILENCE_SAMPLES = SAMPLE_RATE * 45 / 100;
-  const float SPEECH_ACTIVITY_GATE = NOISE_GATE_THRESHOLD * 1.5f;
+  float noiseSum = 0;
+  uint32_t noiseSamples = 0;
+  float speechActivityGate = NOISE_GATE_THRESHOLD * 1.5f;
 
   while (sent < recordSamples && !captureStopped) {
     if (cancelRequest)
@@ -861,6 +947,17 @@ String recordAndTranscribe(uint32_t recordSeconds) {
       int16_t pcm = (int16_t)y;
       uint32_t a = abs((int)pcm);
       sumAbs += a;
+      if (sent < SAMPLE_RATE / 5) {
+        noiseSum += a;
+        noiseSamples++;
+        if (noiseSamples == SAMPLE_RATE / 5) {
+          float noiseAverage = noiseSum / noiseSamples;
+          speechActivityGate =
+              max((float)(NOISE_GATE_THRESHOLD * 1.5f), noiseAverage * 1.15f);
+          Serial.printf("[STT] Noise floor %.0f, speech gate %.0f\n",
+                        noiseAverage, speechActivityGate);
+        }
+      }
       if (a > vuMax)
         vuMax = a;
       blkSum += a;
@@ -868,7 +965,7 @@ String recordAndTranscribe(uint32_t recordSeconds) {
         float avg = blkSum / blkN;
         if (avg > maxBlkAvg)
           maxBlkAvg = avg;
-        if (avg >= SPEECH_ACTIVITY_GATE) {
+        if (avg >= speechActivityGate) {
           speechStarted = true;
           silenceSamples = 0;
         } else if (speechStarted && sent >= MIN_SPEECH_SAMPLES) {
@@ -918,10 +1015,10 @@ String recordAndTranscribe(uint32_t recordSeconds) {
     }
   }
 
-  Serial.printf("[STT] Done. captured %.2f s, avg %.0f, loudest 100ms block %.0f (gate %d)\n",
+  Serial.printf("[STT] Done. captured %.2f s, avg %.0f, loudest 100ms block %.0f (gate %.0f)\n",
                 (float)capturedSamples / SAMPLE_RATE,
-                sumAbs / recordSamples, maxBlkAvg, NOISE_GATE_THRESHOLD);
-  if (maxBlkAvg < NOISE_GATE_THRESHOLD)
+                sumAbs / recordSamples, maxBlkAvg, speechActivityGate);
+  if (maxBlkAvg < speechActivityGate)
     return bail("quiet");
 
   client.print(part2);

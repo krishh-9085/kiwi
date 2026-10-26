@@ -29,5 +29,6 @@ void handleFacesPage();
 void handleWiring();
 void handleDoAction();
 void handleStatus();
+void handleConfigApi();
 void handleOtaPage();
 void processPendingSound();

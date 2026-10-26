@@ -396,6 +396,67 @@ static void drawEye(int cx, int cy, int w, int h, int r, int lidIn, int lidOut,
   int top = cy - h / 2;
   int bot = top + h;
 
+  // 0. DESK BUDDY / KIWI EYES: flat upper edge, rounded bottom base,
+  // U-shaped deep pupil cutout with floating top-right catchlight glint dot.
+  if (currentEyeSkin == SKIN_KIWI) {
+    if (h <= 4) {
+      display.fillRoundRect(x0, cy - 1, w, max(2, h), 1, SSD1306_WHITE);
+      return;
+    }
+
+    int rBottom = (r > 2) ? r : min(7, h / 3);
+    if (rBottom * 2 > h) rBottom = h / 2;
+
+    // Outer sclera: flat top edge, rounded lower edge
+    display.fillRect(x0, top, w, h - rBottom, SSD1306_WHITE);
+    display.fillRoundRect(x0, bot - rBottom * 2, w, rBottom * 2, rBottom, SSD1306_WHITE);
+
+    // Dynamic pupil cutout (proportional to eye size and reacting to gaze)
+    int pw = (int)(w * 0.44f);
+    if (pw < 6) pw = 6;
+    int ph = (int)(h * 0.58f);
+    if (ph < 4) ph = 4;
+    int pr = min(4, max(2, pw / 4));
+
+    int pupilShift = (int)(gazeX * 0.45f);
+    int px = cx + pupilShift - pw / 2;
+    if (px < x0 + 3) px = x0 + 3;
+    if (px + pw > x1 - 3) px = x1 - 3 - pw;
+
+    int py = top;
+    if (gazeY > 1.5f && h > 16) {
+      py += min(4, (int)(gazeY * 0.4f));
+    }
+
+    display.fillRect(px, py, pw, ph - pr, SSD1306_BLACK);
+    display.fillRoundRect(px, py + ph - pr * 2, pw, pr * 2, pr, SSD1306_BLACK);
+
+    // Specular catchlight / glint dot in upper-right corner of pupil
+    int dotSize = (pw >= 12 && ph >= 12) ? 3 : 2;
+    int dotX = px + pw - dotSize - 2;
+    int dotY = py + 2;
+    if (h > 12) {
+      display.fillRect(dotX, dotY, dotSize, dotSize, SSD1306_WHITE);
+      if (glint && dotSize >= 3) {
+        display.drawPixel(dotX - 1, dotY + dotSize, SSD1306_WHITE);
+      }
+    }
+
+    // Dynamic eyelid masking
+    if (lidIn > 0 || lidOut > 0) {
+      int lL = isLeft ? lidOut : lidIn;
+      int lR = isLeft ? lidIn : lidOut;
+      display.fillTriangle(x0 - 1, top - 1, x1 + 1, top - 1, x1 + 1, top + lR, SSD1306_BLACK);
+      display.fillTriangle(x0 - 1, top - 1, x1 + 1, top + lR, x0 - 1, top + lL, SSD1306_BLACK);
+    }
+    // Dynamic cheek masking
+    if (cheek > 1) {
+      int R = w * 7 / 10;
+      display.fillCircle(cx, bot - cheek + R, R, SSD1306_BLACK);
+    }
+    return;
+  }
+
   // 1. RETRO 8-BIT ARCADE / PIXEL ART SKIN
   if (currentEyeSkin == SKIN_RETRO8BIT) {
     int step = (w >= 22) ? 4 : 2;

@@ -319,6 +319,8 @@ bool handleSkinCommand(const String &qIn) {
     currentEyeSkin = SKIN_NINJA; name = "Shinobi Ninja";
   } else if (hasAny(q, {"round", "circle", "gol", "rounded"})) {
     currentEyeSkin = SKIN_ROUND; name = "Round Vector";
+  } else if (hasAny(q, {"kiwi", "desk buddy", "buddy", "relaxed eyes", "bored eyes", "block eyes"})) {
+    currentEyeSkin = SKIN_KIWI; name = "Desk Buddy (Cute Block)";
   } else if (hasAny(q, {"default", "normal", "clean", "reset skin"})) {
     currentEyeSkin = SKIN_DEFAULT; name = "Default Eyes";
   } else {

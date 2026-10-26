@@ -1,15 +1,17 @@
 #include "hardware/TouchController.h"
 #include "config/AppConfig.h"
+#include "config/ConfigManager.h"
 #include "animation/AnimationEngine.h"
 #include "hardware/AudioEngine.h"
 #include "face/FaceEngine.h"
 #include "services/AiService.h"
+#include "services/WeatherService.h"
 #include <WiFi.h>
 #include <esp_sleep.h>
 
-TouchSensor touchL = {PIN_TOUCH_LEFT, false, false, 0, 0, false, false, false};
-TouchSensor touchR = {PIN_TOUCH_RIGHT, false, false, 0, 0, false, false, false};
-TouchSensor touchT = {PIN_TOUCH_TOP, false, false, 0, 0, false, false, false};
+TouchSensor touchL = {PIN_TOUCH_LEFT, false, false, 0, 0, false, false, false, 0, false};
+TouchSensor touchR = {PIN_TOUCH_RIGHT, false, false, 0, 0, false, false, false, 0, false};
+TouchSensor touchT = {PIN_TOUCH_TOP, false, false, 0, 0, false, false, false, 0, false};
 
 void triggerPetReaction();
 bool syncTimeFromNTP();
@@ -60,18 +62,185 @@ void resyncTouch() {
   touchL.holdHandled = false;
   touchL.sleepHandled = false;
   touchL.startedAt = 0;
+  touchL.lastReleaseAt = 0;
+  touchL.pendingSingleTap = false;
 
   touchR.state = false;
   touchR.lastRaw = digitalRead(PIN_TOUCH_RIGHT);
   touchR.holdHandled = false;
   touchR.sleepHandled = false;
   touchR.startedAt = 0;
+  touchR.lastReleaseAt = 0;
+  touchR.pendingSingleTap = false;
 
   touchT.state = false;
   touchT.lastRaw = digitalRead(PIN_TOUCH_TOP);
   touchT.holdHandled = false;
   touchT.sleepHandled = false;
   touchT.startedAt = 0;
+  touchT.lastReleaseAt = 0;
+  touchT.pendingSingleTap = false;
+}
+
+// ---------- Touch Gesture Action Dispatcher ----------
+constexpr uint32_t DOUBLE_TAP_WINDOW_MS = 320;
+
+TouchAction getSingleTapAction(uint8_t pin) {
+  if (pin == PIN_TOUCH_TOP) return touchActTopTap;
+  if (pin == PIN_TOUCH_LEFT) return touchActLeftTap;
+  if (pin == PIN_TOUCH_RIGHT) return touchActRightTap;
+  return TOUCH_ACT_NONE;
+}
+
+TouchAction getDoubleTapAction(uint8_t pin) {
+  if (pin == PIN_TOUCH_TOP) return touchActTopDbl;
+  if (pin == PIN_TOUCH_LEFT) return touchActLeftDbl;
+  if (pin == PIN_TOUCH_RIGHT) return touchActRightDbl;
+  return TOUCH_ACT_NONE;
+}
+
+void executeTouchAction(TouchAction act, uint8_t pin) {
+  uint32_t now = millis();
+  lastUserInteractionAt = now;
+
+  if (inCircadianSleep || manualSleep) {
+    manualSleep = false;
+    inCircadianSleep = false;
+    circadianTempWakeUntil = now + CIRCADIAN_TEMP_WAKE_MS;
+    setOledDim(false);
+    setEmotion(EMOTION_HAPPY);
+    soundPetSparkle();
+    Serial.println("[TOUCH] Wake-up from Sleep Mode");
+    return;
+  }
+
+  if (animationIsActive()) {
+    stopAnimation();
+    setEmotion(EMOTION_HAPPY);
+    soundPetSparkle();
+    return;
+  }
+  if (bannerActive) {
+    bannerActive = false;
+    setEmotion(EMOTION_HAPPY);
+    soundPetSparkle();
+    return;
+  }
+
+  // Cheek tickle rapid tap tracking
+  if (pin == PIN_TOUCH_LEFT || pin == PIN_TOUCH_RIGHT) {
+    if (now - lastCheekTouchAt < TICKLE_CHEEK_WINDOW_MS) {
+      cheekTapCount++;
+    } else {
+      cheekTapCount = 1;
+    }
+    lastCheekTouchAt = now;
+    if (cheekTapCount >= 3 && now - lastTickleTriggeredAt > TICKLE_COOLDOWN_MS &&
+        !busyProcessing && !inCircadianSleep && !manualSleep) {
+      triggerTickleMode();
+      return;
+    }
+  }
+
+  switch (act) {
+    case TOUCH_ACT_LISTEN:
+      if (busyProcessing) {
+        Serial.println("[TOUCH] Action LISTEN -> Cancel current request");
+        cancelRequest = true;
+        soundPetSparkle();
+      } else {
+        Serial.println("[TOUCH] Action LISTEN -> Enter Listening Mode!");
+        setEmotion(EMOTION_LISTENING);
+        soundListening();
+        startRecording = true;
+      }
+      break;
+
+    case TOUCH_ACT_CLOCK:
+      showWeatherScreen = false;
+      showClockScreen = !showClockScreen;
+      if (showClockScreen) {
+        soundClock();
+        if (!timeSynced && WiFi.status() == WL_CONNECTED)
+          syncTimeFromNTP();
+      } else {
+        setEmotion(EMOTION_HAPPY);
+      }
+      break;
+
+    case TOUCH_ACT_WEATHER:
+      showClockScreen = false;
+      showWeatherScreen = !showWeatherScreen;
+      if (showWeatherScreen) {
+        soundPetSparkle();
+        if (millis() - lastWeatherFetchAt > 600000UL)
+          fetchWeather();
+      } else {
+        setEmotion(EMOTION_HAPPY);
+      }
+      break;
+
+    case TOUCH_ACT_CYCLE_SKIN: {
+      int nextSkin = ((int)currentEyeSkin + 1) % 18;
+      currentEyeSkin = (EyeSkin)nextSkin;
+      soundCoin();
+      saveConfig();
+      Serial.printf("[TOUCH] Action CYCLE_SKIN -> Skin %d\n", nextSkin);
+      break;
+    }
+
+    case TOUCH_ACT_PET:
+      triggerPetReaction();
+      break;
+
+    case TOUCH_ACT_TICKLE:
+      triggerTickleMode();
+      break;
+
+    case TOUCH_ACT_VOL_UP:
+      speakerVolume = min(100, speakerVolume + 10);
+      soundVolUp();
+      saveConfig();
+      Serial.printf("[TOUCH] Action VOL_UP -> %d%%\n", speakerVolume);
+      break;
+
+    case TOUCH_ACT_VOL_DOWN:
+      speakerVolume = max(0, speakerVolume - 10);
+      soundVolDown();
+      saveConfig();
+      Serial.printf("[TOUCH] Action VOL_DOWN -> %d%%\n", speakerVolume);
+      break;
+
+    case TOUCH_ACT_DISMISS:
+      if (showClockScreen) {
+        showClockScreen = false;
+      } else if (showWeatherScreen) {
+        showWeatherScreen = false;
+      } else if (currentEmotion != EMOTION_IDLE && !busyProcessing) {
+        setEmotion(EMOTION_IDLE);
+        emotionAutoReturnAt = 0;
+        returnIdleAt = 0;
+        soundPetSparkle();
+      } else if (!busyProcessing) {
+        gazeTgtX = (pin == PIN_TOUCH_LEFT) ? -8.0f : 8.0f;
+        gazeTgtY = 0;
+        gazeLockUntil = now + 2500;
+        faceTgt.gazeLock = false;
+      }
+      break;
+
+    case TOUCH_ACT_NONE:
+    default:
+      break;
+  }
+}
+
+void checkPendingSingleTap(TouchSensor &ts, uint32_t now) {
+  if (ts.pendingSingleTap && (now - ts.lastReleaseAt > DOUBLE_TAP_WINDOW_MS)) {
+    ts.pendingSingleTap = false;
+    Serial.printf("[TOUCH] Pin %d SINGLE TAP confirmed\n", ts.pin);
+    executeTouchAction(getSingleTapAction(ts.pin), ts.pin);
+  }
 }
 
 static void updateOneTouch(TouchSensor &ts, uint32_t now) {
@@ -82,7 +251,8 @@ static void updateOneTouch(TouchSensor &ts, uint32_t now) {
     ts.lastRaw = raw;
     ts.changedAt = now;
   }
-  if (now - ts.changedAt >= TOUCH_DEBOUNCE && raw != ts.state) {
+  uint32_t deb = (touchDebounceMs > 0) ? (uint32_t)touchDebounceMs : TOUCH_DEBOUNCE;
+  if (now - ts.changedAt >= deb && raw != ts.state) {
     ts.state = raw;
     if (ts.state) {
       ts.startedAt = now;
@@ -90,86 +260,45 @@ static void updateOneTouch(TouchSensor &ts, uint32_t now) {
       ts.sleepHandled = false;
       returnIdleAt = 0;
       Serial.printf("[TOUCH] Pin %d PRESSED\n", ts.pin);
+
+      // Instant Audio & Visual Touch Response
+      static uint32_t lastTouchBlipAt = 0;
+      if (!inCircadianSleep && !manualSleep) {
+        if (touchFeedbackSound && !busyProcessing && (now - lastTouchBlipAt >= 250)) {
+          lastTouchBlipAt = now;
+          soundTouchBlip();
+        }
+        if (ts.pin == PIN_TOUCH_LEFT) {
+          activeWinkLeft = true;
+          activeWinkEnd = now + 180;
+        } else if (ts.pin == PIN_TOUCH_RIGHT) {
+          activeWinkLeft = false;
+          activeWinkEnd = now + 180;
+        } else if (ts.pin == PIN_TOUCH_TOP) {
+          triggerTouchBlink(now);
+        }
+      }
     } else {
       uint32_t held = now - ts.startedAt;
       Serial.printf("[TOUCH] Pin %d RELEASED after %lu ms\n", ts.pin, (unsigned long)held);
       uint32_t tapMax = (ts.pin == PIN_TOUCH_TOP) ? TOUCH_CLOCK_MS : TOUCH_TAP_MAX_MS;
       if (!ts.holdHandled && !ts.sleepHandled && held < tapMax) {
-        lastUserInteractionAt = now;
-        if (animationIsActive()) {
-          stopAnimation();
-          setEmotion(EMOTION_HAPPY);
-          soundPetSparkle();
+        if (inCircadianSleep || manualSleep) {
+          executeTouchAction(TOUCH_ACT_DISMISS, ts.pin);
+          ts.pendingSingleTap = false;
           return;
         }
-        if (bannerActive) {
-          bannerActive = false;
-          setEmotion(EMOTION_HAPPY);
-          soundPetSparkle();
-          return;
-        }
-        if (ts.pin == PIN_TOUCH_LEFT || ts.pin == PIN_TOUCH_RIGHT) {
-          // Cheek tap sequence detection for Tickle Mode
-          if (now - lastCheekTouchAt < TICKLE_CHEEK_WINDOW_MS) {
-            cheekTapCount++;
-          } else {
-            cheekTapCount = 1;
-          }
-          lastCheekTouchAt = now;
-          if (cheekTapCount >= 3 && now - lastTickleTriggeredAt > TICKLE_COOLDOWN_MS &&
-              !busyProcessing && !inCircadianSleep && !manualSleep) {
-            triggerTickleMode();
-            return;
-          }
 
-          if (showClockScreen) {
-            showClockScreen = false;
-          } else if (showWeatherScreen) {
-            showWeatherScreen = false;
-          } else if (inCircadianSleep || manualSleep) {
-            manualSleep = false;
-            inCircadianSleep = false;
-            circadianTempWakeUntil = millis() + CIRCADIAN_TEMP_WAKE_MS;
-            setOledDim(false);
-            setEmotion(EMOTION_HAPPY);
-            soundPetSparkle();
-            Serial.println("[TOUCH] Left/Right tap wake-up from Sleep Mode");
-          } else if (currentEmotion != EMOTION_IDLE && !busyProcessing) {
-            // Dismiss active emotion back to IDLE immediately on left/right tap
-            setEmotion(EMOTION_IDLE);
-            emotionAutoReturnAt = 0;
-            returnIdleAt = 0;
-            soundPetSparkle();
-            Serial.println("[TOUCH] Left/Right tap dismissed active emotion -> IDLE");
-          } else if (!busyProcessing) {
-            gazeTgtX = (ts.pin == PIN_TOUCH_LEFT) ? -8.0f : 8.0f;
-            gazeTgtY = 0;
-            gazeLockUntil = millis() + 2500;
-            faceTgt.gazeLock = false;
-          }
-        } else if (ts.pin == PIN_TOUCH_TOP) {
-          if (showClockScreen)
-            showClockScreen = false;
-          else if (showWeatherScreen)
-            showWeatherScreen = false;
-          else if (inCircadianSleep || manualSleep) {
-            manualSleep = false;
-            inCircadianSleep = false;
-            circadianTempWakeUntil = millis() + CIRCADIAN_TEMP_WAKE_MS;
-            setOledDim(false);
-            setEmotion(EMOTION_HAPPY);
-            soundPetSparkle();
-            Serial.println("[TOUCH] Tap wake-up from Sleep Mode");
-          } else if (busyProcessing) {
-            Serial.println("[TOUCH] Top tap -> Cancel active processing");
-            cancelRequest = true;
-            soundPetSparkle();
-          } else {
-            Serial.println("[TOUCH] Top tap -> Enter Listening Mode!");
-            setEmotion(EMOTION_LISTENING);
-            soundListening();
-            startRecording = true;
-          }
+        TouchAction dblAct = getDoubleTapAction(ts.pin);
+        if (ts.pendingSingleTap && (now - ts.lastReleaseAt <= DOUBLE_TAP_WINDOW_MS) && dblAct != TOUCH_ACT_NONE) {
+          ts.pendingSingleTap = false;
+          Serial.printf("[TOUCH] Pin %d DOUBLE TAP triggered!\n", ts.pin);
+          executeTouchAction(dblAct, ts.pin);
+        } else if (dblAct == TOUCH_ACT_NONE) {
+          executeTouchAction(getSingleTapAction(ts.pin), ts.pin);
+        } else {
+          ts.pendingSingleTap = true;
+          ts.lastReleaseAt = now;
         }
       }
     }
@@ -191,12 +320,16 @@ static void updateOneTouch(TouchSensor &ts, uint32_t now) {
       }
     }
 
-    if ((ts.pin == PIN_TOUCH_LEFT || ts.pin == PIN_TOUCH_RIGHT) &&
-        held >= TOUCH_HOLD_MS && !ts.holdHandled && !busyProcessing) {
+    if (ts.pin == PIN_TOUCH_LEFT && held >= TOUCH_HOLD_MS && !ts.holdHandled && !busyProcessing) {
       ts.holdHandled = true;
-      triggerPetReaction();
+      executeTouchAction(touchActLeftHold, ts.pin);
     }
-    // Hold 3s -> Clock
+    if (ts.pin == PIN_TOUCH_RIGHT && held >= TOUCH_HOLD_MS && !ts.holdHandled && !busyProcessing) {
+      ts.holdHandled = true;
+      executeTouchAction(touchActRightHold, ts.pin);
+    }
+
+    // Hold 3s on Top -> Clock
     if (ts.pin == PIN_TOUCH_TOP && held >= TOUCH_CLOCK_MS && !ts.holdHandled && !busyProcessing) {
       ts.holdHandled = true;
       if (!showClockScreen && !inCircadianSleep && !manualSleep) {
@@ -206,7 +339,7 @@ static void updateOneTouch(TouchSensor &ts, uint32_t now) {
           syncTimeFromNTP();
       }
     }
-    // Hold 7-10s -> Sleep Mode Toggle!
+    // Hold 7-10s on Top -> Sleep Mode Toggle!
     if (ts.pin == PIN_TOUCH_TOP && held >= SLEEP_HOLD_MS && !ts.sleepHandled && !busyProcessing) {
       ts.sleepHandled = true;
       showClockScreen = false;
@@ -235,4 +368,8 @@ void updateTouch() {
   updateOneTouch(touchL, now);
   updateOneTouch(touchR, now);
   updateOneTouch(touchT, now);
+
+  checkPendingSingleTap(touchL, now);
+  checkPendingSingleTap(touchR, now);
+  checkPendingSingleTap(touchT, now);
 }

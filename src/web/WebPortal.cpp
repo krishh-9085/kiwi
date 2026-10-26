@@ -160,10 +160,10 @@ bool suspendLocalNet() {
     dnsServer.stop();
     WiFi.softAPdisconnect(true);
     apMode = false;
-    delay(300);
+    delay(50);
   }
   server.stop();
-  delay(100);
+  delay(20);
   return apWasUp;
 }
 
@@ -171,7 +171,7 @@ void restoreWebAndAP(bool apWasUp) {
   if (apWasUp)
     startAPParallel();
   startWeb();
-  Serial.printf("[NET] Free heap after restore: %u\n", (unsigned)ESP.getFreeHeap());
+  Serial.printf("[NET] Free heap: %u\n", (unsigned)ESP.getFreeHeap());
 }
 
 // ============================================================
@@ -213,6 +213,7 @@ void startWeb() {
         });
     server.on("/status", HTTP_GET, handleStatus);
     server.on("/config", HTTP_GET, handleConfigApi);
+    server.on("/scan", HTTP_GET, handleScanNetworks);
     server.on("/update", HTTP_GET, handleOtaPage);
     server.on(
         "/update", HTTP_POST,
@@ -245,6 +246,28 @@ void startWeb() {
             }
           }
         });
+
+    // Captive Portal probes redirect to root (192.168.4.1) for Android, Apple, Windows
+    auto handleCaptiveRedirect = []() {
+      server.sendHeader("Location", String("http://") + apIP.toString() + "/", true);
+      server.send(302, "text/plain", "");
+    };
+    server.on("/generate_204", HTTP_GET, handleCaptiveRedirect);
+    server.on("/gen_204", HTTP_GET, handleCaptiveRedirect);
+    server.on("/ncsi.txt", HTTP_GET, handleCaptiveRedirect);
+    server.on("/hotspot-detect.html", HTTP_GET, handleCaptiveRedirect);
+    server.on("/canonical.html", HTTP_GET, handleCaptiveRedirect);
+    server.on("/connecttest.txt", HTTP_GET, handleCaptiveRedirect);
+
+    server.onNotFound([]() {
+      if (apMode) {
+        server.sendHeader("Location", String("http://") + apIP.toString() + "/", true);
+        server.send(302, "text/plain", "");
+        return;
+      }
+      server.send(404, "text/plain", "Not Found");
+    });
+
     webRoutesSet = true;
   }
   server.begin();

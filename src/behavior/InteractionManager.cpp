@@ -6,6 +6,7 @@
 #include "hardware/TouchController.h"
 #include "services/AiService.h"
 #include "behavior/CommandHandler.h"
+#include "behavior/ActionExecutor.h"
 
 // ============================================================
 // UI PUMP (Display + Touch + Tone Update)
@@ -107,6 +108,13 @@ void handleQuestion(const String &q) {
   if (cancelRequest)
     return;
   if (!answer.length()) {
+    if (lastActionsExecuted > 0) {
+      robotStateDesc = "Ready";
+      addTerminalLog("[ROBOT] Action completed.");
+      setEmotion(EMOTION_HAPPY);
+      returnIdleAt = millis() + 1500;
+      return;
+    }
     robotStateDesc = "LLM Empty / Error";
     addTerminalLog("[LLM] Empty response or error received");
     Serial.println("[ROBOT] LLM empty");

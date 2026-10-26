@@ -30,5 +30,6 @@ void handleWiring();
 void handleDoAction();
 void handleStatus();
 void handleConfigApi();
+void handleScanNetworks();
 void handleOtaPage();
 void processPendingSound();

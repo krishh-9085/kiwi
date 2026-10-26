@@ -46,10 +46,12 @@ void updateTonePlayer() {
   float t = (float)(now - toneStartTime) / 1000.0f;
   float duration = toneQueue[toneIndex].ms / 1000.0f;
   float env = 1.0f;
-  if (t < 0.03f)
-    env = t / 0.03f;
-  else if (t > duration - 0.05f)
-    env = (duration - t) / 0.05f;
+  float attack = min(0.015f, duration * 0.25f);
+  float release = min(0.025f, duration * 0.35f);
+  if (t < attack && attack > 0.001f)
+    env = t / attack;
+  else if (t > duration - release && release > 0.001f)
+    env = (duration - t) / release;
   if (env < 0.0f)
     env = 0.0f;
   if (env > 1.0f)
@@ -133,6 +135,18 @@ void soundListening() {
   Tone t[] = {{1046, 60}, {1568, 90}};
   playToneQueue(t, 2);
 }
+void soundTouchBlip() {
+  Tone t[] = {{1760, 35}};
+  playToneQueue(t, 1);
+}
+void soundVolUp() {
+  Tone t[] = {{1200, 30}, {1800, 40}};
+  playToneQueue(t, 2);
+}
+void soundVolDown() {
+  Tone t[] = {{1800, 30}, {1200, 40}};
+  playToneQueue(t, 2);
+}
 
 // ============================================================
 // INTERACTIVE SOUNDBOARD PRESETS
@@ -169,7 +183,7 @@ void soundSadViolin() {
 bool startAudio() {
   i2s_chan_config_t chan =
       I2S_CHANNEL_DEFAULT_CONFIG(I2S_NUM_0, I2S_ROLE_MASTER);
-  chan.dma_desc_num = 10;
+  chan.dma_desc_num = 6;
   chan.dma_frame_num = 256;
   chan.auto_clear = true;
   if (i2s_new_channel(&chan, &txHandle, &rxHandle) != ESP_OK)
@@ -294,11 +308,13 @@ void spkFlush() {
 }
 
 void spkPushSample(int16_t s) {
-  float gain = ((float)speakerVolume / 100.0f) * SPEAKER_MAX_GAIN;
-  float x = ((float)s / 32768.0f) * gain;
-  x = x / (1.0f + fabsf(x)); // Soft clip prevents distortion
-  int32_t boosted = (int32_t)(x * 32700.0f);
-  int32_t v = boosted * 65536;
+  // Fast 32-bit integer volume scaling (Zero float math on RISC-V RV32IMC)
+  // speakerVolume is 0..100. Scaled with 1.35x headroom (345/256)
+  int32_t mult = (speakerVolume * 345) / 100;
+  int32_t val = ((int32_t)s * mult) >> 8;
+  if (val > 32760) val = 32760;
+  else if (val < -32760) val = -32760;
+  int32_t v = val << 16;
   txBuf[txPos * 2] = v;
   txBuf[txPos * 2 + 1] = v;
   if (++txPos >= TX_FRAMES)

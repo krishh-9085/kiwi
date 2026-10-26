@@ -25,6 +25,11 @@ static uint32_t activeNextWink = 0;
 uint32_t activeWinkEnd = 0;
 bool activeWinkLeft = false;
 
+void triggerTouchBlink(uint32_t now) {
+  eyeBlinking = true;
+  eyeBlinkT0 = now;
+}
+
 void eyesUpdateAnim(uint32_t now) {
   if (!eyeBlinking && now >= eyeNextBlink) {
     eyeBlinking = true;

@@ -19,3 +19,4 @@ void applyIdleEye(FaceState &tgt, int eyeIdx, uint32_t now);
 void applyIdleMouth(FaceState &tgt, uint32_t now);
 void applyClassicIdle(FaceState &tgt, uint32_t now);
 void updateIdleVariety();
+void triggerTouchBlink(uint32_t now);

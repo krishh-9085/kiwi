@@ -16,6 +16,8 @@ bool speakText(const String &text) {
     return ttsPcmOpenAI(text) == 1;
   if (ttsProvider == "elevenlabs")
     return ttsPcmEleven(text) == 1;
+  if (ttsProvider == "fish" || ttsProvider == "fishaudio")
+    return ttsFishAudio(text) == 1;
   return ttsSarvam(text) == 1;
 }
 
@@ -55,27 +57,42 @@ int ttsSarvam(const String &text) {
     return 0;
   }
 
-  // Sarvam bulbul:v3 strictly requires hi-IN for Devanagari script and en-IN
-  // for Latin script (English & Roman Hinglish).
-  String langCode = containsDevanagari(text) ? "hi-IN" : "en-IN";
-  Serial.printf("[TTS/Sarvam] Script=%s -> target_language_code=%s\n",
-                containsDevanagari(text) ? "Devanagari (hi-IN)"
-                                         : "Latin/Hinglish (en-IN)",
-                langCode.c_str());
+  // Sarvam bulbul:v3 handles Hindi and Hinglish natively with hi-IN, and English with en-IN
+  String langCode = "hi-IN";
+  if (replyLang == "en") {
+    langCode = "en-IN";
+  } else if (replyLang == "hi") {
+    langCode = "hi-IN";
+  } else if (!containsDevanagari(text) && sttLang == "en") {
+    langCode = "en-IN";
+  }
 
-  String body = "{\"text\":\"" + jsonEscape(text) +
-                "\","
-                "\"target_language_code\":\"" +
-                jsonEscape(langCode) +
-                "\","
-                "\"speaker\":\"" +
-                jsonEscape(ttsVoice) +
-                "\","
-                "\"model\":\"" +
-                jsonEscape(ttsModel) +
-                "\","
-                "\"speech_sample_rate\":24000,"
-                "\"enable_preprocessing\":true}";
+  bool isV4 = (ttsModel.indexOf("v4") >= 0);
+  String voiceParam = ttsVoice;
+  if (isV4) {
+    if (voiceParam.indexOf('_') < 0) {
+      if (voiceParam.equalsIgnoreCase("amit")) voiceParam = "amit_hi_conversational";
+      else if (voiceParam.equalsIgnoreCase("priya")) voiceParam = "ishita_hi_conversational";
+      else if (voiceParam.equalsIgnoreCase("aditya")) voiceParam = "aditya_hi_conversational";
+      else if (voiceParam.equalsIgnoreCase("ritu")) voiceParam = "ritu_hi_conversational";
+      else if (voiceParam.equalsIgnoreCase("shubh")) voiceParam = "shubh_enhi_ads";
+      else if (voiceParam.length() == 0) voiceParam = "amit_hi_conversational";
+      else voiceParam = voiceParam + "_hi_conversational";
+    }
+  }
+
+  Serial.printf("[TTS/Sarvam] Model=%s Voice=%s Lang=%s (replyLang=%s)\n",
+                ttsModel.c_str(), voiceParam.c_str(), langCode.c_str(), replyLang.c_str());
+
+  String body = "{\"text\":\"" + jsonEscape(text) + "\",";
+  if (isV4) {
+    body += "\"language_code\":\"" + jsonEscape(langCode) + "\",";
+  } else {
+    body += "\"target_language_code\":\"" + jsonEscape(langCode) + "\",";
+  }
+  body += "\"speaker\":\"" + jsonEscape(voiceParam) + "\",";
+  body += "\"model\":\"" + jsonEscape(ttsModel) + "\",";
+  body += "\"speech_sample_rate\":16000,\"enable_preprocessing\":false}";
 
   WiFiClientSecure client;
   client.setInsecure();
@@ -114,8 +131,10 @@ int ttsSarvam(const String &text) {
   }
   Serial.printf("[TTS] HTTP %d%s\n", status, hs.chunked ? " (chunked)" : "");
   if (status != 200) {
+    uint32_t tErr = millis();
+    while (!client.available() && client.connected() && millis() - tErr < 1200) delay(10);
     String errBody;
-    while (client.available() && errBody.length() < 300)
+    while (client.available() && errBody.length() < 400)
       errBody += (char)client.read();
     Serial.printf("[TTS] Error body: %s\n", errBody.c_str());
     client.stop();
@@ -139,32 +158,59 @@ int ttsSarvam(const String &text) {
   int16_t firstCh = 0;
   bool haveLo = false;
   uint8_t lo = 0;
+
+  // Jitter Pre-Buffer (256ms @ 16kHz): Prevents Wi-Fi packet latency from causing audio gaps
+  const size_t PREBUF_SAMPLES = 4096;
+  static int16_t prebuf[PREBUF_SAMPLES];
+  size_t prebufCount = 0;
+  bool prebufDone = false;
+
   const size_t CHUNK = 512;
   static int16_t pcmChunk[CHUNK];
   size_t chunkFill = 0;
 
   auto flushChunk = [&]() {
     if (chunkFill > 0) {
-      for (size_t i = 0; i < chunkFill; i++)
-        spkPushSample(pcmChunk[i]);
+      if (!prebufDone) {
+        for (size_t i = 0; i < chunkFill; i++) {
+          prebuf[prebufCount++] = pcmChunk[i];
+          if (prebufCount >= PREBUF_SAMPLES) {
+            for (size_t k = 0; k < prebufCount; k++)
+              spkPushSample(prebuf[k]);
+            prebufCount = 0;
+            prebufDone = true;
+          }
+        }
+      } else {
+        for (size_t i = 0; i < chunkFill; i++)
+          spkPushSample(pcmChunk[i]);
+      }
       chunkFill = 0;
     }
   };
+
   auto emitSample = [&](int16_t s) {
     if (chIdx == 0)
       firstCh = s;
     if (++chIdx >= channels) {
       chIdx = 0;
-      float cur = (float)firstCh;
-      while (fpos < 1.0f) {
-        int16_t out = (int16_t)(prev + (cur - prev) * fpos);
-        pcmChunk[chunkFill++] = out;
+      // Fast path: Native 16kHz rate requires ZERO float resampling math
+      if (srcRate == SAMPLE_RATE) {
+        pcmChunk[chunkFill++] = firstCh;
         if (chunkFill >= CHUNK)
           flushChunk();
-        fpos += step;
+      } else {
+        float cur = (float)firstCh;
+        while (fpos < 1.0f) {
+          int16_t out = (int16_t)(prev + (cur - prev) * fpos);
+          pcmChunk[chunkFill++] = out;
+          if (chunkFill >= CHUNK)
+            flushChunk();
+          fpos += step;
+        }
+        fpos -= 1.0f;
+        prev = cur;
       }
-      fpos -= 1.0f;
-      prev = cur;
     }
   };
   auto onWavByte = [&](uint8_t b) {
@@ -292,6 +338,12 @@ int ttsSarvam(const String &text) {
       pumpUI();
   }
   client.stop();
+  if (!prebufDone && prebufCount > 0) {
+    for (size_t k = 0; k < prebufCount; k++)
+      spkPushSample(prebuf[k]);
+    prebufCount = 0;
+    prebufDone = true;
+  }
   flushChunk();
   spkFlush();
   for (int i = 0; i < SAMPLE_RATE / 10; i++)
@@ -392,6 +444,26 @@ int ttsPcmOpenAI(const String &text) {
   static uint8_t rbuf[2048];
   int n;
   uint32_t readStart = millis();
+
+  const size_t PREBUF_SAMPLES = 4096;
+  static int16_t prebuf[PREBUF_SAMPLES];
+  size_t prebufCount = 0;
+  bool prebufDone = false;
+
+  auto pushWithPrebuf = [&](int16_t s) {
+    if (!prebufDone) {
+      prebuf[prebufCount++] = s;
+      if (prebufCount >= PREBUF_SAMPLES) {
+        for (size_t k = 0; k < prebufCount; k++)
+          spkPushSample(prebuf[k]);
+        prebufCount = 0;
+        prebufDone = true;
+      }
+    } else {
+      spkPushSample(s);
+    }
+  };
+
   while (true) {
     if (cancelRequest)
       break;
@@ -414,12 +486,18 @@ int ttsPcmOpenAI(const String &text) {
       } else {
         int16_t s = (int16_t)(lo | (rbuf[i] << 8));
         haveLo = false;
-        spkPushSample(s);
+        pushWithPrebuf(s);
       }
     }
     pumpUI();
   }
   client.stop();
+  if (!prebufDone && prebufCount > 0) {
+    for (size_t k = 0; k < prebufCount; k++)
+      spkPushSample(prebuf[k]);
+    prebufCount = 0;
+    prebufDone = true;
+  }
   spkFlush();
   for (int i = 0; i < SAMPLE_RATE / 10; i++)
     spkPushSample(0);
@@ -517,6 +595,26 @@ int ttsPcmEleven(const String &text) {
   static uint8_t rbuf[2048];
   int n;
   uint32_t readStart = millis();
+
+  const size_t PREBUF_SAMPLES = 4096;
+  static int16_t prebuf[PREBUF_SAMPLES];
+  size_t prebufCount = 0;
+  bool prebufDone = false;
+
+  auto pushWithPrebuf = [&](int16_t s) {
+    if (!prebufDone) {
+      prebuf[prebufCount++] = s;
+      if (prebufCount >= PREBUF_SAMPLES) {
+        for (size_t k = 0; k < prebufCount; k++)
+          spkPushSample(prebuf[k]);
+        prebufCount = 0;
+        prebufDone = true;
+      }
+    } else {
+      spkPushSample(s);
+    }
+  };
+
   while (true) {
     if (cancelRequest)
       break;
@@ -539,12 +637,176 @@ int ttsPcmEleven(const String &text) {
       } else {
         int16_t s = (int16_t)(lo | (rbuf[i] << 8));
         haveLo = false;
-        spkPushSample(s);
+        pushWithPrebuf(s);
       }
     }
     pumpUI();
   }
   client.stop();
+  if (!prebufDone && prebufCount > 0) {
+    for (size_t k = 0; k < prebufCount; k++)
+      spkPushSample(prebuf[k]);
+    prebufCount = 0;
+    prebufDone = true;
+  }
+  spkFlush();
+  for (int i = 0; i < SAMPLE_RATE / 10; i++)
+    spkPushSample(0);
+  spkFlush();
+  gFaceFrameMs = 33;
+  restoreWebAndAP(apWasUp);
+  return playing ? 1 : 0;
+}
+
+int ttsFishAudio(const String &text) {
+  if (!fishKey.length()) {
+    Serial.println("[TTS/FishAudio] No API key.");
+    return 0;
+  }
+  if (WiFi.status() != WL_CONNECTED) {
+    Serial.println("[TTS] No Wi-Fi.");
+    return 0;
+  }
+  String host, path;
+  if (!parseUrl(fishEndpoint, host, path))
+    return 0;
+
+  bool apWasUp = suspendLocalNet();
+  if (ESP.getFreeHeap() < 35000) {
+    restoreWebAndAP(apWasUp);
+    return 0;
+  }
+  if (WiFi.status() != WL_CONNECTED) {
+    uint32_t tw = millis();
+    while (WiFi.status() != WL_CONNECTED && millis() - tw < 4000)
+      delay(100);
+    if (WiFi.status() != WL_CONNECTED) {
+      restoreWebAndAP(apWasUp);
+      return 0;
+    }
+  }
+  if (!ensureDns(host)) {
+    restoreWebAndAP(apWasUp);
+    return 0;
+  }
+
+  String body = "{\"text\":\"" + jsonEscape(text) +
+                "\",\"format\":\"pcm\",\"sample_rate\":24000";
+  if (fishVoice.length() > 0) {
+    body += ",\"reference_id\":\"" + jsonEscape(fishVoice) + "\"";
+  }
+  body += "}";
+
+  WiFiClientSecure client;
+  client.setInsecure();
+  client.setTimeout(20);
+  client.setHandshakeTimeout(10);
+  if (!tlsConnect(client, host, "TTS/FishAudio")) {
+    client.stop();
+    restoreWebAndAP(apWasUp);
+    return 0;
+  }
+  client.printf("POST %s HTTP/1.1\r\n", path.c_str());
+  client.printf("Host: %s\r\n", host.c_str());
+  client.printf("Authorization: Bearer %s\r\n", fishKey.c_str());
+  if (fishModel.length() > 0) {
+    client.printf("model: %s\r\n", fishModel.c_str());
+  }
+  client.print("Content-Type: application/json\r\n");
+  client.printf("Content-Length: %u\r\n", (unsigned)body.length());
+  client.print("Connection: close\r\n\r\n");
+  client.print(body);
+
+  String line;
+  if (!httpReadLine(client, line, 20000)) {
+    client.stop();
+    restoreWebAndAP(apWasUp);
+    return 0;
+  }
+  int sp = line.indexOf(' ');
+  int status = sp > 0 ? line.substring(sp + 1).toInt() : 0;
+  HttpStream hs;
+  hs.c = &client;
+  while (httpReadLine(client, line, 10000) && line.length() > 0) {
+    String l = line;
+    l.toLowerCase();
+    if (l.startsWith("transfer-encoding:") && l.indexOf("chunked") > 0)
+      hs.chunked = true;
+    if (l.startsWith("content-length:"))
+      hs.contentLeft = l.substring(15).toInt();
+  }
+  if (status != 200) {
+    uint32_t tErr = millis();
+    while (!client.available() && client.connected() && millis() - tErr < 1200) delay(10);
+    String errBody;
+    while (client.available() && errBody.length() < 400)
+      errBody += (char)client.read();
+    Serial.printf("[TTS/FishAudio] HTTP %d: %s\n", status, errBody.c_str());
+    client.stop();
+    restoreWebAndAP(apWasUp);
+    return 0;
+  }
+  setEmotion(EMOTION_SPEAKING);
+  gFaceFrameMs = 300;
+  bool playing = false, haveLo = false;
+  uint8_t lo = 0;
+  static uint8_t rbuf[2048];
+  int n;
+  uint32_t readStart = millis();
+
+  const size_t PREBUF_SAMPLES = 4096;
+  static int16_t prebuf[PREBUF_SAMPLES];
+  size_t prebufCount = 0;
+  bool prebufDone = false;
+
+  auto pushWithPrebuf = [&](int16_t s) {
+    if (!prebufDone) {
+      prebuf[prebufCount++] = s;
+      if (prebufCount >= PREBUF_SAMPLES) {
+        for (size_t k = 0; k < prebufCount; k++)
+          spkPushSample(prebuf[k]);
+        prebufCount = 0;
+        prebufDone = true;
+      }
+    } else {
+      spkPushSample(s);
+    }
+  };
+
+  while (true) {
+    if (cancelRequest)
+      break;
+    n = httpReadBlock(hs, rbuf, sizeof(rbuf));
+    if (n < 0)
+      break;
+    if (n == 0) {
+      if (millis() - readStart > 15000)
+        break;
+      pumpUI();
+      delay(1);
+      continue;
+    }
+    readStart = millis();
+    playing = true;
+    for (int i = 0; i < n; i++) {
+      if (!haveLo) {
+        lo = rbuf[i];
+        haveLo = true;
+      } else {
+        int16_t s = (int16_t)(lo | (rbuf[i] << 8));
+        haveLo = false;
+        pushWithPrebuf(s);
+      }
+    }
+    pumpUI();
+  }
+  client.stop();
+  if (!prebufDone && prebufCount > 0) {
+    for (size_t k = 0; k < prebufCount; k++)
+      spkPushSample(prebuf[k]);
+    prebufCount = 0;
+    prebufDone = true;
+  }
   spkFlush();
   for (int i = 0; i < SAMPLE_RATE / 10; i++)
     spkPushSample(0);

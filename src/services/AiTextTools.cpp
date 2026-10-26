@@ -142,10 +142,23 @@ String jsonEscape(const String &s) {
 }
 
 String cleanForSpeech(const String &in) {
+  String s = in;
+  int t1 = s.indexOf("<think>");
+  while (t1 >= 0) {
+    int t2 = s.indexOf("</think>", t1);
+    if (t2 >= 0) {
+      s.remove(t1, (t2 + 8) - t1);
+    } else {
+      s = s.substring(0, t1);
+      break;
+    }
+    t1 = s.indexOf("<think>");
+  }
+  s.trim();
   String o;
-  o.reserve(in.length() + 8);
+  o.reserve(s.length() + 8);
   bool lastSpace = true;
-  for (size_t i = 0; i < in.length(); i++) {
+  for (size_t i = 0; i < s.length(); i++) {
     unsigned char c = (unsigned char)in[i];
     // Skip 4-byte UTF-8 emojis (0xF0..0xF4)
     if ((c & 0xF8) == 0xF0 && i + 3 < in.length()) {

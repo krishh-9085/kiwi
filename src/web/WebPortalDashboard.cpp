@@ -32,10 +32,8 @@ static String escJson(String s) {
   return s;
 }
 
-static String configPage() {
-  String h;
-  h.reserve(28000);
-  h = R"rawliteral(
+// --- Chunked PROGMEM Dashboard Segments (Zero-Heap Streamed) ---
+static const char DASHBOARD_CSS[] PROGMEM = R"rawcss(
 <!doctype html>
 <html lang="en"><head>
 <meta charset="utf-8">
@@ -131,8 +129,11 @@ a.nav-btn.primary:hover{background:var(--blue-dark);border-color:var(--blue-dark
 .status-val.good{color:var(--green)}
 
 /* ── Form Grid & Cards ───────────────────────────────────────────────── */
-.form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;align-items:start}
-.form-grid>.card{min-width:0}
+/* ── Form Grid (Masonry Columns - No Empty Space) ────────── */
+.form-grid{columns:2 460px;column-gap:16px}
+.form-grid>.card{break-inside:avoid;margin-bottom:16px;min-width:0}
+.save-wrap{width:100%;margin-top:8px;break-inside:avoid;column-span:all}
+@media (max-width:960px){.form-grid{columns:1}}
 .card{
   background:var(--surface);
   border:1px solid var(--border);
@@ -246,6 +247,7 @@ button.save-btn:active{transform:scale(0.98)}
 .dot.rec{background:var(--red);animation:pulseDot 1s ease-in-out infinite}
 .dot.sleep{background:#8e8e93}
 @keyframes pulseDot{0%,100%{opacity:1}50%{opacity:.35}}
+@keyframes spin{0%{transform:rotate(0deg)}100%{transform:rotate(360deg)}}
 
 /* ── Mic Button ──────────────────────────────────────────────────────── */
 .mic-btn{
@@ -342,7 +344,9 @@ button.save-btn:active{transform:scale(0.98)}
 </nav>
 
 <div class="container">
-  <div class="status-grid">
+  )rawcss";
+
+static const char DASHBOARD_STATUS_TEMPLATE[] PROGMEM = R"rawstat(<div class="status-grid">
     <div class="status-item">
       <div class="status-label">Hotspot SSID</div>
       <div class="status-val">%AP%</div>
@@ -363,9 +367,9 @@ button.save-btn:active{transform:scale(0.98)}
       <div class="status-label">Voice Synthesis</div>
       <div class="status-val">%TTSPROV%</div>
     </div>
-  </div>
+  </div>)rawstat";
 
-  <!-- Live AI Voice Interaction & Serial Console Deck -->
+static const char DASHBOARD_LIVE_CONSOLE[] PROGMEM = R"rawconsole(<!-- Live AI Voice Interaction & Serial Console Deck -->
   <div class="card live-console" style="margin-bottom:24px">
     <div style="display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);padding-bottom:12px;margin-bottom:16px;flex-wrap:wrap;gap:10px">
       <div style="display:flex;align-items:center;gap:10px">
@@ -422,13 +426,31 @@ button.save-btn:active{transform:scale(0.98)}
       </div>
     </div>
   </div>
+)rawconsole";
 
-  <form method="POST" action="/save" class="form-grid">
+static const char DASHBOARD_BODY_PART1[] PROGMEM = R"rawb1(
+<form method="POST" action="/save" class="form-grid">
     <!-- Wi-Fi -->
     <div class="card">
-      <div class="card-title">Network Configuration</div>
-      <label>Wi-Fi SSID</label><input name="ssid" value="%SSID%" required>
-      <label>Wi-Fi Password</label><input name="pass" type="password" value="%PASS%">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+        <div class="card-title" style="margin-bottom:0">Network Configuration</div>
+        <button type="button" id="btnScanWifi" class="qbtn" onclick="scanWifiNetworks()" style="padding:4px 10px;font-size:12px;display:inline-flex;align-items:center;gap:5px">
+          <span id="scanSpinner" style="display:none;animation:spin 1s linear infinite">🔄</span>
+          <span id="scanBtnText">🔍 Scan Networks</span>
+        </button>
+      </div>
+      <label>Found Networks</label>
+      <select id="wifiScanSelect" onchange="onSelectScannedWifi(this.value)">
+        <option value="">-- Click "Scan Networks" to search --</option>
+      </select>
+      <label>Wi-Fi SSID</label>
+      <input name="ssid" id="wifiSsidInput" value="%SSID%" required placeholder="Select from list or type SSID">
+      <label>Wi-Fi Password</label>
+      <div style="position:relative;display:flex;align-items:center">
+        <input name="pass" id="wifiPassInput" type="password" value="%PASS%" placeholder="Enter Wi-Fi password" style="width:100%;padding-right:38px">
+        <button type="button" onclick="togglePassVisibility()" style="position:absolute;right:8px;background:none;border:none;cursor:pointer;font-size:15px;color:var(--secondary);padding:4px" title="Show/Hide Password">👁️</button>
+      </div>
+      <small>Pick a network above to auto-fill SSID, or type manually if hidden.</small>
     </div>
 
     <!-- Speech-to-Text -->
@@ -526,7 +548,9 @@ button.save-btn:active{transform:scale(0.98)}
       </div>
     </div>
 
-    <!-- Text-to-Speech -->
+    )rawb1";
+
+static const char DASHBOARD_BODY_PART2[] PROGMEM = R"rawb2(<!-- Text-to-Speech -->
     <div class="card">
       <div class="card-title">Text-to-Speech (TTS)</div>
       <label>TTS Provider</label>
@@ -534,13 +558,19 @@ button.save-btn:active{transform:scale(0.98)}
         <option value="sarvam" %TTS_SARVAM_SEL%>Sarvam AI (bulbul:v3)</option>
         <option value="openai" %TTS_OPENAI_SEL%>OpenAI TTS</option>
         <option value="elevenlabs" %TTS_ELEVEN_SEL%>ElevenLabs</option>
+        <option value="fish" %TTS_FISH_SEL%>Fish Audio (Fish Speech)</option>
       </select>
       <div id="ttsSarvamBox">
         <h3>Sarvam TTS Settings</h3>
         <label>Endpoint</label><input name="ttsurl" value="%TTSURL%">
         <label>API Key</label><input name="ttskey" type="password" value="%TTSKEY%">
-        <label>Model</label><input name="ttsmodel" value="%TTSMODEL%">
-        <label>Voice</label>
+        <label>Model</label>
+        <select name="ttsmodel">
+          <option value="bulbul:v4-flash" %SARVAM_V4F_SEL%>bulbul:v4-flash (⚡ New Flash Model · Ultra Fast)</option>
+          <option value="bulbul:v3" %SARVAM_V3_SEL%>bulbul:v3 (Latest Stable · Hindi/Hinglish/English)</option>
+          <option value="bulbul:v2" %SARVAM_V2_SEL%>bulbul:v2 (Legacy v2)</option>
+        </select>
+        <label>Voice / Speaker</label>
         <select name="ttsvoice">
 %SARVAM_VOICE_OPTIONS%
         </select>
@@ -567,6 +597,13 @@ button.save-btn:active{transform:scale(0.98)}
         <label>Model</label><input name="elevmodel" value="%ELEVMODEL%">
         <label>Voice ID</label><input name="elevvoice" value="%ELEVVOICE%">
       </div>
+      <div id="ttsFishBox">
+        <h3>Fish Audio Settings</h3>
+        <label>Endpoint</label><input name="fishurl" value="%FISHURL%">
+        <label>API Key</label><input name="fishkey" type="password" value="%FISHKEY%">
+        <label>Model</label><input name="fishmodel" value="%FISHMODEL%">
+        <label>Voice / Reference ID (Optional, leave blank for default voice)</label><input name="fishvoice" value="%FISHVOICE%" placeholder="e.g. voice model reference ID">
+      </div>
     </div>
 
     <!-- Audio & Sleep -->
@@ -583,15 +620,15 @@ button.save-btn:active{transform:scale(0.98)}
       <input type="number" name="circ_end" min="0" max="23" value="%CIRC_END%">
       <small>Screen dims and Kiwi sleeps during scheduled hours. Hold top sensor 7-10s to toggle manually.</small>
 
-      <div style="margin-top:20px;padding:12px;background:#090d16;border:1px solid #334155;border-radius:8px">
+      <div style="margin-top:20px;padding:16px;background:rgba(0,113,227,0.05);border:1px solid rgba(0,113,227,0.18);border-radius:var(--radius-sm)">
         <label class="toggle" style="margin:0">
           <input type="checkbox" name="boredom" id="rootBoredomToggle" value="1" %BOREDOM_CHECKED% onchange="toggleBoredomLive(this.checked)">
           <span class="switch"></span>
-          <span>Enable Autonomous Idle Desk Chatter &amp; Quirks</span>
+          <span style="font-weight:600;color:var(--text);font-size:14px">Enable Autonomous Idle Desk Chatter &amp; Quirks</span>
         </label>
         <div style="margin-top:10px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-          <label style="font-size:12px;color:#94a3b8;margin:0">Idle Chatter Time:</label>
-          <select name="boredom_mins" id="boredomMinsSel" onchange="setBoredomIntervalLive(this.value)" style="width:auto;margin:0;padding:6px 12px;font-size:13px;background:#0f172a;color:#38bdf8;border:1px solid #334155;border-radius:6px;cursor:pointer">
+          <label style="font-size:13px;font-weight:500;color:var(--secondary);margin:0">Idle Chatter Time:</label>
+          <select name="boredom_mins" id="boredomMinsSel" onchange="setBoredomIntervalLive(this.value)" style="width:auto;margin:0;padding:6px 12px;font-size:13px;background:#ffffff;color:var(--text);border:1px solid var(--border);border-radius:6px;cursor:pointer">
             <option value="1" %BM_1_SEL%>Every 1 Minute (Lively)</option>
             <option value="2" %BM_2_SEL%>Every 2 Minutes (Default)</option>
             <option value="3" %BM_3_SEL%>Every 3 Minutes</option>
@@ -601,8 +638,66 @@ button.save-btn:active{transform:scale(0.98)}
             <option value="30" %BM_30_SEL%>Every 30 Minutes</option>
           </select>
         </div>
-        <small style="margin-top:8px;display:block">When left idle, Kiwi makes natural witty remarks, health/tea reminders, and desk banter instead of repeating robotic sounds.</small>
+        <small style="margin-top:8px;display:block;color:var(--tertiary);line-height:1.4">When left idle, Kiwi makes natural witty remarks, health/tea reminders, and desk banter instead of repeating robotic sounds.</small>
       </div>
+
+      <div style="margin-top:20px;padding:16px;background:var(--bg-subtle);border:1px solid var(--border);border-radius:var(--radius-sm)">
+        <div style="font-weight:600;font-size:14px;color:var(--text);margin-bottom:8px">Touch Sensors Accessibility &amp; Sensitivity</div>
+        <label class="toggle" style="margin:0 0 10px 0">
+          <input type="checkbox" name="tch_snd" value="1" %TCH_SND_CHECKED%>
+          <span class="switch"></span>
+          <span style="font-size:13px;font-weight:500;color:var(--text)">Instant Audio/Visual Feedback (Blip &amp; Wink)</span>
+        </label>
+        <label style="font-size:13px;margin:0 0 4px 0">Debounce Filter / Sensitivity: <span id="tchDebLabel" style="font-weight:600;color:var(--accent)">%TCH_DEB%</span> ms</label>
+        <input type="range" name="tch_deb" min="15" max="150" step="5" value="%TCH_DEB%"
+               oninput="document.getElementById('tchDebLabel').textContent=this.value">
+        <small style="color:var(--tertiary);line-height:1.4">Lower ms (15-30ms) = Ultra-responsive touch. Higher ms (50-100ms) = Filters out static &amp; accidental ghost touches.</small>
+      </div>
+    </div>
+
+    <!-- Touch Controls & Gestures Customization -->
+    <div class="card">
+      <div class="card-title">Touch Controls &amp; Gestures</div>
+      <small style="display:block;margin-bottom:14px;color:var(--tertiary)">Customize actions triggered when tapping, double-tapping, or holding Kiwi's touch sensors.</small>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div>
+          <label style="font-weight:600">Top Head (Single Tap)</label>
+          <select name="act_top_tap" class="touch-act-sel" data-val="%ACT_TOP_TAP%"></select>
+        </div>
+        <div>
+          <label style="font-weight:600">Top Head (Double Tap)</label>
+          <select name="act_top_dbl" class="touch-act-sel" data-val="%ACT_TOP_DBL%"></select>
+        </div>
+
+        <div>
+          <label style="font-weight:600">Left Cheek (Single Tap)</label>
+          <select name="act_lt_tap" class="touch-act-sel" data-val="%ACT_LT_TAP%"></select>
+        </div>
+        <div>
+          <label style="font-weight:600">Left Cheek (Double Tap)</label>
+          <select name="act_lt_dbl" class="touch-act-sel" data-val="%ACT_LT_DBL%"></select>
+        </div>
+
+        <div>
+          <label style="font-weight:600">Right Cheek (Single Tap)</label>
+          <select name="act_rt_tap" class="touch-act-sel" data-val="%ACT_RT_TAP%"></select>
+        </div>
+        <div>
+          <label style="font-weight:600">Right Cheek (Double Tap)</label>
+          <select name="act_rt_dbl" class="touch-act-sel" data-val="%ACT_RT_DBL%"></select>
+        </div>
+
+        <div>
+          <label style="font-weight:600">Left Cheek (Hold 1.5s)</label>
+          <select name="act_lt_hld" class="touch-act-sel" data-val="%ACT_LT_HLD%"></select>
+        </div>
+        <div>
+          <label style="font-weight:600">Right Cheek (Hold 1.5s)</label>
+          <select name="act_rt_hld" class="touch-act-sel" data-val="%ACT_RT_HLD%"></select>
+        </div>
+      </div>
+      <small style="margin-top:12px;display:block;color:var(--tertiary);line-height:1.4">💡 <i>Tip: Hold Top Head for 3s to show Clock; hold for 7s to enter Night Sleep.</i></small>
     </div>
 
     <!-- Weather & Personality -->
@@ -643,7 +738,7 @@ button.save-btn:active{transform:scale(0.98)}
       <input name="mem_name" value="%MEM_NAME%" placeholder="e.g. Rohil">
 
       <label style="margin-top:14px">Facts Kiwi Remembers About You:</label>
-      <div style="background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px;margin-bottom:12px;max-height:160px;overflow-y:auto">
+      <div style="background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px 14px;margin-bottom:12px;max-height:180px;overflow-y:auto">
         %MEM_LIST_HTML%
       </div>
 
@@ -660,9 +755,288 @@ button.save-btn:active{transform:scale(0.98)}
       <button type="submit" class="save-btn">Save Configuration &amp; Restart</button>
     </div>
   </form>
+)rawb2";
+static String getDashboardStatusHtml() {
+  String h;
+  h.reserve(1200);
+  h = FPSTR(DASHBOARD_STATUS_TEMPLATE);
+
+  String langName = (sttLang == "hi") ? "Hindi" : (sttLang == "en") ? "English" : "Auto (HI+EN)";
+  h.replace("%AP%", esc(apSSID));
+  h.replace("%LLMPROV%", esc(llmProvider));
+  h.replace("%ACTIVEMODEL%", esc(llmProvider == "groq" ? groqModel : llmModel));
+  h.replace("%STTPROV%", esc(sttProvider));
+  h.replace("%STTLANGNAME%", esc(langName));
+  h.replace("%TTSPROV%", esc(ttsProvider));
+
+  return h;
+}
+static String getDashboardBodyPart1() {
+  String h;
+  h.reserve(8000);
+  h = FPSTR(DASHBOARD_BODY_PART1);
+
+  h.replace("%SSID%", esc(wifiSSID));
+  h.replace("%PASS%", esc(wifiPassword));
+
+  h.replace("%STT_SARVAM_SEL%", sttProvider == "sarvam" ? "selected" : "");
+  h.replace("%STT_GROQ_SEL%", sttProvider == "groq" ? "selected" : "");
+  h.replace("%STT_OPENAI_SEL%", sttProvider == "openai" ? "selected" : "");
+  h.replace("%LANG_AUTO_SEL%", sttLang == "auto" ? "selected" : "");
+  h.replace("%LANG_HI_SEL%", sttLang == "hi" ? "selected" : "");
+  h.replace("%LANG_EN_SEL%", sttLang == "en" ? "selected" : "");
+
+  h.replace("%STTURL%", esc(sttEndpoint));
+  h.replace("%STTKEY%", esc(sttKey));
+  h.replace("%STT_SAARAS_SEL%", sttModel == "saaras:v3" ? "selected" : "");
+  h.replace("%STT_SAARIKA_SEL%", sttModel == "saarika:v2" ? "selected" : "");
+  h.replace("%GROQSTTURL%", esc(groqSttEndpoint));
+  h.replace("%GROQSTTKEY%", esc(groqSttKey));
+  h.replace("%GW3T_SEL%", groqSttModel == "whisper-large-v3-turbo" ? "selected" : "");
+  h.replace("%GW3_SEL%", groqSttModel == "whisper-large-v3" ? "selected" : "");
+  h.replace("%GDW_SEL%", groqSttModel == "distil-whisper-large-v3-en" ? "selected" : "");
+  h.replace("%OPENAIURL%", esc(openaiSttEndpoint));
+  h.replace("%OPENAIKEY%", esc(openaiSttKey));
+  h.replace("%OW1_SEL%", openaiSttModel == "whisper-1" ? "selected" : "");
+  h.replace("%OG4M_SEL%", openaiSttModel == "gpt-4o-mini-transcribe" ? "selected" : "");
+  h.replace("%OG4_SEL%", openaiSttModel == "gpt-4o-transcribe" ? "selected" : "");
+
+  h.replace("%GROQ_SEL%", llmProvider == "groq" ? "selected" : "");
+  h.replace("%GEMINI_SEL%", llmProvider == "gemini" ? "selected" : "");
+  h.replace("%OPENAI_SEL%", llmProvider == "openai" ? "selected" : "");
+  h.replace("%G20B_SEL%", groqModel == "openai/gpt-oss-20b" ? "selected" : "");
+  h.replace("%G120B_SEL%", groqModel == "openai/gpt-oss-120b" ? "selected" : "");
+  h.replace("%GQ32B_SEL%", groqModel == "qwen/qwen3-32b" ? "selected" : "");
+  h.replace("%GL33_SEL%", groqModel == "llama-3.3-70b-versatile" ? "selected" : "");
+  h.replace("%GE20L_SEL%", (llmModel == "gemini-2.0-flash-lite" || llmModel == "gemini-3.5-flash-lite") ? "selected" : "");
+  h.replace("%GE25_SEL%", llmModel == "gemini-2.5-flash" ? "selected" : "");
+  h.replace("%GE25L_SEL%", llmModel == "gemini-2.5-flash-lite" ? "selected" : "");
+  h.replace("%GPT4OM_SEL%", llmModel == "gpt-4o-mini" ? "selected" : "");
+  h.replace("%GPT41M_SEL%", llmModel == "gpt-4.1-mini" ? "selected" : "");
+  h.replace("%GPT41N_SEL%", llmModel == "gpt-4.1-nano" ? "selected" : "");
+  h.replace("%GPT4O_SEL%", llmModel == "gpt-4o" ? "selected" : "");
+  h.replace("%LLMURL%", esc(llmEndpoint));
+  h.replace("%LLMKEY%", esc(llmKey));
+  h.replace("%OPENAI_LLM_URL%", esc(llmEndpoint));
+  h.replace("%OPENAI_LLM_KEY%", esc(llmKey));
+  h.replace("%GROQURL%", esc(groqEndpoint));
+  h.replace("%GROQKEY%", esc(groqKey));
+
+  return h;
+}
+static String getDashboardBodyPart2() {
+  String h;
+  h.reserve(14000);
+  h = FPSTR(DASHBOARD_BODY_PART2);
+
+  h.replace("%TTS_SARVAM_SEL%", ttsProvider == "sarvam" ? "selected" : "");
+  h.replace("%TTS_OPENAI_SEL%", ttsProvider == "openai" ? "selected" : "");
+  h.replace("%TTS_ELEVEN_SEL%", ttsProvider == "elevenlabs" ? "selected" : "");
+  h.replace("%TTS_FISH_SEL%", (ttsProvider == "fish" || ttsProvider == "fishaudio") ? "selected" : "");
+  h.replace("%TTSURL%", esc(ttsEndpoint));
+  h.replace("%TTSKEY%", esc(ttsKey));
+  h.replace("%SARVAM_V4F_SEL%", (ttsModel == "bulbul:v4-flash" || ttsModel == "bulbul:v4") ? "selected" : "");
+  h.replace("%SARVAM_V3_SEL%", (ttsModel == "bulbul:v3" || ttsModel == "" || ttsModel == "DEFAULT") ? "selected" : "");
+  h.replace("%SARVAM_V2_SEL%", ttsModel == "bulbul:v2" ? "selected" : "");
+
+  static const struct {
+    const char *id;
+    const char *label;
+  } sarvamVoices[] = {
+    {"amit", "Amit (Male · Clear & Expressive)"},
+    {"priya", "Priya (Female · Default)"},
+    {"aditya", "Aditya (Male · Dynamic)"},
+    {"ritu", "Ritu (Female · Natural)"},
+    {"ashutosh", "Ashutosh (Male · Deep Voice)"},
+    {"neha", "Neha (Female · Warm)"},
+    {"rahul", "Rahul (Male · Casual)"},
+    {"pooja", "Pooja (Female · Friendly)"},
+    {"rohan", "Rohan (Male · Young)"},
+    {"simran", "Simran (Female · Cheerful)"},
+    {"kabir", "Kabir (Male · Authoritative)"},
+    {"shreya", "Shreya (Female · Sweet)"},
+    {"varun", "Varun (Male · Energetic)"},
+    {"ishita", "Ishita (Female · Professional)"},
+    {"kavya", "Kavya (Female · Soft)"},
+    {"dev", "Dev (Male · Modern)"},
+    {"ratan", "Ratan (Male · Classic)"},
+    {"manan", "Manan (Male)"},
+    {"sumit", "Sumit (Male)"},
+    {"roopa", "Roopa (Female)"},
+    {"aayan", "Aayan (Male)"},
+    {"shubh", "Shubh (Male)"},
+    {"advait", "Advait (Male)"},
+    {"anand", "Anand (Male)"},
+    {"tanya", "Tanya (Female)"},
+    {"tarun", "Tarun (Male)"},
+    {"sunny", "Sunny (Male)"},
+    {"mani", "Mani (Male)"},
+    {"gokul", "Gokul (Male)"}
+  };
+  String voiceOpts;
+  voiceOpts.reserve(2200);
+  for (const auto &v : sarvamVoices) {
+    bool sel = (ttsVoice.equalsIgnoreCase(v.id)) || (ttsVoice == "" && strcmp(v.id, "priya") == 0);
+    voiceOpts += "          <option value=\"";
+    voiceOpts += v.id;
+    voiceOpts += "\"";
+    if (sel) voiceOpts += " selected";
+    voiceOpts += ">";
+    voiceOpts += v.label;
+    voiceOpts += "</option>\n";
+  }
+  h.replace("%SARVAM_VOICE_OPTIONS%", voiceOpts);
+
+  h.replace("%OPENAITTSURL%", esc(openaiTtsEndpoint));
+  h.replace("%OPENAITTSKEY%", esc(openaiTtsKey));
+  h.replace("%OPENAITTSMODEL%", esc(openaiTtsModel));
+  h.replace("%OPENAITTSVOICE%", esc(openaiTtsVoice));
+  h.replace("%OA_ALLOY_SEL%", (openaiTtsVoice == "alloy" || openaiTtsVoice == "") ? "selected" : "");
+  h.replace("%OA_ECHO_SEL%", openaiTtsVoice == "echo" ? "selected" : "");
+  h.replace("%OA_FABLE_SEL%", openaiTtsVoice == "fable" ? "selected" : "");
+  h.replace("%OA_ONYX_SEL%", openaiTtsVoice == "onyx" ? "selected" : "");
+  h.replace("%OA_NOVA_SEL%", openaiTtsVoice == "nova" ? "selected" : "");
+  h.replace("%OA_SHIMMER_SEL%", openaiTtsVoice == "shimmer" ? "selected" : "");
+
+  h.replace("%ELEVURL%", esc(elevenEndpoint));
+  h.replace("%ELEVKEY%", esc(elevenKey));
+  h.replace("%ELEVMODEL%", esc(elevenModel));
+  h.replace("%ELEVVOICE%", esc(elevenVoice));
+
+  h.replace("%FISHURL%", esc(fishEndpoint));
+  h.replace("%FISHKEY%", esc(fishKey));
+  h.replace("%FISHMODEL%", esc(fishModel));
+  h.replace("%FISHVOICE%", esc(fishVoice));
+
+  h.replace("%VOL%", String(speakerVolume));
+  h.replace("%REPLANG%", esc(replyLang));
+  h.replace("%PROMPT%", esc(systemPrompt));
+
+  h.replace("%CIRC_EN_CHECKED%", circadianSleepEnabled ? "checked" : "");
+  h.replace("%CIRC_START%", String(circadianSleepStart));
+  h.replace("%CIRC_END%", String(circadianSleepEnd));
+  h.replace("%BOREDOM_CHECKED%", boredomEnabled ? "checked" : "");
+  h.replace("%BM_1_SEL%", boredomMinutes == 1 ? "selected" : "");
+  h.replace("%BM_2_SEL%", boredomMinutes == 2 ? "selected" : "");
+  h.replace("%BM_3_SEL%", boredomMinutes == 3 ? "selected" : "");
+  h.replace("%BM_5_SEL%", boredomMinutes == 5 ? "selected" : "");
+  h.replace("%BM_10_SEL%", boredomMinutes == 10 ? "selected" : "");
+  h.replace("%BM_15_SEL%", boredomMinutes == 15 ? "selected" : "");
+  h.replace("%BM_30_SEL%", boredomMinutes == 30 ? "selected" : "");
+  h.replace("%TCH_SND_CHECKED%", touchFeedbackSound ? "checked" : "");
+  h.replace("%TCH_DEB%", String(touchDebounceMs));
+
+  h.replace("%ACT_TOP_TAP%", touchActionToString(touchActTopTap));
+  h.replace("%ACT_TOP_DBL%", touchActionToString(touchActTopDbl));
+  h.replace("%ACT_LT_TAP%", touchActionToString(touchActLeftTap));
+  h.replace("%ACT_LT_DBL%", touchActionToString(touchActLeftDbl));
+  h.replace("%ACT_RT_TAP%", touchActionToString(touchActRightTap));
+  h.replace("%ACT_RT_DBL%", touchActionToString(touchActRightDbl));
+  h.replace("%ACT_LT_HLD%", touchActionToString(touchActLeftHold));
+  h.replace("%ACT_RT_HLD%", touchActionToString(touchActRightHold));
+
+  h.replace("%WTHR_CITY%", esc(weatherCity));
+  h.replace("%WTHR_LAT%", esc(weatherLat));
+  h.replace("%WTHR_LON%", esc(weatherLon));
+
+  h.replace("%SKIN_DEFAULT_SEL%", currentEyeSkin == SKIN_DEFAULT ? "selected" : "");
+  h.replace("%SKIN_CYBER_SEL%", currentEyeSkin == SKIN_CYBERPUNK ? "selected" : "");
+  h.replace("%SKIN_CAT_SEL%", currentEyeSkin == SKIN_CAT ? "selected" : "");
+  h.replace("%SKIN_RETRO_SEL%", currentEyeSkin == SKIN_RETRO8BIT ? "selected" : "");
+  h.replace("%SKIN_ANIME_SEL%", currentEyeSkin == SKIN_ANIME ? "selected" : "");
+  h.replace("%SKIN_HEARTS_SEL%", currentEyeSkin == SKIN_HEARTS ? "selected" : "");
+  h.replace("%SKIN_STEAM_SEL%", currentEyeSkin == SKIN_STEAMPUNK ? "selected" : "");
+  h.replace("%SKIN_DEMON_SEL%", currentEyeSkin == SKIN_DEMON ? "selected" : "");
+  h.replace("%SKIN_MATRIX_SEL%", currentEyeSkin == SKIN_MATRIX ? "selected" : "");
+  h.replace("%SKIN_CYBORG_SEL%", currentEyeSkin == SKIN_CYBORG ? "selected" : "");
+  h.replace("%SKIN_MECHA_SEL%", currentEyeSkin == SKIN_MECHA ? "selected" : "");
+  h.replace("%SKIN_SHADES_SEL%", currentEyeSkin == SKIN_SUNGLASSES ? "selected" : "");
+  h.replace("%SKIN_PUPPY_SEL%", currentEyeSkin == SKIN_PUPPY ? "selected" : "");
+  h.replace("%SKIN_HYPNO_SEL%", currentEyeSkin == SKIN_HYPNO ? "selected" : "");
+  h.replace("%SKIN_ALIEN_SEL%", currentEyeSkin == SKIN_ALIEN ? "selected" : "");
+  h.replace("%SKIN_NINJA_SEL%", currentEyeSkin == SKIN_NINJA ? "selected" : "");
+  h.replace("%SKIN_ROUND_SEL%", currentEyeSkin == SKIN_ROUND ? "selected" : "");
+  h.replace("%SKIN_KIWI_SEL%", currentEyeSkin == SKIN_KIWI ? "selected" : "");
+
+  h.replace("%MEM_NAME%", esc(getOwnerName()));
+
+  String memListHtml;
+  memListHtml.reserve(1000);
+  if (kiwiMemory.memoryCount == 0) {
+    memListHtml = "<div style=\"font-size:12px;color:var(--tertiary);font-style:italic\">No facts learned yet. Tell Kiwi your name or chat!</div>";
+  } else {
+    memListHtml = "<ul style=\"margin:0;padding-left:18px;font-size:12px;line-height:1.6;color:var(--text)\">";
+    for (int i = 0; i < kiwiMemory.memoryCount; i++) {
+      memListHtml += "<li>" + esc(kiwiMemory.memories[i]) + "</li>";
+    }
+    memListHtml += "</ul>";
+  }
+  h.replace("%MEM_LIST_HTML%", memListHtml);
+
+  return h;
+}
+static const char DASHBOARD_FOOT[] PROGMEM = R"rawfoot(
 </div>
 
 <script>
+function scanWifiNetworks() {
+  var btn = document.getElementById('btnScanWifi');
+  var txt = document.getElementById('scanBtnText');
+  var spin = document.getElementById('scanSpinner');
+  var sel = document.getElementById('wifiScanSelect');
+  if (btn) btn.disabled = true;
+  if (txt) txt.textContent = 'Scanning...';
+  if (spin) spin.style.display = 'inline-block';
+  if (sel) sel.innerHTML = '<option value="">Scanning surrounding 2.4GHz Wi-Fi networks...</option>';
+
+  fetch('/scan')
+    .then(function(r) { return r.json(); })
+    .then(function(networks) {
+      if (btn) btn.disabled = false;
+      if (txt) txt.textContent = '🔍 Scan Networks';
+      if (spin) spin.style.display = 'none';
+      if (!sel) return;
+
+      if (!networks || networks.length === 0) {
+        sel.innerHTML = '<option value="">No networks found (click Scan to retry)</option>';
+        return;
+      }
+
+      var currentSSID = (document.getElementById('wifiSsidInput') || {}).value || '';
+      var html = '<option value="">-- ' + networks.length + ' Networks Found (Select One) --</option>';
+
+      networks.forEach(function(net) {
+        var lock = net.secure ? '🔒' : '🔓';
+        var signal = (net.rssi >= -60) ? '📶 4/4' : (net.rssi >= -70) ? '📶 3/4' : (net.rssi >= -80) ? '📶 2/4' : '📶 1/4';
+        var isCurrent = (net.ssid === currentSSID);
+        html += '<option value="' + encodeURIComponent(net.ssid) + '"' + (isCurrent ? ' selected' : '') + '>';
+        html += net.ssid + ' (' + signal + ' ' + net.rssi + 'dBm ' + lock + ')';
+        html += '</option>';
+      });
+      sel.innerHTML = html;
+    })
+    .catch(function(err) {
+      if (btn) btn.disabled = false;
+      if (txt) txt.textContent = '🔍 Scan Networks';
+      if (spin) spin.style.display = 'none';
+      if (sel) sel.innerHTML = '<option value="">Scan failed (Click to retry)</option>';
+    });
+}
+
+function onSelectScannedWifi(val) {
+  if (!val) return;
+  var ssid = decodeURIComponent(val);
+  var inp = document.getElementById('wifiSsidInput');
+  if (inp) inp.value = ssid;
+  var passInp = document.getElementById('wifiPassInput');
+  if (passInp) passInp.focus();
+}
+
+function togglePassVisibility() {
+  var p = document.getElementById('wifiPassInput');
+  if (p) p.type = (p.type === 'password') ? 'text' : 'password';
+}
+
 function toggleSkinLive(v){
   fetch('/do?skin='+encodeURIComponent(v)).catch(function(){});
 }
@@ -707,6 +1081,7 @@ function toggleTts(){
   document.getElementById('ttsSarvamBox').style.display = (p==='sarvam')?'block':'none';
   document.getElementById('ttsOpenaiBox').style.display = (p==='openai')?'block':'none';
   document.getElementById('ttsElevenBox').style.display = (p==='elevenlabs')?'block':'none';
+  document.getElementById('ttsFishBox').style.display = (p==='fish'||p==='fishaudio')?'block':'none';
 }
 toggleModels(); toggleStt(); toggleTts();
 
@@ -757,7 +1132,7 @@ function sendPrompt(){
 }
 
 function pollConsole(){
-  fetch('/status').then(function(r){ return r.json(); }).then(function(j){
+  fetch('/status', {cache: 'no-store'}).then(function(r){ return r.json(); }).then(function(j){
     var mic = document.getElementById('btnWebMic');
     var badgeDot = document.getElementById('liveStateDot');
     var badgeTxt = document.getElementById('liveStateText');
@@ -817,161 +1192,62 @@ function pollConsole(){
 }
 setInterval(pollConsole, 900);
 pollConsole();
+
+var touchActs = [
+  {val: "listen", lbl: "🎤 Voice Prompt / Mic Record"},
+  {val: "clock", lbl: "🕒 Show Clock Screen"},
+  {val: "weather", lbl: "⛅ Show Weather Screen"},
+  {val: "skin", lbl: "👁️ Cycle OLED Eye Skin"},
+  {val: "pet", lbl: "💖 Pet Reaction / Cuddle"},
+  {val: "tickle", lbl: "😂 Tickle Laugh Mode"},
+  {val: "vol_up", lbl: "🔊 Volume Up (+10%)"},
+  {val: "vol_dn", lbl: "🔉 Volume Down (-10%)"},
+  {val: "dismiss", lbl: "👀 Look Around / Dismiss"},
+  {val: "none", lbl: "🚫 Disabled"}
+];
+document.querySelectorAll('.touch-act-sel').forEach(function(sel) {
+  var cur = sel.getAttribute('data-val');
+  touchActs.forEach(function(a) {
+    var opt = document.createElement('option');
+    opt.value = a.val;
+    opt.textContent = a.lbl;
+    if (a.val === cur) opt.selected = true;
+    sel.appendChild(opt);
+  });
+});
 </script>
 </body></html>
-)rawliteral";
+)rawfoot";
 
-  String langName = (sttLang == "hi") ? "Hindi" : (sttLang == "en") ? "English" : "Auto (HI+EN)";
+void handleRoot() {
+  server.sendHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+  server.sendHeader("Pragma", "no-cache");
+  server.sendHeader("Expires", "0");
+  server.setContentLength(CONTENT_LENGTH_UNKNOWN);
+  server.send(200, "text/html; charset=utf-8", "");
 
-  h.replace("%AP%", esc(apSSID));
-  h.replace("%LLMPROV%", esc(llmProvider));
-  h.replace("%ACTIVEMODEL%", esc(llmProvider == "groq" ? groqModel : llmModel));
-  h.replace("%STTPROV%", esc(sttProvider));
-  h.replace("%STTLANGNAME%", esc(langName));
-  h.replace("%TTSPROV%", esc(ttsProvider));
-  h.replace("%VOL%", String(speakerVolume));
+  // 1. Static HTML head, styles & navbar (0 bytes RAM heap)
+  server.sendContent_P(DASHBOARD_CSS);
 
-  h.replace("%STT_SARVAM_SEL%", sttProvider == "sarvam" ? "selected" : "");
-  h.replace("%STT_GROQ_SEL%", sttProvider == "groq" ? "selected" : "");
-  h.replace("%STT_OPENAI_SEL%", sttProvider == "openai" ? "selected" : "");
-  h.replace("%LANG_AUTO_SEL%", sttLang == "auto" ? "selected" : "");
-  h.replace("%LANG_HI_SEL%", sttLang == "hi" ? "selected" : "");
-  h.replace("%LANG_EN_SEL%", sttLang == "en" ? "selected" : "");
+  // 2. Small dynamic status summary pill (< 1 KB RAM heap)
+  String statusHtml = getDashboardStatusHtml();
+  server.sendContent(statusHtml);
+  statusHtml = "";
 
-  h.replace("%STTURL%", esc(sttEndpoint));
-  h.replace("%STTKEY%", esc(sttKey));
-  h.replace("%STT_SAARAS_SEL%", sttModel == "saaras:v3" ? "selected" : "");
-  h.replace("%STT_SAARIKA_SEL%", sttModel == "saarika:v2" ? "selected" : "");
-  h.replace("%GROQSTTURL%", esc(groqSttEndpoint));
-  h.replace("%GROQSTTKEY%", esc(groqSttKey));
-  h.replace("%GW3T_SEL%", groqSttModel == "whisper-large-v3-turbo" ? "selected" : "");
-  h.replace("%GW3_SEL%", groqSttModel == "whisper-large-v3" ? "selected" : "");
-  h.replace("%GDW_SEL%", groqSttModel == "distil-whisper-large-v3-en" ? "selected" : "");
-  h.replace("%OPENAIURL%", esc(openaiSttEndpoint));
-  h.replace("%OPENAIKEY%", esc(openaiSttKey));
-  h.replace("%OW1_SEL%", openaiSttModel == "whisper-1" ? "selected" : "");
-  h.replace("%OG4M_SEL%", openaiSttModel == "gpt-4o-mini-transcribe" ? "selected" : "");
-  h.replace("%OG4_SEL%", openaiSttModel == "gpt-4o-transcribe" ? "selected" : "");
+  // 3. Static Live Console and Serial Monitor window (0 bytes RAM heap)
+  server.sendContent_P(DASHBOARD_LIVE_CONSOLE);
 
-  h.replace("%GROQ_SEL%", llmProvider == "groq" ? "selected" : "");
-  h.replace("%GEMINI_SEL%", llmProvider == "gemini" ? "selected" : "");
-  h.replace("%OPENAI_SEL%", llmProvider == "openai" ? "selected" : "");
-  h.replace("%G20B_SEL%", groqModel == "openai/gpt-oss-20b" ? "selected" : "");
-  h.replace("%G120B_SEL%", groqModel == "openai/gpt-oss-120b" ? "selected" : "");
-  h.replace("%GQ32B_SEL%", groqModel == "qwen/qwen3-32b" ? "selected" : "");
-  h.replace("%GL33_SEL%", groqModel == "llama-3.3-70b-versatile" ? "selected" : "");
-  h.replace("%GE20L_SEL%", (llmModel == "gemini-2.0-flash-lite" || llmModel == "gemini-3.5-flash-lite") ? "selected" : "");
-  h.replace("%GE25_SEL%", llmModel == "gemini-2.5-flash" ? "selected" : "");
-  h.replace("%GE25L_SEL%", llmModel == "gemini-2.5-flash-lite" ? "selected" : "");
-  h.replace("%GPT4OM_SEL%", llmModel == "gpt-4o-mini" ? "selected" : "");
-  h.replace("%GPT41M_SEL%", llmModel == "gpt-4.1-mini" ? "selected" : "");
-  h.replace("%GPT41N_SEL%", llmModel == "gpt-4.1-nano" ? "selected" : "");
-  h.replace("%GPT4O_SEL%", llmModel == "gpt-4o" ? "selected" : "");
+  // 4. Form Part 1: Wi-Fi, STT, LLM (~6 KB RAM heap)
+  String body1 = getDashboardBodyPart1();
+  server.sendContent(body1);
+  body1 = "";
 
-  h.replace("%TTS_SARVAM_SEL%", ttsProvider == "sarvam" ? "selected" : "");
-  h.replace("%TTS_OPENAI_SEL%", ttsProvider == "openai" ? "selected" : "");
-  h.replace("%TTS_ELEVEN_SEL%", ttsProvider == "elevenlabs" ? "selected" : "");
-  h.replace("%TTSURL%", esc(ttsEndpoint));
-  h.replace("%TTSKEY%", esc(ttsKey));
-  h.replace("%TTSMODEL%", esc(ttsModel));
-  h.replace("%TTSVOICE%", esc(ttsVoice));
-  static const char *const sarvamVoices[] = {
-    "aditya", "ritu", "ashutosh", "priya", "neha", "rahul", "pooja", "rohan", "simran",
-    "kavya", "amit", "dev", "ishita", "shreya", "ratan", "varun", "manan", "sumit",
-    "roopa", "kabir", "aayan", "shubh", "advait", "anand", "tanya", "tarun", "sunny",
-    "mani", "gokul"
-  };
-  String voiceOpts;
-  voiceOpts.reserve(1600);
-  for (const char *v : sarvamVoices) {
-    bool sel = (ttsVoice.equalsIgnoreCase(v)) || (ttsVoice == "" && strcmp(v, "priya") == 0);
-    voiceOpts += "          <option value=\"";
-    voiceOpts += v;
-    voiceOpts += "\"";
-    if (sel) voiceOpts += " selected";
-    voiceOpts += ">";
-    String disp = v;
-    if (disp.length() > 0) disp[0] = toupper(disp[0]);
-    voiceOpts += disp;
-    if (strcmp(v, "priya") == 0) voiceOpts += " (Default)";
-    voiceOpts += "</option>\n";
-  }
-  h.replace("%SARVAM_VOICE_OPTIONS%", voiceOpts);
+  // 5. Form Part 2: TTS, Audio, Touch, Weather, Memory (~11 KB RAM heap)
+  String body2 = getDashboardBodyPart2();
+  server.sendContent(body2);
+  body2 = "";
 
-  h.replace("%OPENAITTSURL%", esc(openaiTtsEndpoint));
-  h.replace("%OPENAITTSKEY%", esc(openaiTtsKey));
-  h.replace("%OPENAITTSMODEL%", esc(openaiTtsModel));
-  h.replace("%OPENAITTSVOICE%", esc(openaiTtsVoice));
-  h.replace("%OA_ALLOY_SEL%", (openaiTtsVoice == "alloy" || openaiTtsVoice == "") ? "selected" : "");
-  h.replace("%OA_ECHO_SEL%", openaiTtsVoice == "echo" ? "selected" : "");
-  h.replace("%OA_FABLE_SEL%", openaiTtsVoice == "fable" ? "selected" : "");
-  h.replace("%OA_ONYX_SEL%", openaiTtsVoice == "onyx" ? "selected" : "");
-  h.replace("%OA_NOVA_SEL%", openaiTtsVoice == "nova" ? "selected" : "");
-  h.replace("%OA_SHIMMER_SEL%", openaiTtsVoice == "shimmer" ? "selected" : "");
-
-  h.replace("%ELEVURL%", esc(elevenEndpoint));
-  h.replace("%ELEVKEY%", esc(elevenKey));
-  h.replace("%ELEVMODEL%", esc(elevenModel));
-  h.replace("%ELEVVOICE%", esc(elevenVoice));
-
-  h.replace("%SSID%", esc(wifiSSID));
-  h.replace("%PASS%", esc(wifiPassword));
-  h.replace("%REPLANG%", esc(replyLang));
-  h.replace("%PROMPT%", esc(systemPrompt));
-  h.replace("%LLMURL%", esc(llmEndpoint));
-  h.replace("%LLMKEY%", esc(llmKey));
-  h.replace("%OPENAI_LLM_URL%", esc(llmEndpoint));
-  h.replace("%OPENAI_LLM_KEY%", esc(llmKey));
-  h.replace("%GROQURL%", esc(groqEndpoint));
-  h.replace("%GROQKEY%", esc(groqKey));
-
-  h.replace("%CIRC_EN_CHECKED%", circadianSleepEnabled ? "checked" : "");
-  h.replace("%CIRC_START%", String(circadianSleepStart));
-  h.replace("%BOREDOM_CHECKED%", boredomEnabled ? "checked" : "");
-  h.replace("%BM_1_SEL%", boredomMinutes == 1 ? "selected" : "");
-  h.replace("%BM_2_SEL%", boredomMinutes == 2 ? "selected" : "");
-  h.replace("%BM_3_SEL%", boredomMinutes == 3 ? "selected" : "");
-  h.replace("%BM_5_SEL%", boredomMinutes == 5 ? "selected" : "");
-  h.replace("%BM_10_SEL%", boredomMinutes == 10 ? "selected" : "");
-  h.replace("%BM_15_SEL%", boredomMinutes == 15 ? "selected" : "");
-  h.replace("%BM_30_SEL%", boredomMinutes == 30 ? "selected" : "");
-  h.replace("%WTHR_CITY%", esc(weatherCity));
-  h.replace("%WTHR_LAT%", esc(weatherLat));
-  h.replace("%WTHR_LON%", esc(weatherLon));
-  h.replace("%SKIN_DEFAULT_SEL%", currentEyeSkin == SKIN_DEFAULT ? "selected" : "");
-  h.replace("%SKIN_CYBER_SEL%", currentEyeSkin == SKIN_CYBERPUNK ? "selected" : "");
-  h.replace("%SKIN_CAT_SEL%", currentEyeSkin == SKIN_CAT ? "selected" : "");
-  h.replace("%SKIN_RETRO_SEL%", currentEyeSkin == SKIN_RETRO8BIT ? "selected" : "");
-  h.replace("%SKIN_ANIME_SEL%", currentEyeSkin == SKIN_ANIME ? "selected" : "");
-  h.replace("%SKIN_HEARTS_SEL%", currentEyeSkin == SKIN_HEARTS ? "selected" : "");
-  h.replace("%SKIN_STEAM_SEL%", currentEyeSkin == SKIN_STEAMPUNK ? "selected" : "");
-  h.replace("%SKIN_DEMON_SEL%", currentEyeSkin == SKIN_DEMON ? "selected" : "");
-  h.replace("%SKIN_MATRIX_SEL%", currentEyeSkin == SKIN_MATRIX ? "selected" : "");
-  h.replace("%SKIN_CYBORG_SEL%", currentEyeSkin == SKIN_CYBORG ? "selected" : "");
-  h.replace("%SKIN_MECHA_SEL%", currentEyeSkin == SKIN_MECHA ? "selected" : "");
-  h.replace("%SKIN_SHADES_SEL%", currentEyeSkin == SKIN_SUNGLASSES ? "selected" : "");
-  h.replace("%SKIN_PUPPY_SEL%", currentEyeSkin == SKIN_PUPPY ? "selected" : "");
-  h.replace("%SKIN_HYPNO_SEL%", currentEyeSkin == SKIN_HYPNO ? "selected" : "");
-  h.replace("%SKIN_ALIEN_SEL%", currentEyeSkin == SKIN_ALIEN ? "selected" : "");
-  h.replace("%SKIN_NINJA_SEL%", currentEyeSkin == SKIN_NINJA ? "selected" : "");
-  h.replace("%SKIN_ROUND_SEL%", currentEyeSkin == SKIN_ROUND ? "selected" : "");
-  h.replace("%SKIN_KIWI_SEL%", currentEyeSkin == SKIN_KIWI ? "selected" : "");
-
-  h.replace("%MEM_NAME%", esc(getOwnerName()));
-  String memListHtml;
-  if (kiwiMemory.memoryCount == 0) {
-    memListHtml = "<div style=\"color:#86868b;font-size:13px;font-style:italic;padding:4px 0\">No memories saved yet. Talk to Kiwi or type one above!</div>";
-  } else {
-    for (int i = 0; i < kiwiMemory.memoryCount; i++) {
-      memListHtml += "<div style=\"font-size:13px;color:#1d1d1f;padding:6px 0;border-bottom:1px solid rgba(0,0,0,0.06)\">" + esc(kiwiMemory.memories[i]) + "</div>";
-    }
-  }
-  if (kiwiMemory.pendingFollowUp.length() > 0 && !kiwiMemory.followUpTriggered) {
-    memListHtml += "<div style=\"font-size:12px;color:#ff9500;padding:6px 0;font-weight:600\">Pending Follow-up: " + esc(kiwiMemory.pendingFollowUp) + "</div>";
-  }
-  h.replace("%MEM_LIST_HTML%", memListHtml);
-
-  return h;
+  // 6. Scripts & Footer (0 bytes RAM heap)
+  server.sendContent_P(DASHBOARD_FOOT);
+  server.sendContent("");
 }
-
-void handleRoot() { server.send(200, "text/html; charset=utf-8", configPage()); }

@@ -87,6 +87,9 @@ extern const char *DEFAULT_ELEVEN_URL;
 extern const char *DEFAULT_ELEVEN_MODEL;
 extern const char *DEFAULT_ELEVEN_VOICE;
 
+extern const char *DEFAULT_FISH_TTS_URL;
+extern const char *DEFAULT_FISH_TTS_MODEL;
+
 // ============================================================
 // GLOBAL CONFIGURATION VARIABLES (Shared Across Modules)
 // ============================================================
@@ -128,8 +131,29 @@ extern String elevenEndpoint;
 extern String elevenModel;
 extern String elevenVoice;
 extern String elevenKey;
+extern String fishEndpoint;
+extern String fishModel;
+extern String fishVoice;
+extern String fishKey;
 extern String replyLang;
 extern int speakerVolume;
+
+// ---------- Touch Accessibility & Sensitivity ----------
+extern int touchDebounceMs;
+extern bool touchFeedbackSound;
+
+// ---------- Touch Gesture Remapping ----------
+extern TouchAction touchActTopTap;
+extern TouchAction touchActTopDbl;
+extern TouchAction touchActLeftTap;
+extern TouchAction touchActLeftDbl;
+extern TouchAction touchActRightTap;
+extern TouchAction touchActRightDbl;
+extern TouchAction touchActLeftHold;
+extern TouchAction touchActRightHold;
+
+TouchAction parseTouchAction(const String &s, TouchAction def);
+String touchActionToString(TouchAction a);
 
 // ---------- Circadian Sleep Mode ----------
 extern bool circadianSleepEnabled;

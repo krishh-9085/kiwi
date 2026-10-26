@@ -50,6 +50,9 @@ const char *DEFAULT_ELEVEN_URL = "https://api.elevenlabs.io/v1/text-to-speech";
 const char *DEFAULT_ELEVEN_MODEL = "eleven_multilingual_v2";
 const char *DEFAULT_ELEVEN_VOICE = "21m00Tcm4TlvDq8ikWAM";
 
+const char *DEFAULT_FISH_TTS_URL = "https://api.fish.audio/v1/tts";
+const char *DEFAULT_FISH_TTS_MODEL = "s2.1-pro-free";
+
 // ============================================================
 // VARIABLE INSTANTIATIONS
 // ============================================================
@@ -92,8 +95,58 @@ String elevenEndpoint = DEFAULT_ELEVEN_URL;
 String elevenModel = DEFAULT_ELEVEN_MODEL;
 String elevenVoice = DEFAULT_ELEVEN_VOICE;
 String elevenKey = "";
+String fishEndpoint = DEFAULT_FISH_TTS_URL;
+String fishModel = DEFAULT_FISH_TTS_MODEL;
+String fishVoice = "";
+String fishKey = "";
 String replyLang = "";
 int    speakerVolume = 70; // 0-100
+
+// ---------- Touch Accessibility & Sensitivity ----------
+int    touchDebounceMs = 35; // Default 35ms debounce filter
+bool   touchFeedbackSound = true; // Instant audio/visual feedback on touch
+
+// ---------- Touch Gesture Remapping ----------
+TouchAction touchActTopTap    = TOUCH_ACT_LISTEN;
+TouchAction touchActTopDbl    = TOUCH_ACT_CYCLE_SKIN;
+TouchAction touchActLeftTap   = TOUCH_ACT_DISMISS;
+TouchAction touchActLeftDbl   = TOUCH_ACT_CLOCK;
+TouchAction touchActRightTap  = TOUCH_ACT_DISMISS;
+TouchAction touchActRightDbl  = TOUCH_ACT_WEATHER;
+TouchAction touchActLeftHold  = TOUCH_ACT_PET;
+TouchAction touchActRightHold = TOUCH_ACT_PET;
+
+TouchAction parseTouchAction(const String &s, TouchAction def) {
+  String v = s;
+  v.trim();
+  v.toLowerCase();
+  if (v == "listen" || v == "0") return TOUCH_ACT_LISTEN;
+  if (v == "clock" || v == "1") return TOUCH_ACT_CLOCK;
+  if (v == "weather" || v == "2") return TOUCH_ACT_WEATHER;
+  if (v == "skin" || v == "3") return TOUCH_ACT_CYCLE_SKIN;
+  if (v == "pet" || v == "4") return TOUCH_ACT_PET;
+  if (v == "tickle" || v == "5") return TOUCH_ACT_TICKLE;
+  if (v == "vol_up" || v == "6") return TOUCH_ACT_VOL_UP;
+  if (v == "vol_dn" || v == "7") return TOUCH_ACT_VOL_DOWN;
+  if (v == "dismiss" || v == "8") return TOUCH_ACT_DISMISS;
+  if (v == "none" || v == "9") return TOUCH_ACT_NONE;
+  return def;
+}
+
+String touchActionToString(TouchAction a) {
+  switch (a) {
+    case TOUCH_ACT_LISTEN: return "listen";
+    case TOUCH_ACT_CLOCK: return "clock";
+    case TOUCH_ACT_WEATHER: return "weather";
+    case TOUCH_ACT_CYCLE_SKIN: return "skin";
+    case TOUCH_ACT_PET: return "pet";
+    case TOUCH_ACT_TICKLE: return "tickle";
+    case TOUCH_ACT_VOL_UP: return "vol_up";
+    case TOUCH_ACT_VOL_DOWN: return "vol_dn";
+    case TOUCH_ACT_DISMISS: return "dismiss";
+    default: return "none";
+  }
+}
 
 // ---------- Circadian Sleep Mode ----------
 bool     circadianSleepEnabled = true;

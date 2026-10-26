@@ -277,8 +277,8 @@ String recordAndTranscribe(uint32_t recordSeconds) {
     if (!clientWriteAll(client, out, outPos))
       return bail("upload failed");
   }
-  // Keep the WAV at its declared length while avoiding another blocking mic read.
-  if (captureStopped && sent < recordSamples) {
+  // Ensure the WAV reaches its exact declared Content-Length even if mic stopped or had a partial buffer
+  if (sent < recordSamples) {
     static uint8_t silence[UPLOAD_BATCH * 2] = {};
     while (sent < recordSamples) {
       uint32_t remainingSamples = recordSamples - sent;
@@ -297,6 +297,8 @@ String recordAndTranscribe(uint32_t recordSeconds) {
 
   client.print(part2);
   client.print(ending);
+  client.flush();
+  Serial.println("[STT] Upload complete. Waiting for response...");
   setEmotion(EMOTION_THINKING);
 
   uint32_t waitStart = millis();
@@ -307,6 +309,9 @@ String recordAndTranscribe(uint32_t recordSeconds) {
     pumpUI();
     delay(10);
   }
+
+  Serial.printf("[STT] Response received after %lu ms (connected=%d, avail=%d)\n",
+                (unsigned long)(millis() - waitStart), client.connected(), client.available());
 
   String response;
   uint32_t readStart = millis();

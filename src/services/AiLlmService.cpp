@@ -6,14 +6,15 @@
 #include "face/FaceEngine.h"
 #include "behavior/InteractionManager.h"
 #include "behavior/ActionExecutor.h"
+#include "web/WebPortal.h"
 #include <WiFi.h>
 #include <HTTPClient.h>
 #include <WiFiClientSecure.h>
 
 static String getSmartActionInstruction() {
   return " SMART ACTION EXECUTION: You control your physical robot hardware! "
-         "When user asks you to perform an action, change settings, timer, face or volume, "
-         "append [ACTION: ...] tags at the end of your response: "
+         "When user asks you to perform an action, change settings, timer, skin/theme, weather, time or volume, "
+         "ALWAYS reply with a friendly spoken sentence AND append [ACTION: ...] tags: "
          "[ACTION: volume <0-100>] (e.g. [ACTION: volume 85]) "
          "[ACTION: skin <kiwi|cat|cyberpunk|retro8bit|matrix|anime|hearts|steampunk|demon|cyborg|mecha|sunglasses|puppy|hypno|alien|ninja|round|default>] "
          "[ACTION: emotion <happy|excited|sad|angry|confused|cool|cute|evil|crying|hearts|dead|shocked|singing|party|nervous|bored|scared|suspicious|relieved|proud|dizzy|lovestruck|wink|smug|curious|laughing|sleepy>] "
@@ -23,8 +24,11 @@ static String getSmartActionInstruction() {
          "[ACTION: weather] (show weather screen) "
          "[ACTION: time] (show clock screen) "
          "[ACTION: sound <chime|sparkle|giggle|kiss|playful|sleepy|proud>] "
-         "Example: User says 'Aawaz 80 kardo' -> reply 'Bilkul, aawaz 80 kar di! [ACTION: volume 80] [ACTION: emotion happy]'. "
-         "Example: User says 'Show cat eyes' -> reply 'Meow! Check out my cute cat eyes! [ACTION: skin cat] [ACTION: emotion cute]'.";
+         "Example: User says 'Aawaz 80 kardo' -> reply 'Bilkul, aawaz 80 kar di! [ACTION: volume 80]'. "
+         "Example: User says 'Cyberpunk theme rakho' -> reply 'Bilkul, Cyberpunk theme activate kar di! [ACTION: skin cyberpunk]'. "
+         "Example: User says 'Show cat eyes' -> reply 'Meow! Check out my cute cat eyes! [ACTION: skin cat]'. "
+         "Example: User says 'Weather kya hai?' -> reply 'Yeh lijiye live weather! [ACTION: weather]'. "
+         "IMPORTANT: NEVER reply with ONLY the action tag alone. Always write a cheerful spoken sentence first.";
 }
 
 // ============================================================
@@ -136,10 +140,15 @@ String askGemini(const String &question) {
                   (unsigned)ESP.getFreeHeap());
   }
   if (code != 200) {
-    Serial.println(resp);
+    Serial.printf("[GEMINI] HTTP %d: %s\n", code, resp.c_str());
     return "";
   }
-  return cleanForSpeech(jsonTextField(resp, "text"));
+  String ans = jsonTextField(resp, "text");
+  if (!ans.length()) ans = jsonTextField(resp, "content");
+  if (!ans.length()) {
+    Serial.printf("[GEMINI] Warning: empty parsed. Raw: %s\n", resp.substring(0, 300).c_str());
+  }
+  return cleanForSpeech(ans);
 }
 
 String askGroq(const String &question) {
@@ -180,8 +189,8 @@ String askGroq(const String &question) {
   sys += getSmartActionInstruction();
 
   int reqTokens =
-      (groqModel.indexOf("gpt-oss") >= 0 || groqModel.indexOf("qwen3") >= 0)
-          ? 400
+      (groqModel.indexOf("gpt-oss") >= 0 || groqModel.indexOf("qwen") >= 0)
+          ? 512
           : LLM_MAX_TOKENS;
 
   String body;
@@ -200,9 +209,10 @@ String askGroq(const String &question) {
   body += ",{\"role\":\"user\",\"content\":\"" + jsonEscape(question) +
           "\"}],"
           "\"max_tokens\":" +
-          String(reqTokens) + ",\"temperature\":0.8";
-  if (groqModel.indexOf("gpt-oss") >= 0)
-    body += ",\"reasoning_effort\":\"low\"";
+          String(reqTokens) + ",\"temperature\":0.7";
+  if (groqModel.indexOf("gpt-oss") >= 0) {
+    body += ",\"reasoning_effort\":\"low\",\"reasoning_format\":\"hidden\"";
+  }
   body += "}";
 
   String resp;
@@ -210,10 +220,10 @@ String askGroq(const String &question) {
   {
     WiFiClientSecure client;
     client.setInsecure();
-    client.setTimeout(10);
+    client.setTimeout(15);
     HTTPClient http;
     http.setReuse(false);
-    http.setTimeout(12000);
+    http.setTimeout(18000);
     http.setConnectTimeout(6000);
     uint32_t t0 = millis();
     Serial.println("[GROQ] Asking...");
@@ -228,7 +238,7 @@ String askGroq(const String &question) {
       WiFiClient *stream = http.getStreamPtr();
       resp.reserve(2048);
       uint32_t tr = millis();
-      while (millis() - tr < 12000 && resp.length() < 4096) {
+      while (millis() - tr < 15000 && resp.length() < 4096) {
         if (!http.connected() && (!stream || !stream->available()))
           break;
         if (stream) {
@@ -243,8 +253,8 @@ String askGroq(const String &question) {
       }
     } else {
       resp = http.getString();
-      if (resp.length() > 200)
-        resp = resp.substring(0, 200);
+      if (resp.length() > 300)
+        resp = resp.substring(0, 300);
     }
     http.end();
     Serial.printf("[GROQ] HTTP %d in %.1fs, respLen=%u, heap=%u\n", code,
@@ -252,10 +262,15 @@ String askGroq(const String &question) {
                   (unsigned)ESP.getFreeHeap());
   }
   if (code != 200) {
-    Serial.println(resp);
+    Serial.printf("[GROQ] HTTP %d: %s\n", code, resp.c_str());
     return "";
   }
-  return cleanForSpeech(jsonTextField(resp, "content"));
+  String ans = jsonTextField(resp, "content");
+  if (!ans.length()) ans = jsonTextField(resp, "text");
+  if (!ans.length()) {
+    Serial.printf("[GROQ] Warning: empty 'content' parsed. Raw: %s\n", resp.substring(0, 300).c_str());
+  }
+  return cleanForSpeech(ans);
 }
 
 String askOpenAI(const String &question) {
@@ -297,10 +312,10 @@ String askOpenAI(const String &question) {
 
   WiFiClientSecure client;
   client.setInsecure();
-  client.setTimeout(10);
+  client.setTimeout(15);
   HTTPClient http;
   http.setReuse(false);
-  http.setTimeout(12000);
+  http.setTimeout(18000);
   http.setConnectTimeout(6000);
   String endpoint = llmEndpoint;
   if (endpoint.length() == 0 ||
@@ -322,14 +337,20 @@ String askOpenAI(const String &question) {
                 (millis() - t0) / 1000.0f, (unsigned)resp.length(),
                 (unsigned)ESP.getFreeHeap());
   if (code != 200) {
-    Serial.println(resp.substring(0, 200));
+    Serial.printf("[OPENAI] HTTP %d: %s\n", code, resp.substring(0, 200).c_str());
     return "";
   }
-  return cleanForSpeech(jsonTextField(resp, "content"));
+  String ans = jsonTextField(resp, "content");
+  if (!ans.length()) ans = jsonTextField(resp, "text");
+  if (!ans.length()) {
+    Serial.printf("[OPENAI] Warning: empty 'content' parsed. Raw: %s\n", resp.substring(0, 300).c_str());
+  }
+  return cleanForSpeech(ans);
 }
 
 String askLLM(const String &question) {
   checkChatHistoryTimeout();
+  bool apWasUp = suspendLocalNet();
   String ans;
   if (llmProvider == "groq") {
     Serial.printf("[LLM] Provider = Groq | Memory turns = %d\n",
@@ -344,6 +365,7 @@ String askLLM(const String &question) {
                   chatHistoryCount);
     ans = askGemini(question);
   }
+  restoreWebAndAP(apWasUp);
   if (ans.length() > 0) {
     parseAndExecuteActions(ans);
     parseAndSaveMemoriesFromLlm(ans);

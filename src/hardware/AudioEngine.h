@@ -36,6 +36,9 @@ void playBootChime();
 void soundError();
 void soundClock();
 void soundListening();
+void soundTouchBlip();
+void soundVolUp();
+void soundVolDown();
 
 // ---------- Interactive Soundboard FX ----------
 void soundFart();

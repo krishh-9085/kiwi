@@ -9,6 +9,7 @@
 #include "web/WebPortal.h"
 #include "behavior/InteractionManager.h"
 #include "behavior/ActionExecutor.h"
+#include "services/AiTextTools.h"
 #include <WiFi.h>
 
 // ============================================================
@@ -29,16 +30,35 @@ bool handleTimeCommand(const String &qIn) {
           "show time", "tell me time", "time kya", "kya time", "kitna baja",
           "kitne baje", "abhi kitna", "abhi time", "समय", "टाइम", "घड़ी",
           "घडी", "कितना बजा", "कितने बजे", "अभी समय", "क्या समय", "समय बताओ",
-          "टाइम बताओ"});
+          "टाइम बताओ", "टाइम क्या"});
   if (!isTime)
     return false;
-  Serial.println("[CMD] time -> show clock");
-  showClockScreen = true;
-  soundClock();
+  Serial.println("[CMD] time -> show clock & speak");
   if (!timeSynced && WiFi.status() == WL_CONNECTED)
     syncTimeFromNTP();
+
+  showClockScreen = true;
+  soundClock();
+
+  struct tm timeinfo;
+  if (getLocalTime(&timeinfo, 500)) {
+    int hour12 = timeinfo.tm_hour % 12;
+    if (hour12 == 0) hour12 = 12;
+    const char *ampm = (timeinfo.tm_hour >= 12) ? "PM" : "AM";
+    String timeSpeech;
+    if (sttLang == "hi" || containsDevanagari(qIn) || hasAny(q, {"samay", "kya", "baja", "baje", "समय", "टाइम"})) {
+      timeSpeech = "Abhi " + String(hour12) + " bajke " + String(timeinfo.tm_min) + " minute ho rahe hain.";
+    } else {
+      timeSpeech = "It is " + String(hour12) + ":" + ((timeinfo.tm_min < 10) ? "0" : "") + String(timeinfo.tm_min) + " " + String(ampm) + ".";
+    }
+    setEmotion(EMOTION_SPEAKING);
+    speakText(timeSpeech);
+  } else {
+    speakText("Time sync nahi hua hai.");
+  }
+
   uint32_t t0 = millis();
-  while (millis() - t0 < 6000) {
+  while (millis() - t0 < 4000) {
     if (cancelRequest || touchT.state)
       break;
     pumpWeb();
@@ -47,6 +67,8 @@ bool handleTimeCommand(const String &qIn) {
     delay(10);
   }
   showClockScreen = false;
+  setEmotion(EMOTION_HAPPY);
+  returnIdleAt = millis() + 1500;
   return true;
 }
 
@@ -57,7 +79,8 @@ bool handleWeatherCommand(const String &qIn) {
       q, {"weather", "temperature", "temp", "mausam", "mosam", "मौसम",
           "तापमान", "barish", "rain", "forecast", "taapmaan", "weather kya",
           "kya mausam", "aaj ka mausam", "kitni garmi", "kitni thand",
-          "how is the weather", "current weather"});
+          "how is the weather", "current weather", "वेदर", "आज का वेदर",
+          "वेदर क्या", "मौसम कैसा"});
   if (!isWeather)
     return false;
   Serial.println("[CMD] weather requested");
@@ -69,7 +92,7 @@ bool handleWeatherCommand(const String &qIn) {
   soundPetSparkle();
 
   String voiceReply;
-  if (sttLang == "hi" || q.indexOf("mausam") >= 0 || q.indexOf("मौसम") >= 0) {
+  if (sttLang == "hi" || containsDevanagari(qIn) || q.indexOf("mausam") >= 0 || q.indexOf("मौसम") >= 0 || q.indexOf("वेदर") >= 0) {
     voiceReply = weatherCity + " mein mausam " + weatherDesc + " hai, aur taapmaan " +
                  String((int)round(weatherTemp)) + " degree Celsius hai.";
   } else {
@@ -197,45 +220,45 @@ bool handleEmotionCommand(const String &qIn) {
 bool handleSkinCommand(const String &qIn) {
   String q = qIn;
   q.toLowerCase();
-  if (!hasAny(q, {"skin", "eyes", "eye skin", "looks", "chashma", "theme"}))
+  if (!hasAny(q, {"skin", "eyes", "eye skin", "looks", "chashma", "theme", "थीम", "स्किन", "आंखें", "चश्मा", "चेहरा", "look", "rakho", "lagao", "karo", "रखो", "लगाओ", "करो", "बदलो"}))
     return false;
 
   String name = "";
-  if (hasAny(q, {"cyberpunk", "cyber", "hud", "sci-fi"})) {
+  if (hasAny(q, {"cyberpunk", "cyber", "hud", "sci-fi", "साइबरपंक", "साइबर"})) {
     currentEyeSkin = SKIN_CYBERPUNK; name = "Cyberpunk Visor";
-  } else if (hasAny(q, {"cat", "neko", "billi", "kitty"})) {
+  } else if (hasAny(q, {"cat", "neko", "billi", "kitty", "कैट", "बिल्ली"})) {
     currentEyeSkin = SKIN_CAT; name = "Kawaii Cat";
-  } else if (hasAny(q, {"retro", "8bit", "8-bit", "pixel", "arcade"})) {
+  } else if (hasAny(q, {"retro", "8bit", "8-bit", "pixel", "arcade", "रेट्रो"})) {
     currentEyeSkin = SKIN_RETRO8BIT; name = "Retro 8-Bit";
-  } else if (hasAny(q, {"anime", "star", "shounen", "starry"})) {
+  } else if (hasAny(q, {"anime", "star", "shounen", "starry", "एनिमे", "एनीमे"})) {
     currentEyeSkin = SKIN_ANIME; name = "Anime Star";
-  } else if (hasAny(q, {"heart", "hearts", "dil", "love"})) {
+  } else if (hasAny(q, {"heart", "hearts", "dil", "love", "हार्ट", "दिल"})) {
     currentEyeSkin = SKIN_HEARTS; name = "Heart Eyes";
-  } else if (hasAny(q, {"steampunk", "goggles", "aviator"})) {
+  } else if (hasAny(q, {"steampunk", "goggles", "aviator", "स्टीमपंक"})) {
     currentEyeSkin = SKIN_STEAMPUNK; name = "Steampunk Goggles";
-  } else if (hasAny(q, {"demon", "devil", "horns", "shaitan"})) {
+  } else if (hasAny(q, {"demon", "devil", "horns", "shaitan", "डेमन", "शैतान"})) {
     currentEyeSkin = SKIN_DEMON; name = "Demon Horns";
-  } else if (hasAny(q, {"matrix", "terminal", "code", "hacker"})) {
+  } else if (hasAny(q, {"matrix", "terminal", "code", "hacker", "मैट्रिक्स"})) {
     currentEyeSkin = SKIN_MATRIX; name = "Matrix Code";
-  } else if (hasAny(q, {"cyborg", "terminator", "t800", "t-800"})) {
+  } else if (hasAny(q, {"cyborg", "terminator", "t800", "t-800", "साइबोर्ग"})) {
     currentEyeSkin = SKIN_CYBORG; name = "Cyborg T-800";
-  } else if (hasAny(q, {"mecha", "gundam", "robot eyes", "v-fin"})) {
+  } else if (hasAny(q, {"mecha", "gundam", "robot eyes", "v-fin", "मेका"})) {
     currentEyeSkin = SKIN_MECHA; name = "Mecha Gundam";
-  } else if (hasAny(q, {"sunglass", "sunglasses", "shades", "thug life", "boss"})) {
+  } else if (hasAny(q, {"sunglass", "sunglasses", "shades", "thug life", "boss", "काला चश्मा"})) {
     currentEyeSkin = SKIN_SUNGLASSES; name = "Boss Shades";
-  } else if (hasAny(q, {"puppy", "dog", "doggy", "kutta"})) {
+  } else if (hasAny(q, {"puppy", "dog", "doggy", "kutta", "पपी", "कुत्ता"})) {
     currentEyeSkin = SKIN_PUPPY; name = "Kawaii Puppy";
-  } else if (hasAny(q, {"hypno", "spiral", "vortex", "dizzy"})) {
+  } else if (hasAny(q, {"hypno", "spiral", "vortex", "dizzy", "हिप्नो"})) {
     currentEyeSkin = SKIN_HYPNO; name = "Hypno Spiral";
-  } else if (hasAny(q, {"alien", "ufo", "cosmic", "galaxy"})) {
+  } else if (hasAny(q, {"alien", "ufo", "cosmic", "galaxy", "एलियन"})) {
     currentEyeSkin = SKIN_ALIEN; name = "Cosmic Alien";
-  } else if (hasAny(q, {"ninja", "shinobi", "naruto", "headband"})) {
+  } else if (hasAny(q, {"ninja", "shinobi", "naruto", "headband", "निंजा"})) {
     currentEyeSkin = SKIN_NINJA; name = "Shinobi Ninja";
-  } else if (hasAny(q, {"round", "circle", "gol", "rounded"})) {
+  } else if (hasAny(q, {"round", "circle", "gol", "rounded", "गोल"})) {
     currentEyeSkin = SKIN_ROUND; name = "Round Vector";
-  } else if (hasAny(q, {"kiwi", "desk buddy", "buddy", "relaxed eyes", "bored eyes", "block eyes"})) {
+  } else if (hasAny(q, {"kiwi", "desk buddy", "buddy", "कीवी"})) {
     currentEyeSkin = SKIN_KIWI; name = "Desk Buddy (Cute Block)";
-  } else if (hasAny(q, {"default", "normal", "clean", "reset skin"})) {
+  } else if (hasAny(q, {"default", "normal", "clean", "reset skin", "डिफ़ॉल्ट", "डिफॉल्ट"})) {
     currentEyeSkin = SKIN_DEFAULT; name = "Default Eyes";
   } else {
     return false;
@@ -243,7 +266,11 @@ bool handleSkinCommand(const String &qIn) {
 
   saveConfig();
   soundPetSparkle();
-  speakText("Eye skin set to " + name + "!");
+  if (sttLang == "hi" || containsDevanagari(qIn) || hasAny(q, {"rakho", "karo", "lagao", "थीम", "बदलो", "रखो", "लगाओ"})) {
+    speakText("Theme " + name + " set kar di hai!");
+  } else {
+    speakText("Theme set to " + name + "!");
+  }
   setEmotion(EMOTION_HAPPY);
   returnIdleAt = millis() + 1500;
   return true;

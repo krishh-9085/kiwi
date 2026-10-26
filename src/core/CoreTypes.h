@@ -40,11 +40,26 @@ struct TouchSensor {
   bool holdHandled;
   bool armed;
   bool sleepHandled;
+  uint32_t lastReleaseAt;
+  bool pendingSingleTap;
 };
 
 // ============================================================
 // ENUMS
 // ============================================================
+enum TouchAction {
+  TOUCH_ACT_LISTEN = 0,
+  TOUCH_ACT_CLOCK,
+  TOUCH_ACT_WEATHER,
+  TOUCH_ACT_CYCLE_SKIN,
+  TOUCH_ACT_PET,
+  TOUCH_ACT_TICKLE,
+  TOUCH_ACT_VOL_UP,
+  TOUCH_ACT_VOL_DOWN,
+  TOUCH_ACT_DISMISS,
+  TOUCH_ACT_NONE
+};
+
 enum Emotion {
   EMOTION_IDLE,
   EMOTION_LISTENING,

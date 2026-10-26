@@ -87,12 +87,13 @@ void setup() {
     if (syncTimeFromNTP())
       Serial.println("[NTP] Time Synced");
     fetchWeather();
-    if (MDNS.begin("myrobot")) {
-      MDNS.addService("http", "tcp", 80);
-      Serial.println("[MDNS] http://myrobot.local");
-    }
   } else {
     startAP();
+  }
+
+  if (MDNS.begin("myrobot")) {
+    MDNS.addService("http", "tcp", 80);
+    Serial.println("[MDNS] http://myrobot.local");
   }
 
   initOfflineBrain();

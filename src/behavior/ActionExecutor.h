@@ -5,9 +5,12 @@
 // LLM TOOL / SMART ACTION EXECUTOR
 // ============================================================
 
+extern int lastActionsExecuted;
+
 // Scans text for [ACTION: ...] tags, executes all requested robot actions,
 // and removes the tags so speech/TTS and chat logs remain clean and natural.
-void parseAndExecuteActions(String &text);
+// Returns count of executed actions.
+int parseAndExecuteActions(String &text);
 
 // Executes a single action command string, e.g. "volume 80", "skin cat", "timer 60 Study"
 bool executeRobotAction(const String &actionCmd);

@@ -19,3 +19,4 @@ build-cli-upload/
 .agents/
 .claude/
 skills-lock.json
+scratch/

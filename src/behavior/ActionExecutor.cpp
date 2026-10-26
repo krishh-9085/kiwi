@@ -88,58 +88,58 @@ bool setEyeSkinByName(const String &nameIn) {
   n.toLowerCase();
   n.trim();
 
-  if (n == "kiwi" || n == "buddy" || n == "desk buddy" || n == "deskbuddy") {
+  if (n == "kiwi" || n == "buddy" || n == "desk buddy" || n == "deskbuddy" || n == "कीवी") {
     currentEyeSkin = SKIN_KIWI; return true;
   }
-  if (n == "cyberpunk" || n == "cyber" || n == "hud" || n == "sci-fi") {
+  if (n == "cyberpunk" || n == "cyber" || n == "hud" || n == "sci-fi" || n == "साइबरपंक" || n == "साइबर") {
     currentEyeSkin = SKIN_CYBERPUNK; return true;
   }
-  if (n == "cat" || n == "neko" || n == "kitty" || n == "billi") {
+  if (n == "cat" || n == "neko" || n == "kitty" || n == "billi" || n == "कैट" || n == "बिल्ली") {
     currentEyeSkin = SKIN_CAT; return true;
   }
-  if (n == "retro8bit" || n == "retro" || n == "8bit" || n == "8-bit" || n == "pixel") {
+  if (n == "retro8bit" || n == "retro" || n == "8bit" || n == "8-bit" || n == "pixel" || n == "रेट्रो") {
     currentEyeSkin = SKIN_RETRO8BIT; return true;
   }
-  if (n == "anime" || n == "star" || n == "starry" || n == "shounen") {
+  if (n == "anime" || n == "star" || n == "starry" || n == "shounen" || n == "एनिमे" || n == "एनीमे") {
     currentEyeSkin = SKIN_ANIME; return true;
   }
-  if (n == "hearts" || n == "heart" || n == "dil" || n == "love") {
+  if (n == "hearts" || n == "heart" || n == "dil" || n == "love" || n == "हार्ट" || n == "दिल") {
     currentEyeSkin = SKIN_HEARTS; return true;
   }
-  if (n == "steampunk" || n == "goggles" || n == "aviator") {
+  if (n == "steampunk" || n == "goggles" || n == "aviator" || n == "स्टीमपंक") {
     currentEyeSkin = SKIN_STEAMPUNK; return true;
   }
-  if (n == "demon" || n == "devil" || n == "horns" || n == "shaitan") {
+  if (n == "demon" || n == "devil" || n == "horns" || n == "shaitan" || n == "डेमन" || n == "शैतान") {
     currentEyeSkin = SKIN_DEMON; return true;
   }
-  if (n == "matrix" || n == "code" || n == "hacker" || n == "terminal") {
+  if (n == "matrix" || n == "code" || n == "hacker" || n == "terminal" || n == "मैट्रिक्स") {
     currentEyeSkin = SKIN_MATRIX; return true;
   }
-  if (n == "cyborg" || n == "t800" || n == "t-800" || n == "terminator") {
+  if (n == "cyborg" || n == "t800" || n == "t-800" || n == "terminator" || n == "साइबोर्ग") {
     currentEyeSkin = SKIN_CYBORG; return true;
   }
-  if (n == "mecha" || n == "gundam" || n == "v-fin") {
+  if (n == "mecha" || n == "gundam" || n == "v-fin" || n == "मेका") {
     currentEyeSkin = SKIN_MECHA; return true;
   }
-  if (n == "sunglasses" || n == "shades" || n == "cool" || n == "sunglass" || n == "boss") {
+  if (n == "sunglasses" || n == "shades" || n == "cool" || n == "sunglass" || n == "boss" || n == "चश्मा") {
     currentEyeSkin = SKIN_SUNGLASSES; return true;
   }
-  if (n == "puppy" || n == "dog" || n == "doggy" || n == "kutta") {
+  if (n == "puppy" || n == "dog" || n == "doggy" || n == "kutta" || n == "पपी" || n == "कुत्ता") {
     currentEyeSkin = SKIN_PUPPY; return true;
   }
-  if (n == "hypno" || n == "spiral" || n == "vortex" || n == "dizzy") {
+  if (n == "hypno" || n == "spiral" || n == "vortex" || n == "dizzy" || n == "हिप्नो") {
     currentEyeSkin = SKIN_HYPNO; return true;
   }
-  if (n == "alien" || n == "ufo" || n == "cosmic") {
+  if (n == "alien" || n == "ufo" || n == "cosmic" || n == "एलियन") {
     currentEyeSkin = SKIN_ALIEN; return true;
   }
-  if (n == "ninja" || n == "shinobi" || n == "naruto") {
+  if (n == "ninja" || n == "shinobi" || n == "naruto" || n == "निंजा") {
     currentEyeSkin = SKIN_NINJA; return true;
   }
-  if (n == "round" || n == "circle" || n == "gol") {
+  if (n == "round" || n == "circle" || n == "gol" || n == "गोल") {
     currentEyeSkin = SKIN_ROUND; return true;
   }
-  if (n == "default" || n == "normal" || n == "clean" || n == "reset") {
+  if (n == "default" || n == "normal" || n == "clean" || n == "reset" || n == "डिफ़ॉल्ट" || n == "डिफॉल्ट") {
     currentEyeSkin = SKIN_DEFAULT; return true;
   }
   return false;
@@ -288,24 +288,44 @@ bool executeRobotAction(const String &actionCmd) {
   return false;
 }
 
+int lastActionsExecuted = 0;
+
 // ============================================================
 // SCAN, EXECUTE AND STRIP [ACTION: ...] TAGS FROM LLM
 // ============================================================
-void parseAndExecuteActions(String &text) {
+int parseAndExecuteActions(String &text) {
+  int actionCount = 0;
   while (true) {
-    int start = text.indexOf("[ACTION:");
+    int start = -1;
+    for (int i = 0; i < (int)text.length(); i++) {
+      if (text[i] == '[') {
+        int k = i + 1;
+        while (k < (int)text.length() && text[k] == ' ') k++;
+        if (k + 7 <= (int)text.length() && text.substring(k, k + 7).equalsIgnoreCase("action:")) {
+          start = i;
+          break;
+        }
+      }
+    }
     if (start < 0)
       break;
     int end = text.indexOf(']', start);
     if (end < 0)
       break;
 
-    String actionCmd = text.substring(start + 8, end);
-    actionCmd.trim();
-    if (actionCmd.length() > 0) {
-      executeRobotAction(actionCmd);
+    int colon = text.indexOf(':', start);
+    if (colon > start && colon < end) {
+      String actionCmd = text.substring(colon + 1, end);
+      actionCmd.trim();
+      if (actionCmd.length() > 0) {
+        if (executeRobotAction(actionCmd)) {
+          actionCount++;
+        }
+      }
     }
     text.remove(start, (end - start) + 1);
   }
   text.trim();
+  lastActionsExecuted = actionCount;
+  return actionCount;
 }

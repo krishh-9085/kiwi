@@ -13,6 +13,8 @@
 #include <time.h>
 #include <Preferences.h>
 #include "services/WeatherService.h"
+#include <vector>
+#include <algorithm>
 
 static String escJson(String s) {
   s.replace("\\", "\\\\");
@@ -295,6 +297,9 @@ void handleStatus() {
   j += ",\"answer\":\"" + escJson(lastLlmAnswer) + "\"";
   j += ",\"logs\":" + getTerminalJson();
   j += "}";
+  server.sendHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+  server.sendHeader("Pragma", "no-cache");
+  server.sendHeader("Expires", "0");
   server.send(200, "application/json", j);
 }
 
@@ -309,7 +314,8 @@ void handleConfigApi() {
   j += "\"groqUrl\":\"" + escJson(groqEndpoint) + "\",\"groqKey\":\"" + escJson(groqKey) + "\",\"groqModel\":\"" + escJson(groqModel) + "\"},";
   j += "\"tts\":{\"provider\":\"" + escJson(ttsProvider) + "\",\"url\":\"" + escJson(ttsEndpoint) + "\",\"key\":\"" + escJson(ttsKey) + "\",\"model\":\"" + escJson(ttsModel) + "\",\"voice\":\"" + escJson(ttsVoice) + "\",";
   j += "\"openaiUrl\":\"" + escJson(openaiTtsEndpoint) + "\",\"openaiKey\":\"" + escJson(openaiTtsKey) + "\",\"openaiModel\":\"" + escJson(openaiTtsModel) + "\",\"openaiVoice\":\"" + escJson(openaiTtsVoice) + "\",";
-  j += "\"elevenUrl\":\"" + escJson(elevenEndpoint) + "\",\"elevenKey\":\"" + escJson(elevenKey) + "\",\"elevenModel\":\"" + escJson(elevenModel) + "\",\"elevenVoice\":\"" + escJson(elevenVoice) + "\"},";
+  j += "\"elevenUrl\":\"" + escJson(elevenEndpoint) + "\",\"elevenKey\":\"" + escJson(elevenKey) + "\",\"elevenModel\":\"" + escJson(elevenModel) + "\",\"elevenVoice\":\"" + escJson(elevenVoice) + "\",";
+  j += "\"fishUrl\":\"" + escJson(fishEndpoint) + "\",\"fishKey\":\"" + escJson(fishKey) + "\",\"fishModel\":\"" + escJson(fishModel) + "\",\"fishVoice\":\"" + escJson(fishVoice) + "\"},";
   j += "\"volume\":" + String(speakerVolume) + ",\"replyLang\":\"" + escJson(replyLang) + "\",\"prompt\":\"" + escJson(systemPrompt) + "\",";
   j += "\"circadian\":{\"enabled\":" + String(circadianSleepEnabled ? "true" : "false") + ",\"start\":" + String(circadianSleepStart) + ",\"end\":" + String(circadianSleepEnd) + "},";
   j += "\"boredom\":{\"enabled\":" + String(boredomEnabled ? "true" : "false") + ",\"minutes\":" + String(boredomMinutes) + "},";
@@ -323,6 +329,9 @@ void handleConfigApi() {
     j += "\"" + escJson(kiwiMemory.memories[i]) + "\"";
   }
   j += "],\"followUp\":\"" + escJson(kiwiMemory.pendingFollowUp) + "\"}}";
+  server.sendHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+  server.sendHeader("Pragma", "no-cache");
+  server.sendHeader("Expires", "0");
   server.send(200, "application/json", j);
 }
 
@@ -339,18 +348,19 @@ void handleSave() {
   if (server.hasArg("sttlang"))
     sttLang = normalizeSttLang(server.arg("sttlang"));
 
-  sttEndpoint = server.arg("stturl");
-  sttKey = server.arg("sttkey");
-  sttModel = server.arg("sttmodel");
-  groqSttEndpoint = server.arg("groqstturl");
-  groqSttKey = server.arg("groqsttkey");
-  groqSttModel = server.arg("groqsttmodel");
-  openaiSttEndpoint = server.arg("opaistturl");
-  openaiSttKey = server.arg("opaisttkey");
-  openaiSttModel = server.arg("opaisttmodel");
+  sttEndpoint = sanitizeUrl(server.arg("stturl"), DEFAULT_STT_URL);
+  sttKey = sanitizeField(server.arg("sttkey"));
+  sttModel = sanitizeField(server.arg("sttmodel"), DEFAULT_STT_MODEL);
+  groqSttEndpoint = sanitizeUrl(server.arg("groqstturl"), DEFAULT_GROQ_STT_URL);
+  groqSttKey = sanitizeField(server.arg("groqsttkey"));
+  groqSttModel = sanitizeField(server.arg("groqsttmodel"), DEFAULT_GROQ_STT_MODEL);
+  openaiSttEndpoint = sanitizeUrl(server.arg("opaistturl"), DEFAULT_OPENAI_STT_URL);
+  openaiSttKey = sanitizeField(server.arg("opaisttkey"));
+  openaiSttModel = sanitizeField(server.arg("opaisttmodel"), DEFAULT_OPENAI_STT_MODEL);
 
-  replyLang = server.arg("replang");
-  systemPrompt = server.arg("prompt");
+  replyLang = sanitizeField(server.arg("replang"));
+  systemPrompt = sanitizeField(server.arg("prompt"), DEFAULT_PROMPT);
+  if (systemPrompt.length() == 0) systemPrompt = DEFAULT_PROMPT;
 
   if (server.hasArg("llmprovider")) {
     llmProvider = server.arg("llmprovider");
@@ -360,32 +370,36 @@ void handleSave() {
       llmProvider = "groq";
   }
   if (llmProvider == "openai") {
-    llmEndpoint = server.arg("openaiurl");
-    llmKey = server.arg("openaikey");
-    llmModel = server.arg("openaimodel");
+    llmEndpoint = sanitizeUrl(server.arg("openaiurl"), DEFAULT_OPENAI_LLM_URL);
+    llmKey = sanitizeField(server.arg("openaikey"));
+    llmModel = sanitizeField(server.arg("openaimodel"), "gpt-4o-mini");
   } else {
-    llmEndpoint = server.arg("llmurl");
-    llmKey = server.arg("llmkey");
-    llmModel = server.arg("llmmodel");
+    llmEndpoint = sanitizeUrl(server.arg("llmurl"), DEFAULT_LLM_URL);
+    llmKey = sanitizeField(server.arg("llmkey"));
+    llmModel = sanitizeField(server.arg("llmmodel"), DEFAULT_LLM_MODEL);
   }
-  groqEndpoint = server.arg("groqurl");
-  groqKey = server.arg("groqkey");
-  groqModel = server.arg("groqmodel");
+  groqEndpoint = sanitizeUrl(server.arg("groqurl"), DEFAULT_GROQ_URL);
+  groqKey = sanitizeField(server.arg("groqkey"));
+  groqModel = sanitizeField(server.arg("groqmodel"), DEFAULT_GROQ_MODEL);
 
   if (server.hasArg("ttsprovider"))
     ttsProvider = normalizeTtsProvider(server.arg("ttsprovider"));
-  ttsEndpoint = server.arg("ttsurl");
-  ttsKey = server.arg("ttskey");
-  ttsModel = server.arg("ttsmodel");
-  ttsVoice = server.arg("ttsvoice");
-  openaiTtsEndpoint = server.arg("openaittsurl");
-  openaiTtsKey = server.arg("openaittskey");
-  openaiTtsModel = server.arg("openaittsmodel");
-  openaiTtsVoice = server.arg("openaittsvoice");
-  elevenEndpoint = server.arg("elevurl");
-  elevenKey = server.arg("elevkey");
-  elevenModel = server.arg("elevmodel");
-  elevenVoice = server.arg("elevvoice");
+  ttsEndpoint = sanitizeUrl(server.arg("ttsurl"), DEFAULT_TTS_URL);
+  ttsKey = sanitizeField(server.arg("ttskey"));
+  ttsModel = sanitizeField(server.arg("ttsmodel"), DEFAULT_TTS_MODEL);
+  ttsVoice = sanitizeField(server.arg("ttsvoice"), DEFAULT_TTS_VOICE);
+  openaiTtsEndpoint = sanitizeUrl(server.arg("openaittsurl"), DEFAULT_OPENAI_TTS_URL);
+  openaiTtsKey = sanitizeField(server.arg("openaittskey"));
+  openaiTtsModel = sanitizeField(server.arg("openaittsmodel"), DEFAULT_OPENAI_TTS_MODEL);
+  openaiTtsVoice = sanitizeField(server.arg("openaittsvoice"), DEFAULT_OPENAI_TTS_VOICE);
+  elevenEndpoint = sanitizeUrl(server.arg("elevurl"), DEFAULT_ELEVEN_URL);
+  elevenKey = sanitizeField(server.arg("elevkey"));
+  elevenModel = sanitizeField(server.arg("elevmodel"), DEFAULT_ELEVEN_MODEL);
+  elevenVoice = sanitizeField(server.arg("elevvoice"), DEFAULT_ELEVEN_VOICE);
+  fishEndpoint = sanitizeUrl(server.arg("fishurl"), DEFAULT_FISH_TTS_URL);
+  fishKey = sanitizeField(server.arg("fishkey"));
+  fishModel = sanitizeField(server.arg("fishmodel"), DEFAULT_FISH_TTS_MODEL);
+  fishVoice = sanitizeField(server.arg("fishvoice"));
 
   if (server.hasArg("vol")) {
     speakerVolume = server.arg("vol").toInt();
@@ -408,6 +422,23 @@ void handleSave() {
       resetBoredomInterval();
     }
   }
+
+  if (server.hasArg("tch_deb")) {
+    int td = server.arg("tch_deb").toInt();
+    if (td >= 10 && td <= 200) {
+      touchDebounceMs = td;
+    }
+  }
+  touchFeedbackSound = server.hasArg("tch_snd");
+
+  if (server.hasArg("act_top_tap")) touchActTopTap = parseTouchAction(server.arg("act_top_tap"), TOUCH_ACT_LISTEN);
+  if (server.hasArg("act_top_dbl")) touchActTopDbl = parseTouchAction(server.arg("act_top_dbl"), TOUCH_ACT_CYCLE_SKIN);
+  if (server.hasArg("act_lt_tap"))  touchActLeftTap = parseTouchAction(server.arg("act_lt_tap"), TOUCH_ACT_DISMISS);
+  if (server.hasArg("act_lt_dbl"))  touchActLeftDbl = parseTouchAction(server.arg("act_lt_dbl"), TOUCH_ACT_CLOCK);
+  if (server.hasArg("act_rt_tap"))  touchActRightTap = parseTouchAction(server.arg("act_rt_tap"), TOUCH_ACT_DISMISS);
+  if (server.hasArg("act_rt_dbl"))  touchActRightDbl = parseTouchAction(server.arg("act_rt_dbl"), TOUCH_ACT_WEATHER);
+  if (server.hasArg("act_lt_hld"))  touchActLeftHold = parseTouchAction(server.arg("act_lt_hld"), TOUCH_ACT_PET);
+  if (server.hasArg("act_rt_hld"))  touchActRightHold = parseTouchAction(server.arg("act_rt_hld"), TOUCH_ACT_PET);
 
   if (server.hasArg("skin")) {
     String s = server.arg("skin");
@@ -479,12 +510,87 @@ void handleSave() {
   elevenVoice.trim();
 
   saveConfig();
+  server.sendHeader("Cache-Control", "no-cache, no-store, must-revalidate");
   server.send(200, "text/html",
-              "<html><body style='font-family:Arial;text-align:center;background:#111;color:white;padding:50px'>"
-              "<h1>Saved</h1><p>Restarting Kiwi...</p></body></html>");
+              "<!DOCTYPE html><html><head>"
+              "<meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'>"
+              "<meta http-equiv='refresh' content='4;url=/'>"
+              "<title>Saved · Kiwi</title>"
+              "<style>"
+              "body{background:#0b0f19;color:#f8fafc;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;"
+              "display:flex;align-items:center;justify-content:center;height:100vh;margin:0;padding:20px;box-sizing:border-box;text-align:center;}"
+              ".card{background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:24px;padding:36px;max-width:380px;box-shadow:0 20px 40px rgba(0,0,0,0.5);}"
+              ".spin{display:inline-block;width:44px;height:44px;border:4px solid rgba(255,255,255,0.15);border-top-color:#38bdf8;border-radius:50%;animation:sp 0.8s linear infinite;margin-bottom:18px;}"
+              "@keyframes sp{to{transform:rotate(360deg);}}"
+              "h2{margin:0 0 10px;font-size:22px;color:#38bdf8;} p{color:#94a3b8;font-size:14px;margin:0 0 18px;line-height:1.5;}"
+              "#sec{font-weight:700;color:#f8fafc;}"
+              "</style></head><body>"
+              "<div class='card'>"
+              "<div class='spin'></div>"
+              "<h2>Settings Saved!</h2>"
+              "<p>Kiwi is restarting to apply changes...<br>Redirecting to dashboard in <span id='sec'>4</span>s</p>"
+              "<script>var c=4;var iv=setInterval(function(){c--;var el=document.getElementById('sec');if(el)el.innerText=c;if(c<=0){clearInterval(iv);location.href='/';}},1000);</script>"
+              "</div></body></html>");
   delay(1200);
   ESP.restart();
 }
 
+
+void handleScanNetworks() {
+  lastUserInteractionAt = millis();
+  int n = WiFi.scanNetworks(false, false);
+  String json = "[";
+  if (n > 0) {
+    struct ScannedNet {
+      String ssid;
+      int32_t rssi;
+      bool secure;
+    };
+    std::vector<ScannedNet> nets;
+    nets.reserve(n);
+
+    for (int i = 0; i < n; ++i) {
+      String s = WiFi.SSID(i);
+      s.trim();
+      if (s.length() == 0) continue;
+
+      int32_t r = WiFi.RSSI(i);
+      bool sec = (WiFi.encryptionType(i) != WIFI_AUTH_OPEN);
+
+      bool found = false;
+      for (size_t k = 0; k < nets.size(); ++k) {
+        if (nets[k].ssid == s) {
+          found = true;
+          if (r > nets[k].rssi) {
+            nets[k].rssi = r;
+            nets[k].secure = sec;
+          }
+          break;
+        }
+      }
+      if (!found) {
+        nets.push_back({s, r, sec});
+      }
+    }
+
+    std::sort(nets.begin(), nets.end(), [](const ScannedNet &a, const ScannedNet &b) {
+      return a.rssi > b.rssi;
+    });
+
+    for (size_t i = 0; i < nets.size(); ++i) {
+      if (i > 0) json += ",";
+      json += "{\"ssid\":\"";
+      json += escJson(nets[i].ssid);
+      json += "\",\"rssi\":";
+      json += String(nets[i].rssi);
+      json += ",\"secure\":";
+      json += (nets[i].secure ? "true" : "false");
+      json += "}";
+    }
+  }
+  json += "]";
+  WiFi.scanDelete();
+  server.send(200, "application/json", json);
+}
 
 void processPendingSound() {   if (pendingSound < 0)     return;   int8_t s = pendingSound;   pendingSound = -1;   if (!txHandle || busyProcessing)     return;   switch (s) {   case 0: soundPetLove(); break;   case 1: soundPetGiggle(); break;   case 2: soundPetShy(); break;   case 3: soundPetSparkle(); break;   case 4: soundPetKiss(); break;   case 5: soundPetCuddle(); break;   case 6: soundPetPlayful(); break;   case 7: soundPetSleepy(); break;   case 8: soundPetProud(); break;   case 9: soundPetSurprised(); break;   } }

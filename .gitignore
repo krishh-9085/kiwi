@@ -7,6 +7,9 @@ build-cli-upload/
 *.o
 *.d
 
+# PlatformIO build output
+.pio/
+
 # Local backups
 *.bak
 

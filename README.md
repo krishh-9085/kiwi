@@ -8,19 +8,58 @@ A clean, modular C++ architecture for the **ESP32-C3 Super Mini AI Desktop Compa
 
 ```
 MyRobot_Modular/
-├── MyRobot_Modular.ino      # Main sketch: setup(), loop(), voice command parsing, pipeline
-├── Config.h / .cpp         # Pin definitions, constants, shared global variables
-├── Types.h                 # Data structs (HttpStream, Tone, FaceState, etc.) & Enums
-├── Battery.h / .cpp        # Accurate piecewise Li-Ion/LiPo battery percentage estimator
-├── ConfigManager.h / .cpp  # Preferences (NVS) read, write, and clear operations
-├── AudioEngine.h / .cpp    # I2S driver, Tone player, WAV header, soft-clip volume scaler
-├── FaceEngine.h / .cpp     # OLED vector eye renderer, facial animation easing, screens
-├── WeatherService.h / .cpp # Open-Meteo REST API live weather client (HTTP port 80)
-├── CircadianEngine.h / .cpp# Nighttime sleep schedule, auto-dim, morning wake cycle
-├── AiService.h / .cpp      # STT multipart client, LLM (Gemini/Groq), streaming TTS decoders
-├── TouchController.h / .cpp# Debouncing, tap vs hold, pet reactions, sleep wake-up
-├── MemoryService.h / .cpp  # Long-term life diary, auto fact extraction, next-day follow-ups
-└── WebPortal.h / .cpp      # SoftAP captive portal, settings web UI, Web OTA updates
+├── platformio.ini              # PlatformIO build configuration
+├── partitions.csv              # Custom flash partition table (Dual OTA + Preferences)
+├── README.md                   # Project documentation & wiring guide
+├── .gitignore                  # Git ignore rules (*.bin, build/, .pio/)
+├── archive/
+│   └── WebPortal.cpp.bak       # Preserved legacy single-file portal backup
+├── tools/
+│   └── scratch/scratch_dog.py  # Utility test frame scripts
+└── src/
+    ├── MyRobot_Modular.ino     # Main entry point (setup() and loop() only)
+    ├── core/
+    │   └── CoreTypes.h         # Core data structs, enums (Emotion, Skin, Tone)
+    ├── config/
+    │   ├── AppConfig.h / .cpp  # Hardware pinouts, constants, runtime configuration
+    │   └── ConfigManager.h/.cpp# Preferences (NVS) read, write, and clear operations
+    ├── hardware/
+    │   ├── Battery.h / .cpp    # Piecewise Li-Ion/LiPo battery percentage estimator
+    │   ├── TouchController.h/c # Debounced capacitive/digital multi-touch gestures
+    │   └── AudioEngine.h / .cpp# I2S driver, Tone player, soft-clip volume scaler
+    ├── behavior/
+    │   ├── CircadianEngine.h/.c# Nighttime sleep schedule, auto-dim, morning wake cycle
+    │   ├── BoredomBehavior.h/.c# Autonomous idle remarks, desk banter & quirks
+    │   ├── CommandHandler.h/.c # Voice command parsing & localized triggers
+    │   └── InteractionManager.h# Pet touch reactions, UI pump & question pipeline
+    ├── animation/
+    │   ├── AnimationEngine.h/.c# Full-screen procedural bitmap animation system
+    │   └── DogAnimationFrames.h# Dog animation bitmap frame data
+    ├── face/
+    │   ├── FaceEngine.h / .cpp # Face engine coordinator & tickFace()
+    │   ├── FaceDisplay.h / .cpp# I2C OLED hardware initialization & dimming
+    │   ├── FaceExpressions.h/.c# Emotion states, facial target easing & action helpers
+    │   ├── FaceIdle.h / .cpp   # Natural eye blinking, gaze jitter & idle animations
+    │   ├── FaceSkins.h / .cpp  # Procedural vector eye skins (Kiwi, Cyberpunk, Cat, etc.)
+    │   ├── FaceRenderer.h /.cpp# Eyes, mouth, blush, flourish & status compositing
+    │   └── FaceScreens.h / .cpp# Clock, weather, banner, status & connecting screens
+    ├── services/
+    │   ├── AiService.h / .cpp  # AI service unified facade
+    │   ├── AiTextTools.h / .cpp# JSON parser, UTF-8 utils & text-to-speech sanitizer
+    │   ├── AiTransport.h / .cpp# Non-blocking TLS/HTTP client & socket stream reader
+    │   ├── AiChatHistory.h/.cpp# Multi-turn conversation buffer with auto-expiry
+    │   ├── AiLlmService.h /.cpp# Cloud LLM integration (Gemini, Groq, OpenAI)
+    │   ├── AiSttService.h /.cpp# Voice capture & cloud STT (Whisper, Sarvam)
+    │   ├── AiTtsService.h /.cpp# Streaming TTS audio playback (Sarvam, OpenAI, Eleven)
+    │   ├── MemoryService.h/.cpp# Long-term life diary, fact memory & follow-ups
+    │   └── WeatherService.h/.cp# Open-Meteo REST API live weather client
+    └── web/
+        ├── WebPortal.h / .cpp  # Captive SoftAP & HTTP request router
+        ├── WebPortalApi.h/.cpp # REST API endpoints for live status & controls
+        ├── WebPortalDashboard.c# Cyber glassmorphic configuration dashboard
+        ├── WebPortalFaces.cpp  # Interactive 42-face emoji control deck
+        ├── WebPortalOta.cpp    # Web browser over-the-air firmware updates
+        └── WebPortalWiring.cpp # Embedded interactive hardware wiring blueprint
 ```
 
 ---

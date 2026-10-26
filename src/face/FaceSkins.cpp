@@ -1,10 +1,11 @@
 #include "face/FaceSkins.h"
 #include "face/FaceDisplay.h"
 #include "config/AppConfig.h"
+#include <Wire.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 
-static void drawEye(int cx, int cy, int w, int h, int r, int lidIn, int lidOut,
+void drawEye(int cx, int cy, int w, int h, int r, int lidIn, int lidOut,
                     int cheek, bool isLeft, bool glint) {
   if (h < 2)
     h = 2;

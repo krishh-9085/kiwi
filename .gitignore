@@ -1,6 +1,7 @@
 # Arduino and generated build output
 build/
 build-cli-upload/
+.build_test/
 *.bin
 *.elf
 *.map

@@ -3,6 +3,7 @@
 #include "core/CoreTypes.h"
 
 extern FaceState faceNow, faceTgt;
+extern uint32_t emotionStartedAt;
 
 void setFace(float w, float h, float gap, float y, float r,
              float lidIn = 0, float lidOut = 0, float cheek = 0,

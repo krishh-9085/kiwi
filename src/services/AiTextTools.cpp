@@ -1,11 +1,12 @@
 #include "services/AiTextTools.h"
+#include "config/AppConfig.h"
 
 // ============================================================
 // BASE64 & UTF-8 HELPERS
 // ============================================================
 static const char b64_table[] =
     "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-static int8_t b64_lookup[256];
+int8_t b64_lookup[256];
 
 void initBase64Lookup() {
   for (int i = 0; i < 256; i++)
@@ -186,7 +187,7 @@ bool parseUrl(const String &url, String &host, String &path) {
 }
 
 
-static bool containsDevanagari(const String &s) {
+bool containsDevanagari(const String &s) {
   for (size_t i = 0; i + 1 < s.length(); i++) {
     if ((uint8_t)s[i] == 0xE0 &&
         ((uint8_t)s[i + 1] == 0xA4 || (uint8_t)s[i + 1] == 0xA5)) {
@@ -196,7 +197,7 @@ static bool containsDevanagari(const String &s) {
   return false;
 }
 
-static String sarvamSttLangCode() {
+String sarvamSttLangCode() {
   if (sttLang == "en")
     return "en-IN";
   if (sttLang == "hi")
@@ -205,7 +206,7 @@ static String sarvamSttLangCode() {
                     // Hinglish! Empty string = let the API auto-detect.
 }
 
-static String whisperSttLangCode() {
+String whisperSttLangCode() {
   if (sttLang == "en")
     return "en";
   if (sttLang == "hi")

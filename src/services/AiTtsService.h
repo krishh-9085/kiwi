@@ -2,6 +2,6 @@
 #include <Arduino.h>
 
 bool speakText(const String &text);
-int ttsSarvam(const String &text, const String &speaker);
-int ttsPcmOpenAI(const String &text, const String &voice, float speed);
-int ttsPcmEleven(const String &text, const String &voiceId);
+int ttsSarvam(const String &text);
+int ttsPcmOpenAI(const String &text);
+int ttsPcmEleven(const String &text);

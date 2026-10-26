@@ -1,6 +1,6 @@
 #include "services/AiTransport.h"
-#include "behavior/InteractionManager.h"
 #include "config/AppConfig.h"
+#include "behavior/InteractionManager.h"
 
 // ============================================================
 bool httpReadLine(WiFiClient &c, String &line, uint32_t timeoutMs) {

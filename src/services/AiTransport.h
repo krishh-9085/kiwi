@@ -11,8 +11,8 @@ struct HttpStream {
   bool finished = false;
 };
 
-bool httpReadLine(WiFiClient *c, char *buf, size_t maxLen, uint32_t timeoutMs = 5000);
-int httpReadBlock(HttpStream &s, uint8_t *dst, size_t maxLen, uint32_t timeoutMs = 8000);
-bool ensureDns(const char *host, IPAddress &ip, uint32_t timeoutMs = 4000);
-bool tlsConnect(WiFiClientSecure &c, const char *host, int port, uint32_t timeoutMs = 8000);
-bool clientWriteAll(WiFiClientSecure &c, const uint8_t *buf, size_t len, uint32_t timeoutMs = 6000);
+bool httpReadLine(WiFiClient &c, String &line, uint32_t timeoutMs = 5000);
+int httpReadBlock(HttpStream &s, uint8_t *dst, size_t maxLen);
+bool ensureDns(const String &host);
+bool tlsConnect(WiFiClientSecure &c, const String &host, const char *tag);
+bool clientWriteAll(WiFiClient &c, const uint8_t *buf, size_t len);

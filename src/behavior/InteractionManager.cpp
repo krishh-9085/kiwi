@@ -86,6 +86,10 @@ void handleQuestion(const String &q) {
     return;
   if (handleEmotionCommand(q))
     return;
+  if (handleVolumeCommand(q))
+    return;
+  if (handleTimerCommand(q))
+    return;
   if (hasAny(q, {"new topic", "naya topic", "naya sawal", "reset chat", "clear memory", "bhool jao", "forget that", "forget everything"})) {
     clearConversationHistory();
     showEmotionFor(EMOTION_CONFUSED);

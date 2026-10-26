@@ -8,6 +8,7 @@
 #include "services/WeatherService.h"
 #include "web/WebPortal.h"
 #include "behavior/InteractionManager.h"
+#include "behavior/ActionExecutor.h"
 #include <WiFi.h>
 
 // ============================================================
@@ -246,4 +247,94 @@ bool handleSkinCommand(const String &qIn) {
   setEmotion(EMOTION_HAPPY);
   returnIdleAt = millis() + 1500;
   return true;
+}
+
+bool handleVolumeCommand(const String &qIn) {
+  String q = qIn;
+  q.toLowerCase();
+  if (!hasAny(q, {"volume", "vol", "aawaz", "awaz", "sound", "loudness", "mute"}))
+    return false;
+
+  int targetVol = -1;
+  if (hasAny(q, {"mute", "chup", "silent"})) {
+    targetVol = 0;
+  } else if (hasAny(q, {"badhao", "badha", "up", "high", "tez", "increase", "louder"})) {
+    targetVol = min(100, speakerVolume + 20);
+  } else if (hasAny(q, {"kam", "ghatao", "down", "low", "dheere", "decrease", "softer"})) {
+    targetVol = max(10, speakerVolume - 20);
+  } else if (hasAny(q, {"max", "full", "pura"})) {
+    targetVol = 100;
+  } else {
+    // Scan for direct number in string (e.g. 80, 50, 75)
+    for (int i = 0; i < (int)q.length(); i++) {
+      if (isdigit(q[i])) {
+        int val = 0;
+        while (i < (int)q.length() && isdigit(q[i])) {
+          val = val * 10 + (q[i] - '0');
+          i++;
+        }
+        if (val >= 0 && val <= 100) {
+          targetVol = val;
+          break;
+        }
+      }
+    }
+  }
+
+  if (targetVol >= 0) {
+    speakerVolume = targetVol;
+    saveConfig();
+    soundPetSparkle();
+    setEmotion(EMOTION_HAPPY);
+    String reply = (sttLang == "hi" || q.indexOf("aawaz") >= 0 || q.indexOf("awaz") >= 0)
+                       ? "Aawaz " + String(speakerVolume) + " percent kar di!"
+                       : "Volume set to " + String(speakerVolume) + " percent!";
+    speakText(reply);
+    returnIdleAt = millis() + 1500;
+    return true;
+  }
+  return false;
+}
+
+bool handleTimerCommand(const String &qIn) {
+  String q = qIn;
+  q.toLowerCase();
+  if (!hasAny(q, {"timer", "countdown", "alaram"}))
+    return false;
+
+  uint32_t totalSec = 0;
+  for (int i = 0; i < (int)q.length(); i++) {
+    if (isdigit(q[i])) {
+      int val = 0;
+      while (i < (int)q.length() && isdigit(q[i])) {
+        val = val * 10 + (q[i] - '0');
+        i++;
+      }
+      if (val > 0) {
+        if (hasAny(q, {"minute", "min", "minto", "minut"})) {
+          totalSec = (uint32_t)val * 60;
+        } else {
+          totalSec = (uint32_t)val;
+        }
+        break;
+      }
+    }
+  }
+
+  if (totalSec == 0 && hasAny(q, {"ek minute", "one minute"})) totalSec = 60;
+  if (totalSec == 0 && hasAny(q, {"do minute", "two minutes"})) totalSec = 120;
+  if (totalSec == 0 && hasAny(q, {"paanch minute", "five minutes"})) totalSec = 300;
+
+  if (totalSec > 0) {
+    startRobotTimer(totalSec, "Focus Timer");
+    String reply = (sttLang == "hi")
+                       ? String(totalSec >= 60 ? totalSec / 60 : totalSec) +
+                             (totalSec >= 60 ? " minute" : " second") + " ka timer shuru!"
+                       : "Timer started for " +
+                             String(totalSec >= 60 ? totalSec / 60 : totalSec) +
+                             (totalSec >= 60 ? " minutes!" : " seconds!");
+    speakText(reply);
+    return true;
+  }
+  return false;
 }

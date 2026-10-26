@@ -1,16 +1,18 @@
 #include "face/FaceExpressions.h"
+#include "face/FaceDisplay.h"
 #include "face/FaceIdle.h"
 #include "face/FaceScreens.h"
 #include "config/AppConfig.h"
 #include "hardware/AudioEngine.h"
+#include "behavior/InteractionManager.h"
 
 FaceState faceNow, faceTgt;
-static uint32_t emotionStartedAt = 0;
+uint32_t emotionStartedAt = 0;
 static uint32_t nextRandomEmotionAt = 0;
+extern volatile int8_t pendingSound;
 
-static void setFace(float w, float h, float gap, float y, float r,
-                    float lidIn = 0, float lidOut = 0, float cheek = 0,
-                    float blush = 0) {
+void setFace(float w, float h, float gap, float y, float r,
+             float lidIn, float lidOut, float cheek, float blush) {
   faceTgt.w = w;
   faceTgt.h = h;
   faceTgt.gap = gap;

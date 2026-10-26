@@ -8,7 +8,9 @@ String utf8Truncate(const String &s, int maxChars);
 String jsonTextField(const String &json, const char *key);
 String jsonEscape(const String &s);
 String cleanForSpeech(const String &s);
-bool parseUrl(const String &url, String &host, int &port, String &path, bool &https);
+bool parseUrl(const String &url, String &host, String &path);
 bool containsDevanagari(const String &s);
-String sarvamSttLangCode(const String &c);
-String whisperSttLangCode(const String &c);
+String sarvamSttLangCode();
+String whisperSttLangCode();
+
+extern int8_t b64_lookup[256];

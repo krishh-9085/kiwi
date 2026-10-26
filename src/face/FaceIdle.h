@@ -5,6 +5,12 @@
 extern uint32_t nextIdleLookAt;
 extern uint32_t idleExpressionEnd;
 extern int idleExpression;
+extern uint32_t petMoodT0;
+extern uint32_t flourishT0;
+extern int eyeOpenPct;
+extern bool eyeBlinking;
+extern uint32_t activeWinkEnd;
+extern bool activeWinkLeft;
 
 void eyesInit(uint32_t now);
 void eyesUpdateAnim(uint32_t now);

@@ -1,4 +1,6 @@
 #pragma once
 #include <Arduino.h>
+#include "core/CoreTypes.h"
 
-String recordAndTranscribe(int recordSeconds);
+SttCfg resolveStt();
+String recordAndTranscribe(uint32_t recordSeconds);

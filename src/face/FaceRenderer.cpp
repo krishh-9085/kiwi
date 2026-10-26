@@ -2,7 +2,9 @@
 #include "face/FaceDisplay.h"
 #include "face/FaceSkins.h"
 #include "face/FaceExpressions.h"
+#include "face/FaceIdle.h"
 #include "config/AppConfig.h"
+#include <Wire.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 

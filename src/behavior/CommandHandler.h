@@ -7,3 +7,5 @@ bool handleTimeCommand(const String &qIn);
 bool handleWeatherCommand(const String &qIn);
 bool handleEmotionCommand(const String &qIn);
 bool handleSkinCommand(const String &qIn);
+bool handleVolumeCommand(const String &qIn);
+bool handleTimerCommand(const String &qIn);

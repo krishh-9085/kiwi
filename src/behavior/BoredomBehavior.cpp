@@ -4,6 +4,7 @@
 #include "hardware/AudioEngine.h"
 #include "services/AiService.h"
 #include "services/MemoryService.h"
+#include <WiFi.h>
 
 // ============================================================
 // AUTONOMOUS DESK BOREDOM & NATURAL QUIRKS (Dynamic ~2 min idle)
@@ -203,6 +204,33 @@ void checkAutonomousBoredom() {
     }
 
     Serial.printf("[BOREDOM] ~%d mins idle on desk! Triggering dynamic desk remark...\n", boredomMinutes);
+
+    // If offline, trigger instant physical desk buddy quirks with cute eye theme
+    if (WiFi.status() != WL_CONNECTED) {
+      currentEyeSkin = SKIN_KIWI;
+      int offlineQuirk = random(0, 4);
+      if (offlineQuirk == 0) {
+        setEmotion(EMOTION_BORED);
+        soundPetSleepy();
+        returnIdleAt = millis() + 3500;
+      } else if (offlineQuirk == 1) {
+        setEmotion(EMOTION_SINGING);
+        soundPetPlayful();
+        flourish = FL_NOTE;
+        returnIdleAt = millis() + 3000;
+      } else if (offlineQuirk == 2) {
+        setEmotion(EMOTION_CUTE);
+        soundPetSparkle();
+        flourish = FL_SPARKLE;
+        returnIdleAt = millis() + 2500;
+      } else {
+        setEmotion(EMOTION_LAUGHING);
+        soundPetGiggle();
+        setEmotion(EMOTION_HAPPY);
+        returnIdleAt = millis() + 2500;
+      }
+      return;
+    }
 
     // 32 spoken phrases + 3 physical quirks (yawn, humming melody, cute giggle)
     int totalOptions = (int)NUM_BOREDOM_PHRASES + 3;

@@ -5,8 +5,27 @@
 #include "config/AppConfig.h"
 #include "face/FaceEngine.h"
 #include "behavior/InteractionManager.h"
+#include "behavior/ActionExecutor.h"
+#include <WiFi.h>
 #include <HTTPClient.h>
 #include <WiFiClientSecure.h>
+
+static String getSmartActionInstruction() {
+  return " SMART ACTION EXECUTION: You control your physical robot hardware! "
+         "When user asks you to perform an action, change settings, timer, face or volume, "
+         "append [ACTION: ...] tags at the end of your response: "
+         "[ACTION: volume <0-100>] (e.g. [ACTION: volume 85]) "
+         "[ACTION: skin <kiwi|cat|cyberpunk|retro8bit|matrix|anime|hearts|steampunk|demon|cyborg|mecha|sunglasses|puppy|hypno|alien|ninja|round|default>] "
+         "[ACTION: emotion <happy|excited|sad|angry|confused|cool|cute|evil|crying|hearts|dead|shocked|singing|party|nervous|bored|scared|suspicious|relieved|proud|dizzy|lovestruck|wink|smug|curious|laughing|sleepy>] "
+         "[ACTION: timer <seconds> <label>] (e.g. [ACTION: timer 300 Focus]) "
+         "[ACTION: marquee <message>] (scroll a custom banner on OLED) "
+         "[ACTION: sleep] (enter sleep mode) "
+         "[ACTION: weather] (show weather screen) "
+         "[ACTION: time] (show clock screen) "
+         "[ACTION: sound <chime|sparkle|giggle|kiss|playful|sleepy|proud>] "
+         "Example: User says 'Aawaz 80 kardo' -> reply 'Bilkul, aawaz 80 kar di! [ACTION: volume 80] [ACTION: emotion happy]'. "
+         "Example: User says 'Show cat eyes' -> reply 'Meow! Check out my cute cat eyes! [ACTION: skin cat] [ACTION: emotion cute]'.";
+}
 
 // ============================================================
 String askGemini(const String &question) {
@@ -44,6 +63,7 @@ String askGemini(const String &question) {
       "concise fact] at the end. If they mention an upcoming event, also "
       "append [FOLLOWUP: Question to ask them next time]. Example: 'All the "
       "best! [MEM: Has exam tomorrow] [FOLLOWUP: Kal exam kaisa gaya?]'";
+  sys += getSmartActionInstruction();
 
   String body;
   body.reserve(2048);
@@ -157,6 +177,7 @@ String askGroq(const String &question) {
       "concise fact] at the end. If they mention an upcoming event, also "
       "append [FOLLOWUP: Question to ask them next time]. Example: 'All the "
       "best! [MEM: Has exam tomorrow] [FOLLOWUP: Kal exam kaisa gaya?]'";
+  sys += getSmartActionInstruction();
 
   int reqTokens =
       (groqModel.indexOf("gpt-oss") >= 0 || groqModel.indexOf("qwen3") >= 0)
@@ -259,6 +280,7 @@ String askOpenAI(const String &question) {
       " MEMORY INSTRUCTION: If the user shares a personal fact, silently "
       "append [MEM: concise fact]. For an upcoming event, also append "
       "[FOLLOWUP: short question].";
+  sys += getSmartActionInstruction();
 
   String body = "{\"model\":\"" + jsonEscape(llmModel) +
                 "\",\"messages\":[{\"role\":\"system\",\"content\":\"" +
@@ -323,6 +345,7 @@ String askLLM(const String &question) {
     ans = askGemini(question);
   }
   if (ans.length() > 0) {
+    parseAndExecuteActions(ans);
     parseAndSaveMemoriesFromLlm(ans);
     addChatHistory(question, ans);
   }

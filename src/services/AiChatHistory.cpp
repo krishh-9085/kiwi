@@ -1,13 +1,10 @@
 #include "services/AiChatHistory.h"
+#include "services/AiTextTools.h"
 #include "config/AppConfig.h"
 
 // ============================================================
-struct ChatTurn {
-  String question;
-  String answer;
-};
 
-static const int MAX_CHAT_HISTORY = 4; // Retain last 4 exchanges (8 messages)
+
 ChatTurn chatHistory[MAX_CHAT_HISTORY];
 int chatHistoryCount = 0;
 static uint32_t lastChatTime = 0;
@@ -22,7 +19,7 @@ void clearConversationHistory() {
 
 int getConversationHistoryCount() { return chatHistoryCount; }
 
-static void checkChatHistoryTimeout() {
+void checkChatHistoryTimeout() {
   if (chatHistoryCount > 0 && lastChatTime > 0) {
     if (millis() - lastChatTime > CHAT_HISTORY_TIMEOUT_MS) {
       Serial.printf("[CONVO] History timed out (%lu ms) -> reset\n",
@@ -32,7 +29,7 @@ static void checkChatHistoryTimeout() {
   }
 }
 
-static void addChatHistory(const String &q, const String &a) {
+void addChatHistory(const String &q, const String &a) {
   if (q.length() == 0 || a.length() == 0)
     return;
   if (chatHistoryCount >= MAX_CHAT_HISTORY) {

@@ -1,14 +1,16 @@
 #pragma once
 #include <Arduino.h>
 
+static const int MAX_CHAT_HISTORY = 4;
+
 struct ChatTurn {
-  String role;
-  String text;
+  String question;
+  String answer;
 };
 
 void clearConversationHistory();
 int getConversationHistoryCount();
 void checkChatHistoryTimeout();
-void addChatHistory(const String &role, const String &text);
-extern ChatTurn chatHistory[12];
+void addChatHistory(const String &q, const String &a);
+extern ChatTurn chatHistory[MAX_CHAT_HISTORY];
 extern int chatHistoryCount;

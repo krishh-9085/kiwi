@@ -2,13 +2,13 @@
 #include "face/FaceExpressions.h"
 #include "config/AppConfig.h"
 
-static int eyeOpenPct = 100;
-static bool eyeBlinking = false;
+int eyeOpenPct = 100;
+bool eyeBlinking = false;
 static uint32_t eyeBlinkT0 = 0;
 static uint32_t eyeNextBlink = 0;
 static uint32_t eyeNextGaze = 0;
-static uint32_t petMoodT0 = 0;
-static uint32_t flourishT0 = 0;
+uint32_t petMoodT0 = 0;
+uint32_t flourishT0 = 0;
 uint32_t nextIdleLookAt = 0;
 uint32_t idleExpressionEnd = 0;
 int idleExpression = 0;
@@ -22,8 +22,8 @@ void eyesInit(uint32_t now) {
 }
 
 static uint32_t activeNextWink = 0;
-static uint32_t activeWinkEnd = 0;
-static bool activeWinkLeft = false;
+uint32_t activeWinkEnd = 0;
+bool activeWinkLeft = false;
 
 void eyesUpdateAnim(uint32_t now) {
   if (!eyeBlinking && now >= eyeNextBlink) {

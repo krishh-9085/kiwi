@@ -40,6 +40,8 @@
 #include "hardware/TouchController.h"
 #include "web/WebPortal.h"
 #include "services/MemoryService.h"
+#include "behavior/ActionExecutor.h"
+#include "behavior/OfflineBrain.h"
 
 // ============================================================
 // MAIN SETUP
@@ -93,6 +95,7 @@ void setup() {
     startAP();
   }
 
+  initOfflineBrain();
   startWeb();
   Serial.printf("[NET] Heap: %u\n", (unsigned)ESP.getFreeHeap());
   showBootInfo(4000);
@@ -117,6 +120,8 @@ void loop() {
 
   checkCircadianSleep();
   updateTouch();
+  checkRobotTimer();
+  updateOfflineBrain();
   checkAutonomousBoredom();
   updateIdleVariety();
   tickFace();
@@ -154,14 +159,7 @@ void loop() {
     setEmotion(EMOTION_LISTENING);
 
     if (WiFi.status() != WL_CONNECTED) {
-      robotStateDesc = "Wi-Fi Not Connected";
-      addTerminalLog("[REC] Error: Wi-Fi not connected");
-      Serial.println("[ROBOT] Top tap: Wi-Fi not connected!");
-      setEmotion(EMOTION_CONFUSED);
-      showStatus("No Wi-Fi!", "Connect via Portal", 2500);
-      setEmotion(EMOTION_IDLE);
-      resyncTouch();
-      busyProcessing = false;
+      handleOfflineBuddyTap();
       return;
     }
 

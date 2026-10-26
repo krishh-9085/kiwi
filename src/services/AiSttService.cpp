@@ -4,6 +4,7 @@
 #include "config/AppConfig.h"
 #include "hardware/AudioEngine.h"
 #include "face/FaceEngine.h"
+#include "web/WebPortal.h"
 #include "behavior/InteractionManager.h"
 #include <WiFiClientSecure.h>
 

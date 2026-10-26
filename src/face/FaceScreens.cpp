@@ -2,9 +2,11 @@
 #include "face/FaceDisplay.h"
 #include "face/FaceExpressions.h"
 #include "config/AppConfig.h"
+#include "behavior/InteractionManager.h"
 #include "hardware/AudioEngine.h"
 #include "hardware/TouchController.h"
 #include "animation/AnimationEngine.h"
+#include <Wire.h>
 #include <WiFi.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>

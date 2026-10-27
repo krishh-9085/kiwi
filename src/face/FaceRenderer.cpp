@@ -157,16 +157,18 @@ void drawFace() {
   }
   switch (currentEmotion) {
   case EMOTION_THINKING:
-    tx = sinf(now / 700.0f) * 5.0f;
-    ty = -3;
+    // Natural human cognitive recall: eyes look prominently UPWARD and scan left/right while thinking
+    tx = sinf(now / 750.0f) * 6.5f + cosf(now / 380.0f) * 2.0f;
+    ty = -6.5f + sinf(now / 480.0f) * 1.5f;
     break;
   case EMOTION_LISTENING:
     tx = sinf(now / 500.0f) * 2.0f;
     ty = -3.0f;
     break;
   case EMOTION_SPEAKING:
-    tx = 0;
-    ty = 0;
+    // Natural human conversational gaze: actively moves left and right while answering with subtle vertical expression
+    tx = sinf(now / 580.0f) * 6.0f + sinf(now / 230.0f) * 2.2f;
+    ty = sinf(now / 450.0f) * 1.8f;
     break;
   default:
     break;
@@ -181,6 +183,11 @@ void drawFace() {
     break;
   case EMOTION_LISTENING:
     sc = 1.0f + 0.035f * sinf(now / 160.0f);
+    break;
+  case EMOTION_SPEAKING:
+    // Subtle conversational speech cadence and head bounce
+    offY = sinf(now / 150.0f) * 1.2f;
+    sc = 1.0f + 0.025f * sinf(now / 210.0f);
     break;
   case EMOTION_EXCITED:
     offY = sinf(now / 110.0f) * 2.0f;
@@ -456,7 +463,7 @@ void drawFace() {
     int mh = 3 + (int)(7 * fabsf(sinf(t * 1.9f)));
     display.fillRoundRect(64 - mw / 2, 52 - mh / 2, mw, mh, mh > 3 ? 2 : 1,
                           SSD1306_WHITE);
-  } else if (faceNow.mouthW > 3) {
+  } else if (showMouth && faceNow.mouthW > 3) {
     int my = 52 + (int)faceNow.mouthY;
     drawMouth(64, my, (int)faceNow.mouthW, (int)faceNow.mouthH,
               faceNow.mouthCurve);

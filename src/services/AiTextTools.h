@@ -8,6 +8,7 @@ String utf8Truncate(const String &s, int maxChars);
 String jsonTextField(const String &json, const char *key);
 String jsonEscape(const String &s);
 String cleanForSpeech(const String &s);
+String stripAudioCues(const String &text);
 bool parseUrl(const String &url, String &host, String &path);
 bool containsDevanagari(const String &s);
 String sarvamSttLangCode();

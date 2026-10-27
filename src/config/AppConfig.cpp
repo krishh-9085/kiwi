@@ -148,7 +148,10 @@ String touchActionToString(TouchAction a) {
   }
 }
 
-// ---------- Circadian Sleep Mode ----------
+// ---------- Circadian Sleep & Display Brightness Mode ----------
+int      displayBrightness = 80;   // Daytime brightness (0-100%, Rocky default 80%)
+int      nightMode = 1;            // 0: Same as day, 1: Dim, 2: Screen off (Rocky default: Dim)
+int      nightBrightness = 10;     // Night brightness (0-100%, Rocky default 10%)
 bool     circadianSleepEnabled = true;
 int      circadianSleepStart = 23; // 11:00 PM
 int      circadianSleepEnd = 7;    // 07:00 AM
@@ -207,7 +210,8 @@ int      bannerScrollX = 128;
 int      bannerLoops = 0;
 
 // ---------- Custom OLED Eye Skins ----------
-EyeSkin  currentEyeSkin = SKIN_DEFAULT;
+EyeSkin  currentEyeSkin = SKIN_KIWI;
+bool     showMouth = true;
 
 // ---------- Live AI Interaction & Web Serial Terminal ----------
 String lastTranscribedQuestion = "";

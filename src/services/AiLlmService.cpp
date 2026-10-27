@@ -31,6 +31,24 @@ static String getSmartActionInstruction() {
          "IMPORTANT: NEVER reply with ONLY the action tag alone. Always write a cheerful spoken sentence first.";
 }
 
+static String getVoiceExpressionInstruction() {
+  if (ttsProvider == "fish" || ttsProvider == "fishaudio") {
+    return " EXPRESSIVE VOCAL TONE & AUDIO EFFECTS: Your voice engine (Fish Speech) supports real human vocal sound effects and emotional tones! "
+           "Naturally include 1 or 2 emotional tone or audio effect tags in brackets within your response according to the context and emotion: "
+           "Emotional tones: [angry], [sad], [embarrassed], [emphasis], [whispering], [soft], [breathy], [excited] "
+           "Audio effects: [laughing], [chuckling], [clear throat], [sobbing], [crying loudly], [sighing], [panting], [groaning], [pause], [long pause] "
+           "Examples: "
+           "- Funny joke / happy banter -> '[laughing] Haha that is too funny!' or '[chuckling] You really got me there!' "
+           "- Sharing a secret -> '[whispering] Keep this between us...' "
+           "- Sad / bad news -> '[sad] Oh no, I am so sorry to hear that.' "
+           "- Surprised / thrilled -> '[excited] Wow, that is incredible!' "
+           "- Tired / overwhelmed -> '[sighing] Aah, what a long journey.' "
+           "Rules: Use at most 1 or 2 tags per answer where they naturally fit the emotion. Never overuse them.";
+  } else {
+    return " VOICE ENGINE NOTICE: You are using standard TTS. Do NOT use bracketed sound or emotion tags like [laughing], [whispering], or [sighing]. Speak plain text only.";
+  }
+}
+
 // ============================================================
 String askGemini(const String &question) {
   String key = llmKey;
@@ -68,6 +86,7 @@ String askGemini(const String &question) {
       "append [FOLLOWUP: Question to ask them next time]. Example: 'All the "
       "best! [MEM: Has exam tomorrow] [FOLLOWUP: Kal exam kaisa gaya?]'";
   sys += getSmartActionInstruction();
+  sys += getVoiceExpressionInstruction();
 
   String body;
   body.reserve(2048);
@@ -187,6 +206,7 @@ String askGroq(const String &question) {
       "append [FOLLOWUP: Question to ask them next time]. Example: 'All the "
       "best! [MEM: Has exam tomorrow] [FOLLOWUP: Kal exam kaisa gaya?]'";
   sys += getSmartActionInstruction();
+  sys += getVoiceExpressionInstruction();
 
   int reqTokens =
       (groqModel.indexOf("gpt-oss") >= 0 || groqModel.indexOf("qwen") >= 0)
@@ -296,6 +316,7 @@ String askOpenAI(const String &question) {
       "append [MEM: concise fact]. For an upcoming event, also append "
       "[FOLLOWUP: short question].";
   sys += getSmartActionInstruction();
+  sys += getVoiceExpressionInstruction();
 
   String body = "{\"model\":\"" + jsonEscape(llmModel) +
                 "\",\"messages\":[{\"role\":\"system\",\"content\":\"" +

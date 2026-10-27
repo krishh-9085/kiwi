@@ -6,6 +6,7 @@
 #include "face/FaceEngine.h"
 #include "services/AiService.h"
 #include "services/WeatherService.h"
+#include "face/FaceDisplay.h"
 #include <WiFi.h>
 #include <esp_sleep.h>
 
@@ -108,6 +109,7 @@ void executeTouchAction(TouchAction act, uint8_t pin) {
     inCircadianSleep = false;
     circadianTempWakeUntil = now + CIRCADIAN_TEMP_WAKE_MS;
     setOledDim(false);
+    updateDisplayBrightnessMode();
     setEmotion(EMOTION_HAPPY);
     soundPetSparkle();
     Serial.println("[TOUCH] Wake-up from Sleep Mode");

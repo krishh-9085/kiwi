@@ -141,6 +141,30 @@ String jsonEscape(const String &s) {
   return o;
 }
 
+String stripAudioCues(const String &text) {
+  String s = text;
+  int i = 0;
+  while (i < (int)s.length()) {
+    int b1 = s.indexOf('[', i);
+    if (b1 < 0) break;
+    int b2 = s.indexOf(']', b1);
+    if (b2 < 0) break;
+    String tag = s.substring(b1 + 1, b2);
+    tag.trim();
+    String tagUpper = tag;
+    tagUpper.toUpperCase();
+    // Preserve action and memory tags for robot command parser
+    if (tagUpper.startsWith("ACTION:") || tagUpper.startsWith("MEM:") || tagUpper.startsWith("FOLLOWUP:")) {
+      i = b2 + 1;
+      continue;
+    }
+    // Remove sound/tone cue tag like [laughing], [whispering], etc.
+    s.remove(b1, (b2 - b1) + 1);
+  }
+  s.trim();
+  return s;
+}
+
 String cleanForSpeech(const String &in) {
   String s = in;
   int t1 = s.indexOf("<think>");
@@ -155,13 +179,19 @@ String cleanForSpeech(const String &in) {
     t1 = s.indexOf("<think>");
   }
   s.trim();
+
+  // If NOT using Fish Audio, strip bracketed audio/emotion cues so other TTS don't speak them
+  if (ttsProvider != "fish" && ttsProvider != "fishaudio") {
+    s = stripAudioCues(s);
+  }
+
   String o;
   o.reserve(s.length() + 8);
   bool lastSpace = true;
   for (size_t i = 0; i < s.length(); i++) {
-    unsigned char c = (unsigned char)in[i];
+    unsigned char c = (unsigned char)s[i];
     // Skip 4-byte UTF-8 emojis (0xF0..0xF4)
-    if ((c & 0xF8) == 0xF0 && i + 3 < in.length()) {
+    if ((c & 0xF8) == 0xF0 && i + 3 < s.length()) {
       i += 3; // Advances past emoji
       continue;
     }

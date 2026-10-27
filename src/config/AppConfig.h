@@ -155,7 +155,15 @@ extern TouchAction touchActRightHold;
 TouchAction parseTouchAction(const String &s, TouchAction def);
 String touchActionToString(TouchAction a);
 
-// ---------- Circadian Sleep Mode ----------
+// ---------- Circadian Sleep & Display Brightness Mode ----------
+enum NightMode {
+  NIGHT_SAME_AS_DAY = 0,
+  NIGHT_DIM = 1,
+  NIGHT_SCREEN_OFF = 2
+};
+extern int displayBrightness;   // Daytime display brightness (0-100%, default 80)
+extern int nightMode;           // 0: Same as day, 1: Dim, 2: Screen off (default 1)
+extern int nightBrightness;     // Night display brightness (0-100%, default 10)
 extern bool circadianSleepEnabled;
 extern int circadianSleepStart;
 extern int circadianSleepEnd;
@@ -217,6 +225,7 @@ extern int bannerLoops;
 
 // ---------- Custom OLED Eye Skins ----------
 extern EyeSkin currentEyeSkin;
+extern bool showMouth;
 
 // ---------- Live AI Interaction & Web Serial Terminal ----------
 extern String lastTranscribedQuestion;

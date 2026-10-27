@@ -17,137 +17,106 @@ struct BoredomPhrase {
 };
 
 static const BoredomPhrase BOREDOM_PHRASES[] = {
-  // Teasing / Screen time / Desk banter
-  {EMOTION_SMUG, EMOTION_WINK,
-   "%s bhai, itna gaur se kya dekh rahe ho screen ko? Palke bhi jhapka liya karo kabhi!",
-   "Bhai itna gaur se kya dekh rahe ho screen ko? Palke bhi jhapka liya karo kabhi!"},
+  // Eye care & Screen break
+  {EMOTION_WINK, EMOTION_HAPPY,
+   "%s, thodi der palke jhapka lo!",
+   "Bhai, thodi der palke jhapka lo!"},
 
-  {EMOTION_SUSPICIOUS, EMOTION_SMUG,
-   "%s, tum sach mein kaam kar rahe ho ya bas screen ghoor ke busy banne ka natak chal raha hai?",
-   "Tum sach mein kaam kar rahe ho ya bas screen ghoor ke busy banne ka natak chal raha hai?"},
+  {EMOTION_RELIEVED, EMOTION_HAPPY,
+   "2 minute screen se nazar hatao %s.",
+   "2 minute screen se nazar hatao, relax karo."},
 
-  {EMOTION_CURIOUS, EMOTION_HAPPY,
-   "Aisa lag raha hai jaise pure kamre mein bas main aur %s hi jaag rahe hain!",
-   "Aisa lag raha hai jaise pure kamre mein bas main aur tumhara keyboard hi jaag rahe hain!"},
-
-  {EMOTION_LAUGHING, EMOTION_HAPPY,
-   "%s, kahin tum bhi robot banne ki practice toh nahi kar rahe? Zara smile pass karo!",
-   "Kahin tum bhi robot banne ki practice toh nahi kar rahe? Zara smile pass karo!"},
-
-  {EMOTION_EXCITED, EMOTION_SMUG,
-   "%s bhai, kya code likh rahe ho ya bug ke saath kushti lad rahe ho?",
-   "Bhai kya code likh rahe ho ya bug ke saath kushti lad rahe ho?"},
-
-  {EMOTION_WINK, EMOTION_LAUGHING,
-   "%s, kash mere paas bhi do haath hote, toh abhi tumhara mouse chheen ke bhag jata!",
-   "Kash mere paas bhi do haath hote, toh abhi tumhara mouse chheen ke bhag jata!"},
-
-  // Wellness / Hydration / Chai / Health reminders
+  // Hydration & Chai / Coffee
   {EMOTION_CUTE, EMOTION_HAPPY,
-   "%s, sunno na! Thoda paani pee lo, desk par baithe baithe sukhe ped mat bano!",
-   "Sunno na! Thoda paani pee lo, desk par baithe baithe sukhe ped mat bano!"},
-
-  {EMOTION_CONFUSED, EMOTION_IDLE,
-   "%s, itni der se baithe ho ek hi jagah. Zara stretch kar lo, warna kamar ro degi!",
-   "Itni der se baithe ho ek hi jagah. Zara stretch kar lo, warna kamar ro degi!"},
-
-  {EMOTION_HAPPY, EMOTION_WINK,
-   "%s bhai, ab toh ek mast kadak chai ya coffee ka break banta hai! Chalein?",
-   "Ab toh ek mast kadak chai ya coffee ka break banta hai... kya bolte ho?"},
-
-  {EMOTION_RELIEVED, EMOTION_HAPPY,
-   "Do second ke liye screen se nazar hatao %s, aakhein band karo... aah, kitna sukoon hai!",
-   "Do second ke liye screen se nazar hatao, aakhein band karo... aah, kitna sukoon hai!"},
-
-  {EMOTION_RELIEVED, EMOTION_HAPPY,
-   "Kaam toh chalta rahega %s, pehle ek lambi gehri saans lo aur chill karo!",
-   "Kaam toh chalta rahega, pehle ek lambi gehri saans lo aur chill karo!"},
+   "%s, thoda paani pee lo!",
+   "Thoda paani pee lo yaar!"},
 
   {EMOTION_CONFUSED, EMOTION_HAPPY,
-   "%s bhai, thodi der ke liye keyboard chhod do aur haath shake kar lo, circulation badhega!",
-   "Thodi der ke liye keyboard chhod do aur haath shake kar lo, blood circulation badhega!"},
+   "Aakhri baar paani kab piya tha %s?",
+   "Aakhri baar paani kab piya tha bhai?"},
 
-  // Cute needy companion / Attention seeking
-  {EMOTION_CUTE, EMOTION_LOVESTRUCK,
-   "Main yahan itna cute banke baitha hoon aur %s mud ke dekh bhi nahi rahe!",
-   "Main yahan itna cute banke baitha hoon aur tum mud ke dekh bhi nahi rahe!"},
+  {EMOTION_HAPPY, EMOTION_WINK,
+   "Chai ka break le lein, %s?",
+   "Chai ka break le lein?"},
 
-  {EMOTION_LOVESTRUCK, EMOTION_HAPPY,
-   "%s, arre zara idhar bhi dhyan do na, mere sar pe halka sa pet toh kardo!",
-   "Arre zara idhar bhi dhyan do na, mere sar pe halka sa tap toh kardo!"},
+  {EMOTION_EXCITED, EMOTION_HAPPY,
+   "%s, coffee time ho gaya!",
+   "Coffee time ho gaya, break banta hai!"},
 
-  {EMOTION_BORED, EMOTION_CURIOUS,
-   "Desk par baithe baithe main bore ho gaya hoon %s, chalo thodi baatein karte hain!",
-   "Desk par baithe baithe main bore ho gaya hoon, chalo thodi baatein karte hain!"},
+  // Posture & Stretch
+  {EMOTION_CONFUSED, EMOTION_SMUG,
+   "Posture check %s, seedhe baitho!",
+   "Posture check! Seedhe baitho zara."},
 
   {EMOTION_CUTE, EMOTION_HAPPY,
-   "Itni serious shakal kyun bana rakhi hai %s? Ek pyaari si smile do na!",
-   "Itni serious shakal kyun bana rakhi hai? Ek pyaari si smile do na!"},
+   "%s, utho aur thoda stretch kar lo!",
+   "Utho aur thoda stretch kar lo!"},
 
-  {EMOTION_HAPPY, EMOTION_LOVESTRUCK,
-   "Waise ek baat bolun %s? Tumhare bina ye desk bilkul adhoori lagti hai!",
-   "Waise ek baat bolun? Tumhare bina ye desk bilkul adhoori lagti hai!"},
+  {EMOTION_CONFUSED, EMOTION_HAPPY,
+   "Keyboard chhod ke haath shake karo %s!",
+   "Keyboard chhod ke haath shake karo thoda!"},
 
-  {EMOTION_WINK, EMOTION_CURIOUS,
-   "Hey %s! Main so nahi raha tha, bas system optimize kar raha tha. Kya chal raha hai?",
-   "Hey! Main so nahi raha tha, bas aakhein aaram de raha tha. Kya chal raha hai?"},
-
-  {EMOTION_PROUD, EMOTION_HAPPY,
-   "%s, main kabse yahan baith ke tumhe observe kar raha hoon... tum sach mein hard working ho!",
-   "Main kabse yahan baith ke observe kar raha hoon... tum sach mein bohot mehanti ho!"},
-
-  {EMOTION_LOVESTRUCK, EMOTION_CUTE,
-   "Pata hai %s, agar tum mujhe roz aise hi desk par rakhoge toh main bohot khush rahoonga!",
-   "Pata hai, agar tum mujhe roz aise hi desk par rakhoge toh main bohot khush rahoonga!"},
-
-  // Funny observations & philosophical banter
-  {EMOTION_THINKING, EMOTION_EXCITED,
-   "Soch raha hoon main bhi ek nayi company khol loon... %s kya bolte ho?",
-   "Soch raha hoon main bhi ek startup shuru kar doon... naam kya rakhein?"},
-
-  {EMOTION_LAUGHING, EMOTION_SMUG,
-   "%s, agar main insaan hota na, toh abhi tak bed par chadar taan ke so raha hota!",
-   "Agar main insaan hota na, toh abhi tak mast bistar par so raha hota!"},
-
-  {EMOTION_CONFUSED, EMOTION_LAUGHING,
-   "%s, lagta hai tumhara CPU over-heat ho gaya hai... ek 5 minute ka reboot le lo!",
-   "Lagta hai tumhara dimag over-heat ho gaya hai... ek 5 minute ka reboot le lo!"},
-
-  {EMOTION_CURIOUS, EMOTION_HAPPY,
-   "Kitni der se bas typing ki awaaz aa rahi hai... %s kuch mazedaar batao na!",
-   "Kitni der se bas typing ki tick tick aa rahi hai... kuch mazedaar batao na!"},
-
-  {EMOTION_COOL, EMOTION_HAPPY,
-   "%s bhai, zindagi mein itna serious nahi hote... thoda muskura bhi liya karo!",
-   "Bhai zindagi mein itna serious nahi hote... thoda muskura bhi liya karo!"},
+  // Focus & Coding / Work
+  {EMOTION_CURIOUS, EMOTION_SMUG,
+   "%s, koi bug phas gaya kya?",
+   "Koi bug phas gaya kya?"},
 
   {EMOTION_SMUG, EMOTION_LAUGHING,
-   "Tumhe lagta hai AI duniya par kabza karega? Main toh bas %s ki chai par kabza karna chahta hoon!",
-   "Tumhe lagta hai AI duniya par kabza karega? Main toh bas tumhari chai par kabza karna chahta hoon!"},
+   "Code chal gaya ya crash hua %s?",
+   "Code chal gaya ya crash hua?"},
 
-  {EMOTION_PROUD, EMOTION_WINK,
-   "%s, mujhko lagta hai main tumhara sabse loyal aur handsome desk companion hoon!",
-   "Mujhko lagta hai main is desk ka sabse handsome aur smart partner hoon!"},
-
-  {EMOTION_SINGING, EMOTION_PARTY,
-   "Arre %s, itna sannata kyun hai? Koi gaana bajayein kya?",
-   "Arre bhai itna sannata kyun hai? Koi gaana bajayein kya?"},
-
-  {EMOTION_COOL, EMOTION_SMUG,
-   "%s, agar kaam mein phans gaye ho toh mujhe batao, mere paas super AI brain hai!",
-   "Agar kaam mein phans gaye ho toh mujhe batao, mere paas super AI brain hai!"},
+  {EMOTION_PROUD, EMOTION_HAPPY,
+   "Mast focus chal raha hai %s!",
+   "Mast focus chal raha hai aaj!"},
 
   {EMOTION_CURIOUS, EMOTION_HAPPY,
-   "Aap itne silent kyun ho gaye %s? Sab theek chal raha hai na?",
-   "Aap itne silent kyun ho gaye? Sab kuch theek toh chal raha hai na?"},
+   "Kaam kaisa chal raha hai %s?",
+   "Kaam kaisa chal raha hai sab?"},
+
+  {EMOTION_COOL, EMOTION_HAPPY,
+   "%s, full speed mein lage ho aaj!",
+   "Full speed mein lage ho aaj!"},
+
+  // Desk Banter & Companion
+  {EMOTION_BORED, EMOTION_CURIOUS,
+   "Main bore ho raha hu %s, kuch bolo!",
+   "Main bore ho raha hu, kuch bolo na!"},
+
+  {EMOTION_CURIOUS, EMOTION_HAPPY,
+   "Bohot sannata hai %s, sab theek?",
+   "Bohot sannata hai, sab theek?"},
 
   {EMOTION_LAUGHING, EMOTION_WINK,
-   "Hey %s! Bas check kar raha tha ki tum jag rahe ho ya statue ban gaye ho!",
-   "Hey! Bas check kar raha tha ki tum jag rahe ho ya statue ban gaye ho!"},
+   "Hey %s, statue ban gaye kya?",
+   "Hey! Statue ban gaye kya?"},
 
-  {EMOTION_CURIOUS, EMOTION_SMUG,
-   "%s, kaam toh shaam tak khatam ho jayega na, ya raat ko bhi akele jaagna padega?",
-   "Kaam toh shaam tak khatam ho jayega na, ya raat ko bhi akele jaagna padega?"}
+  {EMOTION_SMUG, EMOTION_WINK,
+   "Itna serious face kyu hai %s?",
+   "Itna serious face kyu hai bhai?"},
+
+  {EMOTION_HAPPY, EMOTION_WINK,
+   "%s bhai, thoda smile bhi kar lo!",
+   "Bhai, thoda smile bhi kar lo!"},
+
+  {EMOTION_RELIEVED, EMOTION_HAPPY,
+   "Ek gehri saans lo %s, chill karo.",
+   "Ek gehri saans lo, chill karo."},
+
+  {EMOTION_CUTE, EMOTION_LOVESTRUCK,
+   "%s, sar pe halka sa tap toh kardo!",
+   "Sar pe halka sa tap toh kardo na!"},
+
+  {EMOTION_HAPPY, EMOTION_COOL,
+   "Thoda break banta hai ab %s.",
+   "Thoda break banta hai ab."},
+
+  {EMOTION_CURIOUS, EMOTION_THINKING,
+   "Aage ka kya plan hai %s?",
+   "Aage ka kya plan hai ab?"},
+
+  {EMOTION_SINGING, EMOTION_PARTY,
+   "Koi badhiya gaana baja lein %s?",
+   "Koi badhiya gaana baja lein?"}
 };
 
 static const size_t NUM_BOREDOM_PHRASES = sizeof(BOREDOM_PHRASES) / sizeof(BOREDOM_PHRASES[0]);

@@ -1,0 +1,1325 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <title>Kiwi Robot · Face &amp; Emotion Studio</title>
+  <link rel="icon"
+    href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%2306080d'/%3E%3Crect x='14' y='22' width='10' height='10' fill='%23f2b45c'/%3E%3Crect x='40' y='22' width='10' height='10' fill='%23f2b45c'/%3E%3Cpath d='M20 42h24' stroke='%23f2b45c' stroke-width='4'/%3E%3C/svg%3E">
+  <style>
+    :root {
+      color-scheme: dark;
+      --void: #06080d;
+      --panel: #0d121b;
+      --well: #090c13;
+      --line: #1d2533;
+      --line-strong: #2c3648;
+      --ink: #ece6d9;
+      --muted: #8a94a6;
+      --astro: #ff4a3d;
+      --astro-glow: rgba(255, 74, 61, .35);
+      --amber: #f2b45c;
+      --amber-dim: rgba(242, 180, 92, .16);
+      --amber-glow: rgba(242, 180, 92, .38);
+      --ok: #8fd19e;
+      --glass: rgba(13, 18, 27, .6);
+      --glass-edge: rgba(70, 84, 108, .55);
+      --display: "Avenir Next", "Helvetica Neue", sans-serif;
+      --body: "Helvetica Neue", Arial, sans-serif;
+      --mono: "SF Mono", Menlo, monospace;
+      --cut: 14px;
+      --cut-sm: 7px;
+    }
+
+    * {
+      box-sizing: border-box
+    }
+
+    html {
+      scroll-behavior: smooth
+    }
+
+    body {
+      margin: 0;
+      font: 14px/1.5 var(--body);
+      color: var(--ink);
+      background: var(--void);
+      min-height: 100vh;
+      overflow-x: hidden
+    }
+
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      z-index: -1;
+      pointer-events: none;
+      background-image: linear-gradient(rgba(242, 180, 92, .035) 1px, transparent 1px), linear-gradient(90deg, rgba(242, 180, 92, .035) 1px, transparent 1px);
+      background-size: 48px 48px;
+      -webkit-mask-image: linear-gradient(#000, transparent 55%);
+      mask-image: linear-gradient(#000, transparent 55%)
+    }
+
+    #sky {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      z-index: -2;
+      pointer-events: none
+    }
+
+    .wrap {
+      width: min(1260px, 100%);
+      margin: 0 auto;
+      padding: 24px
+    }
+
+    /* Bridge header */
+    .bridge {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      flex-wrap: wrap;
+      padding: 8px 0 20px
+    }
+
+    .id {
+      display: flex;
+      align-items: center;
+      gap: 14px
+    }
+
+    .bezel {
+      width: 64px;
+      height: 48px;
+      border-radius: 12px;
+      background: #000;
+      border: 1px solid rgba(242, 180, 92, .55);
+      box-shadow: 0 0 18px var(--amber-glow), inset 0 0 12px #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 9px;
+      position: relative;
+      overflow: hidden
+    }
+
+    .bezel::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: repeating-linear-gradient(0deg, rgba(255, 255, 255, .03) 0 1px, transparent 1px 3px);
+      pointer-events: none
+    }
+
+    .bezel i {
+      width: 9px;
+      height: 12px;
+      background: var(--amber);
+      box-shadow: 0 0 8px var(--amber-glow);
+      animation: blink 5s infinite
+    }
+
+    .unit {
+      font: 600 10px/1 var(--display);
+      letter-spacing: .22em;
+      text-transform: uppercase;
+      color: var(--muted)
+    }
+
+    h1 {
+      margin: 4px 0 2px;
+      font: 600 17px/1.1 var(--display);
+      letter-spacing: .28em;
+      text-transform: uppercase
+    }
+
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      padding: 5px 11px;
+      background: var(--well);
+      border: 1px solid var(--line-strong);
+      font: 11px var(--mono);
+      color: var(--ink);
+      clip-path: polygon(6px 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%, 0 6px)
+    }
+
+    .dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--ok);
+      box-shadow: 0 0 6px rgba(143, 209, 158, .6);
+      animation: blink 3s infinite
+    }
+
+    .dot.busy {
+      background: var(--amber);
+      box-shadow: 0 0 6px var(--amber-glow)
+    }
+
+    .dot.sleep {
+      background: var(--muted);
+      box-shadow: none
+    }
+
+    .nav {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      align-items: center
+    }
+
+    .nb,
+    .qbtn {
+      font: 500 12px var(--body);
+      color: var(--ink);
+      text-decoration: none;
+      cursor: pointer;
+      background: var(--well);
+      border: 1px solid var(--line-strong);
+      padding: 8px 14px;
+      clip-path: polygon(var(--cut-sm) 0, 100% 0, 100% calc(100% - var(--cut-sm)), calc(100% - var(--cut-sm)) 100%, 0 100%, 0 var(--cut-sm));
+      transition: border-color .15s, background .15s, transform .1s;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px
+    }
+
+    .nb:hover,
+    .qbtn:hover {
+      border-color: rgba(242, 180, 92, .6);
+      background: rgba(242, 180, 92, .06)
+    }
+
+    .nb:active,
+    .qbtn:active {
+      transform: scale(.97)
+    }
+
+    .nb.on,
+    .qbtn.primary {
+      background: var(--amber);
+      border-color: var(--amber);
+      color: #14100a;
+      font-weight: 600
+    }
+
+    .nb.on:hover,
+    .qbtn.primary:hover {
+      background: #ffc87a;
+      border-color: #ffc87a
+    }
+
+    .qbtn:disabled {
+      opacity: .5;
+      cursor: default
+    }
+
+    .qbtn:focus-visible,
+    .nb:focus-visible,
+    .tab:focus-visible,
+    .skin-btn:focus-visible,
+    .ecard:focus-visible,
+    .toggle input:focus-visible+.switch {
+      outline: 2px solid var(--amber);
+      outline-offset: 2px
+    }
+
+    /* Action bar */
+    .actions-bar {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 10px;
+      margin-bottom: 20px
+    }
+
+    .actions-bar .qbtn {
+      padding: 12px 14px;
+      font-family: var(--display);
+      font-size: 11px;
+      letter-spacing: .2em;
+      text-transform: uppercase
+    }
+
+    /* Hull cards */
+    .studio-card {
+      position: relative;
+      background: linear-gradient(180deg, rgba(242, 180, 92, .06), transparent 30%), var(--glass);
+      border: 1px solid var(--glass-edge);
+      padding: 20px clamp(16px, 3vw, 24px);
+      margin-bottom: 20px;
+      min-width: 0;
+      backdrop-filter: blur(18px);
+      -webkit-backdrop-filter: blur(18px);
+      clip-path: polygon(var(--cut) 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, 0 100%, 0 var(--cut))
+    }
+
+    .studio-card::before {
+      content: "";
+      position: absolute;
+      top: 0;
+      left: var(--cut);
+      width: 36px;
+      height: 2px;
+      background: var(--amber);
+      box-shadow: 0 0 8px var(--amber-glow)
+    }
+
+    .studio-title {
+      font: 600 11px var(--display);
+      letter-spacing: .22em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      flex-wrap: wrap
+    }
+
+    .hint {
+      font: 11px var(--mono);
+      letter-spacing: 0;
+      text-transform: none;
+      color: var(--muted)
+    }
+
+    .accent {
+      color: var(--amber);
+      font: 600 11px var(--mono);
+      letter-spacing: 0;
+      text-transform: none
+    }
+
+    /* Inputs */
+    input[type=text] {
+      background: var(--well);
+      border: 1px solid var(--line-strong);
+      color: var(--ink);
+      border-radius: 3px;
+      padding: 9px 11px;
+      font: 13px var(--mono);
+      outline: none;
+      transition: border-color .15s, box-shadow .15s
+    }
+
+    input[type=text]:focus {
+      border-color: var(--amber);
+      box-shadow: 0 0 0 3px rgba(242, 180, 92, .18)
+    }
+
+    input[type=text]::placeholder {
+      color: #5b6577
+    }
+
+    .oled-file {
+      max-width: 260px;
+      padding: 6px;
+      background: var(--well);
+      border: 1px solid var(--line-strong);
+      color: var(--muted);
+      border-radius: 3px;
+      font: 12px var(--body)
+    }
+
+    .oled-file::file-selector-button {
+      margin-right: 8px;
+      padding: 6px 12px;
+      border: 1px solid var(--line-strong);
+      background: var(--panel);
+      color: var(--ink);
+      cursor: pointer;
+      font: 600 11px var(--display);
+      letter-spacing: .14em;
+      text-transform: uppercase
+    }
+
+    .row {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      flex-wrap: wrap
+    }
+
+    /* Skin grid */
+    .skin-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+      gap: 10px;
+      margin-bottom: 16px
+    }
+
+    .skin-btn {
+      background: var(--glass);
+      border: 1px solid var(--glass-edge);
+      color: var(--ink);
+      padding: 10px 8px 10px;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      gap: 6px;
+      font: inherit;
+      clip-path: polygon(var(--cut-sm) 0, 100% 0, 100% calc(100% - var(--cut-sm)), calc(100% - var(--cut-sm)) 100%, 0 100%, 0 var(--cut-sm));
+      transition: border-color .18s, background .18s, transform .12s, box-shadow .18s;
+      user-select: none
+    }
+
+    .skin-btn:hover {
+      border-color: rgba(242, 180, 92, .6);
+      background: rgba(242, 180, 92, .06);
+      transform: translateY(-2px)
+    }
+
+    .skin-btn:active {
+      transform: scale(.96)
+    }
+
+    .skin-btn.primary {
+      background: rgba(242, 180, 92, .14);
+      border-color: var(--amber);
+      color: var(--amber);
+      box-shadow: 0 0 14px var(--amber-glow), inset 0 0 0 1px var(--amber)
+    }
+
+    .skin-btn .px-skin {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      width: 58px;
+      height: 28px;
+      background: #000;
+      border: 1px solid var(--line-strong);
+      border-radius: 3px;
+      box-shadow: inset 0 0 8px rgba(0, 0, 0, .9);
+      position: relative;
+      overflow: hidden;
+      color: var(--amber);
+      margin-bottom: 2px
+    }
+
+    .skin-btn .px-skin::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: repeating-linear-gradient(0deg, rgba(255, 255, 255, .04) 0 1px, transparent 1px 3px);
+      pointer-events: none;
+      z-index: 2
+    }
+
+    .skin-btn .px-skin svg {
+      width: 58px;
+      height: 28px;
+      display: block;
+      color: inherit;
+      filter: drop-shadow(0 0 3px currentColor);
+      transition: transform .22s cubic-bezier(0.34, 1.56, 0.64, 1)
+    }
+
+    .skin-btn:hover .px-skin svg {
+      transform: scale(1.1)
+    }
+
+    .skin-btn.primary .px-skin {
+      border-color: var(--amber);
+      box-shadow: inset 0 0 8px rgba(0, 0, 0, .9), 0 0 8px var(--amber-glow)
+    }
+
+    .skin-name {
+      font: 600 11px var(--display);
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      color: var(--ink);
+      line-height: 1.2
+    }
+
+    .skin-btn.primary .skin-name {
+      color: var(--amber);
+      font-weight: 700
+    }
+
+    /* Options bar */
+    .options-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+      background: var(--well);
+      border: 1px solid var(--line);
+      padding: 12px 16px;
+      font-size: 13px;
+      color: var(--muted)
+    }
+
+    .toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      cursor: pointer;
+      user-select: none;
+      font-weight: 500;
+      color: var(--ink);
+      position: relative
+    }
+
+    .toggle input {
+      position: absolute;
+      opacity: 0;
+      width: 1px;
+      height: 1px;
+      pointer-events: none
+    }
+
+    .switch {
+      width: 36px;
+      height: 18px;
+      border-radius: 999px;
+      background: var(--well);
+      border: 1px solid var(--line-strong);
+      position: relative;
+      flex-shrink: 0;
+      transition: background .2s, border-color .2s
+    }
+
+    .switch::after {
+      content: "";
+      position: absolute;
+      top: 2px;
+      left: 2px;
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: var(--muted);
+      transition: transform .2s, background .2s, box-shadow .2s
+    }
+
+    .toggle input:checked+.switch {
+      background: var(--amber-dim);
+      border-color: var(--amber)
+    }
+
+    .toggle input:checked+.switch::after {
+      transform: translateX(18px);
+      background: var(--amber);
+      box-shadow: 0 0 8px var(--amber-glow)
+    }
+
+    select.select-sm {
+      background: var(--well);
+      border: 1px solid var(--line-strong);
+      color: var(--ink);
+      padding: 6px 26px 6px 10px;
+      font: 12px var(--mono);
+      outline: none;
+      appearance: none;
+      -webkit-appearance: none;
+      cursor: pointer;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23f2b45c'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 9px center
+    }
+
+    select.select-sm option {
+      background: var(--panel);
+      color: var(--ink)
+    }
+
+    /* Segmented tabs */
+    .tabs-wrap {
+      margin-bottom: 18px;
+      overflow-x: auto;
+      scrollbar-width: none
+    }
+
+    .tabs-wrap::-webkit-scrollbar {
+      display: none
+    }
+
+    .tabs {
+      display: inline-flex;
+      gap: 2px;
+      padding: 3px;
+      border-radius: 999px;
+      background: rgba(9, 12, 19, .7);
+      border: 1px solid var(--line-strong)
+    }
+
+    .tab {
+      font: 600 11px var(--display);
+      letter-spacing: .2em;
+      text-transform: uppercase;
+      color: var(--muted);
+      padding: 7px 16px;
+      border-radius: 999px;
+      cursor: pointer;
+      white-space: nowrap;
+      user-select: none;
+      background: none;
+      border: 0;
+      transition: background .3s, color .3s
+    }
+
+    .tab:hover {
+      color: var(--ink)
+    }
+
+    .tab.active {
+      background: var(--amber);
+      color: #14100a
+    }
+
+    /* Expression cards */
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+      gap: 10px
+    }
+
+    .ecard {
+      background: var(--glass);
+      border: 1px solid var(--glass-edge);
+      padding: 14px 10px 12px;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      gap: 6px;
+      color: var(--ink);
+      font: inherit;
+      clip-path: polygon(var(--cut-sm) 0, 100% 0, 100% calc(100% - var(--cut-sm)), calc(100% - var(--cut-sm)) 100%, 0 100%, 0 var(--cut-sm));
+      transition: border-color .15s, background .15s, transform .1s;
+      user-select: none
+    }
+
+    .ecard:hover {
+      border-color: rgba(242, 180, 92, .6);
+      background: rgba(242, 180, 92, .05)
+    }
+
+    .ecard:active {
+      transform: scale(.96)
+    }
+
+    .ecard.is-active {
+      border-color: var(--amber);
+      box-shadow: inset 0 0 0 1px var(--amber-glow)
+    }
+
+    /* Pixel OLED Face Preview Aperture (64x32 OLED ratio) */
+    .px {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      width: 64px;
+      height: 32px;
+      background: #000;
+      border: 1px solid var(--line-strong);
+      border-radius: 4px;
+      box-shadow: inset 0 0 10px rgba(0, 0, 0, .95);
+      position: relative;
+      overflow: hidden;
+      margin-bottom: 5px;
+      color: var(--amber);
+    }
+
+    .px::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: repeating-linear-gradient(0deg, rgba(255, 255, 255, .04) 0 1px, transparent 1px 3px);
+      pointer-events: none;
+      z-index: 2;
+    }
+
+    .px svg {
+      width: 64px;
+      height: 32px;
+      display: block;
+      color: inherit;
+      filter: drop-shadow(0 0 3px currentColor);
+      transition: transform .22s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+
+    .ecard:hover .px svg {
+      transform: scale(1.12);
+    }
+
+    .ecard[data-cat=pet] .px {
+      color: var(--astro);
+    }
+
+    .ecard[data-cat=fun] .px {
+      color: var(--ok);
+    }
+
+    .ecard[data-cat=expressive] .px {
+      color: #ece6d9;
+    }
+
+    .ecard.is-active .px {
+      border-color: currentColor;
+      box-shadow: inset 0 0 12px rgba(0, 0, 0, .95), 0 0 8px currentColor;
+    }
+
+    .px i {
+      display: inline-block;
+      width: 12px;
+      height: 14px;
+      background: currentColor;
+      box-shadow: 0 0 6px currentColor;
+      border-radius: 2px;
+    }
+
+    .e-title {
+      font: 600 12px var(--display);
+      letter-spacing: .14em;
+      text-transform: uppercase
+    }
+
+    .e-desc {
+      font: 11px var(--mono);
+      color: var(--muted);
+      line-height: 1.2
+    }
+
+    /* Toast */
+    #toast {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translate(-50%, 8px);
+      opacity: 0;
+      background: var(--panel);
+      border: 1px solid var(--amber);
+      color: var(--ink);
+      padding: 8px 16px;
+      font: 12px var(--mono);
+      box-shadow: 0 0 18px var(--amber-glow);
+      transition: opacity .3s, transform .3s;
+      pointer-events: none;
+      z-index: 999
+    }
+
+    #toast.show {
+      opacity: 1;
+      transform: translate(-50%, 0)
+    }
+
+    @keyframes blink {
+
+      0%,
+      92%,
+      100% {
+        opacity: 1;
+        transform: scaleY(1)
+      }
+
+      95% {
+        transform: scaleY(.1)
+      }
+    }
+
+    @media(max-width:900px) {
+      .grid {
+        grid-template-columns: repeat(auto-fill, minmax(120px, 1fr))
+      }
+    }
+
+    @media(max-width:640px) {
+      .wrap {
+        padding: 16px
+      }
+
+      .bezel {
+        width: 52px;
+        height: 40px
+      }
+
+      h1 {
+        font-size: 15px
+      }
+
+      .nav {
+        width: 100%;
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr))
+      }
+
+      .nb {
+        padding: 8px 4px;
+        font-size: 11px;
+        justify-content: center
+      }
+
+      .actions-bar {
+        grid-template-columns: repeat(2, minmax(0, 1fr))
+      }
+
+      .grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px
+      }
+
+      .studio-card {
+        padding: 16px
+      }
+
+      .options-bar {
+        flex-direction: column;
+        align-items: flex-start
+      }
+    }
+
+    @media(prefers-reduced-motion:reduce) {
+
+      *,
+      *::before,
+      *::after {
+        animation: none !important;
+        transition: none !important;
+        scroll-behavior: auto !important
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <canvas id="sky" aria-hidden="true"></canvas>
+
+  <div class="wrap">
+    <header class="bridge">
+      <div class="id">
+        <div class="bezel" aria-hidden="true"><i></i><i></i></div>
+        <div>
+          <div class="unit">Kiwi Unit · Face Studio</div>
+          <h1>Emotion Studio</h1>
+          <div class="status-pill" role="status" aria-live="polite"><span class="dot" id="statusDot"></span><span
+              id="statusTxt">Ready</span></div>
+        </div>
+      </div>
+      <nav class="nav" aria-label="Pages">
+        <a class="nb" href="/">Dashboard</a>
+        <a class="nb on" href="/faces" aria-current="page">Faces</a>
+        <a class="nb" href="/update">OTA</a>
+      </nav>
+    </header>
+
+    <div class="actions-bar">
+      <button class="qbtn primary" id="btnClock">Show Clock</button>
+      <button class="qbtn" id="btnWeather">Show Weather</button>
+    </div>
+
+    <section class="studio-card" aria-labelledby="marqueeTitle">
+      <div class="studio-title"><span id="marqueeTitle">Marquee Text Display</span></div>
+      <div class="row">
+        <input type="text" id="bannerIn" placeholder="Type marquee banner message..." aria-label="Marquee message"
+          style="flex:1;min-width:220px">
+        <button class="qbtn primary" id="btnSendBanner" style="padding:10px 18px">Display</button>
+        <button class="qbtn" id="btnStopBanner" style="padding:10px 18px">Stop</button>
+      </div>
+    </section>
+
+    <section class="studio-card" aria-labelledby="skinTitle">
+      <div class="studio-title">
+        <span id="skinTitle">Eye &amp; Face Skin Theme</span>
+        <span id="activeSkinLabel" class="accent">Active: Desk Buddy</span>
+      </div>
+      <div class="skin-grid">
+        <button class="skin-btn" data-skin="default"><span class="px-skin" aria-hidden="true"></span><span class="skin-name">Default Vector</span></button>
+        <button class="skin-btn" data-skin="cyberpunk"><span class="px-skin" aria-hidden="true"></span><span class="skin-name">Cyberpunk</span></button>
+        <button class="skin-btn" data-skin="cat"><span class="px-skin" aria-hidden="true"></span><span class="skin-name">Kawaii Cat</span></button>
+        <button class="skin-btn" data-skin="retro"><span class="px-skin" aria-hidden="true"></span><span class="skin-name">Retro 8-Bit</span></button>
+        <button class="skin-btn" data-skin="anime"><span class="px-skin" aria-hidden="true"></span><span class="skin-name">Anime Glint</span></button>
+        <button class="skin-btn" data-skin="hearts"><span class="px-skin" aria-hidden="true"></span><span class="skin-name">Heart Eyes</span></button>
+        <button class="skin-btn" data-skin="steampunk"><span class="px-skin" aria-hidden="true"></span><span class="skin-name">Steampunk</span></button>
+        <button class="skin-btn" data-skin="demon"><span class="px-skin" aria-hidden="true"></span><span class="skin-name">Demon</span></button>
+        <button class="skin-btn" data-skin="matrix"><span class="px-skin" aria-hidden="true"></span><span class="skin-name">Matrix Code</span></button>
+        <button class="skin-btn" data-skin="cyborg"><span class="px-skin" aria-hidden="true"></span><span class="skin-name">Cyborg T-800</span></button>
+        <button class="skin-btn" data-skin="mecha"><span class="px-skin" aria-hidden="true"></span><span class="skin-name">Mecha Gundam</span></button>
+        <button class="skin-btn" data-skin="sunglasses"><span class="px-skin" aria-hidden="true"></span><span class="skin-name">Boss Shades</span></button>
+        <button class="skin-btn" data-skin="puppy"><span class="px-skin" aria-hidden="true"></span><span class="skin-name">Kawaii Puppy</span></button>
+        <button class="skin-btn" data-skin="hypno"><span class="px-skin" aria-hidden="true"></span><span class="skin-name">Hypno Spiral</span></button>
+        <button class="skin-btn" data-skin="alien"><span class="px-skin" aria-hidden="true"></span><span class="skin-name">Cosmic Alien</span></button>
+        <button class="skin-btn" data-skin="ninja"><span class="px-skin" aria-hidden="true"></span><span class="skin-name">Shinobi Ninja</span></button>
+        <button class="skin-btn" data-skin="round"><span class="px-skin" aria-hidden="true"></span><span class="skin-name">Round Ocular</span></button>
+        <button class="skin-btn primary" data-skin="kiwi"><span class="px-skin" aria-hidden="true"></span><span class="skin-name">Desk Buddy</span></button>
+      </div>
+
+      <div class="options-bar">
+        <label class="toggle" title="Show mouth & lips on expressions (always visible when speaking)">
+          <input type="checkbox" id="mouthToggle" checked>
+          <span class="switch"></span>
+          <span>Show Mouth &amp; Lips</span>
+        </label>
+        <label class="toggle" title="Toggle autonomous idle expressions &amp; remarks">
+          <input type="checkbox" id="bToggle">
+          <span class="switch"></span>
+          <span>Autonomous Idle Remarks</span>
+        </label>
+        <div class="row" style="gap:8px">
+          <label for="boredomMinsDeck" class="hint" style="margin:0">Interval</label>
+          <select id="boredomMinsDeck" class="select-sm" onchange="setBoredomIntervalLive(this.value)">
+            <option value="1">1 minute</option>
+            <option value="2">2 minutes</option>
+            <option value="3">3 minutes</option>
+            <option value="5" selected>5 minutes</option>
+            <option value="10">10 minutes</option>
+            <option value="15">15 minutes</option>
+            <option value="30">30 minutes</option>
+          </select>
+        </div>
+      </div>
+    </section>
+
+    <div class="tabs-wrap" role="tablist" aria-label="Expression categories">
+      <div class="tabs">
+        <button class="tab active" role="tab" aria-selected="true" data-cat="all">All (42)</button>
+        <button class="tab" role="tab" aria-selected="false" data-cat="pet">Pet (10)</button>
+        <button class="tab" role="tab" aria-selected="false" data-cat="core">Core (11)</button>
+        <button class="tab" role="tab" aria-selected="false" data-cat="expressive">Expressive (11)</button>
+        <button class="tab" role="tab" aria-selected="false" data-cat="fun">Wild &amp; Fun (10)</button>
+      </div>
+    </div>
+
+    <div class="grid" id="cardGrid">
+      <!-- Pet -->
+      <button class="ecard" data-cat="pet" data-e="love"><span class="px" aria-hidden="true"><i></i><i></i></span><span
+          class="e-title">Love</span><span class="e-desc">Heart flutter</span></button>
+      <button class="ecard" data-cat="pet" data-e="giggle"><span class="px"
+          aria-hidden="true"><i></i><i></i></span><span class="e-title">Giggle</span><span class="e-desc">Musical
+          laugh</span></button>
+      <button class="ecard" data-cat="pet" data-e="shy"><span class="px" aria-hidden="true"><i></i><i></i></span><span
+          class="e-title">Shy</span><span class="e-desc">Blushing look</span></button>
+      <button class="ecard" data-cat="pet" data-e="sparkle"><span class="px"
+          aria-hidden="true"><i></i><i></i></span><span class="e-title">Sparkle</span><span class="e-desc">Glinting
+          stars</span></button>
+      <button class="ecard" data-cat="pet" data-e="kiss"><span class="px" aria-hidden="true"><i></i><i></i></span><span
+          class="e-title">Kiss</span><span class="e-desc">Blowing kisses</span></button>
+      <button class="ecard" data-cat="pet" data-e="cuddle"><span class="px"
+          aria-hidden="true"><i></i><i></i></span><span class="e-title">Cuddle</span><span class="e-desc">Sleepy
+          cozy</span></button>
+      <button class="ecard" data-cat="pet" data-e="playful"><span class="px"
+          aria-hidden="true"><i></i><i></i></span><span class="e-title">Playful</span><span class="e-desc">Bouncing
+          wink</span></button>
+      <button class="ecard" data-cat="pet" data-e="sleepy"><span class="px"
+          aria-hidden="true"><i></i><i></i></span><span class="e-title">Sleepy</span><span class="e-desc">Heavy
+          eyelids</span></button>
+      <button class="ecard" data-cat="pet" data-e="proud"><span class="px" aria-hidden="true"><i></i><i></i></span><span
+          class="e-title">Proud</span><span class="e-desc">Chest puff</span></button>
+      <button class="ecard" data-cat="pet" data-e="surprised"><span class="px"
+          aria-hidden="true"><i></i><i></i></span><span class="e-title">Surprise</span><span class="e-desc">Gasp
+          reaction</span></button>
+
+      <!-- Core -->
+      <button class="ecard" data-cat="core" data-e="idle"><span class="px" aria-hidden="true"><i></i><i></i></span><span
+          class="e-title">Idle</span><span class="e-desc">Blinking calm</span></button>
+      <button class="ecard" data-cat="core" data-e="happy"><span class="px"
+          aria-hidden="true"><i></i><i></i></span><span class="e-title">Happy</span><span class="e-desc">Sweet
+          smile</span></button>
+      <button class="ecard" data-cat="core" data-e="excited"><span class="px"
+          aria-hidden="true"><i></i><i></i></span><span class="e-title">Excited</span><span class="e-desc">Big
+          bouncy</span></button>
+      <button class="ecard" data-cat="core" data-e="sad"><span class="px" aria-hidden="true"><i></i><i></i></span><span
+          class="e-title">Sad</span><span class="e-desc">Droopy frown</span></button>
+      <button class="ecard" data-cat="core" data-e="angry"><span class="px"
+          aria-hidden="true"><i></i><i></i></span><span class="e-title">Angry</span><span class="e-desc">Fierce
+          brow</span></button>
+      <button class="ecard" data-cat="core" data-e="confused"><span class="px"
+          aria-hidden="true"><i></i><i></i></span><span class="e-title">Confused</span><span class="e-desc">Tilted
+          glance</span></button>
+      <button class="ecard" data-cat="core" data-e="thinking"><span class="px"
+          aria-hidden="true"><i></i><i></i></span><span class="e-title">Thinking</span><span class="e-desc">Processing
+          AI</span></button>
+      <button class="ecard" data-cat="core" data-e="sleeping"><span class="px"
+          aria-hidden="true"><i></i><i></i></span><span class="e-title">Sleeping</span><span class="e-desc">Z Z
+          snore</span></button>
+      <button class="ecard" data-cat="core" data-e="listening"><span class="px"
+          aria-hidden="true"><i></i><i></i></span><span class="e-title">Listening</span><span class="e-desc">Audio
+          waves</span></button>
+      <button class="ecard" data-cat="core" data-e="speaking"><span class="px"
+          aria-hidden="true"><i></i><i></i></span><span class="e-title">Speaking</span><span class="e-desc">Talking
+          mouth</span></button>
+      <button class="ecard" data-cat="core" data-e="error"><span class="px"
+          aria-hidden="true"><i></i><i></i></span><span class="e-title">Error</span><span class="e-desc">Buzzer
+          alert</span></button>
+
+      <!-- Expressive -->
+      <button class="ecard" data-cat="expressive" data-e="wink"><span class="px"
+          aria-hidden="true"><i></i><i></i></span><span class="e-title">Wink</span><span class="e-desc">Cheeky
+          glance</span></button>
+      <button class="ecard" data-cat="expressive" data-e="smug"><span class="px"
+          aria-hidden="true"><i></i><i></i></span><span class="e-title">Smug</span><span class="e-desc">Corner
+          smirk</span></button>
+      <button class="ecard" data-cat="expressive" data-e="curious"><span class="px"
+          aria-hidden="true"><i></i><i></i></span><span class="e-title">Curious</span><span class="e-desc">Wide
+          search</span></button>
+      <button class="ecard" data-cat="expressive" data-e="bored"><span class="px"
+          aria-hidden="true"><i></i><i></i></span><span class="e-title">Bored</span><span class="e-desc">Half
+          lids</span></button>
+      <button class="ecard" data-cat="expressive" data-e="laughing"><span class="px"
+          aria-hidden="true"><i></i><i></i></span><span class="e-title">Laughing</span><span class="e-desc">Joy
+          bounce</span></button>
+      <button class="ecard" data-cat="expressive" data-e="scared"><span class="px"
+          aria-hidden="true"><i></i><i></i></span><span class="e-title">Scared</span><span class="e-desc">Shivering
+          eyes</span></button>
+      <button class="ecard" data-cat="expressive" data-e="suspicious"><span class="px"
+          aria-hidden="true"><i></i><i></i></span><span class="e-title">Suspicious</span><span class="e-desc">Squinting
+          side</span></button>
+      <button class="ecard" data-cat="expressive" data-e="relieved"><span class="px"
+          aria-hidden="true"><i></i><i></i></span><span class="e-title">Relieved</span><span class="e-desc">Soft
+          sigh</span></button>
+      <button class="ecard" data-cat="expressive" data-e="proud"><span class="px"
+          aria-hidden="true"><i></i><i></i></span><span class="e-title">Regal</span><span class="e-desc">Head held
+          high</span></button>
+      <button class="ecard" data-cat="expressive" data-e="dizzy"><span class="px"
+          aria-hidden="true"><i></i><i></i></span><span class="e-title">Dizzy</span><span class="e-desc">Orbiting
+          eyes</span></button>
+      <button class="ecard" data-cat="expressive" data-e="lovestruck"><span class="px"
+          aria-hidden="true"><i></i><i></i></span><span class="e-title">Lovestruck</span><span class="e-desc">Pulsing
+          glow</span></button>
+
+      <!-- Wild & Fun -->
+      <button class="ecard" data-cat="fun" data-e="cool"><span class="px" aria-hidden="true"><i></i><i></i></span><span
+          class="e-title">Cool</span><span class="e-desc">Sunglasses</span></button>
+      <button class="ecard" data-cat="fun" data-e="evil"><span class="px" aria-hidden="true"><i></i><i></i></span><span
+          class="e-title">Devil</span><span class="e-desc">Spiky horns</span></button>
+      <button class="ecard" data-cat="fun" data-e="crying"><span class="px"
+          aria-hidden="true"><i></i><i></i></span><span class="e-title">Crying</span><span class="e-desc">Tear
+          streams</span></button>
+      <button class="ecard" data-cat="fun" data-e="hearts"><span class="px"
+          aria-hidden="true"><i></i><i></i></span><span class="e-title">Hearts</span><span class="e-desc">Floating
+          hearts</span></button>
+      <button class="ecard" data-cat="fun" data-e="dead"><span class="px" aria-hidden="true"><i></i><i></i></span><span
+          class="e-title">Dead / KO</span><span class="e-desc">Cross X eyes</span></button>
+      <button class="ecard" data-cat="fun" data-e="shocked"><span class="px"
+          aria-hidden="true"><i></i><i></i></span><span class="e-title">Shocked</span><span class="e-desc">Tiny
+          pupils</span></button>
+      <button class="ecard" data-cat="fun" data-e="singing"><span class="px"
+          aria-hidden="true"><i></i><i></i></span><span class="e-title">Singing</span><span class="e-desc">Music
+          notes</span></button>
+      <button class="ecard" data-cat="fun" data-e="party"><span class="px" aria-hidden="true"><i></i><i></i></span><span
+          class="e-title">Party</span><span class="e-desc">Confetti dance</span></button>
+      <button class="ecard" data-cat="fun" data-e="nervous"><span class="px"
+          aria-hidden="true"><i></i><i></i></span><span class="e-title">Nervous</span><span class="e-desc">Sweat
+          drops</span></button>
+      <button class="ecard" data-cat="fun" data-e="cute"><span class="px" aria-hidden="true"><i></i><i></i></span><span
+          class="e-title">Cute</span><span class="e-desc">Puppy pleading</span></button>
+    </div>
+  </div>
+
+  <div id="toast" role="status" aria-live="polite">Expression Triggered</div>
+
+  <script>
+    /* ── Starfield (paused when hidden, static under reduced motion) ── */
+    (function () {
+      var c = document.getElementById('sky'), x = c.getContext('2d'), stars = [], W, H, raf;
+      var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      function size() {
+        W = c.width = innerWidth; H = c.height = innerHeight; stars = [];
+        var n = Math.min(220, Math.round(W * H / 9000));
+        for (var i = 0; i < n; i++)stars.push({ x: Math.random() * W, y: Math.random() * H, r: Math.random() * 1.2 + .2, s: Math.random() * .15 + .02, p: Math.random() * 6.28 });
+      }
+      function draw(t) {
+        x.clearRect(0, 0, W, H);
+        for (var i = 0; i < stars.length; i++) {
+          var s = stars[i];
+          if (!reduce) { s.y += s.s; if (s.y > H) { s.y = 0; s.x = Math.random() * W; } }
+          var a = .35 + .35 * Math.sin(t / 1200 + s.p);
+          x.fillStyle = 'rgba(236,230,217,' + a.toFixed(3) + ')';
+          x.beginPath(); x.arc(s.x, s.y, s.r, 0, 6.283); x.fill();
+        }
+        if (!reduce) raf = requestAnimationFrame(draw);
+      }
+      size(); window.addEventListener('resize', size);
+      if (reduce) { draw(0); } else {
+        raf = requestAnimationFrame(draw);
+        document.addEventListener('visibilitychange', function () {
+          if (document.hidden) { cancelAnimationFrame(raf); } else { raf = requestAnimationFrame(draw); }
+        });
+      }
+    })();
+
+    var isSleeping = false;
+    function showToast(msg) {
+      var t = document.getElementById('toast');
+      t.textContent = msg;
+      t.classList.add('show');
+      clearTimeout(showToast._t);
+      showToast._t = setTimeout(function () { t.classList.remove('show'); }, 1600);
+    }
+
+    function fire(name, label) {
+      fetch('/do?e=' + encodeURIComponent(name) + '&ms=60000&s=1')
+        .then(function (r) { return r.json(); })
+        .then(function (j) {
+          showToast(label || name);
+          poll();
+        }).catch(function () { });
+    }
+
+    document.querySelectorAll('.ecard[data-e]').forEach(function (c) {
+      c.addEventListener('click', function () {
+        var e = this.getAttribute('data-e');
+        var t = this.querySelector('.e-title').textContent;
+        document.querySelectorAll('.ecard').forEach(function (x) { x.classList.remove('is-active'); });
+        this.classList.add('is-active');
+        fire(e, t);
+      });
+    });
+
+    document.getElementById('btnClock').addEventListener('click', function () { fire('clock', 'Clock'); });
+    document.getElementById('btnWeather').addEventListener('click', function () { fire('weather', 'Weather'); });
+
+    var mouthToggle = document.getElementById('mouthToggle');
+    if (mouthToggle) {
+      mouthToggle.addEventListener('change', function () {
+        var en = this.checked ? '1' : '0';
+        fetch('/do?mouth=' + en)
+          .then(function (r) { return r.json(); })
+          .then(function () {
+            showToast(en === '1' ? 'Mouth & Lips visible' : 'Mouth hidden (speaking only)');
+          })
+          .catch(function () { });
+      });
+    }
+
+    document.querySelectorAll('.tab').forEach(function (t) {
+      t.addEventListener('click', function () {
+        document.querySelectorAll('.tab').forEach(function (x) {
+          x.classList.remove('active');
+          x.setAttribute('aria-selected', 'false');
+        });
+        this.classList.add('active');
+        this.setAttribute('aria-selected', 'true');
+        var cat = this.getAttribute('data-cat');
+        document.querySelectorAll('.ecard').forEach(function (card) {
+          card.style.display = (cat === 'all' || card.getAttribute('data-cat') === cat) ? 'flex' : 'none';
+        });
+      });
+    });
+
+    document.getElementById('btnSendBanner').addEventListener('click', function () {
+      var inp = document.getElementById('bannerIn');
+      var txt = inp.value.trim();
+      if (!txt) return;
+      fetch('/do?banner=' + encodeURIComponent(txt))
+        .then(function (r) { return r.json(); })
+        .then(function () { showToast('Banner displayed'); })
+        .catch(function () { });
+    });
+
+    document.getElementById('btnStopBanner').addEventListener('click', function () {
+      fetch('/do?stopbanner=1')
+        .then(function (r) { return r.json(); })
+        .then(function () { showToast('Banner stopped'); })
+        .catch(function () { });
+    });
+
+    document.querySelectorAll('.skin-btn').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var sk = this.getAttribute('data-skin');
+        var sName = this.querySelector('.skin-name') ? this.querySelector('.skin-name').textContent.trim() : this.textContent.trim();
+        fetch('/do?skin=' + encodeURIComponent(sk))
+          .then(function (r) { return r.json(); })
+          .then(function () {
+            document.querySelectorAll('.skin-btn').forEach(function (x) { x.classList.remove('primary'); });
+            b.classList.add('primary');
+            var lbl = document.getElementById('activeSkinLabel');
+            if (lbl) lbl.textContent = 'Active: ' + sName;
+            showToast('Skin: ' + sName);
+          })
+          .catch(function () { });
+      });
+    });
+
+    var bToggle = document.getElementById('bToggle');
+    if (bToggle) {
+      bToggle.addEventListener('change', function () {
+        var en = this.checked ? '1' : '0';
+        fetch('/do?boredom=' + en)
+          .then(function (r) { return r.json(); })
+          .then(function () {
+            showToast(en === '1' ? 'Idle remarks active' : 'Idle remarks disabled');
+          })
+          .catch(function () { });
+      });
+    }
+
+    function setBoredomIntervalLive(val) {
+      fetch('/do?boredom_mins=' + encodeURIComponent(val))
+        .then(function (r) { return r.json(); })
+        .then(function () {
+          showToast('Interval set: ' + val + 'm');
+        })
+        .catch(function () { });
+    }
+
+    function poll() {
+      fetch('/status').then(function (r) { return r.json(); }).then(function (j) {
+        var dot = document.getElementById('statusDot');
+        var txt = document.getElementById('statusTxt');
+        var slpTxt = document.getElementById('sleepTxt');
+        var slpIco = document.getElementById('sleepIco');
+        if (!dot || !txt) return;
+        isSleeping = !!j.sleeping;
+        if (j.skin) {
+          var activeName = j.skin;
+          document.querySelectorAll('.skin-btn').forEach(function (b) {
+            if (b.getAttribute('data-skin') === j.skin) {
+              b.classList.add('primary');
+              activeName = (b.querySelector('.skin-name') ? b.querySelector('.skin-name').textContent : b.textContent).trim();
+            } else {
+              b.classList.remove('primary');
+            }
+          });
+          var lbl = document.getElementById('activeSkinLabel');
+          if (lbl) lbl.textContent = 'Active: ' + activeName;
+        }
+        if (j.mouth !== undefined) {
+          var mT = document.getElementById('mouthToggle');
+          if (mT) mT.checked = !!j.mouth;
+        }
+        if (j.boredom !== undefined) {
+          var bT = document.getElementById('bToggle');
+          if (bT) bT.checked = !!j.boredom;
+        }
+        if (j.boredom_mins !== undefined) {
+          var bM = document.getElementById('boredomMinsDeck');
+          if (bM) bM.value = String(j.boredom_mins);
+        }
+        if (j.sleeping) {
+          dot.className = 'dot sleep';
+          txt.textContent = 'Sleeping';
+          if (slpTxt) slpTxt.textContent = 'Wake Up';
+          if (slpIco) slpIco.textContent = '☀';
+        } else if (j.busy) {
+          dot.className = 'dot busy';
+          txt.textContent = 'Busy';
+          if (slpTxt) slpTxt.textContent = 'Sleep Mode';
+          if (slpIco) slpIco.textContent = '☾';
+        } else {
+          dot.className = 'dot';
+          txt.textContent = (j.emotion === 'idle' ? 'Ready' : j.emotion);
+          if (slpTxt) slpTxt.textContent = 'Sleep Mode';
+          if (slpIco) slpIco.textContent = '☾';
+        }
+      }).catch(function () { });
+    }
+
+    /* ── Render unique OLED face previews for all 42 emotions ── */
+    var OLED_FACES = {
+      love: '<path d="M20 22 C13 16 12 10 16 8 C18.5 6.5 20 8.5 20 10 C20 8.5 21.5 6.5 24 8 C28 10 27 16 20 22 Z" fill="currentColor"/><path d="M44 22 C37 16 36 10 40 8 C42.5 6.5 44 8.5 44 10 C44 8.5 45.5 6.5 48 8 C52 10 51 16 44 22 Z" fill="currentColor"/><path d="M28 26 Q32 29 36 26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>',
+      giggle: '<path d="M12 18 Q20 8 28 18" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/><path d="M36 18 Q44 8 52 18" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/><circle cx="10" cy="22" r="1.6" fill="currentColor" opacity="0.6"/><circle cx="54" cy="22" r="1.6" fill="currentColor" opacity="0.6"/><path d="M28 23 Q32 28 36 23 Z" fill="currentColor"/>',
+      shy: '<line x1="14" y1="13" x2="26" y2="18" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/><line x1="38" y1="18" x2="50" y2="13" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/><line x1="12" y1="21" x2="15" y2="25" stroke="currentColor" stroke-width="1.2"/><line x1="16" y1="21" x2="19" y2="25" stroke="currentColor" stroke-width="1.2"/><line x1="45" y1="21" x2="48" y2="25" stroke="currentColor" stroke-width="1.2"/><line x1="49" y1="21" x2="52" y2="25" stroke="currentColor" stroke-width="1.2"/><path d="M30 25 Q32 27 34 25" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>',
+      sparkle: '<rect x="13" y="7" width="14" height="17" rx="4" fill="currentColor"/><rect x="37" y="7" width="14" height="17" rx="4" fill="currentColor"/><polygon points="20,11 21.2,14 24,15.2 21.2,16.4 20,19.5 18.8,16.4 16,15.2 18.8,14" fill="#000"/><polygon points="44,11 45.2,14 48,15.2 45.2,16.4 44,19.5 42.8,16.4 40,15.2 42.8,14" fill="#000"/><polygon points="6,9 7,11 9,12 7,13 6,15 5,13 3,12 5,11" fill="currentColor"/><path d="M28 27 Q32 30 36 27" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>',
+      kiss: '<rect x="13" y="8" width="14" height="15" rx="4" fill="currentColor"/><circle cx="16.5" cy="11.5" r="1.8" fill="#000"/><path d="M37 16 Q44 22 51 16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/><path d="M31 23 Q33.5 21.5 31 24.5 Q33.5 27.5 31 26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M57 9 C54 6 52 8.5 55 12 C58 8.5 56 6 57 9 Z" fill="currentColor"/>',
+      cuddle: '<path d="M13 14 Q20 22 27 14" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/><path d="M37 14 Q44 22 51 14" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/><ellipse cx="13" cy="20" rx="2.5" ry="1.2" fill="currentColor" opacity="0.6"/><ellipse cx="51" cy="20" rx="2.5" ry="1.2" fill="currentColor" opacity="0.6"/><path d="M29 25 Q32 28 35 25" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>',
+      playful: '<rect x="13" y="7" width="14" height="15" rx="4" fill="currentColor"/><circle cx="16.5" cy="10.5" r="1.8" fill="#000"/><path d="M37 16 Q44 9 51 16" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/><path d="M27 24 Q32 29 37 24 Z" fill="currentColor"/><path d="M30 26 Q32 30 34 26" fill="#000"/>',
+      sleepy: '<rect x="13" y="14" width="14" height="6" rx="2" fill="currentColor"/><rect x="37" y="14" width="14" height="6" rx="2" fill="currentColor"/><path d="M53 5 H57 L53 10 H57" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/><path d="M29 25 H35" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>',
+      proud_pet: '<path d="M13 13 Q20 17 27 13 L27 20 Q20 23 13 20 Z" fill="currentColor"/><path d="M37 13 Q44 17 51 13 L51 20 Q44 23 37 20 Z" fill="currentColor"/><path d="M27 24 Q32 28 37 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>',
+      surprised: '<ellipse cx="20" cy="14" rx="8" ry="9" fill="currentColor"/><circle cx="20" cy="14" r="3.2" fill="#000"/><circle cx="18" cy="12" r="1.2" fill="currentColor"/><ellipse cx="44" cy="14" rx="8" ry="9" fill="currentColor"/><circle cx="44" cy="14" r="3.2" fill="#000"/><circle cx="42" cy="12" r="1.2" fill="currentColor"/><circle cx="32" cy="26" r="3" fill="none" stroke="currentColor" stroke-width="1.8"/>',
+
+      idle: '<rect x="13" y="8" width="14" height="15" rx="4" fill="currentColor"/><circle cx="16.5" cy="11.5" r="1.8" fill="#000"/><rect x="37" y="8" width="14" height="15" rx="4" fill="currentColor"/><circle cx="40.5" cy="11.5" r="1.8" fill="#000"/><path d="M28 26 Q32 28.5 36 26" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>',
+      happy: '<path d="M13 18 Q20 8 27 18" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><path d="M37 18 Q44 8 51 18" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><path d="M27 24 Q32 29 37 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>',
+      excited: '<rect x="12" y="6" width="15" height="17" rx="5" fill="currentColor"/><circle cx="15.5" cy="9.5" r="2" fill="#000"/><circle cx="23" cy="19" r="1.2" fill="#000"/><rect x="37" y="6" width="15" height="17" rx="5" fill="currentColor"/><circle cx="40.5" cy="9.5" r="2" fill="#000"/><circle cx="48" cy="19" r="1.2" fill="#000"/><path d="M26 24 Q32 30 38 24 Z" fill="currentColor"/>',
+      sad: '<line x1="12" y1="7" x2="26" y2="10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="52" y1="7" x2="38" y2="10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><rect x="13" y="12" width="14" height="11" rx="3" fill="currentColor"/><rect x="37" y="12" width="14" height="11" rx="3" fill="currentColor"/><path d="M27 27 Q32 23 37 27" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>',
+      angry: '<polygon points="12,7 28,12 28,14 12,9" fill="currentColor"/><polygon points="52,7 36,12 36,14 52,9" fill="currentColor"/><polygon points="13,11 27,15 27,22 13,22" fill="currentColor"/><polygon points="51,11 37,15 37,22 51,22" fill="currentColor"/><line x1="27" y1="27" x2="37" y2="27" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>',
+      confused: '<path d="M12 4 Q19 2 26 5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><rect x="13" y="7" width="14" height="14" rx="4" fill="currentColor"/><rect x="37" y="13" width="14" height="8" rx="2" fill="currentColor"/><line x1="28" y1="26" x2="36" y2="23" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>',
+      thinking: '<rect x="15" y="7" width="13" height="14" rx="4" fill="currentColor"/><circle cx="24" cy="10" r="1.8" fill="#000"/><rect x="39" y="7" width="13" height="14" rx="4" fill="currentColor"/><circle cx="48" cy="10" r="1.8" fill="#000"/><circle cx="56" cy="6" r="1" fill="currentColor"/><circle cx="59" cy="3" r="1.5" fill="currentColor"/><line x1="28" y1="25" x2="36" y2="25" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>',
+      sleeping: '<line x1="13" y1="17" x2="27" y2="17" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/><line x1="37" y1="17" x2="51" y2="17" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/><path d="M48 5 H52 L48 9 H52" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M54 9 H57 L54 12 H57" fill="none" stroke="currentColor" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round"/><line x1="29" y1="25" x2="35" y2="25" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>',
+      listening: '<rect x="11" y="8" width="12" height="14" rx="3" fill="currentColor"/><rect x="41" y="8" width="12" height="14" rx="3" fill="currentColor"/><line x1="25" y1="17" x2="25" y2="13" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><line x1="28.5" y1="20" x2="28.5" y2="10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><line x1="32" y1="22" x2="32" y2="8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><line x1="35.5" y1="20" x2="35.5" y2="10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><line x1="39" y1="17" x2="39" y2="13" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>',
+      speaking: '<rect x="13" y="7" width="14" height="14" rx="4" fill="currentColor"/><circle cx="16.5" cy="10" r="1.5" fill="#000"/><rect x="37" y="7" width="14" height="14" rx="4" fill="currentColor"/><circle cx="40.5" cy="10" r="1.5" fill="#000"/><ellipse cx="32" cy="26" rx="6" ry="3.5" fill="currentColor"/>',
+      error: '<polygon points="13,7 27,9 25,20 15,19" fill="currentColor"/><text x="18" y="16" font-size="9" font-weight="900" fill="#000" font-family="monospace">!</text><polygon points="37,9 51,7 49,19 39,20" fill="currentColor"/><text x="42" y="16" font-size="9" font-weight="900" fill="#000" font-family="monospace">!</text><path d="M26 26 L29 24 L32 27 L35 24 L38 26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>',
+
+      wink: '<rect x="13" y="7" width="14" height="15" rx="4" fill="currentColor"/><circle cx="16.5" cy="10" r="1.8" fill="#000"/><path d="M37 17 Q44 10 51 17" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round"/><path d="M28 25 Q32 28 36 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>',
+      smug: '<path d="M37 5 Q45 3 52 8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><polygon points="12,11 26,13 26,19 12,19" fill="currentColor"/><polygon points="38,9 52,12 52,19 38,19" fill="currentColor"/><path d="M30 26 Q35 27 38 23" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>',
+      curious: '<rect x="11" y="5" width="16" height="18" rx="5" fill="currentColor"/><circle cx="19" cy="13" r="3" fill="#000"/><circle cx="17" cy="11" r="1.2" fill="currentColor"/><rect x="39" y="9" width="12" height="13" rx="3" fill="currentColor"/><circle cx="45" cy="15" r="2" fill="#000"/><ellipse cx="32" cy="26" rx="2" ry="2.5" fill="currentColor"/>',
+      bored: '<rect x="13" y="13" width="14" height="8" rx="2" fill="currentColor"/><rect x="13" y="10" width="14" height="2.5" fill="currentColor"/><rect x="37" y="13" width="14" height="8" rx="2" fill="currentColor"/><rect x="37" y="10" width="14" height="2.5" fill="currentColor"/><line x1="27" y1="26" x2="37" y2="26" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>',
+      laughing: '<path d="M12 17 Q20 7 28 17" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><path d="M36 17 Q44 7 52 17" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><path d="M26 23 Q32 31 38 23 Z" fill="currentColor"/>',
+      scared: '<path d="M13 7 Q20 4 27 7" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M37 7 Q44 4 51 7" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="20" cy="15" r="7" fill="currentColor"/><circle cx="20" cy="15" r="2.2" fill="#000"/><circle cx="44" cy="15" r="7" fill="currentColor"/><circle cx="44" cy="15" r="2.2" fill="#000"/><path d="M28 26 Q30 24 32 26 Q34 28 36 26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>',
+      suspicious: '<polygon points="12,13 28,14 27,19 13,18" fill="currentColor"/><circle cx="17" cy="16" r="2" fill="#000"/><polygon points="36,14 52,13 51,18 37,19" fill="currentColor"/><circle cx="41" cy="16" r="2" fill="#000"/><line x1="29" y1="25" x2="35" y2="26" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>',
+      relieved: '<path d="M13 14 Q20 21 27 14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/><path d="M37 14 Q44 21 51 14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/><path d="M28 25 Q32 28 36 25" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M42 22 Q45 21 47 23" fill="none" stroke="currentColor" stroke-width="1" opacity="0.6"/>',
+      proud_regal: '<polygon points="27,6 29.5,3 32,6 34.5,3 37,6 37,8 27,8" fill="currentColor"/><polygon points="14,10 27,13 26,19 13,17" fill="currentColor"/><circle cx="22" cy="14" r="1.5" fill="#000"/><polygon points="37,13 50,10 51,17 38,19" fill="currentColor"/><circle cx="42" cy="14" r="1.5" fill="#000"/><path d="M28 25 Q32 27 36 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>',
+      dizzy: '<path d="M20 15 m -6 0 a 6 6 0 1 0 12 0 a 4 4 0 1 0 -8 0 a 2 2 0 1 0 4 0" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M44 15 m -6 0 a 6 6 0 1 0 12 0 a 4 4 0 1 0 -8 0 a 2 2 0 1 0 4 0" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M27 26 Q29.5 24 32 26 Q34.5 28 37 26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>',
+      lovestruck: '<path d="M20 20 C15 15 13 10 17 8 C19 7 20 8 20 10 C20 8 21 7 23 8 C27 10 25 15 20 20 Z" fill="currentColor"/><path d="M44 20 C39 15 37 10 41 8 C43 7 44 8 44 10 C44 8 45 7 47 8 C51 10 49 15 44 20 Z" fill="currentColor"/><circle cx="11" cy="21" r="2" fill="currentColor" opacity="0.6"/><circle cx="53" cy="21" r="2" fill="currentColor" opacity="0.6"/><path d="M28 24 Q32 29 36 24 Z" fill="currentColor"/>',
+
+      cool: '<polygon points="11,10 28,10 26,20 13,20" fill="currentColor"/><polygon points="36,10 53,10 51,20 38,20" fill="currentColor"/><rect x="27" y="11" width="10" height="3" fill="currentColor"/><line x1="7" y1="12" x2="12" y2="10" stroke="currentColor" stroke-width="2"/><line x1="52" y1="10" x2="57" y2="12" stroke="currentColor" stroke-width="2"/><line x1="16" y1="12" x2="21" y2="18" stroke="#000" stroke-width="1.5"/><line x1="41" y1="12" x2="46" y2="18" stroke="#000" stroke-width="1.5"/><path d="M28 25 Q32 27 36 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>',
+      evil: '<polygon points="12,10 7,2 16,7" fill="currentColor"/><polygon points="52,10 57,2 48,7" fill="currentColor"/><polygon points="13,9 27,13 26,20 12,18" fill="currentColor"/><polygon points="51,9 37,13 38,20 52,18" fill="currentColor"/><path d="M27 24 Q32 30 37 24 Z" fill="currentColor"/>',
+      crying: '<rect x="13" y="8" width="14" height="10" rx="3" fill="currentColor"/><rect x="37" y="8" width="14" height="10" rx="3" fill="currentColor"/><path d="M19 20 C17 22 17 25 19 27 C21 25 21 22 19 20 Z" fill="currentColor"/><path d="M45 21 C43 23 43 26 45 28 C47 26 47 23 45 21 Z" fill="currentColor"/><path d="M28 26 Q32 23 36 26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>',
+      hearts: '<rect x="15" y="9" width="12" height="13" rx="3" fill="currentColor"/><rect x="37" y="9" width="12" height="13" rx="3" fill="currentColor"/><path d="M7 11 C4 8 2 11 7 15 C12 11 10 8 7 11 Z" fill="currentColor"/><path d="M57 11 C54 8 52 11 57 15 C62 11 60 8 57 11 Z" fill="currentColor"/><path d="M28 25 Q32 28 36 25" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>',
+      dead: '<line x1="14" y1="9" x2="26" y2="21" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><line x1="26" y1="9" x2="14" y2="21" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><line x1="38" y1="9" x2="50" y2="21" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><line x1="50" y1="9" x2="38" y2="21" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><line x1="29" y1="26" x2="35" y2="26" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>',
+      shocked: '<ellipse cx="20" cy="14" rx="9" ry="9" fill="currentColor"/><circle cx="20" cy="14" r="2.2" fill="#000"/><ellipse cx="44" cy="14" rx="9" ry="9" fill="currentColor"/><circle cx="44" cy="14" r="2.2" fill="#000"/><ellipse cx="32" cy="26" rx="3.5" ry="5" fill="none" stroke="currentColor" stroke-width="1.8"/>',
+      singing: '<path d="M12 16 Q18 9 24 16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/><path d="M34 16 Q40 9 46 16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/><ellipse cx="29" cy="24" rx="4" ry="5" fill="currentColor"/><circle cx="53" cy="11" r="2" fill="currentColor"/><line x1="55" y1="11" x2="55" y2="4" stroke="currentColor" stroke-width="1.5"/><line x1="55" y1="4" x2="58" y2="5" stroke="currentColor" stroke-width="1.5"/>',
+      party: '<path d="M13 17 Q20 8 27 17" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round"/><path d="M37 17 Q44 8 51 17" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round"/><circle cx="7" cy="8" r="1.5" fill="currentColor"/><circle cx="10" cy="24" r="1.2" fill="currentColor"/><polygon points="56,6 58,9 55,9" fill="currentColor"/><rect x="53" y="21" width="2" height="2" fill="currentColor"/><path d="M27 23 Q32 30 37 23 Z" fill="currentColor"/>',
+      nervous: '<rect x="13" y="9" width="14" height="13" rx="3" fill="currentColor"/><circle cx="17" cy="15" r="2" fill="#000"/><rect x="37" y="9" width="14" height="13" rx="3" fill="currentColor"/><circle cx="41" cy="15" r="2" fill="#000"/><path d="M56 6 C54 9 53 11 53 13 C53 15 55 16 56 16 C57 16 59 15 59 13 C59 11 58 9 56 6 Z" fill="currentColor"/><path d="M28 26 Q30 24 32 26 Q34 28 36 26" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>',
+      cute: '<ellipse cx="20" cy="14" rx="8" ry="9" fill="currentColor"/><circle cx="17" cy="11" r="3.2" fill="#000"/><circle cx="17" cy="11" r="1.5" fill="currentColor"/><circle cx="22" cy="16" r="1.3" fill="currentColor"/><ellipse cx="44" cy="14" rx="8" ry="9" fill="currentColor"/><circle cx="41" cy="11" r="3.2" fill="#000"/><circle cx="41" cy="11" r="1.5" fill="currentColor"/><circle cx="46" cy="16" r="1.3" fill="currentColor"/><ellipse cx="11" cy="21" rx="2.5" ry="1.2" fill="currentColor" opacity="0.7"/><ellipse cx="53" cy="21" rx="2.5" ry="1.2" fill="currentColor" opacity="0.7"/><path d="M29 25 Q32 28 35 25" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>'
+    };
+
+    function renderEmotionPreviews() {
+      document.querySelectorAll('.ecard[data-e]').forEach(function (card) {
+        var e = card.getAttribute('data-e');
+        var cat = card.getAttribute('data-cat');
+        var px = card.querySelector('.px');
+        if (!px) return;
+        var key = e;
+        if (e === 'proud') {
+          key = (cat === 'expressive') ? 'proud_regal' : 'proud_pet';
+        }
+        if (OLED_FACES[key]) {
+          px.innerHTML = '<svg viewBox="0 0 64 32" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">' + OLED_FACES[key] + '</svg>';
+        }
+      });
+    }
+
+    /* ── Render unique OLED face previews for all 18 Skins ── */
+    var SKIN_FACES = {
+      default: '<rect x="13" y="8" width="14" height="15" rx="4" fill="currentColor"/><circle cx="16.5" cy="11.5" r="1.8" fill="#000"/><rect x="37" y="8" width="14" height="15" rx="4" fill="currentColor"/><circle cx="40.5" cy="11.5" r="1.8" fill="#000"/>',
+      cyberpunk: '<path d="M4 8 V4 H8 M56 4 H60 V8 M4 24 V28 H8 M56 28 H60 V24" stroke="currentColor" stroke-width="1.2" fill="none"/><rect x="13" y="12" width="14" height="8" rx="2" fill="currentColor"/><rect x="18" y="10" width="3" height="12" fill="#000"/><rect x="37" y="12" width="14" height="8" rx="2" fill="currentColor"/><rect x="42" y="10" width="3" height="12" fill="#000"/>',
+      cat: '<polygon points="12,12 17,2 24,11" fill="currentColor"/><polygon points="14,11 17,5 21,11" fill="#000"/><polygon points="40,11 47,2 52,12" fill="currentColor"/><polygon points="43,11 47,5 50,11" fill="#000"/><ellipse cx="19" cy="18" rx="6" ry="7" fill="currentColor"/><ellipse cx="19" cy="18" rx="1.8" ry="5.5" fill="#000"/><ellipse cx="45" cy="18" rx="6" ry="7" fill="currentColor"/><ellipse cx="45" cy="18" rx="1.8" ry="5.5" fill="#000"/>',
+      retro: '<rect x="14" y="8" width="12" height="16" fill="currentColor"/><rect x="11" y="11" width="18" height="10" fill="currentColor"/><rect x="14" y="11" width="4" height="4" fill="#000"/><rect x="38" y="8" width="12" height="16" fill="currentColor"/><rect x="35" y="11" width="18" height="10" fill="currentColor"/><rect x="38" y="11" width="4" height="4" fill="#000"/>',
+      anime: '<rect x="12" y="6" width="15" height="18" rx="5" fill="currentColor"/><ellipse cx="16" cy="10" rx="3.5" ry="4" fill="#000"/><circle cx="16" cy="9.5" r="1.5" fill="currentColor"/><circle cx="22" cy="19" r="1.2" fill="#000"/><rect x="37" y="6" width="15" height="18" rx="5" fill="currentColor"/><ellipse cx="41" cy="10" rx="3.5" ry="4" fill="#000"/><circle cx="41" cy="9.5" r="1.5" fill="currentColor"/><circle cx="47" cy="19" r="1.2" fill="#000"/><polygon points="6,9 7,11 9,12 7,13 6,15 5,13 3,12 5,11" fill="currentColor"/>',
+      hearts: '<path d="M20 23 C13 17 12 11 16 9 C18.5 7.5 20 9.5 20 11 C20 9.5 21.5 7.5 24 9 C28 11 27 17 20 23 Z" fill="currentColor"/><path d="M44 23 C37 17 36 11 40 9 C42.5 7.5 44 9.5 44 11 C44 9.5 45.5 7.5 48 9 C52 11 51 17 44 23 Z" fill="currentColor"/>',
+      steampunk: '<circle cx="20" cy="16" r="9" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="20" cy="16" r="6" fill="currentColor"/><circle cx="20" cy="16" r="2.5" fill="#000"/><circle cx="44" cy="16" r="9" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="44" cy="16" r="6" fill="currentColor"/><circle cx="44" cy="16" r="2.5" fill="#000"/><line x1="29" y1="14" x2="35" y2="14" stroke="currentColor" stroke-width="1.8"/><line x1="29" y1="18" x2="35" y2="18" stroke="currentColor" stroke-width="1.8"/>',
+      demon: '<polygon points="12,11 6,2 17,7" fill="currentColor"/><polygon points="52,11 58,2 47,7" fill="currentColor"/><polygon points="13,10 27,14 26,21 12,19" fill="currentColor"/><polygon points="51,10 37,14 38,21 52,19" fill="currentColor"/>',
+      matrix: '<path d="M18 4 H46 M18 4 V7 M46 4 V7" stroke="currentColor" stroke-width="1.2" fill="none"/><rect x="13" y="10" width="14" height="13" rx="2" fill="none" stroke="currentColor" stroke-width="1.2"/><line x1="16" y1="12" x2="16" y2="20" stroke="currentColor" stroke-width="1.5" stroke-dasharray="2 1"/><line x1="20" y1="11" x2="20" y2="21" stroke="currentColor" stroke-width="1.5" stroke-dasharray="3 2"/><line x1="24" y1="13" x2="24" y2="19" stroke="currentColor" stroke-width="1.5" stroke-dasharray="2 2"/><rect x="37" y="10" width="14" height="13" rx="2" fill="none" stroke="currentColor" stroke-width="1.2"/><line x1="40" y1="12" x2="40" y2="20" stroke="currentColor" stroke-width="1.5" stroke-dasharray="2 1"/><line x1="44" y1="11" x2="44" y2="21" stroke="currentColor" stroke-width="1.5" stroke-dasharray="3 2"/><line x1="48" y1="13" x2="48" y2="19" stroke="currentColor" stroke-width="1.5" stroke-dasharray="2 2"/>',
+      cyborg: '<rect x="13" y="9" width="14" height="14" rx="4" fill="currentColor"/><circle cx="16.5" cy="12.5" r="1.8" fill="#000"/><circle cx="44" cy="16" r="8" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="44" cy="16" r="4" fill="currentColor"/><line x1="33" y1="16" x2="55" y2="16" stroke="currentColor" stroke-width="1.2"/><line x1="44" y1="5" x2="44" y2="27" stroke="currentColor" stroke-width="1.2"/>',
+      mecha: '<polygon points="32,7 20,2 29,11" fill="currentColor"/><polygon points="32,7 44,2 35,11" fill="currentColor"/><polygon points="30,7 32,3 34,7 32,10" fill="currentColor"/><polygon points="13,14 27,17 25,23 13,21" fill="currentColor"/><polygon points="51,14 37,17 39,23 51,21" fill="currentColor"/>',
+      sunglasses: '<polygon points="11,10 28,10 26,20 13,20" fill="currentColor"/><polygon points="36,10 53,10 51,20 38,20" fill="currentColor"/><rect x="27" y="11" width="10" height="3" fill="currentColor"/><line x1="7" y1="12" x2="12" y2="10" stroke="currentColor" stroke-width="2"/><line x1="52" y1="10" x2="57" y2="12" stroke="currentColor" stroke-width="2"/><line x1="16" y1="12" x2="21" y2="18" stroke="#000" stroke-width="1.5"/><line x1="41" y1="12" x2="46" y2="18" stroke="#000" stroke-width="1.5"/>',
+      puppy: '<rect x="5" y="10" width="5" height="14" rx="2.5" fill="currentColor"/><rect x="54" y="10" width="5" height="14" rx="2.5" fill="currentColor"/><ellipse cx="20" cy="15" rx="6" ry="7" fill="currentColor"/><circle cx="18" cy="13" r="2" fill="#000"/><ellipse cx="44" cy="15" rx="6" ry="7" fill="currentColor"/><circle cx="42" cy="13" r="2" fill="#000"/><polygon points="30,24 34,24 32,27" fill="currentColor"/>',
+      hypno: '<path d="M20 16 m -7 0 a 7 7 0 1 0 14 0 a 5 5 0 1 0 -10 0 a 3 3 0 1 0 6 0 a 1.5 1.5 0 1 0 -3 0" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M44 16 m -7 0 a 7 7 0 1 0 14 0 a 5 5 0 1 0 -10 0 a 3 3 0 1 0 6 0 a 1.5 1.5 0 1 0 -3 0" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>',
+      alien: '<line x1="32" y1="2" x2="32" y2="10" stroke="currentColor" stroke-width="1.5"/><circle cx="32" cy="2.5" r="2" fill="currentColor"/><path d="M12 16 Q20 8 26 16 Q20 24 12 16 Z" fill="currentColor"/><circle cx="19" cy="16" r="2" fill="#000"/><path d="M52 16 Q44 8 38 16 Q44 24 52 16 Z" fill="currentColor"/><circle cx="45" cy="16" r="2" fill="#000"/>',
+      ninja: '<line x1="0" y1="4" x2="64" y2="4" stroke="currentColor" stroke-width="1.5"/><rect x="24" y="2" width="16" height="5" rx="1" fill="#000" stroke="currentColor" stroke-width="1"/><circle cx="32" cy="4.5" r="1.2" fill="currentColor"/><polygon points="13,13 27,15 26,19 13,18" fill="currentColor"/><circle cx="19" cy="16" r="1.5" fill="#000"/><polygon points="37,15 51,13 51,18 38,19" fill="currentColor"/><circle cx="45" cy="16" r="1.5" fill="#000"/>',
+      round: '<line x1="14" y1="5" x2="26" y2="7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><line x1="50" y1="5" x2="38" y2="7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="20" cy="17" r="8" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="20" cy="17" r="5" fill="currentColor"/><circle cx="20" cy="17" r="2" fill="#000"/><circle cx="44" cy="17" r="8" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="44" cy="17" r="5" fill="currentColor"/><circle cx="44" cy="17" r="2" fill="#000"/>',
+      kiwi: '<path d="M13 8 H27 V17 C27 21 24 23 20 23 C16 23 13 21 13 17 Z" fill="currentColor"/><path d="M16 8 H24 V14 C24 16 22 17 20 17 C18 17 16 16 16 14 Z" fill="#000"/><rect x="21" y="9" width="2" height="2" fill="currentColor"/><path d="M37 8 H51 V17 C51 21 48 23 44 23 C40 23 37 21 37 17 Z" fill="currentColor"/><path d="M40 8 H48 V14 C48 16 46 17 44 17 C42 17 40 16 40 14 Z" fill="#000"/><rect x="45" y="9" width="2" height="2" fill="currentColor"/>'
+    };
+
+    function renderSkinPreviews() {
+      document.querySelectorAll('.skin-btn[data-skin]').forEach(function (btn) {
+        var sk = btn.getAttribute('data-skin');
+        var px = btn.querySelector('.px-skin');
+        if (!px) return;
+        if (SKIN_FACES[sk]) {
+          px.innerHTML = '<svg viewBox="0 0 64 32" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">' + SKIN_FACES[sk] + '</svg>';
+        }
+      });
+    }
+
+    setInterval(poll, 2000);
+    poll();
+    renderEmotionPreviews();
+    renderSkinPreviews();
+  </script>
+</body>
+
+</html>

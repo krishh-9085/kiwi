@@ -13,12 +13,12 @@ bool speakText(const String &text) {
   if (!txHandle || !text.length())
     return false;
   if (ttsProvider == "openai")
-    return ttsPcmOpenAI(text) == 1;
+    return ttsPcmOpenAI(stripAudioCues(text)) == 1;
   if (ttsProvider == "elevenlabs")
-    return ttsPcmEleven(text) == 1;
+    return ttsPcmEleven(stripAudioCues(text)) == 1;
   if (ttsProvider == "fish" || ttsProvider == "fishaudio")
     return ttsFishAudio(text) == 1;
-  return ttsSarvam(text) == 1;
+  return ttsSarvam(stripAudioCues(text)) == 1;
 }
 
 int ttsSarvam(const String &text) {

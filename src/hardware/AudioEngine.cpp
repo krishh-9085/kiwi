@@ -57,8 +57,7 @@ void updateTonePlayer() {
   if (env > 1.0f)
     env = 1.0f;
 
-  float volFactor =
-      ((float)speakerVolume / 100.0f) * (SPEAKER_MAX_GAIN / 2.0f);
+  float volFactor = ((float)speakerVolume / 100.0f) * (SPEAKER_MAX_GAIN / 2.0f);
   float amplitude = 9500.0f * env * volFactor;
   float phaseStep = 2.0f * PI * freq / SAMPLE_RATE;
 
@@ -191,22 +190,22 @@ bool startAudio() {
 
   // TX (speaker) config: dout = amp pin, din unused
   i2s_std_config_t txCfg = {.clk_cfg = I2S_STD_CLK_DEFAULT_CONFIG(SAMPLE_RATE),
-                             .slot_cfg = I2S_STD_PHILIPS_SLOT_DEFAULT_CONFIG(
-                                 I2S_DATA_BIT_WIDTH_32BIT, I2S_SLOT_MODE_STEREO),
-                             .gpio_cfg = {.mclk = I2S_GPIO_UNUSED,
-                                          .bclk = (gpio_num_t)PIN_I2S_BCLK,
-                                          .ws = (gpio_num_t)PIN_I2S_WS,
-                                          .dout = (gpio_num_t)PIN_AMP_DIN,
-                                          .din = I2S_GPIO_UNUSED}};
+                            .slot_cfg = I2S_STD_PHILIPS_SLOT_DEFAULT_CONFIG(
+                                I2S_DATA_BIT_WIDTH_32BIT, I2S_SLOT_MODE_STEREO),
+                            .gpio_cfg = {.mclk = I2S_GPIO_UNUSED,
+                                         .bclk = (gpio_num_t)PIN_I2S_BCLK,
+                                         .ws = (gpio_num_t)PIN_I2S_WS,
+                                         .dout = (gpio_num_t)PIN_AMP_DIN,
+                                         .din = I2S_GPIO_UNUSED}};
   // RX (microphone) config: din = mic pin, dout unused
   i2s_std_config_t rxCfg = {.clk_cfg = I2S_STD_CLK_DEFAULT_CONFIG(SAMPLE_RATE),
-                             .slot_cfg = I2S_STD_PHILIPS_SLOT_DEFAULT_CONFIG(
-                                 I2S_DATA_BIT_WIDTH_32BIT, I2S_SLOT_MODE_STEREO),
-                             .gpio_cfg = {.mclk = I2S_GPIO_UNUSED,
-                                          .bclk = (gpio_num_t)PIN_I2S_BCLK,
-                                          .ws = (gpio_num_t)PIN_I2S_WS,
-                                          .dout = I2S_GPIO_UNUSED,
-                                          .din = (gpio_num_t)PIN_MIC_SD}};
+                            .slot_cfg = I2S_STD_PHILIPS_SLOT_DEFAULT_CONFIG(
+                                I2S_DATA_BIT_WIDTH_32BIT, I2S_SLOT_MODE_STEREO),
+                            .gpio_cfg = {.mclk = I2S_GPIO_UNUSED,
+                                         .bclk = (gpio_num_t)PIN_I2S_BCLK,
+                                         .ws = (gpio_num_t)PIN_I2S_WS,
+                                         .dout = I2S_GPIO_UNUSED,
+                                         .din = (gpio_num_t)PIN_MIC_SD}};
   if (i2s_channel_init_std_mode(txHandle, &txCfg) != ESP_OK)
     return false;
   if (i2s_channel_init_std_mode(rxHandle, &rxCfg) != ESP_OK)
@@ -273,7 +272,9 @@ void detectMicSlot() {
     Serial.println("[MIC] Using RIGHT slot");
   } else {
     // Ambiguous (quiet room): do not lock, allow next recording to re-detect
-    Serial.printf("[MIC] Ambiguous slot (quiet room), staying with slot %d, will retry\n", micSlot);
+    Serial.printf(
+        "[MIC] Ambiguous slot (quiet room), staying with slot %d, will retry\n",
+        micSlot);
   }
 }
 
@@ -312,8 +313,10 @@ void spkPushSample(int16_t s) {
   // speakerVolume is 0..100. Scaled with 1.35x headroom (345/256)
   int32_t mult = (speakerVolume * 345) / 100;
   int32_t val = ((int32_t)s * mult) >> 8;
-  if (val > 32760) val = 32760;
-  else if (val < -32760) val = -32760;
+  if (val > 32760)
+    val = 32760;
+  else if (val < -32760)
+    val = -32760;
   int32_t v = val << 16;
   txBuf[txPos * 2] = v;
   txBuf[txPos * 2 + 1] = v;

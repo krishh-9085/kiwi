@@ -70,6 +70,7 @@ void faceTargetsForEmotion(Emotion e, PetMood pm) {
     break;
   case EMOTION_SPEAKING:
     setFace(34, 30, 30, 24, 6);
+    faceTgt.glint = 1;
     faceTgt.mouthW = 0;
     break;
   case EMOTION_HAPPY:

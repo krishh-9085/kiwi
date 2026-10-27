@@ -128,7 +128,33 @@ void handleQuestion(const String &q) {
   lastLlmAnswer = answer;
   robotStateDesc = "Speaking...";
   addTerminalLog("[LLM] Answer: \"" + answer + "\"");
-  setEmotion(EMOTION_SPEAKING);
+
+  if (ttsProvider == "fish" || ttsProvider == "fishaudio") {
+    String lower = answer;
+    lower.toLowerCase();
+    if (lower.indexOf("[laughing]") >= 0 || lower.indexOf("[chuckling]") >= 0 || lower.indexOf("laugh") >= 0) {
+      setEmotion(EMOTION_LAUGHING);
+    } else if (lower.indexOf("[crying loudly]") >= 0 || lower.indexOf("[sobbing]") >= 0) {
+      setEmotion(EMOTION_CRYING);
+    } else if (lower.indexOf("[angry]") >= 0) {
+      setEmotion(EMOTION_ANGRY);
+    } else if (lower.indexOf("[sad]") >= 0) {
+      setEmotion(EMOTION_SAD);
+    } else if (lower.indexOf("[excited]") >= 0) {
+      setEmotion(EMOTION_EXCITED);
+    } else if (lower.indexOf("[whispering]") >= 0 || lower.indexOf("[soft]") >= 0 || lower.indexOf("[breathy]") >= 0) {
+      setEmotion(EMOTION_CUTE);
+    } else if (lower.indexOf("[sighing]") >= 0 || lower.indexOf("[groaning]") >= 0) {
+      setEmotion(EMOTION_RELIEVED);
+    } else if (lower.indexOf("[embarrassed]") >= 0) {
+      setEmotion(EMOTION_CONFUSED);
+    } else {
+      setEmotion(EMOTION_SPEAKING);
+    }
+  } else {
+    setEmotion(EMOTION_SPEAKING);
+  }
+
   if (cancelRequest)
     return;
 

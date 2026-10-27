@@ -28,6 +28,39 @@ void drawClockScreen() {
     display.display();
     return;
   }
+
+  // Check if current time falls in Night Schedule
+  bool isNightTime = false;
+  if (circadianSleepEnabled) {
+    int curHour = timeinfo.tm_hour;
+    if (circadianSleepStart > circadianSleepEnd) {
+      isNightTime = (curHour >= circadianSleepStart || curHour < circadianSleepEnd);
+    } else {
+      isNightTime = (curHour >= circadianSleepStart && curHour < circadianSleepEnd);
+    }
+  }
+
+  // Apply night mode to clock screen
+  if (isNightTime) {
+    if (nightMode == NIGHT_SCREEN_OFF) {
+      setDisplayPower(false);
+      return;
+    } else if (nightMode == NIGHT_DIM) {
+      setDisplayPower(true);
+      setDisplayBrightness((uint8_t)nightBrightness);
+    } else {
+      setDisplayPower(true);
+      setDisplayBrightness((uint8_t)displayBrightness);
+    }
+  } else {
+    setDisplayPower(true);
+    setDisplayBrightness((uint8_t)displayBrightness);
+  }
+
+  // Anti Burn-in pixel shifting: shifts clock position by 1-2 pixels every minute
+  int8_t shiftX = (timeinfo.tm_min % 5) - 2; // -2, -1, 0, +1, +2 px
+  int8_t shiftY = ((timeinfo.tm_min / 5) % 3) - 1; // -1, 0, +1 px
+
   display.clearDisplay();
   display.setTextColor(SSD1306_WHITE);
   int16_t x1, y1;
@@ -40,11 +73,11 @@ void drawClockScreen() {
   snprintf(timeStr, sizeof(timeStr), "%d:%02d", hour12, timeinfo.tm_min);
   display.setTextSize(3);
   display.getTextBounds(timeStr, 0, 0, &x1, &y1, &tw, &th);
-  display.setCursor((SCREEN_WIDTH - tw) / 2, 6);
+  display.setCursor((SCREEN_WIDTH - tw) / 2 + shiftX, 6 + shiftY);
   display.print(timeStr);
   display.setTextSize(1);
   display.getTextBounds(ampm, 0, 0, &x1, &y1, &tw, &th);
-  display.setCursor((SCREEN_WIDTH - tw) / 2, 34);
+  display.setCursor((SCREEN_WIDTH - tw) / 2 + shiftX, 34 + shiftY);
   display.print(ampm);
   const char *days[] = {"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"};
   const char *months[] = {"Jan", "Feb", "Mar", "Apr", "May", "Jun",
@@ -53,10 +86,11 @@ void drawClockScreen() {
   snprintf(dateStr, sizeof(dateStr), "%s %02d %s %04d", days[timeinfo.tm_wday],
            timeinfo.tm_mday, months[timeinfo.tm_mon], timeinfo.tm_year + 1900);
   display.getTextBounds(dateStr, 0, 0, &x1, &y1, &tw, &th);
-  display.setCursor((SCREEN_WIDTH - tw) / 2, 50);
+  display.setCursor((SCREEN_WIDTH - tw) / 2 + shiftX, 50 + shiftY);
   display.print(dateStr);
   display.display();
 }
+
 
 void drawWeatherScreen() {
   if (!oledOK)

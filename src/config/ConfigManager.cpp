@@ -102,6 +102,15 @@ void loadConfig() {
   if (speakerVolume > 100)
     speakerVolume = 100;
 
+  displayBrightness = prefs.getInt("disp_bright", 80);
+  if (displayBrightness < 0) displayBrightness = 0;
+  if (displayBrightness > 100) displayBrightness = 100;
+  nightMode = prefs.getInt("night_mode", 1);
+  if (nightMode < 0 || nightMode > 2) nightMode = 1;
+  nightBrightness = prefs.getInt("night_bright", 10);
+  if (nightBrightness < 0) nightBrightness = 0;
+  if (nightBrightness > 100) nightBrightness = 100;
+
   circadianSleepEnabled = prefs.getBool("circ_en", true);
   circadianSleepStart = prefs.getInt("circ_start", 23);
   circadianSleepEnd = prefs.getInt("circ_end", 7);
@@ -109,7 +118,8 @@ void loadConfig() {
   boredomMinutes = prefs.getInt("boredom_mins", 2);
   if (boredomMinutes < 1) boredomMinutes = 1;
   if (boredomMinutes > 60) boredomMinutes = 60;
-  currentEyeSkin = (EyeSkin)prefs.getInt("eyeskin", (int)SKIN_DEFAULT);
+  currentEyeSkin = (EyeSkin)prefs.getInt("eyeskin", (int)SKIN_KIWI);
+  showMouth = prefs.getBool("showmouth", true);
   weatherCity = sanitizeField(prefs.getString("wthr_city", "New Delhi"), "New Delhi");
   weatherLat = sanitizeField(prefs.getString("wthr_lat", "28.6139"), "28.6139");
   weatherLon = sanitizeField(prefs.getString("wthr_lon", "77.2090"), "77.2090");
@@ -174,12 +184,16 @@ void saveConfig() {
   prefs.putString("replang", replyLang);
   prefs.putInt("volume", speakerVolume);
 
+  prefs.putInt("disp_bright", displayBrightness);
+  prefs.putInt("night_mode", nightMode);
+  prefs.putInt("night_bright", nightBrightness);
   prefs.putBool("circ_en", circadianSleepEnabled);
   prefs.putInt("circ_start", circadianSleepStart);
   prefs.putInt("circ_end", circadianSleepEnd);
   prefs.putBool("boredom", boredomEnabled);
   prefs.putInt("boredom_mins", boredomMinutes);
   prefs.putInt("eyeskin", (int)currentEyeSkin);
+  prefs.putBool("showmouth", showMouth);
   prefs.putString("wthr_city", weatherCity);
   prefs.putString("wthr_lat", weatherLat);
   prefs.putString("wthr_lon", weatherLon);

@@ -3,6 +3,7 @@
 #include "config/ConfigManager.h"
 #include "hardware/AudioEngine.h"
 #include "face/FaceEngine.h"
+#include "face/FaceDisplay.h"
 #include "services/AiService.h"
 #include "services/MemoryService.h"
 #include "animation/AnimationEngine.h"
@@ -189,6 +190,137 @@ void handleDoAction() {
     return;
   }
 
+  // Live Toggle / Set Sleep Mode
+  if (server.hasArg("sleep")) {
+    String slp = server.arg("sleep");
+    if (slp == "toggle") {
+      manualSleep = !manualSleep;
+    } else {
+      manualSleep = (slp == "1" || slp == "true");
+    }
+    inCircadianSleep = manualSleep;
+    if (manualSleep) {
+      showClockScreen = false;
+      showWeatherScreen = false;
+      setOledDim(false);
+      setEmotion(EMOTION_SLEEPING);
+      soundPetSleepy();
+    } else {
+      setOledDim(false);
+      setEmotion(EMOTION_HAPPY);
+      soundPetSparkle();
+    }
+    Serial.printf("[PORTAL] Manual sleep mode set to: %d\n", manualSleep);
+    server.send(200, "application/json", "{\"ok\":true,\"sleeping\":" + String(manualSleep ? "true" : "false") + "}");
+    return;
+  }
+
+  // Live Circadian Night Sleep Schedule
+  if (server.hasArg("circ_en") || server.hasArg("circ_start") || server.hasArg("circ_end")) {
+    Preferences p;
+    p.begin("myrobot", false);
+    if (server.hasArg("circ_en")) {
+      String en = server.arg("circ_en");
+      circadianSleepEnabled = (en == "1" || en == "true");
+      p.putBool("circ_en", circadianSleepEnabled);
+      Serial.printf("[PORTAL] Circadian sleep toggle live set to: %d\n", circadianSleepEnabled);
+    }
+    if (server.hasArg("circ_start")) {
+      int s = server.arg("circ_start").toInt();
+      if (s >= 0 && s <= 23) {
+        circadianSleepStart = s;
+        p.putInt("circ_start", circadianSleepStart);
+        Serial.printf("[PORTAL] Circadian start hour set to: %d\n", circadianSleepStart);
+      }
+    }
+    if (server.hasArg("circ_end")) {
+      int e = server.arg("circ_end").toInt();
+      if (e >= 0 && e <= 23) {
+        circadianSleepEnd = e;
+        p.putInt("circ_end", circadianSleepEnd);
+        Serial.printf("[PORTAL] Circadian end hour set to: %d\n", circadianSleepEnd);
+      }
+    }
+    p.end();
+    server.send(200, "application/json", "{\"ok\":true,\"circ_en\":" + String(circadianSleepEnabled ? "true" : "false") + ",\"circ_start\":" + String(circadianSleepStart) + ",\"circ_end\":" + String(circadianSleepEnd) + "}");
+    return;
+  }
+
+  // Live Toggle Mouth & Lips
+  if (server.hasArg("mouth")) {
+    String m = server.arg("mouth");
+    showMouth = (m == "1" || m == "true");
+    Preferences p;
+    p.begin("myrobot", false);
+    p.putBool("showmouth", showMouth);
+    p.end();
+    server.send(200, "application/json", "{\"ok\":true,\"mouth\":" + String(showMouth ? "true" : "false") + "}");
+    return;
+  }
+
+  // Live Display Day Brightness Action
+  if (server.hasArg("brightness")) {
+    int b = server.arg("brightness").toInt();
+    if (b < 0) b = 0;
+    if (b > 100) b = 100;
+    displayBrightness = b;
+    Preferences p;
+    p.begin("myrobot", false);
+    p.putInt("disp_bright", displayBrightness);
+    p.end();
+    updateDisplayBrightnessMode();
+    Serial.printf("[PORTAL] Day Brightness live set to: %d%%\n", displayBrightness);
+    server.send(200, "application/json", "{\"ok\":true,\"brightness\":" + String(displayBrightness) + "}");
+    return;
+  }
+
+  // Live Display Night Brightness Action
+  if (server.hasArg("night_bright")) {
+    int nb = server.arg("night_bright").toInt();
+    if (nb < 0) nb = 0;
+    if (nb > 100) nb = 100;
+    nightBrightness = nb;
+    Preferences p;
+    p.begin("myrobot", false);
+    p.putInt("night_bright", nightBrightness);
+    p.end();
+    updateDisplayBrightnessMode();
+    Serial.printf("[PORTAL] Night Brightness live set to: %d%%\n", nightBrightness);
+    server.send(200, "application/json", "{\"ok\":true,\"night_bright\":" + String(nightBrightness) + "}");
+    return;
+  }
+
+  // Live Night Mode Action (0: Same as day, 1: Dim, 2: Screen off)
+  if (server.hasArg("night_mode")) {
+    int nm = server.arg("night_mode").toInt();
+    if (nm >= 0 && nm <= 2) {
+      nightMode = nm;
+      Preferences p;
+      p.begin("myrobot", false);
+      p.putInt("night_mode", nightMode);
+      p.end();
+      updateDisplayBrightnessMode();
+      Serial.printf("[PORTAL] Night Mode live set to: %d\n", nightMode);
+      server.send(200, "application/json", "{\"ok\":true,\"night_mode\":" + String(nightMode) + "}");
+      return;
+    }
+  }
+
+  // Live Speaker Volume Action
+  if (server.hasArg("vol") || server.hasArg("volume")) {
+    int v = server.hasArg("vol") ? server.arg("vol").toInt() : server.arg("volume").toInt();
+    if (v < 0) v = 0;
+    if (v > 100) v = 100;
+    speakerVolume = v;
+    Preferences p;
+    p.begin("myrobot", false);
+    p.putInt("volume", speakerVolume);
+    p.end();
+    Serial.printf("[PORTAL] Speaker volume live set to: %d%%\n", speakerVolume);
+    server.send(200, "application/json", "{\"ok\":true,\"volume\":" + String(speakerVolume) + "}");
+    return;
+  }
+
   // Memory & Diary Actions
   if (server.hasArg("clearmem")) {
     clearAllMemory();
@@ -292,6 +424,7 @@ void handleStatus() {
   j += ",\"boredom\":" + String(boredomEnabled ? "true" : "false");
   j += ",\"boredom_mins\":" + String(boredomMinutes);
   j += ",\"skin\":\"" + String(skinNames[skIdx]) + "\"";
+  j += ",\"mouth\":" + String(showMouth ? "true" : "false");
   j += ",\"state\":\"" + escJson(robotStateDesc) + "\"";
   j += ",\"question\":\"" + escJson(lastTranscribedQuestion) + "\"";
   j += ",\"answer\":\"" + escJson(lastLlmAnswer) + "\"";
@@ -317,13 +450,14 @@ void handleConfigApi() {
   j += "\"elevenUrl\":\"" + escJson(elevenEndpoint) + "\",\"elevenKey\":\"" + escJson(elevenKey) + "\",\"elevenModel\":\"" + escJson(elevenModel) + "\",\"elevenVoice\":\"" + escJson(elevenVoice) + "\",";
   j += "\"fishUrl\":\"" + escJson(fishEndpoint) + "\",\"fishKey\":\"" + escJson(fishKey) + "\",\"fishModel\":\"" + escJson(fishModel) + "\",\"fishVoice\":\"" + escJson(fishVoice) + "\"},";
   j += "\"volume\":" + String(speakerVolume) + ",\"replyLang\":\"" + escJson(replyLang) + "\",\"prompt\":\"" + escJson(systemPrompt) + "\",";
+  j += "\"brightness\":" + String(displayBrightness) + ",\"nightMode\":" + String(nightMode) + ",\"nightBrightness\":" + String(nightBrightness) + ",";
   j += "\"circadian\":{\"enabled\":" + String(circadianSleepEnabled ? "true" : "false") + ",\"start\":" + String(circadianSleepStart) + ",\"end\":" + String(circadianSleepEnd) + "},";
   j += "\"boredom\":{\"enabled\":" + String(boredomEnabled ? "true" : "false") + ",\"minutes\":" + String(boredomMinutes) + "},";
   j += "\"weather\":{\"city\":\"" + escJson(weatherCity) + "\",\"lat\":\"" + escJson(weatherLat) + "\",\"lon\":\"" + escJson(weatherLon) + "\"},";
   const char *skinNames[] = {"default", "cyberpunk", "cat", "retro", "anime", "hearts", "steampunk", "demon", "matrix", "cyborg", "mecha", "sunglasses", "puppy", "hypno", "alien", "ninja", "round", "kiwi"};
   int skinIndex = (int)currentEyeSkin;
   if (skinIndex < 0 || skinIndex >= SKIN_COUNT) skinIndex = 0;
-  j += "\"skin\":\"" + String(skinNames[skinIndex]) + "\",\"memory\":{\"name\":\"" + escJson(getOwnerName()) + "\",\"facts\":[";
+  j += "\"skin\":\"" + String(skinNames[skinIndex]) + "\",\"showMouth\":" + String(showMouth ? "true" : "false") + ",\"memory\":{\"name\":\"" + escJson(getOwnerName()) + "\",\"facts\":[";
   for (int i = 0; i < kiwiMemory.memoryCount; i++) {
     if (i) j += ",";
     j += "\"" + escJson(kiwiMemory.memories[i]) + "\"";
@@ -409,7 +543,28 @@ void handleSave() {
       speakerVolume = 100;
   }
 
-  circadianSleepEnabled = server.hasArg("circ_en");
+  if (server.hasArg("disp_bright")) {
+    int b = server.arg("disp_bright").toInt();
+    if (b < 0) b = 0;
+    if (b > 100) b = 100;
+    displayBrightness = b;
+  }
+  if (server.hasArg("night_mode")) {
+    int nm = server.arg("night_mode").toInt();
+    if (nm >= 0 && nm <= 2) nightMode = nm;
+  }
+  if (server.hasArg("night_bright")) {
+    int nb = server.arg("night_bright").toInt();
+    if (nb < 0) nb = 0;
+    if (nb > 100) nb = 100;
+    nightBrightness = nb;
+  }
+  if (server.hasArg("circ_en")) {
+    String ce = server.arg("circ_en");
+    circadianSleepEnabled = (ce == "1" || ce == "true" || ce == "on");
+  } else {
+    circadianSleepEnabled = false;
+  }
   if (server.hasArg("circ_start"))
     circadianSleepStart = server.arg("circ_start").toInt();
   if (server.hasArg("circ_end"))

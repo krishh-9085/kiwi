@@ -1,6 +1,7 @@
 #include "behavior/CircadianEngine.h"
 #include "config/AppConfig.h"
 #include "face/FaceEngine.h"
+#include "face/FaceDisplay.h"
 #include "hardware/AudioEngine.h"
 
 void checkCircadianSleep() {
@@ -8,6 +9,7 @@ void checkCircadianSleep() {
     if (currentEmotion != EMOTION_SLEEPING && returnIdleAt == 0 &&
         emotionAutoReturnAt == 0 && !showClockScreen && !showWeatherScreen) {
       setEmotion(EMOTION_SLEEPING);
+      updateDisplayBrightnessMode();
     }
     return;
   }
@@ -31,27 +33,29 @@ void checkCircadianSleep() {
   uint32_t now = millis();
   if (circadianTempWakeUntil > 0) {
     if (now < circadianTempWakeUntil)
-      return; // Temporarily awake due to user touch interaction
+      return; // Temporarily awake due to user touch interaction (stays at full brightness)
     circadianTempWakeUntil = 0;
+    updateDisplayBrightnessMode(); // Temporary wake timeout reached, restore night dimming
   }
 
   if (isSleepTime) {
     if (!inCircadianSleep) {
       inCircadianSleep = true;
       setEmotion(EMOTION_SLEEPING);
-      setOledDim(true);
+      updateDisplayBrightnessMode();
       Serial.printf("[CIRCADIAN] Bedtime reached (%02d:%02d). Entering night sleep mode.\n",
                     curHour, timeinfo.tm_min);
     } else {
       if (currentEmotion != EMOTION_SLEEPING && returnIdleAt == 0 &&
           emotionAutoReturnAt == 0 && !showClockScreen && !showWeatherScreen) {
         setEmotion(EMOTION_SLEEPING);
+        updateDisplayBrightnessMode();
       }
     }
   } else {
     if (inCircadianSleep) {
       inCircadianSleep = false;
-      setOledDim(false);
+      updateDisplayBrightnessMode();
       setEmotion(EMOTION_HAPPY);
       playBootChime();
       Serial.printf("[CIRCADIAN] Good morning! (%02d:%02d). Waking up.\n",

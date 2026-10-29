@@ -50,7 +50,199 @@ static String getVoiceExpressionInstruction() {
 }
 
 // ============================================================
-String askGemini(const String &question) {
+// STREAMING TOKEN EXTRACTION & SENTENCE PIPELINING
+// ============================================================
+static String extractSseDeltaToken(const String &json) {
+  // Supports Gemini ("text") and Groq / OpenAI / Grok ("content")
+  const char *keys[] = {"\"text\"", "\"content\""};
+  for (int k = 0; k < 2; k++) {
+    int pKey = json.indexOf(keys[k]);
+    if (pKey < 0) continue;
+    int p = pKey + strlen(keys[k]);
+    int colon = json.indexOf(':', p);
+    if (colon < 0) continue;
+
+    int openQuote = -1;
+    for (int i = colon + 1; i < (int)json.length(); i++) {
+      char c = json[i];
+      if (c == ' ' || c == '\t' || c == '\r' || c == '\n') continue;
+      if (c == '"') {
+        openQuote = i;
+        break;
+      }
+      // Not a string value (e.g. object, array or null)
+      break;
+    }
+    if (openQuote < 0) continue;
+
+    int start = openQuote + 1;
+    String token = "";
+    token.reserve(48);
+    for (int i = start; i < (int)json.length(); i++) {
+      char c = json[i];
+      if (c == '\\' && i + 1 < (int)json.length()) {
+        char next = json[i + 1];
+        if (next == '"') token += '"';
+        else if (next == '\\') token += '\\';
+        else if (next == 'n') token += '\n';
+        else if (next == 't') token += '\t';
+        else if (next == 'r') {}
+        else { token += '\\'; token += next; }
+        i++;
+        continue;
+      }
+      if (c == '"') break;
+      token += c;
+    }
+    return token;
+  }
+  return "";
+}
+
+static bool isSentenceComplete(const String &s) {
+  if (s.length() < 12)
+    return false;
+
+  int lastOpen = s.lastIndexOf('[');
+  int lastClose = s.lastIndexOf(']');
+  if (lastOpen >= 0 && lastOpen > lastClose) {
+    return false;
+  }
+
+  // Devanagari Purna Viram '।' (UTF-8: 0xE0, 0xA5, 0xA4)
+  if (s.length() >= 3) {
+    uint8_t b1 = (uint8_t)s[s.length() - 3];
+    uint8_t b2 = (uint8_t)s[s.length() - 2];
+    uint8_t b3 = (uint8_t)s[s.length() - 1];
+    if (b1 == 0xE0 && b2 == 0xA5 && b3 == 0xA4)
+      return true;
+  }
+
+  char last = s[s.length() - 1];
+  char prev = s.length() >= 2 ? s[s.length() - 2] : ' ';
+
+  if (last == '.' || last == '!' || last == '?' || last == '\n') {
+    if (last == '.' && isdigit((unsigned char)prev))
+      return false;
+    return true;
+  }
+
+  if (last == ' ') {
+    for (int i = (int)s.length() - 2; i >= 0 && i >= (int)s.length() - 4; i--) {
+      char c = s[i];
+      if (c == '.' || c == '!' || c == '?') {
+        if (c == '.' && i > 0 && isdigit((unsigned char)s[i - 1]))
+          return false;
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
+static String cleanSentenceForSpeech(const String &s) {
+  String out = s;
+  out.trim();
+  if (!out.length()) return "";
+
+  if (out.startsWith("[ACTION:") || out.startsWith("[MEM:") || out.startsWith("[FOLLOWUP:")) {
+    return "";
+  }
+
+  if (ttsProvider != "fish" && ttsProvider != "fishaudio") {
+    out = stripAudioCues(out);
+  }
+
+  return cleanForSpeech(out);
+}
+
+static String processSseStream(HTTPClient &http, WiFiClient *stream, SentenceCallback onSentence) {
+  String fullAnswer;
+  fullAnswer.reserve(512);
+  String currentSentence;
+  currentSentence.reserve(128);
+  String line;
+  line.reserve(256);
+  bool inThink = false;
+  bool isSSE = false;
+  uint32_t tStart = millis();
+
+  while (millis() - tStart < 18000) {
+    if (cancelRequest)
+      break;
+    if (!http.connected() && (!stream || !stream->available()))
+      break;
+
+    if (stream && stream->available()) {
+      char ch = (char)stream->read();
+      tStart = millis();
+
+      if (ch == '\n') {
+        line.trim();
+        if (line.length() > 0) {
+          if (line.startsWith("data:")) {
+            isSSE = true;
+            String payload = line.substring(5);
+            payload.trim();
+            if (payload == "[DONE]") {
+              break;
+            }
+            String delta = extractSseDeltaToken(payload);
+            if (delta.length() > 0) {
+              if (delta.indexOf("<think>") >= 0) inThink = true;
+              if (inThink) {
+                if (delta.indexOf("</think>") >= 0) inThink = false;
+              } else {
+                fullAnswer += delta;
+                currentSentence += delta;
+                if (isSentenceComplete(currentSentence)) {
+                  String toSpeak = cleanSentenceForSpeech(currentSentence);
+                  if (toSpeak.length() > 0 && onSentence) {
+                    onSentence(toSpeak, false);
+                  }
+                  currentSentence = "";
+                }
+              }
+            }
+          } else if (line.startsWith("{")) {
+            fullAnswer += line;
+          }
+        }
+        line = "";
+      } else if (ch != '\r') {
+        if (line.length() < 512)
+          line += ch;
+      }
+    } else {
+      pumpUI();
+      delay(2);
+    }
+  }
+
+  if (!isSSE && fullAnswer.length() > 0) {
+    String ans = jsonTextField(fullAnswer, "content");
+    if (!ans.length()) ans = jsonTextField(fullAnswer, "text");
+    if (ans.length() > 0) fullAnswer = ans;
+    String toSpeak = cleanSentenceForSpeech(fullAnswer);
+    if (toSpeak.length() > 0 && onSentence) {
+      onSentence(toSpeak, true);
+    }
+    return fullAnswer;
+  }
+
+  if (currentSentence.length() > 0) {
+    String toSpeak = cleanSentenceForSpeech(currentSentence);
+    if (toSpeak.length() > 0 && onSentence) {
+      onSentence(toSpeak, true);
+    }
+  }
+
+  return fullAnswer;
+}
+
+// ============================================================
+String askGemini(const String &question, SentenceCallback onSentence) {
   String key = llmKey;
   if (!key.length()) {
     Serial.println("[GEMINI] No API key.");
@@ -105,6 +297,7 @@ String askGemini(const String &question) {
           "\"generationConfig\":{\"maxOutputTokens\":" +
           String(LLM_MAX_TOKENS) + ",\"temperature\":0.8}}";
 
+  String fullAns;
   String resp;
   int code = -1;
   {
@@ -116,13 +309,13 @@ String askGemini(const String &question) {
     http.setTimeout(15000);
     http.setConnectTimeout(6000);
     uint32_t t0 = millis();
-    Serial.println("[GEMINI] Asking...");
+    Serial.println("[GEMINI] Asking (streaming)...");
 
     String targetEp = llmEndpoint;
     if (targetEp == DEFAULT_LLM_URL ||
         targetEp.indexOf("generativelanguage.googleapis.com") >= 0) {
       targetEp = "https://generativelanguage.googleapis.com/v1beta/models/" +
-                 llmModel + ":generateContent";
+                 llmModel + ":streamGenerateContent?alt=sse";
     }
     if (!http.begin(client, targetEp)) {
       Serial.println("[GEMINI] Bad URL.");
@@ -133,51 +326,35 @@ String askGemini(const String &question) {
     code = http.POST(body);
     if (code == 200) {
       WiFiClient *stream = http.getStreamPtr();
-      resp.reserve(2048);
-      uint32_t tr = millis();
-      while (millis() - tr < 12000 && resp.length() < 4096) {
-        if (!http.connected() && (!stream || !stream->available()))
-          break;
-        if (stream) {
-          while (stream->available() && resp.length() < 4096) {
-            resp += (char)stream->read();
-          }
-        }
-        if (cancelRequest)
-          break;
-        pumpUI();
-        delay(1);
-      }
+      fullAns = processSseStream(http, stream, onSentence);
     } else {
       resp = http.getString();
       if (resp.length() > 200)
         resp = resp.substring(0, 200);
     }
     http.end();
-    Serial.printf("[GEMINI] HTTP %d in %.1fs, respLen=%u, heap=%u\n", code,
-                  (millis() - t0) / 1000.0f, (unsigned)resp.length(),
+    Serial.printf("[GEMINI] HTTP %d in %.1fs, ansLen=%u, heap=%u\n", code,
+                  (millis() - t0) / 1000.0f, (unsigned)fullAns.length(),
                   (unsigned)ESP.getFreeHeap());
   }
   if (code != 200) {
     Serial.printf("[GEMINI] HTTP %d: %s\n", code, resp.c_str());
+    addTerminalLog("[GEMINI] Error HTTP " + String(code) + ": " + resp);
     return "";
   }
-  String ans = jsonTextField(resp, "text");
-  if (!ans.length()) ans = jsonTextField(resp, "content");
-  if (!ans.length()) {
-    Serial.printf("[GEMINI] Warning: empty parsed. Raw: %s\n", resp.substring(0, 300).c_str());
-  }
-  return cleanForSpeech(ans);
+  return fullAns;
 }
 
-String askGroq(const String &question) {
-  String key = groqKey;
+String askGroq(const String &question, SentenceCallback onSentence) {
+  String key = groqKey.length() ? groqKey : llmKey;
   if (!key.length()) {
     Serial.println("[GROQ] No API key.");
+    addTerminalLog("[GROQ] Error: No API key set in Web Portal!");
     return "";
   }
   if (WiFi.status() != WL_CONNECTED) {
     Serial.println("[GROQ] No Wi-Fi.");
+    addTerminalLog("[GROQ] Error: Wi-Fi disconnected!");
     return "";
   }
 
@@ -208,16 +385,20 @@ String askGroq(const String &question) {
   sys += getSmartActionInstruction();
   sys += getVoiceExpressionInstruction();
 
+  String model = groqModel;
+  if (!model.length()) {
+    model = DEFAULT_GROQ_MODEL;
+  }
+
   int reqTokens =
-      (groqModel.indexOf("gpt-oss") >= 0 || groqModel.indexOf("qwen") >= 0)
+      (model.indexOf("gpt-oss") >= 0 || model.indexOf("qwen") >= 0)
           ? 512
           : LLM_MAX_TOKENS;
 
   String body;
   body.reserve(2048);
-  body = "{\"model\":\"" + jsonEscape(groqModel) +
-         "\","
-         "\"messages\":["
+  body = "{\"model\":\"" + jsonEscape(model) +
+         "\",\"messages\":["
          "{\"role\":\"system\",\"content\":\"" +
          jsonEscape(sys) + "\"}";
   for (int i = 0; i < chatHistoryCount; i++) {
@@ -227,14 +408,14 @@ String askGroq(const String &question) {
             jsonEscape(chatHistory[i].answer) + "\"}";
   }
   body += ",{\"role\":\"user\",\"content\":\"" + jsonEscape(question) +
-          "\"}],"
-          "\"max_tokens\":" +
+          "\"}],\"max_tokens\":" +
           String(reqTokens) + ",\"temperature\":0.7";
-  if (groqModel.indexOf("gpt-oss") >= 0) {
+  if (model.indexOf("gpt-oss") >= 0) {
     body += ",\"reasoning_effort\":\"low\",\"reasoning_format\":\"hidden\"";
   }
-  body += "}";
+  body += ",\"stream\":true}";
 
+  String fullAns;
   String resp;
   int code = -1;
   {
@@ -246,9 +427,10 @@ String askGroq(const String &question) {
     http.setTimeout(18000);
     http.setConnectTimeout(6000);
     uint32_t t0 = millis();
-    Serial.println("[GROQ] Asking...");
+    Serial.println("[GROQ] Asking (streaming)...");
     if (!http.begin(client, groqEndpoint)) {
       Serial.println("[GROQ] Bad URL.");
+      addTerminalLog("[GROQ] Error: Could not connect to endpoint " + groqEndpoint);
       return "";
     }
     http.addHeader("Content-Type", "application/json");
@@ -256,44 +438,29 @@ String askGroq(const String &question) {
     code = http.POST(body);
     if (code == 200) {
       WiFiClient *stream = http.getStreamPtr();
-      resp.reserve(2048);
-      uint32_t tr = millis();
-      while (millis() - tr < 15000 && resp.length() < 4096) {
-        if (!http.connected() && (!stream || !stream->available()))
-          break;
-        if (stream) {
-          while (stream->available() && resp.length() < 4096) {
-            resp += (char)stream->read();
-          }
-        }
-        if (cancelRequest)
-          break;
-        pumpUI();
-        delay(1);
-      }
+      fullAns = processSseStream(http, stream, onSentence);
     } else {
       resp = http.getString();
       if (resp.length() > 300)
         resp = resp.substring(0, 300);
     }
     http.end();
-    Serial.printf("[GROQ] HTTP %d in %.1fs, respLen=%u, heap=%u\n", code,
-                  (millis() - t0) / 1000.0f, (unsigned)resp.length(),
+    Serial.printf("[GROQ] HTTP %d in %.1fs, ansLen=%u, heap=%u\n", code,
+                  (millis() - t0) / 1000.0f, (unsigned)fullAns.length(),
                   (unsigned)ESP.getFreeHeap());
   }
   if (code != 200) {
     Serial.printf("[GROQ] HTTP %d: %s\n", code, resp.c_str());
+    addTerminalLog("[GROQ] Error HTTP " + String(code) + ": " + resp);
     return "";
   }
-  String ans = jsonTextField(resp, "content");
-  if (!ans.length()) ans = jsonTextField(resp, "text");
-  if (!ans.length()) {
-    Serial.printf("[GROQ] Warning: empty 'content' parsed. Raw: %s\n", resp.substring(0, 300).c_str());
+  if (fullAns.length() == 0) {
+    addTerminalLog("[GROQ] Warning: Empty answer received from Groq.");
   }
-  return cleanForSpeech(ans);
+  return fullAns;
 }
 
-String askOpenAI(const String &question) {
+String askOpenAI(const String &question, SentenceCallback onSentence) {
   if (!llmKey.length()) {
     Serial.println("[OPENAI] No API key.");
     return "";
@@ -329,7 +496,7 @@ String askOpenAI(const String &question) {
   }
   body += ",{\"role\":\"user\",\"content\":\"" + jsonEscape(question) +
           "\"}],\"max_tokens\":" + String(LLM_MAX_TOKENS) +
-          ",\"temperature\":0.8}";
+          ",\"temperature\":0.8,\"stream\":true}";
 
   WiFiClientSecure client;
   client.setInsecure();
@@ -350,41 +517,47 @@ String askOpenAI(const String &question) {
   http.addHeader("Authorization", "Bearer " + llmKey);
   uint32_t t0 = millis();
   int code = http.POST(body);
-  String resp = http.getString();
+  String fullAns;
+  String resp;
+  if (code == 200) {
+    WiFiClient *stream = http.getStreamPtr();
+    fullAns = processSseStream(http, stream, onSentence);
+  } else {
+    resp = http.getString();
+    if (resp.length() > 300)
+      resp = resp.substring(0, 300);
+  }
   http.end();
-  if (resp.length() > 4096)
-    resp = resp.substring(0, 4096);
-  Serial.printf("[OPENAI] HTTP %d in %.1fs, respLen=%u, heap=%u\n", code,
-                (millis() - t0) / 1000.0f, (unsigned)resp.length(),
+  Serial.printf("[OPENAI] HTTP %d in %.1fs, ansLen=%u, heap=%u\n", code,
+                (millis() - t0) / 1000.0f, (unsigned)fullAns.length(),
                 (unsigned)ESP.getFreeHeap());
   if (code != 200) {
     Serial.printf("[OPENAI] HTTP %d: %s\n", code, resp.substring(0, 200).c_str());
+    addTerminalLog("[OPENAI] Error HTTP " + String(code) + ": " + resp);
     return "";
   }
-  String ans = jsonTextField(resp, "content");
-  if (!ans.length()) ans = jsonTextField(resp, "text");
-  if (!ans.length()) {
-    Serial.printf("[OPENAI] Warning: empty 'content' parsed. Raw: %s\n", resp.substring(0, 300).c_str());
+  if (fullAns.length() == 0) {
+    addTerminalLog("[OPENAI] Warning: Empty answer received from OpenAI.");
   }
-  return cleanForSpeech(ans);
+  return fullAns;
 }
 
-String askLLM(const String &question) {
+String askLLM(const String &question, SentenceCallback onSentence) {
   checkChatHistoryTimeout();
   bool apWasUp = suspendLocalNet();
   String ans;
   if (llmProvider == "groq") {
-    Serial.printf("[LLM] Provider = Groq | Memory turns = %d\n",
+    Serial.printf("[LLM] Provider = Groq | Memory turns = %d (streaming)\n",
                   chatHistoryCount);
-    ans = askGroq(question);
+    ans = askGroq(question, onSentence);
   } else if (llmProvider == "openai") {
-    Serial.printf("[LLM] Provider = OpenAI | Memory turns = %d\n",
+    Serial.printf("[LLM] Provider = OpenAI | Memory turns = %d (streaming)\n",
                   chatHistoryCount);
-    ans = askOpenAI(question);
+    ans = askOpenAI(question, onSentence);
   } else {
-    Serial.printf("[LLM] Provider = Gemini | Memory turns = %d\n",
+    Serial.printf("[LLM] Provider = Gemini | Memory turns = %d (streaming)\n",
                   chatHistoryCount);
-    ans = askGemini(question);
+    ans = askGemini(question, onSentence);
   }
   restoreWebAndAP(apWasUp);
   if (ans.length() > 0) {

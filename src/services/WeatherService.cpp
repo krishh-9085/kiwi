@@ -54,7 +54,7 @@ bool fetchWeather() {
   }
   HTTPClient http;
   http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
-  http.setTimeout(9000);
+  http.setTimeout(4000);
   String url = "http://api.open-meteo.com/v1/forecast?latitude=" + weatherLat +
                "&longitude=" + weatherLon +
                "&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m";

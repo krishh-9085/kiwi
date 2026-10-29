@@ -48,7 +48,12 @@
 // ============================================================
 void setup() {
   Serial.begin(115200);
-  delay(2000);
+#if ARDUINO_USB_CDC_ON_BOOT
+  uint32_t t0 = millis();
+  while (!Serial && millis() - t0 < 300) { delay(10); }
+#else
+  delay(50);
+#endif
   Serial.println();
   Serial.println("==========================================");
   Serial.println("  MYROBOT (KIWI) - MODULAR ARCHITECTURE   ");
@@ -84,9 +89,9 @@ void setup() {
     connected = connectHome();
   if (connected) {
     startAPParallel();
-    if (syncTimeFromNTP())
-      Serial.println("[NTP] Time Synced");
-    fetchWeather();
+    startNtpAsync();
+    lastNtpTryAt = millis();
+    lastWeatherFetchAt = 0; // Handled asynchronously in maintainWiFi() during main loop
   } else {
     startAP();
   }
@@ -99,7 +104,6 @@ void setup() {
   initOfflineBrain();
   startWeb();
   Serial.printf("[NET] Heap: %u\n", (unsigned)ESP.getFreeHeap());
-  showBootInfo(4000);
 
   if (!startAudio()) {
     setEmotion(EMOTION_ERROR);
@@ -109,6 +113,7 @@ void setup() {
     playBootChime();
     Serial.printf("[I2S] Audio OK, heap=%u\n", (unsigned)ESP.getFreeHeap());
   }
+
   lastUserInteractionAt = millis();
 }
 

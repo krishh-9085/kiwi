@@ -77,6 +77,9 @@ void loadConfig() {
   llmKey = sanitizeField(prefs.getString("llmkey", ""));
   groqEndpoint = sanitizeUrl(prefs.getString("groqurl", DEFAULT_GROQ_URL), DEFAULT_GROQ_URL);
   groqModel = sanitizeField(prefs.getString("groqmodel", DEFAULT_GROQ_MODEL), DEFAULT_GROQ_MODEL);
+  if (groqModel.length() == 0) {
+    groqModel = DEFAULT_GROQ_MODEL;
+  }
   groqKey = sanitizeField(prefs.getString("groqkey", ""));
   ttsProvider = normalizeTtsProvider(sanitizeField(prefs.getString("ttsprov", "sarvam"), "sarvam"));
   ttsEndpoint = sanitizeUrl(prefs.getString("ttsurl", DEFAULT_TTS_URL), DEFAULT_TTS_URL);
@@ -137,6 +140,13 @@ void loadConfig() {
   touchActRightDbl  = (TouchAction)prefs.getInt("act_rt_dbl",  (int)TOUCH_ACT_WEATHER);
   touchActLeftHold  = (TouchAction)prefs.getInt("act_lt_hld",  (int)TOUCH_ACT_PET);
   touchActRightHold = (TouchAction)prefs.getInt("act_rt_hld",  (int)TOUCH_ACT_PET);
+
+  int savedMic = prefs.getInt("micslot", -1);
+  if (savedMic == 0 || savedMic == 1) {
+    micSlot = savedMic;
+    micSlotLocked = true;
+    Serial.printf("[MIC] Slot %d cached from NVS\n", micSlot);
+  }
 
   prefs.end();
 }
@@ -208,6 +218,10 @@ void saveConfig() {
   prefs.putInt("act_rt_dbl",  (int)touchActRightDbl);
   prefs.putInt("act_lt_hld",  (int)touchActLeftHold);
   prefs.putInt("act_rt_hld",  (int)touchActRightHold);
+
+  if (micSlotLocked) {
+    prefs.putInt("micslot", micSlot);
+  }
 
   prefs.end();
 }

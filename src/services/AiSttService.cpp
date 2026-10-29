@@ -15,7 +15,7 @@ SttCfg resolveStt() {
   SttCfg c;
   if (sttProvider == "groq") {
     c.url = groqSttEndpoint;
-    c.key = groqSttKey.length() ? groqSttKey : groqKey;
+    c.key = groqSttKey.length() ? groqSttKey : (groqKey.length() ? groqKey : llmKey);
     c.model = groqSttModel;
     c.sarvam = false;
   } else if (sttProvider == "openai") {
@@ -169,9 +169,12 @@ String recordAndTranscribe(uint32_t recordSeconds) {
 
   setEmotion(EMOTION_LISTENING);
   drainMic();
-  detectMicSlot();
-  Serial.printf("[STT] Recording %lu s (mic slot %d, gain %.1f)...\n",
-                (unsigned long)recordSeconds, micSlot, (double)MIC_GAIN);
+  if (!micSlotLocked) {
+    detectMicSlot();
+  }
+  Serial.printf("[STT] Recording %lu s (mic slot %d%s, gain %.1f)...\n",
+                (unsigned long)recordSeconds, micSlot, micSlotLocked ? " [cached]" : "",
+                (double)MIC_GAIN);
 
   static int32_t raw[AUDIO_FRAMES * 2];
   static uint8_t out[UPLOAD_BATCH * 2];
@@ -187,7 +190,8 @@ String recordAndTranscribe(uint32_t recordSeconds) {
   bool captureStopped = false;
   uint32_t silenceSamples = 0;
   const uint32_t MIN_SPEECH_SAMPLES = SAMPLE_RATE / 2;
-  const uint32_t TRAILING_SILENCE_SAMPLES = SAMPLE_RATE * 45 / 100;
+  const uint32_t TRAILING_SILENCE_SAMPLES = (SAMPLE_RATE * 35) / 100;
+  const uint32_t INITIAL_SILENCE_TIMEOUT_SAMPLES = (SAMPLE_RATE * 15) / 10;
   float noiseSum = 0;
   uint32_t noiseSamples = 0;
   float speechActivityGate = NOISE_GATE_THRESHOLD * 1.5f;
@@ -249,6 +253,9 @@ String recordAndTranscribe(uint32_t recordSeconds) {
             Serial.printf("[STT] Speech ended after %.1f s; stopping early\n",
                           (float)sent / SAMPLE_RATE);
           }
+        } else if (!speechStarted && sent >= INITIAL_SILENCE_TIMEOUT_SAMPLES) {
+          captureStopped = true;
+          Serial.println("[STT] No speech detected in first 1.5s; stopping early");
         }
         blkSum = 0;
         blkN = 0;
@@ -273,6 +280,11 @@ String recordAndTranscribe(uint32_t recordSeconds) {
   }
 
   uint32_t capturedSamples = sent;
+  if (!speechStarted && maxBlkAvg < speechActivityGate) {
+    Serial.println("[STT] Silence threshold not met, aborting upload");
+    return bail("quiet");
+  }
+
   if (outPos > 0) {
     if (!clientWriteAll(client, out, outPos))
       return bail("upload failed");

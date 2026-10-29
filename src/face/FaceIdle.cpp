@@ -1,29 +1,58 @@
 #include "face/FaceIdle.h"
-#include "face/FaceExpressions.h"
 #include "config/AppConfig.h"
+#include "face/FaceExpressions.h"
+#include <math.h>
+
 
 int eyeOpenPct = 100;
+float eyeOpenAmt = 1.0f;
 bool eyeBlinking = false;
 static uint32_t eyeBlinkT0 = 0;
 static uint32_t eyeNextBlink = 0;
 static uint32_t eyeNextGaze = 0;
+static bool eyeDoubleBlinkPending = false;
 uint32_t petMoodT0 = 0;
 uint32_t flourishT0 = 0;
 uint32_t nextIdleLookAt = 0;
 uint32_t idleExpressionEnd = 0;
 int idleExpression = 0;
 
-void eyesInit(uint32_t now) {
-  gazeX = gazeY = gazeTgtX = gazeTgtY = 0;
-  eyeOpenPct = 100;
-  eyeBlinking = false;
-  eyeNextBlink = now + 1500 + random(0, 2500);
-  eyeNextGaze = now + 1000 + random(0, 1500);
-}
+float gazeMicroX = 0.0f;
+float gazeMicroY = 0.0f;
+static uint32_t nextMicroAt = 0;
 
 static uint32_t activeNextWink = 0;
 uint32_t activeWinkEnd = 0;
 bool activeWinkLeft = false;
+
+// Blink timings (ms). Closing is fast, opening is slower - like a real eyelid.
+static const uint32_t BLINK_CLOSE = 75;
+static const uint32_t BLINK_HOLD = 25;
+static const uint32_t BLINK_OPEN = 120;
+
+static void scheduleNextBlink(uint32_t now) {
+  if (eyeDoubleBlinkPending) {
+    eyeDoubleBlinkPending = false;
+    eyeNextBlink = now + 110 + random(0, 80);
+    return;
+  }
+  eyeNextBlink = now + 1800 + random(0, 3500);
+  // ~1 in 7 blinks is a quick double blink
+  if (random(0, 100) < 14)
+    eyeDoubleBlinkPending = true;
+}
+
+void eyesInit(uint32_t now) {
+  gazeX = gazeY = gazeTgtX = gazeTgtY = 0;
+  gazeMicroX = gazeMicroY = 0;
+  eyeOpenPct = 100;
+  eyeOpenAmt = 1.0f;
+  eyeBlinking = false;
+  eyeDoubleBlinkPending = false;
+  eyeNextBlink = now + 1500 + random(0, 2500);
+  eyeNextGaze = now + 1000 + random(0, 1500);
+  nextMicroAt = now + 400;
+}
 
 void triggerTouchBlink(uint32_t now) {
   eyeBlinking = true;
@@ -37,16 +66,33 @@ void eyesUpdateAnim(uint32_t now) {
   }
   if (eyeBlinking) {
     uint32_t t = now - eyeBlinkT0;
-    const uint32_t HALF = 70;
-    if (t < HALF)
-      eyeOpenPct = 100 - (int)(100UL * t / HALF);
-    else if (t < 2 * HALF)
-      eyeOpenPct = (int)(100UL * (t - HALF) / HALF);
-    else {
-      eyeOpenPct = 100;
+    float a;
+    if (t < BLINK_CLOSE) {
+      float p = (float)t / (float)BLINK_CLOSE; // ease-in while closing
+      a = 1.0f - p * p;
+    } else if (t < BLINK_CLOSE + BLINK_HOLD) {
+      a = 0.0f;
+    } else if (t < BLINK_CLOSE + BLINK_HOLD + BLINK_OPEN) {
+      float p = (float)(t - BLINK_CLOSE - BLINK_HOLD) / (float)BLINK_OPEN;
+      float q = 1.0f - p; // ease-out while opening
+      a = 1.0f - q * q;
+    } else {
+      a = 1.0f;
       eyeBlinking = false;
-      eyeNextBlink = now + 1800 + random(0, 3500);
+      scheduleNextBlink(now);
     }
+    eyeOpenAmt = a;
+    eyeOpenPct = (int)(a * 100.0f + 0.5f);
+  } else {
+    eyeOpenAmt = 1.0f;
+    eyeOpenPct = 100;
+  }
+
+  // Micro-saccades: tiny involuntary drifts that make the eyes feel alive
+  if (now >= nextMicroAt) {
+    gazeMicroX = (float)random(-10, 11) * 0.07f;
+    gazeMicroY = (float)random(-10, 11) * 0.04f;
+    nextMicroAt = now + 250 + random(0, 500);
   }
 
   // Active emotion micro-wink (every 6-11 seconds during non-idle emotion)
@@ -69,8 +115,10 @@ void eyesUpdateAnim(uint32_t now) {
       if (gazeLockUntil > now) {
         gazeTgtX = (gazeTgtX > 0) ? 8.0f : -8.0f;
         gazeTgtY = 0;
+        eyeNextGaze = now + 200;
       } else {
         eyeNextGaze = now + 1800 + random(0, 2500);
+        float oldX = gazeTgtX;
         int gMode = random(0, 6);
         if (gMode == 0) {
           gazeTgtX = 0;
@@ -91,11 +139,19 @@ void eyesUpdateAnim(uint32_t now) {
           gazeTgtX = 4.0f;
           gazeTgtY = 2.0f;
         }
+        // Big gaze shifts are often accompanied by a blink
+        if (!eyeBlinking && fabsf(gazeTgtX - oldX) >= 8.0f &&
+            random(0, 100) < 30)
+          triggerTouchBlink(now);
       }
     }
   }
 }
 
+// ---------------------------------------------------------------------------
+// Legacy expression helpers (kept intact; not used by the idle loop below)
+// ---------------------------------------------------------------------------
+static void resetIdleFace() __attribute__((unused));
 static void resetIdleFace() {
   faceTgt.hR = 1.0f;
   faceTgt.lidIn = 0;
@@ -110,6 +166,7 @@ static void resetIdleFace() {
   faceTgt.mouthY = 0;
 }
 
+static void applyIdleEye(IdleEye e) __attribute__((unused));
 static void applyIdleEye(IdleEye e) {
   switch (e) {
   case IE_NORMAL:
@@ -199,6 +256,7 @@ static void applyIdleEye(IdleEye e) {
   }
 }
 
+static void applyIdleMouth(IdleMouth m) __attribute__((unused));
 static void applyIdleMouth(IdleMouth m) {
   switch (m) {
   case IM_FLAT:
@@ -290,6 +348,7 @@ static void applyIdleMouth(IdleMouth m) {
   }
 }
 
+static void applyClassicIdle(int expr) __attribute__((unused));
 static void applyClassicIdle(int expr) {
   switch (expr) {
   case 1:
@@ -413,8 +472,11 @@ static uint32_t idleSqueezeEnd = 0;
 static uint32_t nextIdleSqueezeAt = 0;
 
 void updateIdleVariety() {
-  if (currentEmotion != EMOTION_IDLE)
+  if (currentEmotion != EMOTION_IDLE) {
+    // Forget any half-finished squeeze so it can't leak into the next idle
+    idleSqueezeEnd = 0;
     return;
+  }
   if (busyProcessing || inCircadianSleep || showWeatherScreen)
     return;
   if (showClockScreen)
@@ -424,7 +486,8 @@ void updateIdleVariety() {
 
   uint32_t now = millis();
 
-  // 1. Natural eye squeeze / squint (soft organic eyelid contraction, NO mouth or face mutation)
+  // 1. Natural eye squeeze / squint (soft organic eyelid contraction, NO mouth
+  // or face mutation)
   if (idleSqueezeEnd > 0 && now >= idleSqueezeEnd) {
     faceTgt.lidIn = 0;
     faceTgt.lidOut = 0;
@@ -455,6 +518,7 @@ void updateIdleVariety() {
 
   // 2. Natural eye gaze shifts: Center (look at user), Left, Right, Up, Down
   if (now >= nextIdleLookAt) {
+    float oldX = gazeTgtX;
     int gRoll = random(0, 100);
     if (gRoll < 42) {
       // Direct forward engagement / eye contact with user
@@ -482,6 +546,8 @@ void updateIdleVariety() {
       gazeTgtY = 3.5f;
       nextIdleLookAt = now + 1200 + random(0, 1500);
     }
+    // Large gaze jumps are often masked by a quick blink (like a real eye)
+    if (!eyeBlinking && fabsf(gazeTgtX - oldX) >= 9.0f && random(0, 100) < 35)
+      triggerTouchBlink(now);
   }
 }
-

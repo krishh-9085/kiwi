@@ -1,14 +1,99 @@
 #include "face/FaceRenderer.h"
+#include "config/AppConfig.h"
 #include "face/FaceDisplay.h"
-#include "face/FaceSkins.h"
 #include "face/FaceExpressions.h"
 #include "face/FaceIdle.h"
-#include "config/AppConfig.h"
-#include <Wire.h>
+#include "face/FaceSkins.h"
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
+#include <Wire.h>
+#include <math.h>
 
-static void drawBlush(int cx, int cy, float amt) {
+
+// ---------------------------------------------------------------------------
+// Small math helpers
+// ---------------------------------------------------------------------------
+static const float TWO_PI_F = 6.2831853f;
+static const float PI_F = 3.1415927f;
+
+static inline float clampf(float v, float lo, float hi) {
+  return v < lo ? lo : (v > hi ? hi : v);
+}
+static inline int iround(float v) { return (int)lroundf(v); }
+static inline int minI(int a, int b) { return a < b ? a : b; }
+
+// Frame-rate independent exponential smoothing.
+static inline float approach(float cur, float tgt, float rate, float dt) {
+  return cur + (tgt - cur) * (1.0f - expf(-rate * dt));
+}
+
+// sin()/cos() of (t / div) that stay precise after days of uptime: the phase is
+// reduced with integer arithmetic before it ever reaches a float.
+static inline uint32_t periodOf(float div) {
+  uint32_t p = (uint32_t)(div * TWO_PI_F + 0.5f);
+  return p ? p : 1;
+}
+static inline float swing(uint32_t t, float div) {
+  uint32_t p = periodOf(div);
+  return sinf(TWO_PI_F * (float)(t % p) / (float)p);
+}
+static inline float cwing(uint32_t t, float div) {
+  uint32_t p = periodOf(div);
+  return cosf(TWO_PI_F * (float)(t % p) / (float)p);
+}
+
+// Damped spring (semi-implicit Euler, sub-stepped so it is always stable).
+// Gives sizes a lively, slightly elastic "squash & stretch" settle.
+static void springStep(float &x, float &v, float tgt, float omega, float zeta,
+                       float dt) {
+  float left = dt;
+  while (left > 0.0001f) {
+    float h = left > 0.008f ? 0.008f : left;
+    float a = omega * omega * (tgt - x) - 2.0f * zeta * omega * v;
+    v += a * h;
+    x += v * h;
+    left -= h;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Face state integration
+// ---------------------------------------------------------------------------
+static uint32_t lastRenderAt = 0;
+static float velW = 0, velH = 0, velGap = 0, velY = 0;
+static float speakW = 16, speakH = 3;
+
+static void stepFace(float dt) {
+  const float OMEGA = 24.0f; // spring stiffness (rad/s)
+  const float ZETA = 0.62f;  // damping ratio (<1 = slight overshoot)
+  springStep(faceNow.w, velW, faceTgt.w, OMEGA, ZETA, dt);
+  springStep(faceNow.h, velH, faceTgt.h, OMEGA, ZETA, dt);
+  springStep(faceNow.gap, velGap, faceTgt.gap, OMEGA, ZETA, dt);
+  springStep(faceNow.y, velY, faceTgt.y, OMEGA, ZETA, dt);
+  if (faceNow.w < 2.0f)
+    faceNow.w = 2.0f;
+  if (faceNow.h < 0.0f)
+    faceNow.h = 0.0f;
+
+  const float R = 11.0f; // ~ the old 0.28/frame at ~30 fps
+  faceNow.r = approach(faceNow.r, faceTgt.r, R, dt);
+  faceNow.lidIn = approach(faceNow.lidIn, faceTgt.lidIn, R, dt);
+  faceNow.lidOut = approach(faceNow.lidOut, faceTgt.lidOut, R, dt);
+  faceNow.cheek = approach(faceNow.cheek, faceTgt.cheek, R, dt);
+  faceNow.cheekR = approach(faceNow.cheekR, faceTgt.cheekR, R, dt);
+  faceNow.hR = approach(faceNow.hR, faceTgt.hR, R, dt);
+  faceNow.glint = approach(faceNow.glint, faceTgt.glint, 13.0f, dt);
+  faceNow.blush = approach(faceNow.blush, faceTgt.blush, 5.5f, dt);
+  faceNow.mouthW = approach(faceNow.mouthW, faceTgt.mouthW, R, dt);
+  faceNow.mouthH = approach(faceNow.mouthH, faceTgt.mouthH, R, dt);
+  faceNow.mouthCurve = approach(faceNow.mouthCurve, faceTgt.mouthCurve, R, dt);
+  faceNow.mouthY = approach(faceNow.mouthY, faceTgt.mouthY, R, dt);
+}
+
+// ---------------------------------------------------------------------------
+// Small drawing pieces
+// ---------------------------------------------------------------------------
+static void drawBlushMarks(int cx, int cy, float amt) {
   if (amt < 0.2f)
     return;
   int n = (amt > 0.7f) ? 3 : 2;
@@ -16,27 +101,56 @@ static void drawBlush(int cx, int cy, float amt) {
     display.drawFastHLine(cx - 6 + (i & 1) * 3, cy + i * 3, 9, SSD1306_WHITE);
 }
 
-static void drawMouth(int cx, int cy, int w, int h, float curve) {
+// Mouth shapes:
+//  - open + smiling  -> D-shaped laugh
+//  - open + neutral  -> oval
+//  - otherwise       -> a connected, symmetric parabolic line
+static void drawMouthShape(int cx, int cy, int w, int h, float curve) {
   if (w < 4)
     return;
   int halfW = w / 2;
   if (halfW < 2)
     halfW = 2;
+  float ac = fabsf(curve);
+
+  if (h >= 5 && curve > 0.45f) {
+    int top = cy - h / 4;
+    for (int x = -halfW; x <= halfW; x++) {
+      float t = (float)x / (float)halfW;
+      int lift = iround(curve * 2.0f * t * t); // corners curl upward
+      int depth = iround(h * sqrtf(fmaxf(0.0f, 1.0f - t * t)));
+      if (depth < 1)
+        depth = 1;
+      display.drawFastVLine(cx + x, top - lift, depth, SSD1306_WHITE);
+    }
+    return;
+  }
+  if (h >= 4 && ac <= 0.45f) {
+    int rad = minI(w, h) / 2;
+    display.fillRoundRect(cx - halfW, cy - h / 2, halfW * 2, h, rad,
+                          SSD1306_WHITE);
+    return;
+  }
+
   int thick = (h < 1) ? 1 : h;
   int amp = thick * 2;
   if (amp < 2)
     amp = 2;
   for (int x = -halfW; x <= halfW; x++) {
     float t = (float)x / (float)halfW;
-    int y = cy + (int)(curve * amp * (1.0f - t * t));
-    for (int k = 0; k < thick; k++)
-      display.drawPixel(cx + x, y + k, SSD1306_WHITE);
+    int y = cy + iround(curve * amp * (1.0f - t * t));
+    int nx = (x < 0) ? x + 1 : (x > 0 ? x - 1 : 0); // neighbour toward centre
+    float tn = (float)nx / (float)halfW;
+    int yn = cy + iround(curve * amp * (1.0f - tn * tn));
+    int lo = y < yn ? y : yn;
+    int hi = y > yn ? y : yn;
+    display.drawFastVLine(cx + x, lo, (hi - lo) + thick, SSD1306_WHITE);
   }
 }
 
 static const uint8_t PROGMEM heartBmp[] = {0x6C, 0xFE, 0xFE, 0x7C, 0x38, 0x10};
 
-static void drawFlourish(uint32_t now) {
+static void drawFlourishAt(uint32_t now) {
   if (flourish == FL_NONE)
     return;
   uint32_t dt = now - flourishT0;
@@ -49,36 +163,91 @@ static void drawFlourish(uint32_t now) {
   float p = dt / 1300.0f;
   if (p > 0.85f)
     return;
-  int y = 50 - (int)(p * 24);
+  // Ease-out rise with a little side-to-side float
+  float e = 1.0f - (1.0f - p) * (1.0f - p);
+  int y = 50 - iround(e * 24.0f);
+  int dx = iround(swing(dt, 120.0f) * 3.0f * p);
+  // Flicker out near the end instead of vanishing abruptly
+  if (p > 0.7f && ((now / 60) & 1))
+    return;
+  int x = 64 + dx;
   switch (flourish) {
   case FL_HEART:
-    display.drawBitmap(61, y, heartBmp, 7, 6, SSD1306_WHITE);
+    display.drawBitmap(x - 3, y, heartBmp, 7, 6, SSD1306_WHITE);
     break;
   case FL_SPARKLE:
-    display.drawFastHLine(62, y + 3, 5, SSD1306_WHITE);
-    display.drawFastVLine(64, y + 1, 5, SSD1306_WHITE);
+    display.drawFastHLine(x - 2, y + 3, 5, SSD1306_WHITE);
+    display.drawFastVLine(x, y + 1, 5, SSD1306_WHITE);
     break;
   case FL_NOTE:
-    display.fillCircle(62, y + 4, 2, SSD1306_WHITE);
-    display.drawFastVLine(64, y, 5, SSD1306_WHITE);
+    display.fillCircle(x - 2, y + 4, 2, SSD1306_WHITE);
+    display.drawFastVLine(x, y, 5, SSD1306_WHITE);
     break;
   case FL_MOON:
-    display.drawCircle(64, y + 3, 3, SSD1306_WHITE);
-    display.fillCircle(65, y + 2, 2, SSD1306_BLACK);
+    display.drawCircle(x, y + 3, 3, SSD1306_WHITE);
+    display.fillCircle(x + 1, y + 2, 2, SSD1306_BLACK);
     break;
   case FL_STAR:
-    display.drawPixel(64, y, SSD1306_WHITE);
-    display.drawPixel(64, y + 2, SSD1306_WHITE);
-    display.drawPixel(64, y + 4, SSD1306_WHITE);
-    display.drawPixel(62, y + 2, SSD1306_WHITE);
-    display.drawPixel(66, y + 2, SSD1306_WHITE);
+    display.drawPixel(x, y, SSD1306_WHITE);
+    display.drawPixel(x, y + 2, SSD1306_WHITE);
+    display.drawPixel(x, y + 4, SSD1306_WHITE);
+    display.drawPixel(x - 2, y + 2, SSD1306_WHITE);
+    display.drawPixel(x + 2, y + 2, SSD1306_WHITE);
     break;
   default:
     break;
   }
 }
 
+static void drawSleepingFace(uint32_t now) {
+  display.clearDisplay();
+  float breathY = swing(now, 750.0f) * 2.0f;
+  int by = iround(breathY);
+  int sleepY = 34 + by;
+  int gapVal = 30;
+  int cL = 64 - gapVal;
+  int cR = 64 + gapVal;
 
+  // Cute downward curved sleeping eyelids
+  for (int dx = -14; dx <= 14; dx++) {
+    float norm = (float)dx / 14.0f;
+    int dy = iround(4.0f * (1.0f - norm * norm));
+    display.drawFastVLine(cL + dx, sleepY + dy, 3, SSD1306_WHITE);
+    display.drawFastVLine(cR + dx, sleepY + dy, 3, SSD1306_WHITE);
+  }
+  // Cute tiny sleeping eyelashes
+  display.drawLine(cL - 14, sleepY, cL - 17, sleepY - 2, SSD1306_WHITE);
+  display.drawLine(cR + 14, sleepY, cR + 17, sleepY - 2, SSD1306_WHITE);
+
+  // Cute sleepy blush under eyes
+  drawBlushMarks(cL, sleepY + 9, 0.45f);
+  drawBlushMarks(cR, sleepY + 9, 0.45f);
+
+  // Tiny sleeping mouth that opens a touch on every exhale
+  int mouthOpen = (breathY > 1.0f) ? 2 : 1;
+  drawMouthShape(64, 52 + by, 10, mouthOpen, 0.1f);
+
+  // 3 floating "Z... z... z..." snoring letters
+  for (int i = 0; i < 3; i++) {
+    uint32_t zTime = (now + (uint32_t)i * 900) % 2700;
+    float p = (float)zTime / 2700.0f; // 0.0 to 1.0
+    int zx = 86 + iround(p * 26.0f + sinf(p * TWO_PI_F) * 3.0f);
+    int zy = 38 - iround(p * 32.0f);
+    if (zy >= 2 && zy <= 50 && zx <= 122) {
+      bool big = (i == 2 || p > 0.65f);
+      display.setTextSize(big ? 2 : 1);
+      display.setTextColor(SSD1306_WHITE);
+      display.setCursor(zx, zy);
+      display.print(big ? "Z" : "z");
+    }
+  }
+  display.setTextSize(1);
+  presentDisplay();
+}
+
+// ---------------------------------------------------------------------------
+// Main face renderer
+// ---------------------------------------------------------------------------
 void drawFace() {
   if (!oledOK)
     return;
@@ -86,149 +255,105 @@ void drawFace() {
     return;
   uint32_t now = millis();
 
+  float dt =
+      (lastRenderAt == 0) ? 0.033f : (float)(now - lastRenderAt) / 1000.0f;
+  lastRenderAt = now;
+  dt = clampf(dt, 0.001f, 0.05f);
+
+  // Keep integrating even while asleep so waking up animates from a closed eye
+  stepFace(dt);
+
   if (currentEmotion == EMOTION_SLEEPING) {
-    display.clearDisplay();
-    float breathY = sinf(now / 750.0f) * 2.0f;
-    int sleepY = 34 + (int)breathY;
-    int gapVal = 30;
-    int cL = 64 - gapVal;
-    int cR = 64 + gapVal;
-
-    // Cute downward curved sleeping eyelids
-    for (int dx = -14; dx <= 14; dx++) {
-      float norm = (float)dx / 14.0f;
-      int dy = (int)(4.0f * (1.0f - norm * norm));
-      for (int thick = 0; thick <= 2; thick++) {
-        display.drawPixel(cL + dx, sleepY + dy + thick, SSD1306_WHITE);
-        display.drawPixel(cR + dx, sleepY + dy + thick, SSD1306_WHITE);
-      }
-    }
-    // Cute tiny sleeping eyelashes
-    display.drawLine(cL - 14, sleepY, cL - 17, sleepY - 2, SSD1306_WHITE);
-    display.drawLine(cR + 14, sleepY, cR + 17, sleepY - 2, SSD1306_WHITE);
-
-    // Cute sleepy pink blush under eyes
-    drawBlush(cL, sleepY + 9, 0.45f);
-    drawBlush(cR, sleepY + 9, 0.45f);
-
-    // Cute tiny sleeping mouth (gentle breathing)
-    drawMouth(64, 52 + (int)breathY, 10, 1, 0.1f);
-
-    // 3 animated floating "Z... z... z..." snoring bubbles
-    for (int i = 0; i < 3; i++) {
-      uint32_t zTime = (now + i * 900) % 2700;
-      float p = (float)zTime / 2700.0f; // 0.0 to 1.0
-      int zx = 86 + (int)(p * 26.0f + sinf(p * 6.28f) * 3.0f);
-      int zy = 38 - (int)(p * 32.0f);
-      if (zy >= 2 && zy <= 50 && zx <= 122) {
-        display.setTextSize((i == 2 || p > 0.65f) ? 2 : 1);
-        display.setTextColor(SSD1306_WHITE);
-        display.setCursor(zx, zy);
-        display.print((i == 2 || p > 0.65f) ? "Z" : "z");
-      }
-    }
-    display.display();
+    drawSleepingFace(now);
     return;
   }
 
-  auto lp = [](float &a, float b, float k) { a += (b - a) * k; };
-  const float K = 0.28f;
-  lp(faceNow.w, faceTgt.w, K);
-  lp(faceNow.h, faceTgt.h, K);
-  lp(faceNow.gap, faceTgt.gap, K);
-  lp(faceNow.y, faceTgt.y, K);
-  lp(faceNow.r, faceTgt.r, K);
-  lp(faceNow.lidIn, faceTgt.lidIn, K);
-  lp(faceNow.lidOut, faceTgt.lidOut, K);
-  lp(faceNow.cheek, faceTgt.cheek, K);
-  lp(faceNow.cheekR, faceTgt.cheekR, K);
-  lp(faceNow.hR, faceTgt.hR, K);
-  lp(faceNow.glint, faceTgt.glint, 0.3f);
-  lp(faceNow.blush, faceTgt.blush, 0.15f);
-  lp(faceNow.mouthW, faceTgt.mouthW, K);
-  lp(faceNow.mouthH, faceTgt.mouthH, K);
-  lp(faceNow.mouthCurve, faceTgt.mouthCurve, K);
-  lp(faceNow.mouthY, faceTgt.mouthY, K);
-
+  // ---- Gaze -------------------------------------------------------------
   float tx = gazeTgtX, ty = gazeTgtY;
   if (faceTgt.gazeLock) {
     tx = faceTgt.lockX;
     ty = faceTgt.lockY;
+  } else if (currentEmotion != EMOTION_THINKING &&
+             currentEmotion != EMOTION_LISTENING &&
+             currentEmotion != EMOTION_SPEAKING) {
+    tx += gazeMicroX; // involuntary micro-saccades
+    ty += gazeMicroY;
   }
   switch (currentEmotion) {
   case EMOTION_THINKING: {
-    // Human cognitive recall: looking UPWARD while pondering with gentle left/right scan
-    float thinkPhase = now / 750.0f;
-    tx = sinf(thinkPhase) * 5.5f + cosf(thinkPhase * 1.8f) * 1.6f;
-    ty = -6.5f + sinf(thinkPhase * 1.3f) * 1.2f;
+    // Looking UP while pondering with a gentle left/right scan
+    tx = swing(now, 750.0f) * 5.5f + cwing(now, 416.0f) * 1.6f;
+    ty = -6.5f + swing(now, 577.0f) * 1.2f;
     break;
   }
   case EMOTION_LISTENING:
-    tx = sinf(now / 500.0f) * 2.0f;
+    tx = swing(now, 500.0f) * 2.0f;
     ty = -3.0f;
     break;
   case EMOTION_SPEAKING: {
-    // Human conversational engagement: looking at user, fluidly glancing left/right while speaking
-    float spkPhase = now / 580.0f;
-    tx = sinf(spkPhase) * 6.2f + sinf(spkPhase * 2.1f) * 2.0f;
-    ty = sinf(spkPhase * 1.4f) * 1.6f;
+    // Engaged with the user, fluidly glancing left/right while speaking
+    tx = swing(now, 580.0f) * 6.2f + swing(now, 276.0f) * 2.0f;
+    ty = swing(now, 414.0f) * 1.6f;
     break;
   }
   default:
     break;
   }
-  gazeX += (tx - gazeX) * 0.18f;
-  gazeY += (ty - gazeY) * 0.18f;
+  // Fast, saccade-like gaze motion (tau ~70 ms)
+  gazeX = approach(gazeX, tx, 14.0f, dt);
+  gazeY = approach(gazeY, ty, 14.0f, dt);
 
+  // ---- Per-emotion body motion -----------------------------------------
   float offX = 0, offY = 0, sc = 1.0f;
   switch (currentEmotion) {
   case EMOTION_IDLE:
-    sc = 1.0f + 0.03f * sinf(now / 900.0f);
+    sc = 1.0f + 0.03f * swing(now, 900.0f);
     break;
   case EMOTION_LISTENING:
-    sc = 1.0f + 0.035f * sinf(now / 160.0f);
+    sc = 1.0f + 0.035f * swing(now, 160.0f);
     break;
   case EMOTION_SPEAKING:
     // Subtle conversational speech cadence and head bounce
-    offY = sinf(now / 150.0f) * 1.2f;
-    sc = 1.0f + 0.025f * sinf(now / 210.0f);
+    offY = swing(now, 150.0f) * 1.2f;
+    sc = 1.0f + 0.025f * swing(now, 210.0f);
     break;
   case EMOTION_EXCITED:
-    offY = sinf(now / 110.0f) * 2.0f;
+    offY = swing(now, 110.0f) * 2.0f;
     break;
-  case EMOTION_SLEEPING:
-    offY = sinf(now / 700.0f) * 1.0f;
+  case EMOTION_ERROR: {
+    uint32_t t = now - emotionStartedAt;
+    if (t < 800) {
+      float damp = 1.0f - (float)t / 800.0f; // shake decays smoothly
+      offX = sinf((float)t * 0.11f) * 3.0f * damp;
+    }
     break;
-  case EMOTION_ERROR:
-    if (now - emotionStartedAt < 800)
-      offX = ((now / 55) & 1) ? 2 : -2;
-    break;
+  }
   case EMOTION_PETTED: {
     uint32_t t = now - petMoodT0;
     switch (petMood) {
     case PET_LOVE:
-      offX = sinf(t / 230.0f) * 2.5f;
+      offX = swing(t, 230.0f) * 2.5f;
       break;
     case PET_GIGGLE:
-      offY = sinf(t / 65.0f) * 2.0f;
+      offY = swing(t, 65.0f) * 2.0f;
       break;
     case PET_SPARKLE:
-      sc = 1.0f + 0.05f * sinf(t / 90.0f);
+      sc = 1.0f + 0.05f * swing(t, 90.0f);
       break;
     case PET_CUDDLE:
-      sc = 1.0f + 0.02f * sinf(t / 500.0f);
+      sc = 1.0f + 0.02f * swing(t, 500.0f);
       break;
     case PET_PLAYFUL:
-      offX = sinf(t / 180.0f) * 3.0f;
+      offX = swing(t, 180.0f) * 3.0f;
       break;
     case PET_SLEEPY:
-      offY = sinf(t / 900.0f) * 1.2f;
+      offY = swing(t, 900.0f) * 1.2f;
       break;
     case PET_PROUD:
-      offY = -1 + sinf(t / 700.0f) * 0.5f;
+      offY = -1 + swing(t, 700.0f) * 0.5f;
       break;
     case PET_SURPRISED:
-      sc = 1.0f + 0.03f * sinf(t / 150.0f);
+      sc = 1.0f + 0.03f * swing(t, 150.0f);
       break;
     default:
       break;
@@ -236,7 +361,7 @@ void drawFace() {
     break;
   }
   case EMOTION_SURPRISED:
-    sc = 1.0f + 0.03f * sinf(now / 200.0f);
+    sc = 1.0f + 0.03f * swing(now, 200.0f);
     break;
   case EMOTION_WINK:
     offX = -2;
@@ -245,49 +370,53 @@ void drawFace() {
     offY = -1;
     break;
   case EMOTION_CURIOUS:
-    offX = sinf(now / 500.0f) * 3.0f;
+    offX = swing(now, 500.0f) * 3.0f;
     break;
   case EMOTION_BORED:
-    offY = sinf(now / 1400.0f) * 0.8f;
+    offY = swing(now, 1400.0f) * 0.8f;
     break;
   case EMOTION_LAUGHING:
-    offY = sinf(now / 130.0f) * 2.5f;
+    offY = swing(now, 130.0f) * 2.5f;
     break;
-  case EMOTION_SCARED:
-    if (now - emotionStartedAt < 400)
-      offX = ((now / 45) & 1) ? 3 : -3;
+  case EMOTION_SCARED: {
+    uint32_t t = now - emotionStartedAt;
+    if (t < 500) {
+      float damp = 1.0f - (float)t / 500.0f;
+      offX = sinf((float)t * 0.14f) * 3.5f * damp;
+    }
     break;
+  }
   case EMOTION_SUSPICIOUS:
-    offX = sinf(now / 900.0f) * 2.0f;
+    offX = swing(now, 900.0f) * 2.0f;
     break;
   case EMOTION_RELIEVED:
-    sc = 1.0f + 0.02f * sinf(now / 800.0f);
+    sc = 1.0f + 0.02f * swing(now, 800.0f);
     break;
   case EMOTION_PROUD:
     offY = -2;
     break;
   case EMOTION_DIZZY:
-    offX = sinf(now / 180.0f) * 4.0f;
-    offY = cosf(now / 180.0f) * 3.0f;
+    offX = swing(now, 180.0f) * 4.0f;
+    offY = cwing(now, 180.0f) * 3.0f;
     break;
   case EMOTION_LOVESTRUCK:
-    sc = 1.0f + 0.04f * sinf(now / 500.0f);
+    sc = 1.0f + 0.04f * swing(now, 500.0f);
     break;
   case EMOTION_EVIL:
-    offY = sinf(now / 150.0f) * 1.5f;
+    offY = swing(now, 150.0f) * 1.5f;
     break;
   case EMOTION_CRYING:
-    offY = sinf(now / 90.0f) * 1.5f;
+    offY = swing(now, 90.0f) * 1.5f;
     break;
   case EMOTION_HEARTS:
-    sc = 1.0f + 0.05f * sinf(now / 350.0f);
+    sc = 1.0f + 0.05f * swing(now, 350.0f);
     break;
   case EMOTION_SINGING:
-    offX = sinf(now / 250.0f) * 3.0f;
-    offY = fabsf(cosf(now / 250.0f)) * 2.0f;
+    offX = swing(now, 250.0f) * 3.0f;
+    offY = fabsf(cwing(now, 250.0f)) * 2.0f;
     break;
   case EMOTION_PARTY:
-    offY = -fabsf(sinf(now / 120.0f)) * 3.5f;
+    offY = -fabsf(swing(now, 120.0f)) * 3.5f;
     break;
   case EMOTION_NERVOUS:
     offX = ((now / 40) & 1) ? 1.5f : -1.5f;
@@ -296,58 +425,69 @@ void drawFace() {
     offY = -1;
     break;
   case EMOTION_CUTE:
-    sc = 1.0f + 0.03f * sinf(now / 300.0f);
+    sc = 1.0f + 0.03f * swing(now, 300.0f);
     break;
   default:
     break;
   }
 
-  if (currentEmotion != EMOTION_IDLE && currentEmotion != EMOTION_SLEEPING) {
-    offY += sinf(now / 480.0f) * 1.5f;
+  if (currentEmotion != EMOTION_IDLE) {
+    offY += swing(now, 480.0f) * 1.5f;
   }
 
-  int w = (int)(faceNow.w * sc);
-  int h = (int)(faceNow.h * sc);
-  int r = (int)faceNow.r;
-  int gap = (int)faceNow.gap;
-  int cy = (int)(faceNow.y + gazeY + offY);
-  int cxL = 64 - gap + (int)(gazeX + offX);
-  int cxR = 64 + gap + (int)(gazeX + offX);
+  // ---- Eye geometry -----------------------------------------------------
+  float open = clampf(eyeOpenAmt, 0.0f, 1.0f);
+  // Eyes bulge a hair wider as the lids close (squash & stretch)
+  int w = iround(faceNow.w * sc * (1.0f + 0.05f * (1.0f - open)));
+  float hBase = faceNow.h * sc;
+  int r = iround(faceNow.r);
+  int gap = iround(faceNow.gap);
+  int cy = iround(faceNow.y + gazeY + offY);
+  int cxL = 64 - gap + iround(gazeX + offX);
+  int cxR = 64 + gap + iround(gazeX + offX);
 
-  int hL = h;
-  int hR = (int)(h * faceNow.hR);
+  float hLf = hBase * open;
+  float hRf = hBase * faceNow.hR * open;
+  float cheekL = faceNow.cheek * open;
+  float cheekR = faceNow.cheekR * open;
   if (eyeBlinking) {
-    int bL = hL * eyeOpenPct / 100;
-    int bR = hR * eyeOpenPct / 100;
-    hL = (faceNow.cheek >= 2 && bL < 3) ? 3 : bL;
-    hR = (faceNow.cheekR >= 2 && bR < 3) ? 3 : bR;
-  } else {
-    if (faceNow.cheek < 2)
-      hL = hL * eyeOpenPct / 100;
-    if (faceNow.cheekR < 2)
-      hR = hR * eyeOpenPct / 100;
+    // Arch (happy) eyes never fully disappear while blinking
+    if (faceNow.cheek >= 2 && hLf < 3)
+      hLf = 3;
+    if (faceNow.cheekR >= 2 && hRf < 3)
+      hRf = 3;
   }
 
-  // Active micro-wink during non-idle emotions
+  // Active micro-wink during non-idle emotions: smooth close and re-open
   if (activeWinkEnd > now) {
-    if (activeWinkLeft)
-      hL = 3;
-    else
-      hR = 3;
+    float rem = (float)(activeWinkEnd - now);
+    float t = clampf(1.0f - rem / 260.0f, 0.0f, 1.0f);
+    float wink = clampf(sinf(PI_F * t) * 1.6f, 0.0f, 1.0f);
+    if (activeWinkLeft) {
+      hLf += (3.0f - hLf) * wink;
+      cheekL *= (1.0f - wink);
+    } else {
+      hRf += (3.0f - hRf) * wink;
+      cheekR *= (1.0f - wink);
+    }
   }
+
+  int h = iround(hBase);
+  int hL = iround(hLf);
+  int hR = iround(hRf);
+  int lidIn = iround(faceNow.lidIn);
+  int lidOut = iround(faceNow.lidOut);
 
   display.clearDisplay();
   bool gl = faceNow.glint > 0.5f;
-  drawEye(cxL, cy, w, hL, r, (int)faceNow.lidIn, (int)faceNow.lidOut,
-          (int)faceNow.cheek, true, gl);
-  drawEye(cxR, cy, w, hR, r, (int)faceNow.lidIn, (int)faceNow.lidOut,
-          (int)faceNow.cheekR, false, gl);
+  drawEye(cxL, cy, w, hL, r, lidIn, lidOut, iround(cheekL), true, gl);
+  drawEye(cxR, cy, w, hR, r, lidIn, lidOut, iround(cheekR), false, gl);
 
-  // Custom Skin Accents (Cat Ears & Cyberpunk HUD)
+  // ---- Custom skin accents (cat ears, HUD frames, horns ...) -----------
   if (currentEyeSkin == SKIN_CAT) {
-    float earTwitch = sinf(now / 900.0f);
-    int twL = (earTwitch > 0.88f) ? 2 : 0;
-    int twR = (earTwitch < -0.88f) ? 2 : 0;
+    float earTwitch = swing(now, 900.0f);
+    int twL = iround(clampf((earTwitch - 0.75f) / 0.25f, 0.0f, 1.0f) * 3.0f);
+    int twR = iround(clampf((-earTwitch - 0.75f) / 0.25f, 0.0f, 1.0f) * 3.0f);
     int earBaseY = cy - h / 2;
     if (earBaseY > 15) {
       display.fillTriangle(cxL - w / 2 - 2, earBaseY, cxL - w / 4,
@@ -380,12 +520,10 @@ void drawFace() {
     }
   } else if (currentEyeSkin == SKIN_STEAMPUNK) {
     int bridgeY = cy;
-    display.drawFastHLine(cxL + w / 2 + 1, bridgeY - 2,
-                          (cxR - w / 2) - (cxL + w / 2) - 2, SSD1306_WHITE);
-    display.drawFastHLine(cxL + w / 2 + 1, bridgeY + 2,
-                          (cxR - w / 2) - (cxL + w / 2) - 2, SSD1306_WHITE);
-    display.drawFastHLine(cxL + w / 2 + 3, bridgeY,
-                          (cxR - w / 2) - (cxL + w / 2) - 6, SSD1306_WHITE);
+    int bw = (cxR - w / 2) - (cxL + w / 2);
+    display.drawFastHLine(cxL + w / 2 + 1, bridgeY - 2, bw - 2, SSD1306_WHITE);
+    display.drawFastHLine(cxL + w / 2 + 1, bridgeY + 2, bw - 2, SSD1306_WHITE);
+    display.drawFastHLine(cxL + w / 2 + 3, bridgeY, bw - 6, SSD1306_WHITE);
   } else if (currentEyeSkin == SKIN_MATRIX) {
     display.drawFastHLine(36, 1, 56, SSD1306_WHITE);
     display.drawFastVLine(36, 1, 4, SSD1306_WHITE);
@@ -411,20 +549,22 @@ void drawFace() {
     }
   } else if (currentEyeSkin == SKIN_SUNGLASSES) {
     int bridgeY = cy - 2;
-    display.fillRect(cxL + w / 2 - 1, bridgeY, (cxR - w / 2) - (cxL + w / 2) + 2, 4, SSD1306_WHITE);
-    display.drawFastHLine(cxL - w / 2, cy - h / 2 - 1, (cxR + w / 2) - (cxL - w / 2) + 1, SSD1306_WHITE);
+    display.fillRect(cxL + w / 2 - 1, bridgeY,
+                     (cxR - w / 2) - (cxL + w / 2) + 2, 4, SSD1306_WHITE);
+    display.drawFastHLine(cxL - w / 2, cy - h / 2 - 1,
+                          (cxR + w / 2) - (cxL - w / 2) + 1, SSD1306_WHITE);
   } else if (currentEyeSkin == SKIN_PUPPY) {
-    float earSway = sinf(now / 800.0f);
-    int sway = (int)(earSway * 2.0f);
+    int sway = iround(swing(now, 800.0f) * 2.0f);
     display.fillRoundRect(2, cy - 8 + sway, 9, 22, 4, SSD1306_WHITE);
     display.fillRoundRect(3, cy - 5 + sway, 7, 16, 3, SSD1306_BLACK);
     display.fillRoundRect(117, cy - 8 - sway, 9, 22, 4, SSD1306_WHITE);
     display.fillRoundRect(118, cy - 5 - sway, 7, 16, 3, SSD1306_BLACK);
-    display.fillTriangle(62, cy + h / 2 + 3, 66, cy + h / 2 + 3, 64, cy + h / 2 + 6, SSD1306_WHITE);
+    display.fillTriangle(62, cy + h / 2 + 3, 66, cy + h / 2 + 3, 64,
+                         cy + h / 2 + 6, SSD1306_WHITE);
   } else if (currentEyeSkin == SKIN_HYPNO) {
-    float a = (float)(now % 1000) / 1000.0f * 2.0f * PI;
-    int dX = (int)(cosf(a) * 4);
-    int dY = (int)(sinf(a) * 2);
+    float a = (float)(now % 1000) / 1000.0f * TWO_PI_F;
+    int dX = iround(cosf(a) * 4);
+    int dY = iround(sinf(a) * 2);
     display.drawPixel(20 + dX, 8 + dY, SSD1306_WHITE);
     display.drawPixel(108 - dX, 8 - dY, SSD1306_WHITE);
   } else if (currentEyeSkin == SKIN_ALIEN) {
@@ -449,36 +589,51 @@ void drawFace() {
     // Dynamic floating micro-brows that articulate with emotion
     int browY = cy - h / 2 - 3;
     if (browY >= 2 && h > 10) {
-      int tiltL = (int)(faceNow.lidIn - faceNow.lidOut) / 3;
-      int tiltR = (int)(faceNow.lidOut - faceNow.lidIn) / 3;
-      display.drawLine(cxL - 7, browY + tiltL, cxL + 7, browY - tiltL, SSD1306_WHITE);
-      display.drawLine(cxR - 7, browY - tiltR, cxR + 7, browY + tiltR, SSD1306_WHITE);
+      int tiltL = iround((faceNow.lidIn - faceNow.lidOut) / 3.0f);
+      int tiltR = iround((faceNow.lidOut - faceNow.lidIn) / 3.0f);
+      display.drawLine(cxL - 7, browY + tiltL, cxL + 7, browY - tiltL,
+                       SSD1306_WHITE);
+      display.drawLine(cxR - 7, browY - tiltR, cxR + 7, browY + tiltR,
+                       SSD1306_WHITE);
     }
   }
 
   if (faceNow.blush > 0.2f) {
-    drawBlush(cxL, cy + h / 2 + 4, faceNow.blush);
-    drawBlush(cxR, cy + h / 2 + 4, faceNow.blush);
+    drawBlushMarks(cxL, cy + h / 2 + 4, faceNow.blush);
+    drawBlushMarks(cxR, cy + h / 2 + 4, faceNow.blush);
   }
 
+  // ---- Mouth (follows the head a little for a subtle 3D parallax) ------
+  int mx = 64 + iround((gazeX + offX) * 0.35f);
+  int myBase = 52 + iround(offY * 0.6f + gazeY * 0.25f);
+
   if (currentEmotion == EMOTION_SPEAKING) {
-    float t = now / 110.0f;
-    int mw = 14 + (int)(6 * fabsf(sinf(t * 0.7f)));
-    int mh = 3 + (int)(7 * fabsf(sinf(t * 1.9f)));
-    display.fillRoundRect(64 - mw / 2, 52 - mh / 2, mw, mh, mh > 3 ? 2 : 1,
-                          SSD1306_WHITE);
+    // Syllable-like envelope from incommensurate sines, then smoothed so the
+    // mouth flows instead of flickering.
+    float t = (float)(now % 600000UL) / 1000.0f;
+    float env =
+        fabsf(sinf(t * 12.4f)) * (0.55f + 0.45f * sinf(t * 3.3f + 1.0f));
+    float env2 = 0.5f + 0.5f * sinf(t * 19.1f + 0.7f);
+    float o = clampf(env * 0.8f + env2 * 0.25f, 0.0f, 1.0f);
+    float tw = 19.0f - 5.0f * o; // narrower when the mouth opens ("oo")
+    float th = 3.0f + 7.0f * o;
+    speakW = approach(speakW, tw, 28.0f, dt);
+    speakH = approach(speakH, th, 28.0f, dt);
+    int mw = iround(speakW);
+    int mh = iround(speakH);
+    display.fillRoundRect(mx - mw / 2, myBase - mh / 2, mw, mh,
+                          mh > 3 ? minI(mw, mh) / 2 : 1, SSD1306_WHITE);
   } else if (showMouth && faceNow.mouthW > 3) {
-    int my = 52 + (int)faceNow.mouthY;
-    drawMouth(64, my, (int)faceNow.mouthW, (int)faceNow.mouthH,
-              faceNow.mouthCurve);
+    drawMouthShape(mx, myBase + iround(faceNow.mouthY), iround(faceNow.mouthW),
+                   iround(faceNow.mouthH), faceNow.mouthCurve);
   }
 
   if (currentEmotion == EMOTION_LISTENING) {
-    // Sleek, minimal voice spectrum pulse (5 micro-bars, subtle undulating wave)
+    // Sleek, minimal voice spectrum pulse (5 micro-bars, undulating wave)
     for (int i = 0; i < 5; i++) {
       float phase = (i - 2) * 0.9f;
-      float wave = fabsf(sinf(now / 140.0f + phase));
-      int bh = 1 + (int)(wave * (i == 2 ? 5 : (i == 1 || i == 3 ? 4 : 2)));
+      float wave = fabsf(sinf((float)(now % 100000UL) / 140.0f + phase));
+      int bh = 1 + iround(wave * (i == 2 ? 5 : (i == 1 || i == 3 ? 4 : 2)));
       int bx = 56 + i * 4; // x = 56, 60, 64, 68, 72
       display.fillRect(bx, 53 - bh, 2, bh * 2 + 1, SSD1306_WHITE);
     }
@@ -510,27 +665,30 @@ void drawFace() {
   }
 
   if (currentEmotion == EMOTION_CRYING) {
-    int tearY = (now / 40) % 18;
-    display.fillCircle(cxL - w / 4, cy + h / 2 + 2 + tearY, 2, SSD1306_WHITE);
-    display.fillCircle(cxR + w / 4, cy + h / 2 + 2 + ((tearY + 9) % 18), 2,
+    int tearY = (int)((now / 40) % 18);
+    int tearY2 = (tearY + 9) % 18;
+    // Tears shrink as they fall so they seem to drip away
+    display.fillCircle(cxL - w / 4, cy + h / 2 + 2 + tearY, tearY > 12 ? 1 : 2,
                        SSD1306_WHITE);
+    display.fillCircle(cxR + w / 4, cy + h / 2 + 2 + tearY2,
+                       tearY2 > 12 ? 1 : 2, SSD1306_WHITE);
   }
 
   if (currentEmotion == EMOTION_HEARTS) {
-    int hY = 10 + (int)(sinf(now / 180.0f) * 3);
+    int hY = 10 + iround(swing(now, 180.0f) * 3.0f);
     display.drawBitmap(12, hY, heartBmp, 7, 6, SSD1306_WHITE);
     display.drawBitmap(108, hY, heartBmp, 7, 6, SSD1306_WHITE);
   }
 
   if (currentEmotion == EMOTION_SINGING) {
-    int noteY = 12 + (int)(sinf(now / 150.0f) * 4);
+    int noteY = 12 + iround(swing(now, 150.0f) * 4.0f);
     display.fillCircle(112, noteY + 4, 2, SSD1306_WHITE);
     display.drawFastVLine(114, noteY, 5, SSD1306_WHITE);
     display.drawFastHLine(114, noteY, 3, SSD1306_WHITE);
   }
 
   if (currentEmotion == EMOTION_NERVOUS) {
-    int swY = 10 + (int)(sinf(now / 200.0f) * 2);
+    int swY = 10 + iround(swing(now, 200.0f) * 2.0f);
     display.fillCircle(112, swY + 3, 2, SSD1306_WHITE);
     display.drawPixel(112, swY, SSD1306_WHITE);
   }
@@ -549,7 +707,6 @@ void drawFace() {
     }
   }
 
-  drawFlourish(now);
-  display.display();
+  drawFlourishAt(now);
+  presentDisplay();
 }
-

@@ -1,30 +1,33 @@
 #include "face/FaceEngine.h"
-#include "config/AppConfig.h"
 #include "animation/AnimationEngine.h"
+#include "config/AppConfig.h"
+
 
 void tickFace() {
   if (!oledOK)
     return;
+  uint32_t now = millis();
   if (bootInfoUntil) {
-    if (millis() < bootInfoUntil)
+    if (now < bootInfoUntil)
       return;
     bootInfoUntil = 0;
+    markDisplayDirty();
   }
   if (animationIsActive()) {
-    uint32_t now = millis();
+    // The animation engine draws straight to the panel, so make sure the next
+    // face/screen frame is always pushed afterwards.
+    markDisplayDirty();
     tickAnimation(now);
     return;
   }
   if (bannerActive) {
-    uint32_t now = millis();
-    if (now - lastFaceDrawAt < 35)
+    if (now - lastFaceDrawAt < 33)
       return;
     lastFaceDrawAt = now;
     drawBannerScreen();
     return;
   }
   if (showClockScreen) {
-    uint32_t now = millis();
     if (now - lastFaceDrawAt < 200)
       return;
     lastFaceDrawAt = now;
@@ -32,18 +35,15 @@ void tickFace() {
     return;
   }
   if (showWeatherScreen) {
-    uint32_t now = millis();
-    if (now - lastFaceDrawAt < 200)
+    if (now - lastFaceDrawAt < 100)
       return;
     lastFaceDrawAt = now;
     drawWeatherScreen();
     return;
   }
-  uint32_t now = millis();
   if (now - lastFaceDrawAt < gFaceFrameMs)
     return;
   lastFaceDrawAt = now;
   eyesUpdateAnim(now);
   drawFace();
 }
-

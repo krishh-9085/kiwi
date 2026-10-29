@@ -1,18 +1,18 @@
 #include "face/FaceExpressions.h"
+#include "behavior/InteractionManager.h"
+#include "config/AppConfig.h"
 #include "face/FaceDisplay.h"
 #include "face/FaceIdle.h"
 #include "face/FaceScreens.h"
-#include "config/AppConfig.h"
 #include "hardware/AudioEngine.h"
-#include "behavior/InteractionManager.h"
 
 FaceState faceNow, faceTgt;
 uint32_t emotionStartedAt = 0;
 static uint32_t nextRandomEmotionAt = 0;
 extern volatile int8_t pendingSound;
 
-void setFace(float w, float h, float gap, float y, float r,
-             float lidIn, float lidOut, float cheek, float blush) {
+void setFace(float w, float h, float gap, float y, float r, float lidIn,
+             float lidOut, float cheek, float blush) {
   faceTgt.w = w;
   faceTgt.h = h;
   faceTgt.gap = gap;
@@ -34,13 +34,27 @@ void setFace(float w, float h, float gap, float y, float r,
   faceTgt.mouthY = 0;
 }
 
+// Emotions whose entrance should "pop" instead of being hidden by a blink
+static bool emotionSkipsTransitionBlink(Emotion e) {
+  return e == EMOTION_SLEEPING || e == EMOTION_ERROR ||
+         e == EMOTION_SURPRISED || e == EMOTION_SHOCKED ||
+         e == EMOTION_SCARED || e == EMOTION_DEAD;
+}
+
 void setEmotion(Emotion e) {
+  Emotion prev = currentEmotion;
+  uint32_t now = millis();
   currentEmotion = e;
-  emotionStartedAt = millis();
+  emotionStartedAt = now;
   faceTargetsForEmotion(e, petMood);
+  // A quick blink hides the face morph, exactly like a person changing
+  // expression.
+  if (e != prev && prev != EMOTION_SLEEPING &&
+      !emotionSkipsTransitionBlink(e) && !eyeBlinking)
+    triggerTouchBlink(now);
   if (e == EMOTION_IDLE) {
     emotionAutoReturnAt = 0;
-    nextIdleLookAt = millis() + 300 + random(0, 500);
+    nextIdleLookAt = now + 300 + random(0, 500);
     idleExpression = 0;
     idleExpressionEnd = 0;
   }
@@ -349,11 +363,15 @@ void faceTargetsForEmotion(Emotion e, PetMood pm) {
       faceTgt.mouthH = 7;
       faceTgt.mouthCurve = 0.0f;
       break;
+    default:
+      break;
     }
+    break;
+  default:
+    setFace(34, 32, 30, 29, 6);
     break;
   }
 }
-
 
 void maybeChangeEmotion() {
   if (showClockScreen || showWeatherScreen || inCircadianSleep || bannerActive)
@@ -383,6 +401,32 @@ void maybeChangeEmotion() {
   // Face stays steady in currentEmotion until manually changed via UI or touch!
 }
 
+static Flourish flourishForMood(int m) {
+  switch (m) {
+  case PET_LOVE:
+    return FL_HEART;
+  case PET_GIGGLE:
+    return FL_NOTE;
+  case PET_SHY:
+    return FL_HEART;
+  case PET_SPARKLE:
+    return FL_SPARKLE;
+  case PET_KISS:
+    return FL_HEART;
+  case PET_CUDDLE:
+    return FL_MOON;
+  case PET_PLAYFUL:
+    return FL_NOTE;
+  case PET_SLEEPY:
+    return FL_MOON;
+  case PET_PROUD:
+    return FL_STAR;
+  case PET_SURPRISED:
+    return FL_SPARKLE;
+  default:
+    return FL_SPARKLE;
+  }
+}
 
 void holdFace(uint32_t ms) {
   uint32_t t0 = millis();
@@ -390,7 +434,7 @@ void holdFace(uint32_t ms) {
     if (cancelRequest)
       break;
     pumpUI();
-    delay(5);
+    delay(2);
   }
 }
 
@@ -403,38 +447,7 @@ void showPetMood(PetMood m, uint32_t ms) {
   petMood = m;
   petMoodT0 = millis();
   flourishT0 = millis();
-  switch (m) {
-  case PET_LOVE:
-    flourish = FL_HEART;
-    break;
-  case PET_GIGGLE:
-    flourish = FL_NOTE;
-    break;
-  case PET_SHY:
-    flourish = FL_HEART;
-    break;
-  case PET_SPARKLE:
-    flourish = FL_SPARKLE;
-    break;
-  case PET_KISS:
-    flourish = FL_HEART;
-    break;
-  case PET_CUDDLE:
-    flourish = FL_MOON;
-    break;
-  case PET_PLAYFUL:
-    flourish = FL_NOTE;
-    break;
-  case PET_SLEEPY:
-    flourish = FL_MOON;
-    break;
-  case PET_PROUD:
-    flourish = FL_STAR;
-    break;
-  case PET_SURPRISED:
-    flourish = FL_SPARKLE;
-    break;
-  }
+  flourish = flourishForMood((int)m);
   setEmotion(EMOTION_PETTED);
   switch (m) {
   case PET_LOVE:
@@ -476,7 +489,7 @@ bool triggerEmotionByName(const String &nameIn, uint32_t holdMs,
   String e = nameIn;
   e.toLowerCase();
   e.trim();
-  struct {
+  static const struct EmoteName {
     const char *n;
     Emotion e;
   } emotes[] = {{"idle", EMOTION_IDLE},
@@ -520,7 +533,7 @@ bool triggerEmotionByName(const String &nameIn, uint32_t holdMs,
                 {"nervous", EMOTION_NERVOUS},
                 {"cute", EMOTION_CUTE},
                 {"puppy", EMOTION_CUTE}};
-  for (auto &m : emotes) {
+  for (const auto &m : emotes) {
     if (e == m.n) {
       if (showClockScreen)
         showClockScreen = false;
@@ -595,38 +608,7 @@ bool triggerEmotionByName(const String &nameIn, uint32_t holdMs,
     petMood = (PetMood)mood;
     petMoodT0 = millis();
     flourishT0 = millis();
-    switch (mood) {
-    case PET_LOVE:
-      flourish = FL_HEART;
-      break;
-    case PET_GIGGLE:
-      flourish = FL_NOTE;
-      break;
-    case PET_SHY:
-      flourish = FL_HEART;
-      break;
-    case PET_SPARKLE:
-      flourish = FL_SPARKLE;
-      break;
-    case PET_KISS:
-      flourish = FL_HEART;
-      break;
-    case PET_CUDDLE:
-      flourish = FL_MOON;
-      break;
-    case PET_PLAYFUL:
-      flourish = FL_NOTE;
-      break;
-    case PET_SLEEPY:
-      flourish = FL_MOON;
-      break;
-    case PET_PROUD:
-      flourish = FL_STAR;
-      break;
-    case PET_SURPRISED:
-      flourish = FL_SPARKLE;
-      break;
-    }
+    flourish = flourishForMood(mood);
     setEmotion(EMOTION_PETTED);
     emotionAutoReturnAt = millis() + (holdMs > 0 ? holdMs : 60000);
     if (withSound)

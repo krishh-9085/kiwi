@@ -156,20 +156,24 @@ void drawFace() {
     ty = faceTgt.lockY;
   }
   switch (currentEmotion) {
-  case EMOTION_THINKING:
-    // Natural human cognitive recall: eyes look prominently UPWARD and scan left/right while thinking
-    tx = sinf(now / 750.0f) * 6.5f + cosf(now / 380.0f) * 2.0f;
-    ty = -6.5f + sinf(now / 480.0f) * 1.5f;
+  case EMOTION_THINKING: {
+    // Human cognitive recall: looking UPWARD while pondering with gentle left/right scan
+    float thinkPhase = now / 750.0f;
+    tx = sinf(thinkPhase) * 5.5f + cosf(thinkPhase * 1.8f) * 1.6f;
+    ty = -6.5f + sinf(thinkPhase * 1.3f) * 1.2f;
     break;
+  }
   case EMOTION_LISTENING:
     tx = sinf(now / 500.0f) * 2.0f;
     ty = -3.0f;
     break;
-  case EMOTION_SPEAKING:
-    // Natural human conversational gaze: actively moves left and right while answering with subtle vertical expression
-    tx = sinf(now / 580.0f) * 6.0f + sinf(now / 230.0f) * 2.2f;
-    ty = sinf(now / 450.0f) * 1.8f;
+  case EMOTION_SPEAKING: {
+    // Human conversational engagement: looking at user, fluidly glancing left/right while speaking
+    float spkPhase = now / 580.0f;
+    tx = sinf(spkPhase) * 6.2f + sinf(spkPhase * 2.1f) * 2.0f;
+    ty = sinf(spkPhase * 1.4f) * 1.6f;
     break;
+  }
   default:
     break;
   }

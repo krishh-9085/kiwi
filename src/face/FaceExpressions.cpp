@@ -39,7 +39,6 @@ void setEmotion(Emotion e) {
   emotionStartedAt = millis();
   faceTargetsForEmotion(e, petMood);
   if (e == EMOTION_IDLE) {
-    nextRandomEmotionAt = millis() + 8000 + random(0, 5000);
     emotionAutoReturnAt = 0;
     nextIdleLookAt = millis() + 300 + random(0, 500);
     idleExpression = 0;
@@ -376,22 +375,12 @@ void maybeChangeEmotion() {
     setEmotion(EMOTION_IDLE);
     return;
   }
-  if (currentEmotion != EMOTION_IDLE)
+  if (returnIdleAt && now >= returnIdleAt) {
+    returnIdleAt = 0;
+    setEmotion(EMOTION_IDLE);
     return;
-  if (busyProcessing)
-    return;
-  if (returnIdleAt)
-    return;
-  if (now < nextRandomEmotionAt)
-    return;
-  static const Emotion pool[] = {
-      EMOTION_HAPPY,    EMOTION_EXCITED,    EMOTION_CONFUSED,
-      EMOTION_CURIOUS,  EMOTION_WINK,       EMOTION_SMUG,
-      EMOTION_LAUGHING, EMOTION_LOVESTRUCK, EMOTION_SURPRISED};
-  const int poolN = sizeof(pool) / sizeof(pool[0]);
-  setEmotion(pool[random(0, poolN)]);
-  emotionAutoReturnAt = now + 1500 + random(0, 1500);
-  nextRandomEmotionAt = emotionAutoReturnAt + 8000 + random(0, 6000);
+  }
+  // Face stays steady in currentEmotion until manually changed via UI or touch!
 }
 
 

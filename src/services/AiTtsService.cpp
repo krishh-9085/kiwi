@@ -242,7 +242,7 @@ int ttsSarvam(const String &text) {
           dataSeen = true;
           step = (float)srcRate / (float)SAMPLE_RATE;
           setEmotion(EMOTION_SPEAKING);
-          gFaceFrameMs = 300;
+          gFaceFrameMs = 60;
           playing = true;
           for (size_t i = 44; i < hdrLen; i++) {
             uint8_t b2 = hdr[i];
@@ -438,7 +438,7 @@ int ttsPcmOpenAI(const String &text) {
     return 0;
   }
   setEmotion(EMOTION_SPEAKING);
-  gFaceFrameMs = 300;
+  gFaceFrameMs = 60;
   bool playing = false, haveLo = false;
   uint8_t lo = 0;
   static uint8_t rbuf[2048];
@@ -589,7 +589,7 @@ int ttsPcmEleven(const String &text) {
     return 0;
   }
   setEmotion(EMOTION_SPEAKING);
-  gFaceFrameMs = 300;
+  gFaceFrameMs = 60;
   bool playing = false, haveLo = false;
   uint8_t lo = 0;
   static uint8_t rbuf[2048];
@@ -747,7 +747,7 @@ int ttsFishAudio(const String &text) {
     return 0;
   }
   setEmotion(EMOTION_SPEAKING);
-  gFaceFrameMs = 300;
+  gFaceFrameMs = 60;
   bool playing = false, haveLo = false;
   uint8_t lo = 0;
   static uint8_t rbuf[2048];

@@ -379,6 +379,73 @@
       break-inside: avoid;
       margin-bottom: 16px
     }
+    .credentials-card {
+      column-span: all;
+      break-inside: avoid;
+      width: 100%;
+      margin-bottom: 16px;
+    }
+
+    .credentials-card .card-title {
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: .12em;
+    }
+
+    .credentials-deck {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      column-gap: 24px;
+      row-gap: 16px;
+      margin-top: 14px;
+    }
+
+    .api-key-item {
+      min-width: 0;
+    }
+
+    .api-key-item label {
+      font: 700 10.5px var(--display);
+      letter-spacing: .16em;
+      text-transform: uppercase;
+      color: var(--amber);
+      margin: 0 0 6px;
+    }
+
+    .api-key-item small {
+      color: var(--muted);
+      font-size: 11px;
+      margin-top: 5px;
+      line-height: 1.4;
+      letter-spacing: 0.02em;
+    }
+
+    .ai-pipeline-deck {
+      column-span: all;
+      break-inside: avoid;
+      width: 100%;
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 16px;
+      margin-bottom: 16px;
+    }
+
+    .ai-pipeline-deck>.card {
+      margin-bottom: 0;
+      break-inside: avoid;
+    }
+
+    @media (max-width: 1080px) {
+      .ai-pipeline-deck {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 720px) {
+      .credentials-deck {
+        grid-template-columns: 1fr;
+      }
+    }
 
     .save-wrap {
       column-span: all;
@@ -1389,186 +1456,263 @@
         <input type="hidden" name="circ_end" id="hiddenFormCircEnd" value="%CIRC_END%">
         <input type="hidden" name="circ_en" id="hiddenFormCircEn" value="%CIRC_EN_VAL%">
         <input type="hidden" name="boredom" id="hiddenFormBoredom" value="%BOREDOM_CHECKED%">
-        <input type="hidden" name="boredom_mins" id="hiddenFormBoredomMins" value="5">
+        <input type="hidden" name="boredom_mins" id="hiddenFormBoredomMins" value="%BOREDOM_MINS%">
 
-        <!-- Wi-Fi -->
-        <div class="card">
-          <div class="card-head" style="margin-bottom:14px">
-            <div class="card-title" style="margin:0;border:0;padding:0">Network Configuration</div>
-            <button type="button" id="btnScanWifi" class="qbtn" onclick="scanWifiNetworks()"
-              style="padding:5px 10px;font-size:11px">
-              <span id="scanSpinner" class="spin" style="display:none">◌</span>
-              <span id="scanBtnText">Scan Networks</span>
+                        <!-- WI-FI & LOCAL NETWORK SETUP (Prominent Top Card) -->
+        <div class="card credentials-card" style="margin-bottom:16px">
+          <div class="card-head" style="margin-bottom:6px">
+            <div class="card-title" style="margin:0;border:0;padding:0">📶 WI-FI &amp; LOCAL NETWORK SETUP</div>
+            <button type="button" id="btnScanWifi" class="qbtn" onclick="scanWifiNetworks()" style="padding:6px 14px;font-size:11px">
+              <span id="scanSpinner" class="spin" style="display:none">↻</span>
+              <span id="scanBtnText">🔍 Scan Networks</span>
             </button>
           </div>
-          <label for="wifiScanSelect">Found Networks</label>
-          <select id="wifiScanSelect" onchange="onSelectScannedWifi(this.value)">
-            <option value="">-- Click "Scan Networks" to search --</option>
-          </select>
-          <label for="wifiSsidInput">Wi-Fi SSID</label>
-          <input name="ssid" id="wifiSsidInput" value="%SSID%" required placeholder="Select from list or type SSID">
-          <label for="wifiPassInput">Wi-Fi Password</label>
-          <div class="pw">
-            <input name="pass" id="wifiPassInput" type="password" value="%PASS%" placeholder="Enter Wi-Fi password">
-            <button type="button" class="icon-btn" onclick="togglePassVisibility()"
-              title="Show/Hide Password">Show</button>
+          <p style="margin:0 0 14px;color:var(--muted);font-size:12px;line-height:1.4">
+            Connect Kiwi to your home 2.4GHz Wi-Fi network. Click "Scan Networks" to search nearby access points.
+          </p>
+          <div class="credentials-deck" style="margin-top:10px">
+            <div>
+              <label for="wifiScanSelect">DETECTED 2.4GHz NETWORKS</label>
+              <select id="wifiScanSelect" onchange="onSelectScannedWifi(this.value)">
+                <option value="">-- Click "Scan Networks" to search --</option>
+              </select>
+              <small>Selecting a network automatically fills the SSID</small>
+            </div>
+            <div>
+              <label for="wifiSsidInput">WI-FI NETWORK (SSID)</label>
+              <input name="ssid" id="wifiSsidInput" value="%SSID%" required placeholder="Enter 2.4GHz Wi-Fi name">
+              <small>Case-sensitive 2.4GHz network name</small>
+            </div>
+            <div style="grid-column:1 / -1">
+              <label for="wifiPassInput">WI-FI PASSWORD</label>
+              <div class="pw">
+                <input name="pass" id="wifiPassInput" type="password" value="%PASS%" placeholder="Enter Wi-Fi password (leave blank for open)">
+                <button type="button" class="icon-btn" onclick="togglePassVisibility(this)" title="Show/Hide Password">SHOW</button>
+              </div>
+              <small>Your password is securely saved in ESP32 flash memory</small>
+            </div>
           </div>
-          <small>Pick a network above to auto-fill SSID, or type manually if hidden.</small>
         </div>
 
-      <!-- Speech-to-Text -->
-      <div class="card">
-        <div class="card-title">Speech-to-Text (STT)</div>
-        <label for="sttProvSel">STT Provider</label>
-        <select name="sttprovider" id="sttProvSel" onchange="toggleStt()">
-          <option value="sarvam" %STT_SARVAM_SEL%>Sarvam AI (saaras:v3)</option>
-          <option value="groq" %STT_GROQ_SEL%>Groq Whisper (fastest)</option>
-          <option value="openai" %STT_OPENAI_SEL%>OpenAI Whisper</option>
-        </select>
-        <label>STT Language</label>
-        <select name="sttlang">
-          <option value="auto" %LANG_AUTO_SEL%>Auto (Hindi + English)</option>
-          <option value="hi" %LANG_HI_SEL%>Force Hindi</option>
-          <option value="en" %LANG_EN_SEL%>Force English</option>
-        </select>
-        <div id="sarvamBox">
-          <h3>Sarvam AI Settings</h3>
-          <label>Endpoint</label><input name="stturl" value="%STTURL%">
-          <label>API Key</label><input name="sttkey" type="password" value="%STTKEY%">
-          <label>Model</label>
-          <select name="sttmodel">
-            <option value="saaras:v3" %STT_SAARAS_SEL%>saaras:v3</option>
-            <option value="saarika:v2" %STT_SAARIKA_SEL%>saarika:v2</option>
-          </select>
-        </div>
-        <div id="groqSttBox">
-          <h3>Groq Whisper Settings</h3>
-          <label>Endpoint</label><input name="groqstturl" value="%GROQSTTURL%">
-          <label>API Key</label><input name="groqsttkey" type="password" value="%GROQSTTKEY%">
-          <label>Model</label>
-          <select name="groqsttmodel">
-            <option value="whisper-large-v3-turbo" %GW3T_SEL%>whisper-large-v3-turbo (fast)</option>
-            <option value="whisper-large-v3" %GW3_SEL%>whisper-large-v3 (accurate)</option>
-            <option value="distil-whisper-large-v3-en" %GDW_SEL%>distil-whisper-large-v3-en</option>
-          </select>
-        </div>
-        <div id="openaiSttBox">
-          <h3>OpenAI Whisper Settings</h3>
-          <label>Endpoint</label><input name="opaistturl" value="%OPENAIURL%">
-          <label>API Key</label><input name="opaisttkey" type="password" value="%OPENAIKEY%">
-          <label>Model</label>
-          <select name="opaisttmodel">
-            <option value="whisper-1" %OW1_SEL%>whisper-1</option>
-            <option value="gpt-4o-mini-transcribe" %OG4M_SEL%>gpt-4o-mini-transcribe</option>
-            <option value="gpt-4o-transcribe" %OG4_SEL%>gpt-4o-transcribe</option>
-          </select>
-        </div>
-      </div>
+<!-- CLOUD API KEYS & CREDENTIALS (Centralized Unified 2-Column Deck) -->
+        <div class="card credentials-card">
+          <div class="card-head" style="margin-bottom:6px">
+            <div class="card-title" style="margin:0;border:0;padding:0">🔑 CLOUD API KEYS &amp; CREDENTIALS</div>
+          </div>
+          <p style="margin:0 0 16px;color:var(--muted);font-size:12px;line-height:1.45;letter-spacing:0.02em">
+            Manage all cloud AI credentials in one unified 2-column deck. Keys are stored locally in ESP32 flash memory
+          </p>
 
-      <!-- AI Brain -->
-      <div class="card">
-        <div class="card-title">AI Intelligence (LLM)</div>
-        <label for="provSel">LLM Provider</label>
-        <select name="llmprovider" id="provSel" onchange="toggleModels()">
-          <option value="groq" %GROQ_SEL%>Groq (Ultra-Fast)</option>
-          <option value="gemini" %GEMINI_SEL%>Google Gemini</option>
-          <option value="openai" %OPENAI_SEL%>OpenAI GPT</option>
-        </select>
-        <div id="groqBox">
-          <h3>Groq Model &amp; Credentials</h3>
-          <label>Model</label>
-          <select name="groqmodel">
-            <option value="openai/gpt-oss-20b" %G20B_SEL%>openai/gpt-oss-20b</option>
-            <option value="openai/gpt-oss-120b" %G120B_SEL%>openai/gpt-oss-120b</option>
-            <option value="qwen/qwen3-32b" %GQ32B_SEL%>qwen/qwen3-32b</option>
-            <option value="llama-3.3-70b-versatile" %GL33_SEL%>llama-3.3-70b-versatile</option>
-          </select>
-          <label>Endpoint</label><input name="groqurl" value="%GROQURL%">
-          <label>API Key</label><input name="groqkey" type="password" value="%GROQKEY%">
+          <div class="credentials-deck">
+            <!-- Left Column: Google Gemini -->
+            <div class="api-key-item">
+              <label for="geminiKeyIn">GOOGLE GEMINI API</label>
+              <div class="pw">
+                <input name="llmkey" id="geminiKeyIn" type="password" value="%LLMKEY%" placeholder="AIzaSy...">
+                <button type="button" class="icon-btn" onclick="togglePw('geminiKeyIn', this)">SHOW</button>
+              </div>
+              <small>Google Gemini 2.0 Flash &amp; Flash-Lite reasoning</small>
+            </div>
+
+            <!-- Right Column: Sarvam AI -->
+            <div class="api-key-item">
+              <label for="sarvamKeyIn">SARVAM AI API</label>
+              <div class="pw">
+                <input name="ttskey" id="sarvamKeyIn" type="password" value="%TTSKEY%" placeholder="Enter Sarvam API key">
+                <button type="button" class="icon-btn" onclick="togglePw('sarvamKeyIn', this)">SHOW</button>
+              </div>
+              <small>Indian regional languages STT (Saaras) &amp; TTS (Bulbul v3/v4)</small>
+            </div>
+
+            <!-- Left Column: Groq Cloud -->
+            <div class="api-key-item">
+              <label for="groqKeyIn">GROQ CLOUD API</label>
+              <div class="pw">
+                <input name="groqkey" id="groqKeyIn" type="password" value="%GROQKEY%" placeholder="gsk_...">
+                <button type="button" class="icon-btn" onclick="togglePw('groqKeyIn', this)">SHOW</button>
+              </div>
+              <small>Ultra-fast Groq LLM (LLaMA 3.3, Qwen) &amp; Groq Whisper STT</small>
+            </div>
+
+            <!-- Right Column: ElevenLabs -->
+            <div class="api-key-item">
+              <label for="elevenKeyIn">ELEVENLABS API</label>
+              <div class="pw">
+                <input name="elevkey" id="elevenKeyIn" type="password" value="%ELEVENKEY%" placeholder="Enter ElevenLabs API key">
+                <button type="button" class="icon-btn" onclick="togglePw('elevenKeyIn', this)">SHOW</button>
+              </div>
+              <small>ElevenLabs ultra-realistic neural TTS voices</small>
+            </div>
+
+            <!-- Left Column: OpenAI -->
+            <div class="api-key-item">
+              <label for="openaiKeyIn">OPENAI API</label>
+              <div class="pw">
+                <input name="openaikey" id="openaiKeyIn" type="password" value="%OPENAIKEY%" placeholder="sk-...">
+                <button type="button" class="icon-btn" onclick="togglePw('openaiKeyIn', this)">SHOW</button>
+              </div>
+              <small>OpenAI GPT models (gpt-4o-mini), Whisper STT, and OpenAI TTS</small>
+            </div>
+
+            <!-- Right Column: Fish Audio -->
+            <div class="api-key-item">
+              <label for="fishKeyIn">FISH AUDIO API</label>
+              <div class="pw">
+                <input name="fishkey" id="fishKeyIn" type="password" value="%FISHKEY%" placeholder="Enter Fish Audio API key">
+                <button type="button" class="icon-btn" onclick="togglePw('fishKeyIn', this)">SHOW</button>
+              </div>
+              <small>Fish Speech neural voice synthesis (S2.1)</small>
+            </div>
+          </div>
         </div>
-        <div id="geminiBox">
-          <h3>Gemini Model &amp; Credentials</h3>
-          <label>Model</label>
-          <select name="llmmodel" id="geminiModelSel" onchange="updateGeminiUrl()">
-            <option value="gemini-2.0-flash-lite" %GE20L_SEL%>gemini-2.0-flash-lite</option>
-            <option value="gemini-2.5-flash" %GE25_SEL%>gemini-2.5-flash</option>
-            <option value="gemini-2.5-flash-lite" %GE25L_SEL%>gemini-2.5-flash-lite</option>
-          </select>
-          <label>Endpoint</label><input name="llmurl" id="geminiUrlIn" value="%LLMURL%">
-          <label>API Key</label><input name="llmkey" type="password" value="%LLMKEY%">
-        </div>
-        <div id="openaiBox">
-          <h3>OpenAI GPT Model &amp; Credentials</h3>
-          <label>Model</label>
-          <select name="openaimodel" id="openaiModelSel" onchange="updateOpenAiUrl()">
-            <option value="gpt-4o-mini" %GPT4OM_SEL%>gpt-4o-mini (fast, recommended)</option>
-            <option value="gpt-4.1-mini" %GPT41M_SEL%>gpt-4.1-mini (quality)</option>
-            <option value="gpt-4.1-nano" %GPT41N_SEL%>gpt-4.1-nano (fastest)</option>
-            <option value="gpt-4o" %GPT4O_SEL%>gpt-4o (higher quality)</option>
-          </select>
-          <label>Endpoint</label><input name="openaiurl" id="openaiUrlIn" value="%OPENAI_LLM_URL%">
-          <label>API Key</label><input name="openaikey" type="password" value="%OPENAI_LLM_KEY%">
-        </div>
-      </div>
+
+        <div class="ai-pipeline-deck">
+          <!-- 1. Speech-to-Text -->
+          <div class="card">
+            <div class="card-title">1. SPEECH-TO-TEXT (STT)</div>
+            <label for="sttProvSel">STT PROVIDER</label>
+            <select name="sttprovider" id="sttProvSel" onchange="toggleStt()">
+              <option value="sarvam" %STT_SARVAM_SEL%>Sarvam AI (saaras:v3)</option>
+              <option value="groq" %STT_GROQ_SEL%>Groq Whisper (fastest)</option>
+              <option value="openai" %STT_OPENAI_SEL%>OpenAI Whisper</option>
+            </select>
+            <label>STT LANGUAGE</label>
+            <select name="sttlang">
+              <option value="auto" %LANG_AUTO_SEL%>Auto (Hindi + English)</option>
+              <option value="hi" %LANG_HI_SEL%>Force Hindi</option>
+              <option value="en" %LANG_EN_SEL%>Force English</option>
+            </select>
+            <div id="sarvamBox">
+              <h3>Sarvam AI Settings</h3>
+              <label>Endpoint</label><input name="stturl" value="%STTURL%">
+              <label>Model</label>
+              <select name="sttmodel">
+                <option value="saaras:v3" %STT_SAARAS_SEL%>saaras:v3</option>
+                <option value="saarika:v2" %STT_SAARIKA_SEL%>saarika:v2</option>
+              </select>
+            </div>
+            <div id="groqSttBox">
+              <h3>Groq Whisper Settings</h3>
+              <label>Endpoint</label><input name="groqstturl" value="%GROQSTTURL%">
+              <label>Model</label>
+              <select name="groqsttmodel">
+                <option value="whisper-large-v3-turbo" %GW3T_SEL%>whisper-large-v3-turbo (fast)</option>
+                <option value="whisper-large-v3" %GW3_SEL%>whisper-large-v3 (accurate)</option>
+                <option value="distil-whisper-large-v3-en" %GDW_SEL%>distil-whisper-large-v3-en</option>
+              </select>
+            </div>
+            <div id="openaiSttBox">
+              <h3>OpenAI Whisper Settings</h3>
+              <label>Endpoint</label><input name="opaistturl" value="%OPENAIURL%">
+              <label>Model</label>
+              <select name="opaisttmodel">
+                <option value="whisper-1" %OW1_SEL%>whisper-1</option>
+                <option value="gpt-4o-mini-transcribe" %OG4M_SEL%>gpt-4o-mini-transcribe</option>
+                <option value="gpt-4o-transcribe" %OG4_SEL%>gpt-4o-transcribe</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- 2. AI Intelligence -->
+          <div class="card">
+            <div class="card-title">2. AI INTELLIGENCE (LLM)</div>
+            <label for="provSel">LLM PROVIDER</label>
+            <select name="llmprovider" id="provSel" onchange="toggleModels()">
+              <option value="gemini" %GEMINI_SEL%>Google Gemini</option>
+              <option value="groq" %GROQ_SEL%>Groq Cloud</option>
+              <option value="openai" %OPENAI_SEL%>OpenAI GPT</option>
+            </select>
+            <div id="geminiBox">
+              <h3>Gemini Model &amp; Settings</h3>
+              <label>Model</label>
+              <select name="llmmodel" id="geminiModelSel" onchange="updateGeminiUrl()">
+                <option value="gemini-2.0-flash-lite" %GE20L_SEL%>gemini-2.0-flash-lite</option>
+                <option value="gemini-2.5-flash" %GE25_SEL%>gemini-2.5-flash</option>
+                <option value="gemini-2.5-flash-lite" %GE25L_SEL%>gemini-2.5-flash-lite</option>
+              </select>
+              <label>Endpoint</label><input name="llmurl" id="geminiUrlIn" value="%LLMURL%">
+            </div>
+            <div id="groqBox">
+              <h3>Groq Model &amp; Settings</h3>
+              <label>Model</label>
+              <select name="groqmodel">
+                <option value="openai/gpt-oss-120b" %G120B_SEL%>openai/gpt-oss-120b</option>
+                <option value="openai/gpt-oss-20b" %G20B_SEL%>openai/gpt-oss-20b</option>
+                <option value="qwen/qwen3-32b" %GQ32B_SEL%>qwen/qwen3-32b</option>
+                <option value="llama-3.3-70b-versatile" %GL33_SEL%>llama-3.3-70b-versatile</option>
+              </select>
+              <label>Endpoint</label><input name="groqurl" value="%GROQURL%">
+            </div>
+            <div id="openaiBox">
+              <h3>OpenAI GPT Model &amp; Settings</h3>
+              <label>Model</label>
+              <select name="openaimodel" id="openaiModelSel" onchange="updateOpenAiUrl()">
+                <option value="gpt-4o-mini" %GPT4OM_SEL%>gpt-4o-mini (fast, recommended)</option>
+                <option value="gpt-4.1-mini" %GPT41M_SEL%>gpt-4.1-mini (quality)</option>
+                <option value="gpt-4.1-nano" %GPT41N_SEL%>gpt-4.1-nano (fastest)</option>
+                <option value="gpt-4o" %GPT4O_SEL%>gpt-4o (higher quality)</option>
+              </select>
+              <label>Endpoint</label><input name="openaiurl" id="openaiUrlIn" value="%OPENAI_LLM_URL%">
+            </div>
+          </div>
 
       <!-- Text-to-Speech -->
-      <div class="card">
-        <div class="card-title">Text-to-Speech (TTS)</div>
-        <label for="ttsProvSel">TTS Provider</label>
-        <select name="ttsprovider" id="ttsProvSel" onchange="toggleTts()">
-          <option value="sarvam" %TTS_SARVAM_SEL%>Sarvam AI (bulbul:v3)</option>
-          <option value="openai" %TTS_OPENAI_SEL%>OpenAI TTS</option>
-          <option value="elevenlabs" %TTS_ELEVEN_SEL%>ElevenLabs</option>
-          <option value="fish" %TTS_FISH_SEL%>Fish Audio (Fish Speech)</option>
-        </select>
-        <div id="ttsSarvamBox">
-          <h3>Sarvam TTS Settings</h3>
-          <label>Endpoint</label><input name="ttsurl" value="%TTSURL%">
-          <label>API Key</label><input name="ttskey" type="password" value="%TTSKEY%">
-          <label>Model</label>
-          <select name="ttsmodel">
-            <option value="bulbul:v4-flash" %SARVAM_V4F_SEL%>bulbul:v4-flash (⚡ New Flash Model · Ultra Fast)</option>
-            <option value="bulbul:v3" %SARVAM_V3_SEL%>bulbul:v3 (Latest Stable · Hindi/Hinglish/English)</option>
-            <option value="bulbul:v2" %SARVAM_V2_SEL%>bulbul:v2 (Legacy v2)</option>
-          </select>
-          <label>Voice / Speaker</label>
-          <select name="ttsvoice">
-            %SARVAM_VOICE_OPTIONS%
-          </select>
-        </div>
-        <div id="ttsOpenaiBox">
-          <h3>OpenAI TTS Settings</h3>
-          <label>Endpoint</label><input name="openaittsurl" value="%OPENAITTSURL%">
-          <label>API Key</label><input name="openaittskey" type="password" value="%OPENAITTSKEY%">
-          <label>Model</label><input name="openaittsmodel" value="%OPENAITTSMODEL%">
-          <label>Voice</label>
-          <select name="openaittsvoice">
-            <option value="alloy" %OA_ALLOY_SEL%>alloy</option>
-            <option value="echo" %OA_ECHO_SEL%>echo</option>
-            <option value="fable" %OA_FABLE_SEL%>fable</option>
-            <option value="onyx" %OA_ONYX_SEL%>onyx</option>
-            <option value="nova" %OA_NOVA_SEL%>nova</option>
-            <option value="shimmer" %OA_SHIMMER_SEL%>shimmer</option>
-          </select>
-        </div>
-        <div id="ttsElevenBox">
-          <h3>ElevenLabs Settings</h3>
-          <label>Endpoint</label><input name="elevurl" value="%ELEVURL%">
-          <label>API Key</label><input name="elevkey" type="password" value="%ELEVKEY%">
-          <label>Model</label><input name="elevmodel" value="%ELEVMODEL%">
-          <label>Voice ID</label><input name="elevvoice" value="%ELEVVOICE%">
-        </div>
-        <div id="ttsFishBox">
-          <h3>Fish Audio Settings</h3>
-          <label>Endpoint</label><input name="fishurl" value="%FISHURL%">
-          <label>API Key</label><input name="fishkey" type="password" value="%FISHKEY%">
-          <label>Model</label><input name="fishmodel" value="%FISHMODEL%">
-          <label>Voice / Reference ID (Optional, leave blank for default voice)</label>
-          <input name="fishvoice" value="%FISHVOICE%" placeholder="e.g. voice model reference ID">
-        </div>
-      </div>
+          <div class="card">
+            <div class="card-title">3. TEXT-TO-SPEECH (TTS)</div>
+            <label for="ttsProvSel">TTS PROVIDER</label>
+            <select name="ttsprovider" id="ttsProvSel" onchange="toggleTts()">
+              <option value="sarvam" %TTS_SARVAM_SEL%>Sarvam AI (bulbul:v3)</option>
+              <option value="openai" %TTS_OPENAI_SEL%>OpenAI TTS</option>
+              <option value="elevenlabs" %TTS_ELEVEN_SEL%>ElevenLabs</option>
+              <option value="fish" %TTS_FISH_SEL%>Fish Audio (Fish Speech)</option>
+            </select>
+            <div id="ttsSarvamBox">
+              <h3>Sarvam TTS Settings</h3>
+              <label>Endpoint</label><input name="ttsurl" value="%TTSURL%">
+              <label>Model</label>
+              <select name="ttsmodel">
+                <option value="bulbul:v4-flash" %SARVAM_V4F_SEL%>bulbul:v4-flash (⚡ New Flash Model · Ultra Fast)</option>
+                <option value="bulbul:v3" %SARVAM_V3_SEL%>bulbul:v3 (Latest Stable · Hindi/Hinglish/English)</option>
+                <option value="bulbul:v2" %SARVAM_V2_SEL%>bulbul:v2 (Legacy v2)</option>
+              </select>
+              <label>Voice / Speaker</label>
+              <select name="ttsvoice">
+                %SARVAM_VOICE_OPTIONS%
+              </select>
+            </div>
+            <div id="ttsOpenaiBox">
+              <h3>OpenAI TTS Settings</h3>
+              <label>Endpoint</label><input name="openaittsurl" value="%OPENAITTSURL%">
+              <label>Model</label><input name="openaittsmodel" value="%OPENAITTSMODEL%">
+              <label>Voice</label>
+              <select name="openaittsvoice">
+                <option value="alloy" %OA_ALLOY_SEL%>alloy</option>
+                <option value="echo" %OA_ECHO_SEL%>echo</option>
+                <option value="fable" %OA_FABLE_SEL%>fable</option>
+                <option value="onyx" %OA_ONYX_SEL%>onyx</option>
+                <option value="nova" %OA_NOVA_SEL%>nova</option>
+                <option value="shimmer" %OA_SHIMMER_SEL%>shimmer</option>
+              </select>
+            </div>
+            <div id="ttsElevenBox">
+              <h3>ElevenLabs Settings</h3>
+              <label>Endpoint</label><input name="elevurl" value="%ELEVURL%">
+              <label>Model</label><input name="elevmodel" value="%ELEVMODEL%">
+              <label>Voice ID</label><input name="elevvoice" value="%ELEVVOICE%">
+            </div>
+            <div id="ttsFishBox">
+              <h3>Fish Audio Settings</h3>
+              <label>Endpoint</label><input name="fishurl" value="%FISHURL%">
+              <label>Model</label><input name="fishmodel" value="%FISHMODEL%">
+              <label>Voice / Reference ID (Optional)</label>
+              <input name="fishvoice" value="%FISHVOICE%" placeholder="e.g. voice model reference ID">
+            </div>
+          </div>
+        </div> <!-- End ai-pipeline-deck -->
 
-      <!-- Touch Controls & Hardware Sensitivity -->
+        
+
+        <!-- Touch Controls & Hardware Sensitivity -->
       <div class="card">
         <div class="card-title">Touch Controls &amp; Hardware Sensitivity</div>
         <small style="margin:0 0 14px">Customize touch sensor responsiveness, debounce filter, and capacitive gestures.</small>
@@ -1617,6 +1761,7 @@
         </div>
         <label for="skinSel" style="margin-top:16px">OLED Face &amp; Eye Skin</label>
         <select name="skin" id="skinSel" onchange="toggleSkinLive(this.value)">
+          <option value="kiwi" %SKIN_KIWI_SEL%>Desk Buddy (Cute Block) [Default]</option>
           <option value="default" %SKIN_DEFAULT_SEL%>Default (Clean Round Vector)</option>
           <option value="cyberpunk" %SKIN_CYBER_SEL%>Cyberpunk Visor &amp; HUD</option>
           <option value="cat" %SKIN_CAT_SEL%>Kawaii Cat Neko &amp; Ears</option>
@@ -1634,7 +1779,6 @@
           <option value="alien" %SKIN_ALIEN_SEL%>Cosmic Alien (UFO Orbit &amp; Antenna)</option>
           <option value="ninja" %SKIN_NINJA_SEL%>Shinobi Ninja (Headband &amp; Stealth)</option>
           <option value="round" %SKIN_ROUND_SEL%>Round Eyes (Classic Ocular)</option>
-          <option value="kiwi" %SKIN_KIWI_SEL%>Desk Buddy (Cute Block)</option>
         </select>
         <label for="promptIn" style="margin-top:16px">Robot System Prompt</label>
         <textarea id="promptIn" name="prompt">%PROMPT%</textarea>
@@ -1919,11 +2063,29 @@
       if (passInp) passInp.focus();
     }
 
-    function togglePassVisibility() {
+    function togglePw(id, btn) {
+      var el = document.getElementById(id);
+      if (!el) return;
+      if (el.type === 'password') {
+        el.type = 'text';
+        if (btn) btn.innerText = 'HIDE';
+      } else {
+        el.type = 'password';
+        if (btn) btn.innerText = 'SHOW';
+      }
+    }
+    function togglePassVisibility(btn) {
       var p = document.getElementById('wifiPassInput');
       if (!p) return;
-      p.type = (p.type === 'password') ? 'text' : 'password';
+      if (p.type === 'password') {
+        p.type = 'text';
+        if (btn) btn.innerText = 'HIDE';
+      } else {
+        p.type = 'password';
+        if (btn) btn.innerText = 'SHOW';
+      }
     }
+
 
     function toggleSkinLive(v) {
       fetch('/do?skin=' + encodeURIComponent(v)).catch(function () { });

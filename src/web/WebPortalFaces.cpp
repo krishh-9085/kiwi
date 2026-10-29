@@ -852,6 +852,7 @@ static const char FACE_PAGE_HTML[] PROGMEM = R"RAWFACE(<!doctype html>
         <span id="activeSkinLabel" class="accent">Active: Desk Buddy</span>
       </div>
       <div class="skin-grid">
+        <button class="skin-btn primary" data-skin="kiwi"><span class="px-skin" aria-hidden="true"></span><span class="skin-name">Desk Buddy (Default)</span></button>
         <button class="skin-btn" data-skin="default"><span class="px-skin" aria-hidden="true"></span><span class="skin-name">Default Vector</span></button>
         <button class="skin-btn" data-skin="cyberpunk"><span class="px-skin" aria-hidden="true"></span><span class="skin-name">Cyberpunk</span></button>
         <button class="skin-btn" data-skin="cat"><span class="px-skin" aria-hidden="true"></span><span class="skin-name">Kawaii Cat</span></button>
@@ -869,7 +870,6 @@ static const char FACE_PAGE_HTML[] PROGMEM = R"RAWFACE(<!doctype html>
         <button class="skin-btn" data-skin="alien"><span class="px-skin" aria-hidden="true"></span><span class="skin-name">Cosmic Alien</span></button>
         <button class="skin-btn" data-skin="ninja"><span class="px-skin" aria-hidden="true"></span><span class="skin-name">Shinobi Ninja</span></button>
         <button class="skin-btn" data-skin="round"><span class="px-skin" aria-hidden="true"></span><span class="skin-name">Round Ocular</span></button>
-        <button class="skin-btn primary" data-skin="kiwi"><span class="px-skin" aria-hidden="true"></span><span class="skin-name">Desk Buddy</span></button>
       </div>
 
       <div class="options-bar">
@@ -878,23 +878,6 @@ static const char FACE_PAGE_HTML[] PROGMEM = R"RAWFACE(<!doctype html>
           <span class="switch"></span>
           <span>Show Mouth &amp; Lips</span>
         </label>
-        <label class="toggle" title="Toggle autonomous idle expressions &amp; remarks">
-          <input type="checkbox" id="bToggle">
-          <span class="switch"></span>
-          <span>Autonomous Idle Remarks</span>
-        </label>
-        <div class="row" style="gap:8px">
-          <label for="boredomMinsDeck" class="hint" style="margin:0">Interval</label>
-          <select id="boredomMinsDeck" class="select-sm" onchange="setBoredomIntervalLive(this.value)">
-            <option value="1">1 minute</option>
-            <option value="2">2 minutes</option>
-            <option value="3">3 minutes</option>
-            <option value="5" selected>5 minutes</option>
-            <option value="10">10 minutes</option>
-            <option value="15">15 minutes</option>
-            <option value="30">30 minutes</option>
-          </select>
-        </div>
       </div>
     </section>
 

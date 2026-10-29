@@ -615,7 +615,23 @@ class DevPortalHandler(BaseHTTPRequestHandler):
                     elif k == "stt_prov": cfg["sttProvider"] = val
                     elif k == "stt_lang": cfg["sttLang"] = val
                     elif k == "llm_prov": cfg["llmProvider"] = val
-                    elif k == "tts_prov": cfg["ttsProvider"] = val
+                    elif k == "tts_prov" or k == "ttsprovider": cfg["ttsProvider"] = val
+                    elif k == "sttprovider": cfg["sttProvider"] = val
+                    elif k == "llmprovider": cfg["llmProvider"] = val
+                    elif k == "sttlang": cfg["sttLang"] = val
+                    elif k == "llmkey": cfg["llmKey"] = val
+                    elif k == "groqkey":
+                        cfg["groqKey"] = val
+                        cfg["groqSttKey"] = val
+                    elif k == "ttskey":
+                        cfg["ttsKey"] = val
+                        cfg["sttKey"] = val
+                    elif k == "openaikey":
+                        cfg["openaiKey"] = val
+                        cfg["openaiSttKey"] = val
+                        cfg["openaiTtsKey"] = val
+                    elif k == "elevkey": cfg["elevenKey"] = val
+                    elif k == "fishkey": cfg["fishKey"] = val
                 save_config(cfg)
             except Exception as e:
                 print(f"[SAVE] Error parsing form: {e}")

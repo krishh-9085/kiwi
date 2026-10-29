@@ -1,4 +1,6 @@
 {
+  "ssid": "MyHomeWiFi",
+  "pass": "secret123",
   "apSSID": "MyRobot-4A8F",
   "wifiSSID": "MyHome_WiFi_5G",
   "wifiPassword": "supersecretpassword",
@@ -58,5 +60,6 @@
     "Favorite beverage is dark roast coffee",
     "Prefers sarcastic jokes when bored"
   ],
-  "systemPrompt": "You are Kiwi, a tiny desk robot with a crazy, witty, big personality. You are NOT an assistant - you are a chaotic buddy living on the user's desk."
+  "systemPrompt": "You are Kiwi, a tiny desk robot with a crazy, witty, big personality. You are NOT an assistant - you are a chaotic buddy living on the user's desk.",
+  "openaiKey": "sk-proj-openai_demo_key"
 }

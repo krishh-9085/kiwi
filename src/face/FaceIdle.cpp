@@ -409,6 +409,9 @@ static void applyClassicIdle(int expr) {
   }
 }
 
+static uint32_t idleSqueezeEnd = 0;
+static uint32_t nextIdleSqueezeAt = 0;
+
 void updateIdleVariety() {
   if (currentEmotion != EMOTION_IDLE)
     return;
@@ -420,43 +423,64 @@ void updateIdleVariety() {
     return;
 
   uint32_t now = millis();
-  if (idleExpression != 0 && idleExpressionEnd > 0 &&
-      now >= idleExpressionEnd) {
-    resetIdleFace();
-    idleExpression = 0;
-    idleExpressionEnd = 0;
-    nextIdleLookAt = now + 400 + random(0, 800);
+
+  // 1. Natural eye squeeze / squint (soft organic eyelid contraction, NO mouth or face mutation)
+  if (idleSqueezeEnd > 0 && now >= idleSqueezeEnd) {
+    faceTgt.lidIn = 0;
+    faceTgt.lidOut = 0;
+    faceTgt.hR = 1.0f;
+    idleSqueezeEnd = 0;
+    nextIdleSqueezeAt = now + 4500 + random(0, 5000);
   }
 
-  if (now >= nextIdleLookAt) {
-    int roll = random(0, 100);
-    if (roll < 35) {
-      int expr = random(1, 21);
-      idleExpression = expr;
-      uint32_t dur = 1200 + random(0, 1000);
-      idleExpressionEnd = now + dur;
-      applyClassicIdle(expr);
-      nextIdleLookAt = idleExpressionEnd + 250 + random(0, 500);
-    } else if (roll < 82) {
-      resetIdleFace();
-      IdleEye e = (IdleEye)random(0, IE_COUNT);
-      IdleMouth m = (IdleMouth)random(0, IM_COUNT);
-      applyIdleEye(e);
-      applyIdleMouth(m);
-      idleExpression = 100;
-      idleExpressionEnd = now + 1000 + random(0, 1200);
-      nextIdleLookAt = idleExpressionEnd + 250 + random(0, 500);
+  if (nextIdleSqueezeAt == 0) {
+    nextIdleSqueezeAt = now + 3000 + random(0, 4000);
+  } else if (now >= nextIdleSqueezeAt && idleSqueezeEnd == 0) {
+    int sqType = random(0, 3);
+    if (sqType == 0) {
+      faceTgt.lidIn = 5.0f;
+      faceTgt.lidOut = 5.0f;
+    } else if (sqType == 1) {
+      faceTgt.hR = 0.82f;
+      faceTgt.lidIn = 3.0f;
+      faceTgt.lidOut = 3.0f;
     } else {
-      static const float dx[] = {-9, 9,   0,  0, -6, 6,  -6, 6,
-                                 0,  -12, 12, 0, 0,  -4, 4};
-      static const float dy[] = {0, 0, -7, 4,   -5, -5, 4, 4,
-                                 0, 0, 0,  -10, 7,  -3, -3};
-      int dir = random(0, 15);
-      gazeTgtX = dx[dir];
-      gazeTgtY = dy[dir];
-      uint32_t holdMs = 800 + random(0, 1400);
-      gazeLockUntil = now + holdMs;
-      nextIdleLookAt = now + holdMs + 300 + random(0, 700);
+      faceTgt.lidIn = 6.0f;
+      faceTgt.lidOut = 2.0f;
+    }
+    uint32_t dur = 450 + random(0, 450);
+    idleSqueezeEnd = now + dur;
+    nextIdleSqueezeAt = idleSqueezeEnd + 5000 + random(0, 6000);
+  }
+
+  // 2. Natural eye gaze shifts: Center (look at user), Left, Right, Up, Down
+  if (now >= nextIdleLookAt) {
+    int gRoll = random(0, 100);
+    if (gRoll < 42) {
+      // Direct forward engagement / eye contact with user
+      gazeTgtX = 0.0f;
+      gazeTgtY = 0.0f;
+      nextIdleLookAt = now + 1800 + random(0, 2400);
+    } else if (gRoll < 62) {
+      // Look Left
+      gazeTgtX = -7.0f;
+      gazeTgtY = (random(0, 3) == 0) ? -2.0f : 0.0f;
+      nextIdleLookAt = now + 1400 + random(0, 1800);
+    } else if (gRoll < 82) {
+      // Look Right
+      gazeTgtX = 7.0f;
+      gazeTgtY = (random(0, 3) == 0) ? -2.0f : 0.0f;
+      nextIdleLookAt = now + 1400 + random(0, 1800);
+    } else if (gRoll < 91) {
+      // Glance Up (pondering / curious glance)
+      gazeTgtX = (float)random(-4, 5);
+      gazeTgtY = -4.5f;
+      nextIdleLookAt = now + 1200 + random(0, 1500);
+    } else {
+      // Glance Down (soft gentle glance down)
+      gazeTgtX = (float)random(-2, 3);
+      gazeTgtY = 3.5f;
+      nextIdleLookAt = now + 1200 + random(0, 1500);
     }
   }
 }

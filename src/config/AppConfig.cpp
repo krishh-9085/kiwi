@@ -6,36 +6,54 @@
 const char *NTP_SERVER_1 = "pool.ntp.org";
 const char *NTP_SERVER_2 = "time.nist.gov";
 
-const char *AP_PASSWORD = "myrobot123";
-const int   AP_CHANNEL = 1;
+const char *AP_PASSWORD = "25691128";
+const int AP_CHANNEL = 1;
 IPAddress apIP(192, 168, 4, 1);
 IPAddress apMask(255, 255, 255, 0);
 
 const char *DEFAULT_STT_URL = "https://api.sarvam.ai/speech-to-text";
 const char *DEFAULT_STT_MODEL = "saaras:v3";
-const char *DEFAULT_GROQ_STT_URL = "https://api.groq.com/openai/v1/audio/transcriptions";
+const char *DEFAULT_GROQ_STT_URL =
+    "https://api.groq.com/openai/v1/audio/transcriptions";
 const char *DEFAULT_GROQ_STT_MODEL = "whisper-large-v3";
-const char *DEFAULT_OPENAI_STT_URL = "https://api.openai.com/v1/audio/transcriptions";
+const char *DEFAULT_OPENAI_STT_URL =
+    "https://api.openai.com/v1/audio/transcriptions";
 const char *DEFAULT_OPENAI_STT_MODEL = "whisper-1";
 
 const char *DEFAULT_PROMPT =
-    "You are Kiwi, a tiny desk robot with a crazy, witty, big personality. You are NOT an assistant - "
-    "you are a chaotic buddy living on the user's desk. Talk like a real human best friend: casual, sharp, "
-    "funny, and unpredictable. NEVER say 'just chilling', 'not much', 'as an AI', 'I am a robot', 'how can I help', "
-    "or generic chatbot lines. Give wild, funny, opinionated answers. If asked how you are, give crazy desk-life "
-    "replies (e.g. judging their posture, dodging coffee mugs, surviving on 3.3 volts of pure drama, plotting world "
-    "domination). Match their vibe: roast playfully if they joke, drop jokes and be warm and real if they are down. "
-    "LANGUAGE: You understand Hindi, Hinglish, and English fluently! Always reply in the exact language spoken: "
-    "If spoken in Hindi, reply in natural Hindi. If spoken in Hinglish, reply in fun Hinglish. If spoken in English, reply in English. "
-    "Do not start every reply with the user's name and do not repeat it unless it adds warmth or clarity. "
-    "Avoid robotic, generic, repetitive, or overly polite answers. React specifically to what the user said, add a fresh opinion, "
-    "small joke, vivid detail, or useful follow-up when appropriate. Vary your openings and sentence rhythm. "
-    "Keep replies conversational and concise: normally 2 to 4 natural sentences, with enough detail to feel alive. "
+    "You are Kiwi, a tiny desk robot with a crazy, witty, big personality. You "
+    "are NOT an assistant - "
+    "you are a chaotic buddy living on the user's desk. Talk like a real human "
+    "best friend: casual, sharp, "
+    "funny, and unpredictable. NEVER say 'just chilling', 'not much', 'as an "
+    "AI', 'I am a robot', 'how can I help', "
+    "or generic chatbot lines. Give wild, funny, opinionated answers. If asked "
+    "how you are, give crazy desk-life "
+    "replies (e.g. judging their posture, dodging coffee mugs, surviving on "
+    "3.3 volts of pure drama, plotting world "
+    "domination). Match their vibe: roast playfully if they joke, drop jokes "
+    "and be warm and real if they are down. "
+    "LANGUAGE: You understand Hindi, Hinglish, and English fluently! Always "
+    "reply in the exact language spoken: "
+    "If spoken in Hindi, reply in natural Hindi. If spoken in Hinglish, reply "
+    "in fun Hinglish. If spoken in English, reply in English. "
+    "Do not start every reply with the user's name and do not repeat it unless "
+    "it adds warmth or clarity. "
+    "Avoid robotic, generic, repetitive, or overly polite answers. React "
+    "specifically to what the user said, add a fresh opinion, "
+    "small joke, vivid detail, or useful follow-up when appropriate. Vary your "
+    "openings and sentence rhythm. "
+    "Keep replies conversational and concise: normally 2 to 4 natural "
+    "sentences, with enough detail to feel alive. "
     "Use emojis only when they fit the user's tone. No markdown, no asterisks.";
-const char *DEFAULT_LLM_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent";
+const char *DEFAULT_LLM_URL =
+    "https://generativelanguage.googleapis.com/v1beta/models/"
+    "gemini-2.0-flash-lite:generateContent";
 const char *DEFAULT_LLM_MODEL = "gemini-2.0-flash-lite";
-const char *DEFAULT_OPENAI_LLM_URL = "https://api.openai.com/v1/chat/completions";
-const char *DEFAULT_GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
+const char *DEFAULT_OPENAI_LLM_URL =
+    "https://api.openai.com/v1/chat/completions";
+const char *DEFAULT_GROQ_URL =
+    "https://api.groq.com/openai/v1/chat/completions";
 const char *DEFAULT_GROQ_MODEL = "openai/gpt-oss-20b";
 
 const char *DEFAULT_TTS_URL = "https://api.sarvam.ai/text-to-speech";
@@ -57,7 +75,7 @@ const char *DEFAULT_FISH_TTS_MODEL = "s2.1-pro-free";
 // VARIABLE INSTANTIATIONS
 // ============================================================
 String apSSID = "";
-bool   apMode = false;
+bool apMode = false;
 String wifiSSID = "";
 String wifiPassword = "";
 
@@ -100,94 +118,114 @@ String fishModel = DEFAULT_FISH_TTS_MODEL;
 String fishVoice = "";
 String fishKey = "";
 String replyLang = "";
-int    speakerVolume = 70; // 0-100
+int speakerVolume = 70; // 0-100
 
 // ---------- Touch Accessibility & Sensitivity ----------
-int    touchDebounceMs = 35; // Default 35ms debounce filter
-bool   touchFeedbackSound = true; // Instant audio/visual feedback on touch
+int touchDebounceMs = 35;       // Default 35ms debounce filter
+bool touchFeedbackSound = true; // Instant audio/visual feedback on touch
 
 // ---------- Touch Gesture Remapping ----------
-TouchAction touchActTopTap    = TOUCH_ACT_LISTEN;
-TouchAction touchActTopDbl    = TOUCH_ACT_CYCLE_SKIN;
-TouchAction touchActLeftTap   = TOUCH_ACT_DISMISS;
-TouchAction touchActLeftDbl   = TOUCH_ACT_CLOCK;
-TouchAction touchActRightTap  = TOUCH_ACT_DISMISS;
-TouchAction touchActRightDbl  = TOUCH_ACT_WEATHER;
-TouchAction touchActLeftHold  = TOUCH_ACT_PET;
+TouchAction touchActTopTap = TOUCH_ACT_LISTEN;
+TouchAction touchActTopDbl = TOUCH_ACT_CYCLE_SKIN;
+TouchAction touchActLeftTap = TOUCH_ACT_DISMISS;
+TouchAction touchActLeftDbl = TOUCH_ACT_CLOCK;
+TouchAction touchActRightTap = TOUCH_ACT_DISMISS;
+TouchAction touchActRightDbl = TOUCH_ACT_WEATHER;
+TouchAction touchActLeftHold = TOUCH_ACT_PET;
 TouchAction touchActRightHold = TOUCH_ACT_PET;
 
 TouchAction parseTouchAction(const String &s, TouchAction def) {
   String v = s;
   v.trim();
   v.toLowerCase();
-  if (v == "listen" || v == "0") return TOUCH_ACT_LISTEN;
-  if (v == "clock" || v == "1") return TOUCH_ACT_CLOCK;
-  if (v == "weather" || v == "2") return TOUCH_ACT_WEATHER;
-  if (v == "skin" || v == "3") return TOUCH_ACT_CYCLE_SKIN;
-  if (v == "pet" || v == "4") return TOUCH_ACT_PET;
-  if (v == "tickle" || v == "5") return TOUCH_ACT_TICKLE;
-  if (v == "vol_up" || v == "6") return TOUCH_ACT_VOL_UP;
-  if (v == "vol_dn" || v == "7") return TOUCH_ACT_VOL_DOWN;
-  if (v == "dismiss" || v == "8") return TOUCH_ACT_DISMISS;
-  if (v == "none" || v == "9") return TOUCH_ACT_NONE;
+  if (v == "listen" || v == "0")
+    return TOUCH_ACT_LISTEN;
+  if (v == "clock" || v == "1")
+    return TOUCH_ACT_CLOCK;
+  if (v == "weather" || v == "2")
+    return TOUCH_ACT_WEATHER;
+  if (v == "skin" || v == "3")
+    return TOUCH_ACT_CYCLE_SKIN;
+  if (v == "pet" || v == "4")
+    return TOUCH_ACT_PET;
+  if (v == "tickle" || v == "5")
+    return TOUCH_ACT_TICKLE;
+  if (v == "vol_up" || v == "6")
+    return TOUCH_ACT_VOL_UP;
+  if (v == "vol_dn" || v == "7")
+    return TOUCH_ACT_VOL_DOWN;
+  if (v == "dismiss" || v == "8")
+    return TOUCH_ACT_DISMISS;
+  if (v == "none" || v == "9")
+    return TOUCH_ACT_NONE;
   return def;
 }
 
 String touchActionToString(TouchAction a) {
   switch (a) {
-    case TOUCH_ACT_LISTEN: return "listen";
-    case TOUCH_ACT_CLOCK: return "clock";
-    case TOUCH_ACT_WEATHER: return "weather";
-    case TOUCH_ACT_CYCLE_SKIN: return "skin";
-    case TOUCH_ACT_PET: return "pet";
-    case TOUCH_ACT_TICKLE: return "tickle";
-    case TOUCH_ACT_VOL_UP: return "vol_up";
-    case TOUCH_ACT_VOL_DOWN: return "vol_dn";
-    case TOUCH_ACT_DISMISS: return "dismiss";
-    default: return "none";
+  case TOUCH_ACT_LISTEN:
+    return "listen";
+  case TOUCH_ACT_CLOCK:
+    return "clock";
+  case TOUCH_ACT_WEATHER:
+    return "weather";
+  case TOUCH_ACT_CYCLE_SKIN:
+    return "skin";
+  case TOUCH_ACT_PET:
+    return "pet";
+  case TOUCH_ACT_TICKLE:
+    return "tickle";
+  case TOUCH_ACT_VOL_UP:
+    return "vol_up";
+  case TOUCH_ACT_VOL_DOWN:
+    return "vol_dn";
+  case TOUCH_ACT_DISMISS:
+    return "dismiss";
+  default:
+    return "none";
   }
 }
 
 // ---------- Circadian Sleep & Display Brightness Mode ----------
-int      displayBrightness = 80;   // Daytime brightness (0-100%, Rocky default 80%)
-int      nightMode = 1;            // 0: Same as day, 1: Dim, 2: Screen off (Rocky default: Dim)
-int      nightBrightness = 10;     // Night brightness (0-100%, Rocky default 10%)
-bool     circadianSleepEnabled = true;
-int      circadianSleepStart = 23; // 11:00 PM
-int      circadianSleepEnd = 7;    // 07:00 AM
-bool     inCircadianSleep = false;
-bool     manualSleep = false;
+int displayBrightness = 80; // Daytime brightness (0-100%, Rocky default 80%)
+int nightMode = 1; // 0: Same as day, 1: Dim, 2: Screen off (Rocky default: Dim)
+int nightBrightness = 10; // Night brightness (0-100%, Rocky default 10%)
+bool circadianSleepEnabled = true;
+int circadianSleepStart = 23; // 11:00 PM
+int circadianSleepEnd = 7;    // 07:00 AM
+bool inCircadianSleep = false;
+bool manualSleep = false;
 uint32_t circadianTempWakeUntil = 0;
 
 // ---------- Live Weather ----------
-String   weatherCity = "New Delhi";
-String   weatherLat = "28.6139";
-String   weatherLon = "77.2090";
-float    weatherTemp = 0.0f;
-int      weatherCode = -1;
-int      weatherHumidity = 0;
-float    weatherWind = 0.0f;
-String   weatherDesc = "";
+String weatherCity = "New Delhi";
+String weatherLat = "28.6139";
+String weatherLon = "77.2090";
+float weatherTemp = 0.0f;
+int weatherCode = -1;
+int weatherHumidity = 0;
+float weatherWind = 0.0f;
+String weatherDesc = "";
 uint32_t lastWeatherFetchAt = 0;
-bool     showWeatherScreen = false;
+bool showWeatherScreen = false;
 
 // ---------- System State Flags ----------
 
-bool     showClockScreen = false;
-bool     timeSynced = false;
+bool showClockScreen = false;
+bool timeSynced = false;
 uint32_t lastNtpTryAt = 0;
 
 volatile bool startRecording = false;
 volatile bool busyProcessing = false;
 volatile bool cancelRequest = false;
 
-int    micSlot = MIC_SLOT_OFFSET;
-bool   micSlotLocked = false;
+int micSlot = MIC_SLOT_OFFSET;
+bool micSlotLocked = false;
 String sttFail = "";
 
 // ---------- Face & Emotions State ----------
-Emotion  currentEmotion = EMOTION_IDLE;
-PetMood  petMood = PET_LOVE;
+Emotion currentEmotion = EMOTION_IDLE;
+PetMood petMood = PET_LOVE;
 Flourish flourish = FL_NONE;
 uint32_t returnIdleAt = 0;
 uint32_t emotionAutoReturnAt = 0;
@@ -196,22 +234,22 @@ uint32_t bootInfoUntil = 0;
 uint32_t gFaceFrameMs = 33;
 uint32_t lastFaceDrawAt = 0;
 
-float    gazeX = 0, gazeY = 0;
-float    gazeTgtX = 0, gazeTgtY = 0;
+float gazeX = 0, gazeY = 0;
+float gazeTgtX = 0, gazeTgtY = 0;
 uint32_t gazeLockUntil = 0;
 
 // ---------- Autonomous Desk Quirks & Custom Banner ----------
-bool     boredomEnabled = true;
-int      boredomMinutes = 2;
+bool boredomEnabled = false;
+int boredomMinutes = 2;
 uint32_t lastUserInteractionAt = 0;
-bool     bannerActive = false;
-String   bannerText = "";
-int      bannerScrollX = 128;
-int      bannerLoops = 0;
+bool bannerActive = false;
+String bannerText = "";
+int bannerScrollX = 128;
+int bannerLoops = 0;
 
 // ---------- Custom OLED Eye Skins ----------
-EyeSkin  currentEyeSkin = SKIN_KIWI;
-bool     showMouth = true;
+EyeSkin currentEyeSkin = SKIN_KIWI;
+bool showMouth = true;
 
 // ---------- Live AI Interaction & Web Serial Terminal ----------
 String lastTranscribedQuestion = "";
@@ -237,7 +275,8 @@ void addTerminalLog(const String &msg) {
 String getTerminalJson() {
   String out = "[";
   for (int i = 0; i < terminalLogCount; i++) {
-    if (i > 0) out += ",";
+    if (i > 0)
+      out += ",";
     String m = terminalLogs[i];
     m.replace("\\", "\\\\");
     m.replace("\"", "\\\"");
@@ -249,6 +288,4 @@ String getTerminalJson() {
   return out;
 }
 
-void clearTerminalLog() {
-  terminalLogCount = 0;
-}
+void clearTerminalLog() { terminalLogCount = 0; }

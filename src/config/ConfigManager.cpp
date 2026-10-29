@@ -114,7 +114,7 @@ void loadConfig() {
   circadianSleepEnabled = prefs.getBool("circ_en", true);
   circadianSleepStart = prefs.getInt("circ_start", 23);
   circadianSleepEnd = prefs.getInt("circ_end", 7);
-  boredomEnabled = prefs.getBool("boredom", true);
+  boredomEnabled = prefs.getBool("boredom", false);
   boredomMinutes = prefs.getInt("boredom_mins", 2);
   if (boredomMinutes < 1) boredomMinutes = 1;
   if (boredomMinutes > 60) boredomMinutes = 60;

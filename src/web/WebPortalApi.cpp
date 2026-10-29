@@ -474,8 +474,17 @@ void handleSave() {
     server.send(400, "text/plain", "SSID required");
     return;
   }
-  wifiSSID = server.arg("ssid");
-  wifiPassword = server.arg("pass");
+  String incomingSsid = server.arg("ssid");
+  incomingSsid.trim();
+  if (incomingSsid.length() > 0 && incomingSsid != "%SSID%") {
+    wifiSSID = incomingSsid;
+  }
+  if (server.hasArg("pass")) {
+    String incomingPass = server.arg("pass");
+    if (incomingPass != "%PASS%") {
+      wifiPassword = incomingPass;
+    }
+  }
 
   if (server.hasArg("sttprovider"))
     sttProvider = normalizeSttProvider(server.arg("sttprovider"));
@@ -483,13 +492,28 @@ void handleSave() {
     sttLang = normalizeSttLang(server.arg("sttlang"));
 
   sttEndpoint = sanitizeUrl(server.arg("stturl"), DEFAULT_STT_URL);
-  sttKey = sanitizeField(server.arg("sttkey"));
+  if (server.hasArg("ttskey") && server.arg("ttskey").length() > 0) {
+    sttKey = sanitizeField(server.arg("ttskey"));
+  } else if (server.hasArg("sttkey")) {
+    sttKey = sanitizeField(server.arg("sttkey"));
+  }
   sttModel = sanitizeField(server.arg("sttmodel"), DEFAULT_STT_MODEL);
+
   groqSttEndpoint = sanitizeUrl(server.arg("groqstturl"), DEFAULT_GROQ_STT_URL);
-  groqSttKey = sanitizeField(server.arg("groqsttkey"));
+  if (server.hasArg("groqkey") && server.arg("groqkey").length() > 0) {
+    groqSttKey = sanitizeField(server.arg("groqkey"));
+  } else if (server.hasArg("groqsttkey")) {
+    groqSttKey = sanitizeField(server.arg("groqsttkey"));
+  }
   groqSttModel = sanitizeField(server.arg("groqsttmodel"), DEFAULT_GROQ_STT_MODEL);
+
   openaiSttEndpoint = sanitizeUrl(server.arg("opaistturl"), DEFAULT_OPENAI_STT_URL);
-  openaiSttKey = sanitizeField(server.arg("opaisttkey"));
+  if (server.hasArg("openaikey") && server.arg("openaikey").length() > 0) {
+    openaiSttKey = sanitizeField(server.arg("openaikey"));
+    openaiTtsKey = openaiSttKey;
+  } else if (server.hasArg("opaisttkey")) {
+    openaiSttKey = sanitizeField(server.arg("opaisttkey"));
+  }
   openaiSttModel = sanitizeField(server.arg("opaisttmodel"), DEFAULT_OPENAI_STT_MODEL);
 
   replyLang = sanitizeField(server.arg("replang"));
@@ -569,7 +593,12 @@ void handleSave() {
     circadianSleepStart = server.arg("circ_start").toInt();
   if (server.hasArg("circ_end"))
     circadianSleepEnd = server.arg("circ_end").toInt();
-  boredomEnabled = server.hasArg("boredom");
+  if (server.hasArg("boredom")) {
+    String bStr = server.arg("boredom");
+    boredomEnabled = (bStr == "1" || bStr == "true" || bStr == "on");
+  } else {
+    boredomEnabled = false;
+  }
   if (server.hasArg("boredom_mins")) {
     int bm = server.arg("boredom_mins").toInt();
     if (bm >= 1 && bm <= 60) {

@@ -15,6 +15,8 @@ void startAP();
 void startAPParallel();
 bool connectHome();
 void maintainWiFi();
+void startNtpAsync();
+bool checkNtpSync();
 bool syncTimeFromNTP();
 
 // ---------- Network Suspension / Heap Helpers ----------

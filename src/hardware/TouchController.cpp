@@ -261,6 +261,9 @@ static void updateOneTouch(TouchSensor &ts, uint32_t now) {
       ts.holdHandled = false;
       ts.sleepHandled = false;
       returnIdleAt = 0;
+      if (bootInfoUntil > 0) {
+        bootInfoUntil = 0;
+      }
       Serial.printf("[TOUCH] Pin %d PRESSED\n", ts.pin);
 
       // Instant Audio & Visual Touch Response

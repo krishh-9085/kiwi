@@ -10,36 +10,59 @@
 
 // ============================================================
 bool speakText(const String &text) {
-  if (!txHandle || !text.length())
+  String toSpeak = (ttsProvider == "fish" || ttsProvider == "fishaudio") ? text : stripAudioCues(text);
+  toSpeak.trim();
+  Serial.printf("[TTS] speakText() prov='%s' len=%d heap=%u txHandle=%s\n",
+                ttsProvider.c_str(), (int)toSpeak.length(), (unsigned)ESP.getFreeHeap(),
+                txHandle ? "OK" : "NULL");
+
+  if (!txHandle) {
+    Serial.println("[TTS] Error: I2S speaker driver (txHandle) is NULL!");
+    addTerminalLog("[TTS] Error: Speaker driver not initialized!");
     return false;
+  }
+  if (!toSpeak.length()) {
+    Serial.println("[TTS] Warning: Text is empty after stripping cues.");
+    return false;
+  }
+
+  int res = 0;
   if (ttsProvider == "openai")
-    return ttsPcmOpenAI(stripAudioCues(text)) == 1;
-  if (ttsProvider == "elevenlabs")
-    return ttsPcmEleven(stripAudioCues(text)) == 1;
-  if (ttsProvider == "fish" || ttsProvider == "fishaudio")
-    return ttsFishAudio(text) == 1;
-  return ttsSarvam(stripAudioCues(text)) == 1;
+    res = ttsPcmOpenAI(toSpeak);
+  else if (ttsProvider == "elevenlabs")
+    res = ttsPcmEleven(toSpeak);
+  else if (ttsProvider == "fish" || ttsProvider == "fishaudio")
+    res = ttsFishAudio(toSpeak);
+  else
+    res = ttsSarvam(toSpeak);
+
+  Serial.printf("[TTS] speakText() returned %d\n", res);
+  return res == 1;
 }
 
 int ttsSarvam(const String &text) {
-  String key = ttsKey.length() ? ttsKey : sttKey;
+  String key = ttsKey.length() ? ttsKey : (sttKey.length() ? sttKey : llmKey);
   if (!key.length()) {
-    Serial.println("[TTS] No Sarvam key.");
+    Serial.println("[TTS] No Sarvam key configured in Web Portal.");
+    addTerminalLog("[TTS] Error: No Sarvam key in Web Portal Settings!");
     return 0;
   }
   if (WiFi.status() != WL_CONNECTED) {
     Serial.println("[TTS] No Wi-Fi.");
+    addTerminalLog("[TTS] Error: Wi-Fi disconnected!");
     return 0;
   }
   String host, path;
   if (!parseUrl(ttsEndpoint, host, path)) {
-    Serial.println("[TTS] Bad URL.");
+    Serial.printf("[TTS] Bad URL: %s\n", ttsEndpoint.c_str());
+    addTerminalLog("[TTS] Error: Bad URL " + ttsEndpoint);
     return 0;
   }
-  Serial.printf("[TTS/Sarvam] Free heap before: %u\n",
-                (unsigned)ESP.getFreeHeap());
+  Serial.printf("[TTS/Sarvam] Free heap before: %u\n", (unsigned)ESP.getFreeHeap());
   bool apWasUp = suspendLocalNet();
   if (ESP.getFreeHeap() < 35000) {
+    Serial.printf("[TTS/Sarvam] Low heap: %u < 35000\n", (unsigned)ESP.getFreeHeap());
+    addTerminalLog("[TTS] Low heap (" + String(ESP.getFreeHeap()) + " < 35000)");
     restoreWebAndAP(apWasUp);
     return 0;
   }
@@ -48,11 +71,15 @@ int ttsSarvam(const String &text) {
     while (WiFi.status() != WL_CONNECTED && millis() - tw < 4000)
       delay(100);
     if (WiFi.status() != WL_CONNECTED) {
+      Serial.println("[TTS/Sarvam] Wi-Fi lost while waiting.");
+      addTerminalLog("[TTS] Error: Wi-Fi lost");
       restoreWebAndAP(apWasUp);
       return 0;
     }
   }
   if (!ensureDns(host)) {
+    Serial.printf("[TTS/Sarvam] DNS resolution failed for %s\n", host.c_str());
+    addTerminalLog("[TTS] Error: DNS failed for " + host);
     restoreWebAndAP(apWasUp);
     return 0;
   }
@@ -355,21 +382,28 @@ int ttsSarvam(const String &text) {
 }
 
 int ttsPcmOpenAI(const String &text) {
-  String key = openaiTtsKey.length() ? openaiTtsKey : openaiSttKey;
+  String key = openaiTtsKey.length() ? openaiTtsKey : (openaiSttKey.length() ? openaiSttKey : llmKey);
   if (!key.length()) {
-    Serial.println("[TTS/OpenAI] No API key.");
+    Serial.println("[TTS/OpenAI] No OpenAI TTS API key configured.");
+    addTerminalLog("[TTS/OpenAI] Error: No API key in Web Portal!");
     return 0;
   }
   if (WiFi.status() != WL_CONNECTED) {
-    Serial.println("[TTS] No Wi-Fi.");
+    Serial.println("[TTS/OpenAI] No Wi-Fi.");
+    addTerminalLog("[TTS/OpenAI] Error: Wi-Fi disconnected!");
     return 0;
   }
   String host, path;
-  if (!parseUrl(openaiTtsEndpoint, host, path))
+  if (!parseUrl(openaiTtsEndpoint, host, path)) {
+    Serial.printf("[TTS/OpenAI] Bad URL: %s\n", openaiTtsEndpoint.c_str());
+    addTerminalLog("[TTS/OpenAI] Error: Bad URL " + openaiTtsEndpoint);
     return 0;
+  }
 
   bool apWasUp = suspendLocalNet();
   if (ESP.getFreeHeap() < 35000) {
+    Serial.printf("[TTS/OpenAI] Low heap (%u < 35000)\n", (unsigned)ESP.getFreeHeap());
+    addTerminalLog("[TTS/OpenAI] Low heap (" + String(ESP.getFreeHeap()) + " < 35000)");
     restoreWebAndAP(apWasUp);
     return 0;
   }
@@ -378,11 +412,15 @@ int ttsPcmOpenAI(const String &text) {
     while (WiFi.status() != WL_CONNECTED && millis() - tw < 4000)
       delay(100);
     if (WiFi.status() != WL_CONNECTED) {
+      Serial.println("[TTS/OpenAI] Wi-Fi lost while waiting.");
+      addTerminalLog("[TTS/OpenAI] Wi-Fi lost.");
       restoreWebAndAP(apWasUp);
       return 0;
     }
   }
   if (!ensureDns(host)) {
+    Serial.printf("[TTS/OpenAI] DNS resolution failed for %s\n", host.c_str());
+    addTerminalLog("[TTS/OpenAI] DNS failed for " + host);
     restoreWebAndAP(apWasUp);
     return 0;
   }

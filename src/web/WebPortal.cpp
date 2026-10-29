@@ -111,17 +111,21 @@ void maintainWiFi() {
   if (!wifiSSID.length())
     return;
   if (WiFi.status() == WL_CONNECTED && !timeSynced) {
-    if (millis() - lastNtpTryAt > 60000) {
+    if (checkNtpSync()) {
+      Serial.println("[NTP] Time Synced (background)");
+    } else if (millis() - lastNtpTryAt > 20000) {
       lastNtpTryAt = millis();
-      syncTimeFromNTP();
+      startNtpAsync();
     }
   }
   if (WiFi.status() == WL_CONNECTED) {
     static uint32_t lastWeatherAttempt = 0;
     if ((lastWeatherFetchAt == 0 || millis() - lastWeatherFetchAt > 30UL * 60UL * 1000UL) &&
         (millis() - lastWeatherAttempt > 60000UL || lastWeatherAttempt == 0)) {
-      lastWeatherAttempt = millis();
-      fetchWeather();
+      if (millis() > 3000) {
+        lastWeatherAttempt = millis();
+        fetchWeather();
+      }
     }
     return;
   }
@@ -131,47 +135,75 @@ void maintainWiFi() {
   WiFi.reconnect();
 }
 
+void startNtpAsync() {
+  if (WiFi.status() != WL_CONNECTED)
+    return;
+  Serial.println("[NTP] Background SNTP configured");
+  configTime(TZ_OFFSET_SEC, TZ_DST_SEC, NTP_SERVER_1, NTP_SERVER_2);
+}
+
+bool checkNtpSync() {
+  if (timeSynced)
+    return true;
+  if (WiFi.status() != WL_CONNECTED)
+    return false;
+  struct tm timeinfo;
+  if (getLocalTime(&timeinfo, 10)) {
+    timeSynced = true;
+    Serial.printf("[NTP] Synced: %02d:%02d:%02d %02d/%02d/%04d\n", timeinfo.tm_hour,
+                  timeinfo.tm_min, timeinfo.tm_sec, timeinfo.tm_mday,
+                  timeinfo.tm_mon + 1, timeinfo.tm_year + 1900);
+    return true;
+  }
+  return false;
+}
+
 bool syncTimeFromNTP() {
   if (WiFi.status() != WL_CONNECTED)
     return false;
-  Serial.println("[NTP] Syncing...");
-  configTime(TZ_OFFSET_SEC, TZ_DST_SEC, NTP_SERVER_1, NTP_SERVER_2);
+  if (checkNtpSync())
+    return true;
+  startNtpAsync();
   struct tm timeinfo;
-  int tries = 0;
-  while (!getLocalTime(&timeinfo, 500) && tries < 20) {
-    tries++;
-    delay(250);
-  }
-  if (tries >= 20) {
-    Serial.println("[NTP] Failed");
-    timeSynced = false;
-    return false;
-  }
-  timeSynced = true;
-  Serial.printf("[NTP] %02d:%02d:%02d %02d/%02d/%04d\n", timeinfo.tm_hour,
-                timeinfo.tm_min, timeinfo.tm_sec, timeinfo.tm_mday,
-                timeinfo.tm_mon + 1, timeinfo.tm_year + 1900);
-  return true;
-}
-
-bool suspendLocalNet() {
-  bool apWasUp = apMode;
-  if (apWasUp) {
-    dnsServer.stop();
-    WiFi.softAPdisconnect(true);
-    apMode = false;
+  for (int tries = 0; tries < 8; tries++) {
+    if (getLocalTime(&timeinfo, 100)) {
+      timeSynced = true;
+      Serial.printf("[NTP] %02d:%02d:%02d %02d/%02d/%04d\n", timeinfo.tm_hour,
+                    timeinfo.tm_min, timeinfo.tm_sec, timeinfo.tm_mday,
+                    timeinfo.tm_mon + 1, timeinfo.tm_year + 1900);
+      return true;
+    }
     delay(50);
   }
-  server.stop();
-  delay(20);
-  return apWasUp;
+  return false;
+}
+
+static int netSuspendDepth = 0;
+static bool originalApState = false;
+
+bool suspendLocalNet() {
+  if (netSuspendDepth++ == 0) {
+    originalApState = apMode;
+    if (originalApState) {
+      dnsServer.stop();
+      WiFi.softAPdisconnect(true);
+      apMode = false;
+      delay(20);
+    }
+    server.stop();
+    delay(10);
+  }
+  return originalApState;
 }
 
 void restoreWebAndAP(bool apWasUp) {
-  if (apWasUp)
-    startAPParallel();
-  startWeb();
-  Serial.printf("[NET] Free heap: %u\n", (unsigned)ESP.getFreeHeap());
+  if (--netSuspendDepth <= 0) {
+    netSuspendDepth = 0;
+    if (apWasUp || originalApState)
+      startAPParallel();
+    startWeb();
+    Serial.printf("[NET] Free heap: %u\n", (unsigned)ESP.getFreeHeap());
+  }
 }
 
 // ============================================================

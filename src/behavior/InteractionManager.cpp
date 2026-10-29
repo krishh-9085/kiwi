@@ -104,7 +104,22 @@ void handleQuestion(const String &q) {
   lastTranscribedQuestion = q;
   robotStateDesc = "Thinking...";
   addTerminalLog("[LLM] Sending to " + (llmProvider == "groq" ? groqModel : llmModel) + ": \"" + q + "\"");
-  String answer = askLLM(q);
+
+  int sentencesSpoken = 0;
+  auto onSentence = [&](const String &sentence, bool isFinal) {
+    if (cancelRequest || !sentence.length())
+      return;
+    Serial.printf("[PIPELINE] Streaming sentence: \"%s\"\n", sentence.c_str());
+    if (speakText(sentence)) {
+      sentencesSpoken++;
+      robotStateDesc = "Speaking...";
+      setEmotion(EMOTION_SPEAKING);
+    } else {
+      Serial.println("[PIPELINE] Streaming TTS deferred to full answer.");
+    }
+  };
+
+  String answer = askLLM(q, onSentence);
   if (cancelRequest)
     return;
   if (!answer.length()) {
@@ -126,49 +141,52 @@ void handleQuestion(const String &q) {
   Serial.print("[ROBOT] A: ");
   Serial.println(answer);
   lastLlmAnswer = answer;
-  robotStateDesc = "Speaking...";
   addTerminalLog("[LLM] Answer: \"" + answer + "\"");
 
-  if (ttsProvider == "fish" || ttsProvider == "fishaudio") {
-    String lower = answer;
-    lower.toLowerCase();
-    if (lower.indexOf("[laughing]") >= 0 || lower.indexOf("[chuckling]") >= 0 || lower.indexOf("laugh") >= 0) {
-      setEmotion(EMOTION_LAUGHING);
-    } else if (lower.indexOf("[crying loudly]") >= 0 || lower.indexOf("[sobbing]") >= 0) {
-      setEmotion(EMOTION_CRYING);
-    } else if (lower.indexOf("[angry]") >= 0) {
-      setEmotion(EMOTION_ANGRY);
-    } else if (lower.indexOf("[sad]") >= 0) {
-      setEmotion(EMOTION_SAD);
-    } else if (lower.indexOf("[excited]") >= 0) {
-      setEmotion(EMOTION_EXCITED);
-    } else if (lower.indexOf("[whispering]") >= 0 || lower.indexOf("[soft]") >= 0 || lower.indexOf("[breathy]") >= 0) {
-      setEmotion(EMOTION_CUTE);
-    } else if (lower.indexOf("[sighing]") >= 0 || lower.indexOf("[groaning]") >= 0) {
-      setEmotion(EMOTION_RELIEVED);
-    } else if (lower.indexOf("[embarrassed]") >= 0) {
-      setEmotion(EMOTION_CONFUSED);
+  // Fallback: If streaming did not speak any sentence, speak the full answer
+  if (sentencesSpoken == 0) {
+    if (ttsProvider == "fish" || ttsProvider == "fishaudio") {
+      String lower = answer;
+      lower.toLowerCase();
+      if (lower.indexOf("[laughing]") >= 0 || lower.indexOf("[chuckling]") >= 0 || lower.indexOf("laugh") >= 0) {
+        setEmotion(EMOTION_LAUGHING);
+      } else if (lower.indexOf("[crying loudly]") >= 0 || lower.indexOf("[sobbing]") >= 0) {
+        setEmotion(EMOTION_CRYING);
+      } else if (lower.indexOf("[angry]") >= 0) {
+        setEmotion(EMOTION_ANGRY);
+      } else if (lower.indexOf("[sad]") >= 0) {
+        setEmotion(EMOTION_SAD);
+      } else if (lower.indexOf("[excited]") >= 0) {
+        setEmotion(EMOTION_EXCITED);
+      } else if (lower.indexOf("[whispering]") >= 0 || lower.indexOf("[soft]") >= 0 || lower.indexOf("[breathy]") >= 0) {
+        setEmotion(EMOTION_CUTE);
+      } else if (lower.indexOf("[sighing]") >= 0 || lower.indexOf("[groaning]") >= 0) {
+        setEmotion(EMOTION_RELIEVED);
+      } else if (lower.indexOf("[embarrassed]") >= 0) {
+        setEmotion(EMOTION_CONFUSED);
+      } else {
+        setEmotion(EMOTION_SPEAKING);
+      }
     } else {
       setEmotion(EMOTION_SPEAKING);
     }
-  } else {
-    setEmotion(EMOTION_SPEAKING);
+
+    if (cancelRequest)
+      return;
+
+    bool ok = speakText(answer);
+    if (cancelRequest)
+      return;
+    if (!ok) {
+      robotStateDesc = "TTS Failed";
+      addTerminalLog("[TTS] Playback error or offline");
+      Serial.println("[ROBOT] TTS failed");
+      showStatus("TTS error", "see Serial log", 2000);
+      returnIdleAt = millis() + 500;
+      return;
+    }
   }
 
-  if (cancelRequest)
-    return;
-
-  bool ok = speakText(answer);
-  if (cancelRequest)
-    return;
-  if (!ok) {
-    robotStateDesc = "TTS Failed";
-    addTerminalLog("[TTS] Playback error or offline");
-    Serial.println("[ROBOT] TTS failed");
-    showStatus("TTS error", "see Serial log", 2000);
-    returnIdleAt = millis() + 500;
-    return;
-  }
   robotStateDesc = "Ready";
   addTerminalLog("[ROBOT] Turn completed. Ready.");
   setEmotion(EMOTION_HAPPY);

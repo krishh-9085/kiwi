@@ -36,7 +36,7 @@ const char *DEFAULT_LLM_URL = "https://generativelanguage.googleapis.com/v1beta/
 const char *DEFAULT_LLM_MODEL = "gemini-2.0-flash-lite";
 const char *DEFAULT_OPENAI_LLM_URL = "https://api.openai.com/v1/chat/completions";
 const char *DEFAULT_GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
-const char *DEFAULT_GROQ_MODEL = "openai/gpt-oss-20b";
+const char *DEFAULT_GROQ_MODEL = "openai/gpt-oss-120b";
 
 const char *DEFAULT_TTS_URL = "https://api.sarvam.ai/text-to-speech";
 const char *DEFAULT_TTS_MODEL = "bulbul:v3";

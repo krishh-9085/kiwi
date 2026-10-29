@@ -1,5 +1,6 @@
 #include "hardware/AudioEngine.h"
 #include "config/AppConfig.h"
+#include <Preferences.h>
 
 void pumpUI();
 
@@ -265,11 +266,19 @@ void detectMicSlot() {
   if (aL > 0.8f && aL > 2.5f * aR) {
     micSlot = 0;
     micSlotLocked = true;
-    Serial.println("[MIC] Using LEFT slot");
+    Serial.println("[MIC] Using LEFT slot (locked & saved to NVS)");
+    Preferences p;
+    p.begin("myrobot", false);
+    p.putInt("micslot", 0);
+    p.end();
   } else if (aR > 0.8f && aR > 2.5f * aL) {
     micSlot = 1;
     micSlotLocked = true;
-    Serial.println("[MIC] Using RIGHT slot");
+    Serial.println("[MIC] Using RIGHT slot (locked & saved to NVS)");
+    Preferences p;
+    p.begin("myrobot", false);
+    p.putInt("micslot", 1);
+    p.end();
   } else {
     // Ambiguous (quiet room): do not lock, allow next recording to re-detect
     Serial.printf(

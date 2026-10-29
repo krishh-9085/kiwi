@@ -1519,10 +1519,10 @@ static const char DASHBOARD_BODY_PART1[] PROGMEM = R"rawb1(<form method="POST" a
           <h3>Groq Model &amp; Credentials</h3>
           <label>Model</label>
           <select name="groqmodel">
-            <option value="openai/gpt-oss-20b" %G20B_SEL%>openai/gpt-oss-20b</option>
-            <option value="openai/gpt-oss-120b" %G120B_SEL%>openai/gpt-oss-120b</option>
-            <option value="qwen/qwen3-32b" %GQ32B_SEL%>qwen/qwen3-32b</option>
+            <option value="openai/gpt-oss-120b" %G120B_SEL%>openai/gpt-oss-120b (Recommended)</option>
+            <option value="openai/gpt-oss-20b" %G20B_SEL%>openai/gpt-oss-20b (Fast 20B)</option>
             <option value="llama-3.3-70b-versatile" %GL33_SEL%>llama-3.3-70b-versatile</option>
+            <option value="llama-3.1-8b-instant" %GL8B_SEL%>llama-3.1-8b-instant</option>
           </select>
           <label>Endpoint</label><input name="groqurl" value="%GROQURL%">
           <label>API Key</label><input name="groqkey" type="password" value="%GROQKEY%">
@@ -1819,10 +1819,10 @@ static String getDashboardBodyPart1() {
   h.replace("%GROQ_SEL%", llmProvider == "groq" ? "selected" : "");
   h.replace("%GEMINI_SEL%", llmProvider == "gemini" ? "selected" : "");
   h.replace("%OPENAI_SEL%", llmProvider == "openai" ? "selected" : "");
+  h.replace("%G120B_SEL%", (groqModel == "openai/gpt-oss-120b" || groqModel == "" || groqModel == DEFAULT_GROQ_MODEL) ? "selected" : "");
   h.replace("%G20B_SEL%", groqModel == "openai/gpt-oss-20b" ? "selected" : "");
-  h.replace("%G120B_SEL%", groqModel == "openai/gpt-oss-120b" ? "selected" : "");
-  h.replace("%GQ32B_SEL%", groqModel == "qwen/qwen3-32b" ? "selected" : "");
   h.replace("%GL33_SEL%", groqModel == "llama-3.3-70b-versatile" ? "selected" : "");
+  h.replace("%GL8B_SEL%", groqModel == "llama-3.1-8b-instant" ? "selected" : "");
   h.replace("%GE20L_SEL%", (llmModel == "gemini-2.0-flash-lite" || llmModel == "gemini-3.5-flash-lite") ? "selected" : "");
   h.replace("%GE25_SEL%", llmModel == "gemini-2.5-flash" ? "selected" : "");
   h.replace("%GE25L_SEL%", llmModel == "gemini-2.5-flash-lite" ? "selected" : "");

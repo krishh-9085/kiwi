@@ -34,6 +34,7 @@ static String escJson(String s) {
 
 // --- Chunked PROGMEM Dashboard Segments (Zero-Heap Streamed) ---
 static const char DASHBOARD_CSS[] PROGMEM = R"rawcss(
+
 <!doctype html>
 <html lang="en">
 
@@ -2619,6 +2620,7 @@ static const char DASHBOARD_FOOT[] PROGMEM = R"rawfoot(<script>
 </body>
 
 </html>
+
 )rawfoot";
 
 void handleRoot() {

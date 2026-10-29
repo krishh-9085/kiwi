@@ -1,3 +1,4 @@
+
 <!doctype html>
 <html lang="en">
 
@@ -1260,7 +1261,7 @@
     <!-- LIVE SECTION (Real-Time Hardware & Voice Console - Zero Reboot Required) -->
     <div id="liveSection">
       <!-- Live voice interaction & serial monitor -->
-      <section id="live" class="card live-card" aria-labelledby="liveTitle">
+<section id="live" class="card live-card" aria-labelledby="liveTitle">
         <div class="card-title">
           <span id="liveTitle">Live Voice Interaction &amp; Serial Monitor</span>
           <span class="status-pill" id="liveStateBadge" role="status" aria-live="polite"><span class="dot"
@@ -1446,7 +1447,8 @@
 
     <!-- SETTINGS SECTION (Permanent Configuration Deck - Saves & Restarts) -->
     <div id="settingsSection" style="display:none">
-      <form method="POST" action="/save" class="form-grid" id="cfgForm">
+
+<form method="POST" action="/save" class="form-grid" id="cfgForm">
         <!-- Hidden inputs preserving live parameters across form saves -->
         <input type="hidden" name="vol" id="hiddenFormVol" value="%VOL%">
         <input type="hidden" name="disp_bright" id="hiddenFormBright" value="%BRIGHT%">
@@ -1656,7 +1658,7 @@
             </div>
           </div>
 
-      <!-- Text-to-Speech -->
+<!-- Text-to-Speech -->
           <div class="card">
             <div class="card-title">3. TEXT-TO-SPEECH (TTS)</div>
             <label for="ttsProvSel">TTS PROVIDER</label>
@@ -1814,7 +1816,7 @@
 
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
-  <script>
+<script>
     /* ── Starfield (paused when hidden, static under reduced motion) ── */
     (function () {
       var c = document.getElementById('sky'), x = c.getContext('2d'), stars = [], W, H, raf;

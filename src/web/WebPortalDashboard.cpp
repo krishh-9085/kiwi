@@ -1551,10 +1551,10 @@ static const char DASHBOARD_BODY_PART1[] PROGMEM = R"rawb1(<form method="POST" a
               <h3>Gemini Model &amp; Settings</h3>
               <label for="geminiModelSel">Model</label>
               <select name="llmmodel" id="geminiModelSel" onchange="updateGeminiUrl()">
-                <option value="gemini-2.0-flash-lite" %GE20L_SEL%>gemini-2.0-flash-lite</option>
                 <option value="gemini-2.5-flash" %GE25_SEL%>gemini-2.5-flash</option>
-                <option value="gemini-2.5-flash-lite" %GE25L_SEL%>gemini-2.5-flash-lite</option>
-                <option value="gemini-3.8-live" %GE38L_SEL%>gemini-3.8-live</option>
+                <option value="gemini-3.5-flash-lite" %GE35L_SEL%>gemini-3.5-flash-lite</option>
+                <option value="gemini-3.1-flash-lite" %GE31L_SEL%>gemini-3.1-flash-lite</option>
+                <option value="gemini-3.8-flash" %GE38_SEL%>gemini-3.8-flash</option>
               </select>
               <label for="geminiUrlIn">Endpoint</label><input type="url" name="llmurl" id="geminiUrlIn" value="%LLMURL%" placeholder="https://...">
             </div>
@@ -1735,8 +1735,7 @@ static const char DASHBOARD_BODY_PART2[] PROGMEM = R"rawb2(<!-- Text-to-Speech -
           </div>
           <button type="submit" class="save-btn" id="btnSaveConfig">Save All Settings</button>
           <p class="save-hint">
-            Saves configuration to flash memory and applies changes live.
-            <br>A reboot is only performed if Wi-Fi network credentials are changed.
+            Saves configuration to flash memory and restarts Kiwi to apply changes cleanly.
           </p>
         </div>
       </form>
@@ -1869,10 +1868,10 @@ static String getDashboardBodyPart1() {
   h.replace("%G120B_SEL%", groqModel == "openai/gpt-oss-120b" ? "selected" : "");
   h.replace("%GQ32B_SEL%", groqModel == "qwen/qwen3-32b" ? "selected" : "");
   h.replace("%GL33_SEL%", groqModel == "llama-3.3-70b-versatile" ? "selected" : "");
-  h.replace("%GE20L_SEL%", (llmModel == "gemini-2.0-flash-lite" || llmModel == "gemini-3.5-flash-lite") ? "selected" : "");
-  h.replace("%GE25_SEL%", llmModel == "gemini-2.5-flash" ? "selected" : "");
-  h.replace("%GE25L_SEL%", llmModel == "gemini-2.5-flash-lite" ? "selected" : "");
-  h.replace("%GE38L_SEL%", llmModel == "gemini-3.8-live" ? "selected" : "");
+  h.replace("%GE25_SEL%", (llmModel == "gemini-2.5-flash" || (llmModel.startsWith("gemini-") && llmModel != "gemini-3.5-flash-lite" && llmModel != "gemini-3.1-flash-lite" && llmModel != "gemini-3.8-flash")) ? "selected" : "");
+  h.replace("%GE35L_SEL%", llmModel == "gemini-3.5-flash-lite" ? "selected" : "");
+  h.replace("%GE31L_SEL%", llmModel == "gemini-3.1-flash-lite" ? "selected" : "");
+  h.replace("%GE38_SEL%", llmModel == "gemini-3.8-flash" ? "selected" : "");
   h.replace("%GPT4OM_SEL%", llmModel == "gpt-4o-mini" ? "selected" : "");
   h.replace("%GPT41M_SEL%", llmModel == "gpt-4.1-mini" ? "selected" : "");
   h.replace("%GPT41N_SEL%", llmModel == "gpt-4.1-nano" ? "selected" : "");
@@ -2879,12 +2878,12 @@ static const char DASHBOARD_FOOT[] PROGMEM = R"rawfoot(<script>
             })
             .then(function (data) {
               if (data && data.reboot) {
-                // Wi-Fi was changed, robot must reboot to reconnect to new network
+                // Robot is restarting to apply changes
                 hasUnsavedSettings = false;
                 var overlay = document.getElementById('rebootOverlay');
                 var statusTxt = document.getElementById('rebootStatus');
                 if (overlay) overlay.style.display = 'flex';
-                if (statusTxt) statusTxt.textContent = 'Wi-Fi credentials updated. Kiwi is reconnecting to your network...';
+                if (statusTxt) statusTxt.textContent = data.message || 'Settings saved. Kiwi is restarting to apply changes...';
 
                 var rebootAttempts = 0;
                 var pollRebootInterval = setInterval(function () {

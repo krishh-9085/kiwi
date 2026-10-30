@@ -735,15 +735,8 @@ void handleSave() {
   server.sendHeader("Pragma", "no-cache");
   server.sendHeader("Expires", "0");
 
-  if (!wifiChanged) {
-    server.send(200, "application/json", "{\"ok\":true,\"reboot\":false,\"message\":\"Settings saved and applied live!\"}");
-    Serial.println("[PORTAL] Settings saved and applied live (no reboot).");
-    return;
-  }
-
-  // Wi-Fi credentials changed; reboot required to connect to new network
-  server.send(200, "application/json", "{\"ok\":true,\"reboot\":true,\"message\":\"Wi-Fi credentials updated. Kiwi is reconnecting...\"}");
-  Serial.println("[PORTAL] Wi-Fi SSID or password changed. Restarting Kiwi to reconnect...");
+  server.send(200, "application/json", "{\"ok\":true,\"reboot\":true,\"message\":\"Settings saved! Kiwi is restarting to apply changes...\"}");
+  Serial.println("[PORTAL] Settings saved. Restarting Kiwi to apply changes...");
   delay(1000);
   ESP.restart();
 }

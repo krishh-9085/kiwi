@@ -1554,6 +1554,7 @@ static const char DASHBOARD_BODY_PART1[] PROGMEM = R"rawb1(<form method="POST" a
                 <option value="gemini-2.0-flash-lite" %GE20L_SEL%>gemini-2.0-flash-lite</option>
                 <option value="gemini-2.5-flash" %GE25_SEL%>gemini-2.5-flash</option>
                 <option value="gemini-2.5-flash-lite" %GE25L_SEL%>gemini-2.5-flash-lite</option>
+                <option value="gemini-3.8-live" %GE38L_SEL%>gemini-3.8-live</option>
               </select>
               <label for="geminiUrlIn">Endpoint</label><input type="url" name="llmurl" id="geminiUrlIn" value="%LLMURL%" placeholder="https://...">
             </div>
@@ -1871,6 +1872,7 @@ static String getDashboardBodyPart1() {
   h.replace("%GE20L_SEL%", (llmModel == "gemini-2.0-flash-lite" || llmModel == "gemini-3.5-flash-lite") ? "selected" : "");
   h.replace("%GE25_SEL%", llmModel == "gemini-2.5-flash" ? "selected" : "");
   h.replace("%GE25L_SEL%", llmModel == "gemini-2.5-flash-lite" ? "selected" : "");
+  h.replace("%GE38L_SEL%", llmModel == "gemini-3.8-live" ? "selected" : "");
   h.replace("%GPT4OM_SEL%", llmModel == "gpt-4o-mini" ? "selected" : "");
   h.replace("%GPT41M_SEL%", llmModel == "gpt-4.1-mini" ? "selected" : "");
   h.replace("%GPT41N_SEL%", llmModel == "gpt-4.1-nano" ? "selected" : "");

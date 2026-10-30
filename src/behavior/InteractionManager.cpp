@@ -7,6 +7,7 @@
 #include "services/AiService.h"
 #include "behavior/CommandHandler.h"
 #include "behavior/ActionExecutor.h"
+#include "web/WebPortal.h"
 
 // ============================================================
 // UI PUMP (Display + Touch + Tone Update)

@@ -3,6 +3,7 @@
 // ============================================================
 // CONSTANT DEFINITIONS
 // ============================================================
+const char *FIRMWARE_VER = FIRMWARE_VERSION;
 const char *NTP_SERVER_1 = "pool.ntp.org";
 const char *NTP_SERVER_2 = "time.nist.gov";
 

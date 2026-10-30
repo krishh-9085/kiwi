@@ -1,4 +1,4 @@
-# MyRobot (Kiwi) - Modular Architecture (v4.6)
+# MyRobot (Kiwi) - Modular Architecture (v1.0)
 
 A clean, modular C++ architecture for the **ESP32-C3 Super Mini AI Desktop Companion Robot**.
 

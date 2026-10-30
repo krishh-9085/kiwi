@@ -90,13 +90,13 @@ bool ensureDns(const String &host) {
 }
 
 bool tlsConnect(WiFiClientSecure &c, const String &host, const char *tag) {
-  for (int attempt = 1; attempt <= 3; attempt++) {
+  for (int attempt = 1; attempt <= 2; attempt++) {
     c.stop();
     Serial.printf("[%s] TLS connect %s try %d heap=%u maxblk=%u\n", tag,
                   host.c_str(), attempt, (unsigned)ESP.getFreeHeap(),
                   (unsigned)ESP.getMaxAllocHeap());
     uint32_t t0 = millis();
-    bool ok = c.connect(host.c_str(), 443, 12000);
+    bool ok = c.connect(host.c_str(), 443, 6000);
     Serial.printf("[%s] connect()=%d after %lu ms\n", tag, ok ? 1 : 0,
                   (unsigned long)(millis() - t0));
     if (ok)

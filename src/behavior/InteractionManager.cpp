@@ -133,7 +133,9 @@ void handleQuestion(const String &q) {
     robotStateDesc = "LLM Empty / Error";
     addTerminalLog("[LLM] Empty response or error received");
     Serial.println("[ROBOT] LLM empty");
-    showStatus("LLM error", "check key/model", 2000);
+    lastLlmAnswer = "Error: No response from AI. Please check Wi-Fi, model, or API key.";
+    setEmotion(EMOTION_CONFUSED);
+    showStatus("AI No Response", "Check key/model", 1800);
     returnIdleAt = millis() + 500;
     return;
   }

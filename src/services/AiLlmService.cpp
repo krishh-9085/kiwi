@@ -168,7 +168,7 @@ static String processSseStream(HTTPClient &http, WiFiClient *stream, SentenceCal
   bool isSSE = false;
   uint32_t tStart = millis();
 
-  while (millis() - tStart < 18000) {
+  while (millis() - tStart < 10000) {
     if (cancelRequest)
       break;
     if (!http.connected() && (!stream || !stream->available()))
@@ -306,7 +306,7 @@ String askGemini(const String &question, SentenceCallback onSentence) {
     client.setTimeout(15);
     HTTPClient http;
     http.setReuse(false);
-    http.setTimeout(15000);
+    http.setTimeout(12000);
     http.setConnectTimeout(6000);
     uint32_t t0 = millis();
     Serial.println("[GEMINI] Asking (streaming)...");
@@ -424,7 +424,7 @@ String askGroq(const String &question, SentenceCallback onSentence) {
     client.setTimeout(15);
     HTTPClient http;
     http.setReuse(false);
-    http.setTimeout(18000);
+    http.setTimeout(12000);
     http.setConnectTimeout(6000);
     uint32_t t0 = millis();
     Serial.println("[GROQ] Asking (streaming)...");

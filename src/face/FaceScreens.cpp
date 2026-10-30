@@ -13,7 +13,6 @@
 #include <math.h>
 #include <time.h>
 
-
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -435,7 +434,7 @@ void showBootInfo(uint32_t holdMs) {
   display.print("KIWI");
   display.drawPixel(28, 5, SSD1306_WHITE);
   display.setCursor(33, 2);
-  display.print("v4.6");
+  display.print("v1.0");
 
   // Inverted Status Pill Badge
   if (WiFi.status() == WL_CONNECTED) {

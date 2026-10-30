@@ -1,6 +1,6 @@
 /*
  ==============================================================================
-  MyRobot (Kiwi) - Modular v4.6
+  MyRobot (Kiwi) - Modular v1.0
   ESP32-C3 Super Mini / PlatformIO / Arduino Core 3.x
   Tools -> USB CDC On Boot = Enabled
 
@@ -9,39 +9,44 @@
   - core/CoreTypes.h               : Data structures, emotion & mood enums
   - hardware/Battery.h / .cpp      : Non-linear LiPo battery sensing curve
   - config/ConfigManager.h / .cpp  : NVS Preferences persistent storage
-  - hardware/AudioEngine.h / .cpp  : I2S driver, Tone player, DSP & soft-clipping
-  - face/FaceEngine.h / .cpp       : OLED procedural vector face engine & screens
+  - hardware/AudioEngine.h / .cpp  : I2S driver, Tone player, DSP &
+ soft-clipping
+  - face/FaceEngine.h / .cpp       : OLED procedural vector face engine &
+ screens
   - services/WeatherService.h/.cpp : Open-Meteo REST API live weather client
   - behavior/CircadianEngine.h/.cpp: Circadian night sleep mode & auto-dimming
   - behavior/BoredomBehavior.h/.cpp: Autonomous idle remarks & desk banter
   - behavior/CommandHandler.h/.cpp : Voice command parsing & dispatch
   - behavior/InteractionManager.h/.: User interaction pipeline & UI pump
-  - services/AiService.h / .cpp    : STT, LLM (Gemini/Groq), streaming TTS clients
+  - services/AiService.h / .cpp    : STT, LLM (Gemini/Groq), streaming TTS
+ clients
   - hardware/TouchController.h/.cpp: Capacitive & digital touch sensor gestures
-  - web/WebPortal.h / .cpp         : Captive SoftAP, settings UI, Web OTA updates
+  - web/WebPortal.h / .cpp         : Captive SoftAP, settings UI, Web OTA
+ updates
  ==============================================================================
 */
 
-#include <Arduino.h>
-#include <WiFi.h>
-#include <ESPmDNS.h>
-#include "config/AppConfig.h"
-#include "core/CoreTypes.h"
-#include "config/ConfigManager.h"
-#include "hardware/AudioEngine.h"
 #include "animation/AnimationEngine.h"
-#include "face/FaceEngine.h"
-#include "services/WeatherService.h"
-#include "behavior/CircadianEngine.h"
+#include "behavior/ActionExecutor.h"
 #include "behavior/BoredomBehavior.h"
+#include "behavior/CircadianEngine.h"
 #include "behavior/CommandHandler.h"
 #include "behavior/InteractionManager.h"
-#include "services/AiService.h"
-#include "hardware/TouchController.h"
-#include "web/WebPortal.h"
-#include "services/MemoryService.h"
-#include "behavior/ActionExecutor.h"
 #include "behavior/OfflineBrain.h"
+#include "config/AppConfig.h"
+#include "config/ConfigManager.h"
+#include "core/CoreTypes.h"
+#include "face/FaceEngine.h"
+#include "hardware/AudioEngine.h"
+#include "hardware/TouchController.h"
+#include "services/AiService.h"
+#include "services/MemoryService.h"
+#include "services/WeatherService.h"
+#include "web/WebPortal.h"
+#include <Arduino.h>
+#include <ESPmDNS.h>
+#include <WiFi.h>
+
 
 // ============================================================
 // MAIN SETUP
@@ -50,7 +55,9 @@ void setup() {
   Serial.begin(115200);
 #if ARDUINO_USB_CDC_ON_BOOT
   uint32_t t0 = millis();
-  while (!Serial && millis() - t0 < 300) { delay(10); }
+  while (!Serial && millis() - t0 < 300) {
+    delay(10);
+  }
 #else
   delay(50);
 #endif
@@ -91,7 +98,8 @@ void setup() {
     startAPParallel();
     startNtpAsync();
     lastNtpTryAt = millis();
-    lastWeatherFetchAt = 0; // Handled asynchronously in maintainWiFi() during main loop
+    lastWeatherFetchAt =
+        0; // Handled asynchronously in maintainWiFi() during main loop
   } else {
     startAP();
   }
@@ -183,7 +191,8 @@ void loop() {
     }
 
     robotStateDesc = "Transcribing...";
-    addTerminalLog("[STT] Transcribing captured audio with " + sttProvider + " (" + cfg.model + ")...");
+    addTerminalLog("[STT] Transcribing captured audio with " + sttProvider +
+                   " (" + cfg.model + ")...");
     String question = recordAndTranscribe(RECORD_SECONDS);
     if (!cancelRequest && question.length()) {
       lastTranscribedQuestion = question;
@@ -210,8 +219,27 @@ void loop() {
     }
   }
 
+  static uint32_t busyWatchdogStart = 0;
+  if (busyProcessing) {
+    if (busyWatchdogStart == 0) {
+      busyWatchdogStart = millis();
+    } else if (millis() - busyWatchdogStart > 20000) {
+      Serial.println("[WATCHDOG] Operation timed out! Force recovering Kiwi to Ready.");
+      addTerminalLog("[WATCHDOG] Request timed out. Recovering to Ready.");
+      busyProcessing = false;
+      cancelRequest = false;
+      busyWatchdogStart = 0;
+      robotStateDesc = "Ready";
+      setEmotion(EMOTION_IDLE);
+      resyncTouch();
+    }
+  } else {
+    busyWatchdogStart = 0;
+  }
+
   if (returnIdleAt && millis() >= returnIdleAt && !busyProcessing) {
     returnIdleAt = 0;
+    robotStateDesc = "Ready";
     if (!showClockScreen && !showWeatherScreen)
       setEmotion(EMOTION_IDLE);
   }

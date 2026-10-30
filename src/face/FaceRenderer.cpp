@@ -15,6 +15,7 @@
 // ---------------------------------------------------------------------------
 static const float TWO_PI_F = 6.2831853f;
 static const float PI_F = 3.1415927f;
+static const float HALF_PI_F = 1.5707963f;
 
 static inline float clampf(float v, float lo, float hi) {
   return v < lo ? lo : (v > hi ? hi : v);
@@ -199,48 +200,116 @@ static void drawFlourishAt(uint32_t now) {
   }
 }
 
+// Custom clean vector Z renderer (crisp 1px lines on 128x64 OLED)
+static void drawCrispZ(int x, int y, int size) {
+  if (x < 0 || x + size > 128 || y < 0 || y + size > 64)
+    return;
+  display.drawFastHLine(x, y, size, SSD1306_WHITE);
+  display.drawFastHLine(x, y + size - 1, size, SSD1306_WHITE);
+  display.drawLine(x + size - 1, y, x, y + size - 1, SSD1306_WHITE);
+  if (size >= 8) {
+    display.drawLine(x + size - 2, y, x - 1, y + size - 1, SSD1306_WHITE);
+  }
+}
+
 static void drawSleepingFace(uint32_t now) {
   display.clearDisplay();
-  float breathY = swing(now, 750.0f) * 2.0f;
-  int by = iround(breathY);
-  int sleepY = 34 + by;
-  int gapVal = 30;
-  int cL = 64 - gapVal;
-  int cR = 64 + gapVal;
 
-  // Cute downward curved sleeping eyelids
-  for (int dx = -14; dx <= 14; dx++) {
-    float norm = (float)dx / 14.0f;
-    int dy = iround(4.0f * (1.0f - norm * norm));
-    display.drawFastVLine(cL + dx, sleepY + dy, 3, SSD1306_WHITE);
-    display.drawFastVLine(cR + dx, sleepY + dy, 3, SSD1306_WHITE);
+  // 1. Organic, peaceful respiratory rhythm (~3.8s period = ~16 breaths/min)
+  // Asymmetric cycle: gentle inhale lift (38%), relaxed exhale settle (62%)
+  uint32_t breathTime = now % 3800;
+  float phase = (float)breathTime / 3800.0f;
+  float breath;
+  if (phase < 0.38f) {
+    breath = sinf((phase / 0.38f) * HALF_PI_F); // 0.0 -> 1.0 inhale
+  } else {
+    breath = cosf(((phase - 0.38f) / 0.62f) * HALF_PI_F); // 1.0 -> 0.0 exhale
   }
-  // Cute tiny sleeping eyelashes
-  display.drawLine(cL - 14, sleepY, cL - 17, sleepY - 2, SSD1306_WHITE);
-  display.drawLine(cR + 14, sleepY, cR + 17, sleepY - 2, SSD1306_WHITE);
 
-  // Cute sleepy blush under eyes
-  drawBlushMarks(cL, sleepY + 9, 0.45f);
-  drawBlushMarks(cR, sleepY + 9, 0.45f);
+  // Smooth chest/face elevation (0 to 2 pixels)
+  int by = iround(breath * 2.0f);
 
-  // Tiny sleeping mouth that opens a touch on every exhale
-  int mouthOpen = (breathY > 1.0f) ? 2 : 1;
-  drawMouthShape(64, 52 + by, 10, mouthOpen, 0.1f);
+  // 2. Rare REM dream flutter: every 10 seconds, a subtle 180ms micro-flutter
+  int flutter = 0;
+  if ((now % 10000 < 180) && ((now / 45) & 1)) {
+    flutter = 1;
+  }
 
-  // 3 floating "Z... z... z..." snoring letters
-  for (int i = 0; i < 3; i++) {
-    uint32_t zTime = (now + (uint32_t)i * 900) % 2700;
-    float p = (float)zTime / 2700.0f; // 0.0 to 1.0
-    int zx = 86 + iround(p * 26.0f + sinf(p * TWO_PI_F) * 3.0f);
-    int zy = 38 - iround(p * 32.0f);
-    if (zy >= 2 && zy <= 50 && zx <= 122) {
-      bool big = (i == 2 || p > 0.65f);
-      display.setTextSize(big ? 2 : 1);
-      display.setTextColor(SSD1306_WHITE);
-      display.setCursor(zx, zy);
-      display.print(big ? "Z" : "z");
+  int sleepY = 32 + by - flutter;
+  const int gapVal = 28;
+  const int cL = 64 - gapVal; // 36
+  const int cR = 64 + gapVal; // 92
+
+  // 3. Expressive curved sleeping eyelids with tapering thickness
+  // Soft, happy downward arc: thicker in the center (3px) and tapering smoothly
+  for (int dx = -13; dx <= 13; dx++) {
+    float norm = (float)dx / 13.0f;
+    int dy = iround(3.5f * (1.0f - norm * norm));
+    int thick = (abs(dx) <= 7) ? 3 : 2;
+    display.drawFastVLine(cL + dx, sleepY + dy, thick, SSD1306_WHITE);
+    display.drawFastVLine(cR + dx, sleepY + dy, thick, SSD1306_WHITE);
+  }
+
+  // Delicate curled eyelashes on outer corners
+  display.drawLine(cL - 13, sleepY, cL - 17, sleepY - 2, SSD1306_WHITE);
+  display.drawLine(cL - 11, sleepY + 1, cL - 14, sleepY + 4, SSD1306_WHITE);
+  display.drawLine(cR + 13, sleepY, cR + 17, sleepY - 2, SSD1306_WHITE);
+  display.drawLine(cR + 11, sleepY + 1, cR + 14, sleepY + 4, SSD1306_WHITE);
+
+  // 4. Softly pulsing sleepy blush
+  // Warms subtly as Kiwi inhales fresh air, softens as Kiwi exhales
+  float blushIntensity = 0.38f + 0.22f * breath;
+  drawBlushMarks(cL, sleepY + 9, blushIntensity);
+  drawBlushMarks(cR, sleepY + 9, blushIntensity);
+
+  // 5. Breathing mouth & cute snooze bubble
+  if (phase < 0.38f) {
+    // Inhaling: peaceful closed smile
+    drawMouthShape(64, 50 + by, 8, 1, 0.25f);
+  } else {
+    // Exhaling: mouth softly parts by 2px as breath releases
+    int mh = (phase > 0.45f && phase < 0.85f) ? 3 : 2;
+    drawMouthShape(64, 50 + by, 8, mh, 0.05f);
+
+    // Cute animated snooze bubble growing at mouth corner and softly releasing
+    float bubbleP = (phase - 0.38f) / 0.62f; // 0.0 to 1.0 during exhale
+    int bx = 71 + iround(bubbleP * 4.0f);
+    int byPos = 49 + by - iround(bubbleP * 6.0f);
+    int br = iround(1.0f + bubbleP * 2.5f); // radius 1 -> 3
+    if (br >= 1 && bubbleP < 0.90f) {
+      display.drawCircle(bx, byPos, br, SSD1306_WHITE);
+      if (br >= 2) {
+        display.drawPixel(bx - 1, byPos - 1, SSD1306_WHITE); // glint
+      }
+    } else if (bubbleP >= 0.90f && bubbleP < 0.98f) {
+      // Soft pop sparkle: 4 micro-dots
+      display.drawPixel(bx - 2, byPos, SSD1306_WHITE);
+      display.drawPixel(bx + 2, byPos, SSD1306_WHITE);
+      display.drawPixel(bx, byPos - 2, SSD1306_WHITE);
+      display.drawPixel(bx, byPos + 2, SSD1306_WHITE);
     }
   }
+
+  // 6. Three floating, swaying "Z... z... z..." snore glyphs
+  // Staggered by 1100ms, drifting upward and swaying like gentle feathers
+  for (int i = 0; i < 3; i++) {
+    uint32_t zTime = (now + (uint32_t)i * 1100) % 3300;
+    float zp = (float)zTime / 3300.0f; // 0.0 to 1.0
+
+    // Gentle horizontal sine sway
+    float sway = sinf(zp * 2.5f * PI_F) * 4.5f;
+    int zx = 76 + iround(zp * 28.0f + sway);
+    int zy = 44 - iround(zp * 38.0f);
+
+    if (zy >= 4 && zy <= 56 && zx <= 122) {
+      int zSize = (zp < 0.35f) ? 5 : ((zp < 0.70f) ? 7 : 9);
+      bool visible = (zp <= 0.88f) || (((now / 40) & 1) != 0);
+      if (visible) {
+        drawCrispZ(zx, zy, zSize);
+      }
+    }
+  }
+
   display.setTextSize(1);
   presentDisplay();
 }

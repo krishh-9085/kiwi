@@ -59,17 +59,17 @@ def sync_dashboard():
         cpp_code = f.read()
 
     cpp_code = re.sub(r'DASHBOARD_CSS\[\] PROGMEM = R"rawcss\(.*?\)rawcss";',
-                      f'DASHBOARD_CSS[] PROGMEM = R"rawcss(\n{css_part})rawcss";', cpp_code, flags=re.DOTALL)
+                      lambda m: f'DASHBOARD_CSS[] PROGMEM = R"rawcss(\n{css_part})rawcss";', cpp_code, flags=re.DOTALL)
     cpp_code = re.sub(r'DASHBOARD_STATUS_TEMPLATE\[\] PROGMEM = R"rawstat\(.*?\)rawstat";',
-                      f'DASHBOARD_STATUS_TEMPLATE[] PROGMEM = R"rawstat({status_part})rawstat";', cpp_code, flags=re.DOTALL)
+                      lambda m: f'DASHBOARD_STATUS_TEMPLATE[] PROGMEM = R"rawstat({status_part})rawstat";', cpp_code, flags=re.DOTALL)
     cpp_code = re.sub(r'DASHBOARD_LIVE_CONSOLE\[\] PROGMEM = R"rawconsole\(.*?\)rawconsole";',
-                      f'DASHBOARD_LIVE_CONSOLE[] PROGMEM = R"rawconsole({console_part}\n)rawconsole";', cpp_code, flags=re.DOTALL)
+                      lambda m: f'DASHBOARD_LIVE_CONSOLE[] PROGMEM = R"rawconsole({console_part}\n)rawconsole";', cpp_code, flags=re.DOTALL)
     cpp_code = re.sub(r'DASHBOARD_BODY_PART1\[\] PROGMEM = R"rawb1\(.*?\)rawb1";',
-                      f'DASHBOARD_BODY_PART1[] PROGMEM = R"rawb1({body1_part}\n)rawb1";', cpp_code, flags=re.DOTALL)
+                      lambda m: f'DASHBOARD_BODY_PART1[] PROGMEM = R"rawb1({body1_part}\n)rawb1";', cpp_code, flags=re.DOTALL)
     cpp_code = re.sub(r'DASHBOARD_BODY_PART2\[\] PROGMEM = R"rawb2\(.*?\)rawb2";',
-                      f'DASHBOARD_BODY_PART2[] PROGMEM = R"rawb2({body2_part}\n)rawb2";', cpp_code, flags=re.DOTALL)
+                      lambda m: f'DASHBOARD_BODY_PART2[] PROGMEM = R"rawb2({body2_part}\n)rawb2";', cpp_code, flags=re.DOTALL)
     cpp_code = re.sub(r'DASHBOARD_FOOT\[\] PROGMEM = R"rawfoot\(.*?\)rawfoot";',
-                      f'DASHBOARD_FOOT[] PROGMEM = R"rawfoot({foot_part}\n)rawfoot";', cpp_code, flags=re.DOTALL)
+                      lambda m: f'DASHBOARD_FOOT[] PROGMEM = R"rawfoot({foot_part}\n)rawfoot";', cpp_code, flags=re.DOTALL)
 
     with open(cpp_path, "w", encoding="utf-8") as f:
         f.write(cpp_code)
@@ -86,7 +86,7 @@ def sync_faces():
     with open(cpp_path, "r", encoding="utf-8") as f:
         cpp = f.read()
     cpp = re.sub(r'FACE_PAGE_HTML\[\] PROGMEM = R"RAWFACE\(.*?\)RAWFACE";',
-                 f'FACE_PAGE_HTML[] PROGMEM = R"RAWFACE({html})RAWFACE";', cpp, flags=re.DOTALL)
+                 lambda m: f'FACE_PAGE_HTML[] PROGMEM = R"RAWFACE({html})RAWFACE";', cpp, flags=re.DOTALL)
     with open(cpp_path, "w", encoding="utf-8") as f:
         f.write(cpp)
     print("Synced faces.html -> WebPortalFaces.cpp")
@@ -106,7 +106,7 @@ def sync_ota():
     with open(cpp_path, "r", encoding="utf-8") as f:
         cpp = f.read()
     cpp = re.sub(r'OTA_HTML\[\] PROGMEM = R"rawliteral\(.*?\)rawliteral";',
-                 f'OTA_HTML[] PROGMEM = R"rawliteral({html})rawliteral";', cpp, flags=re.DOTALL)
+                 lambda m: f'OTA_HTML[] PROGMEM = R"rawliteral({html})rawliteral";', cpp, flags=re.DOTALL)
     with open(cpp_path, "w", encoding="utf-8") as f:
         f.write(cpp)
     print("Synced update.html -> WebPortalOta.cpp")

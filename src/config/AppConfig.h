@@ -3,6 +3,12 @@
 #include <Arduino.h>
 
 // ============================================================
+// FIRMWARE VERSION CONFIGURATION
+// ============================================================
+#define FIRMWARE_VERSION "v1.0"
+extern const char *FIRMWARE_VER;
+
+// ============================================================
 // HARDWARE PIN MAP (ESP32-C3 Super Mini)
 // ============================================================
 #define PIN_TOUCH_LEFT 20
@@ -16,7 +22,7 @@
 #define PIN_OLED_SCL 9
 
 // ---------- Audio Amplifier Limit ----------
-#define SPEAKER_MAX_GAIN 2.0f  // Full-scale gain cap (8ohm 1.5W safe)
+#define SPEAKER_MAX_GAIN 2.0f // Full-scale gain cap (8ohm 1.5W safe)
 
 // ============================================================
 // DISPLAY & AUDIO SPECIFICATIONS
@@ -156,14 +162,10 @@ TouchAction parseTouchAction(const String &s, TouchAction def);
 String touchActionToString(TouchAction a);
 
 // ---------- Circadian Sleep & Display Brightness Mode ----------
-enum NightMode {
-  NIGHT_SAME_AS_DAY = 0,
-  NIGHT_DIM = 1,
-  NIGHT_SCREEN_OFF = 2
-};
-extern int displayBrightness;   // Daytime display brightness (0-100%, default 80)
-extern int nightMode;           // 0: Same as day, 1: Dim, 2: Screen off (default 1)
-extern int nightBrightness;     // Night display brightness (0-100%, default 10)
+enum NightMode { NIGHT_SAME_AS_DAY = 0, NIGHT_DIM = 1, NIGHT_SCREEN_OFF = 2 };
+extern int displayBrightness; // Daytime display brightness (0-100%, default 80)
+extern int nightMode;       // 0: Same as day, 1: Dim, 2: Screen off (default 1)
+extern int nightBrightness; // Night display brightness (0-100%, default 10)
 extern bool circadianSleepEnabled;
 extern int circadianSleepStart;
 extern int circadianSleepEnd;
@@ -189,7 +191,8 @@ extern bool showClockScreen;
 extern bool timeSynced;
 extern uint32_t lastNtpTryAt;
 
-// Single-core ESP32-C3 safe; upgrade to std::atomic<bool> if dispatched across FreeRTOS tasks
+// Single-core ESP32-C3 safe; upgrade to std::atomic<bool> if dispatched across
+// FreeRTOS tasks
 extern volatile bool startRecording;
 extern volatile bool busyProcessing;
 extern volatile bool cancelRequest;

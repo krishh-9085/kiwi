@@ -31,7 +31,10 @@ void handleDoAction() {
   // Web Mic Audio Record Trigger
   if (server.hasArg("record")) {
     if (busyProcessing) {
-      server.send(200, "application/json", "{\"ok\":false,\"reason\":\"busy\"}");
+      cancelRequest = true;
+      // web record cancel
+      addTerminalLog("[WEB] Mic clicked while busy -> Cancel request / Interrupt");
+      server.send(200, "application/json", "{\"ok\":true,\"cancelled\":true}");
       return;
     }
     startRecording = true;
@@ -49,7 +52,10 @@ void handleDoAction() {
       return;
     }
     if (busyProcessing) {
-      server.send(200, "application/json", "{\"ok\":false,\"reason\":\"busy\"}");
+      cancelRequest = true;
+      // web record cancel
+      addTerminalLog("[WEB] Mic clicked while busy -> Cancel request / Interrupt");
+      server.send(200, "application/json", "{\"ok\":true,\"cancelled\":true}");
       return;
     }
     webQueuedQuestion = q;
@@ -399,6 +405,20 @@ void handleDoAction() {
 }
 
 void handleStatus() {
+  static uint32_t lastStatusGen = 0;
+  static String cachedStatusJson = "";
+
+  uint32_t now = millis();
+  // Fast throttle cache: if multiple devices (laptop + phone) poll simultaneously,
+  // return cached JSON immediately to eliminate redundant string formatting & CPU load.
+  if (now - lastStatusGen < 350 && cachedStatusJson.length() > 0) {
+    server.sendHeader("Access-Control-Allow-Origin", "*");
+    server.sendHeader("Connection", "close");
+    server.sendHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+    server.send(200, "application/json", cachedStatusJson);
+    return;
+  }
+
   static const char *names[] = {
       "idle", "listening", "thinking", "speaking", "happy", "excited",
       "sad", "confused", "angry", "sleeping", "error", "petted",
@@ -429,7 +449,14 @@ void handleStatus() {
   j += ",\"question\":\"" + escJson(lastTranscribedQuestion) + "\"";
   j += ",\"answer\":\"" + escJson(lastLlmAnswer) + "\"";
   j += ",\"logs\":" + getTerminalJson();
+  j += ",\"version\":\"" + String(FIRMWARE_VER) + "\"";
   j += "}";
+
+  cachedStatusJson = j;
+  lastStatusGen = now;
+
+  server.sendHeader("Access-Control-Allow-Origin", "*");
+  server.sendHeader("Connection", "close");
   server.sendHeader("Cache-Control", "no-cache, no-store, must-revalidate");
   server.sendHeader("Pragma", "no-cache");
   server.sendHeader("Expires", "0");
@@ -463,6 +490,8 @@ void handleConfigApi() {
     j += "\"" + escJson(kiwiMemory.memories[i]) + "\"";
   }
   j += "],\"followUp\":\"" + escJson(kiwiMemory.pendingFollowUp) + "\"}}";
+  server.sendHeader("Access-Control-Allow-Origin", "*");
+  server.sendHeader("Connection", "close");
   server.sendHeader("Cache-Control", "no-cache, no-store, must-revalidate");
   server.sendHeader("Pragma", "no-cache");
   server.sendHeader("Expires", "0");
@@ -474,15 +503,19 @@ void handleSave() {
     server.send(400, "text/plain", "SSID required");
     return;
   }
+  bool wifiChanged = false;
   String incomingSsid = server.arg("ssid");
   incomingSsid.trim();
-  if (incomingSsid.length() > 0 && incomingSsid != "%SSID%") {
+  if (incomingSsid.length() > 0 && incomingSsid != "%SSID%" && incomingSsid != wifiSSID) {
     wifiSSID = incomingSsid;
+    wifiChanged = true;
   }
   if (server.hasArg("pass")) {
     String incomingPass = server.arg("pass");
-    if (incomingPass != "%PASS%") {
+    incomingPass.trim();
+    if (incomingPass.length() > 0 && incomingPass != "%PASS%" && incomingPass != wifiPassword) {
       wifiPassword = incomingPass;
+      wifiChanged = true;
     }
   }
 
@@ -694,28 +727,24 @@ void handleSave() {
   elevenVoice.trim();
 
   saveConfig();
+  updateDisplayBrightnessMode();
+
+  server.sendHeader("Access-Control-Allow-Origin", "*");
+  server.sendHeader("Connection", "close");
   server.sendHeader("Cache-Control", "no-cache, no-store, must-revalidate");
-  server.send(200, "text/html",
-              "<!DOCTYPE html><html><head>"
-              "<meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'>"
-              "<meta http-equiv='refresh' content='4;url=/'>"
-              "<title>Saved · Kiwi</title>"
-              "<style>"
-              "body{background:#0b0f19;color:#f8fafc;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;"
-              "display:flex;align-items:center;justify-content:center;height:100vh;margin:0;padding:20px;box-sizing:border-box;text-align:center;}"
-              ".card{background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:24px;padding:36px;max-width:380px;box-shadow:0 20px 40px rgba(0,0,0,0.5);}"
-              ".spin{display:inline-block;width:44px;height:44px;border:4px solid rgba(255,255,255,0.15);border-top-color:#38bdf8;border-radius:50%;animation:sp 0.8s linear infinite;margin-bottom:18px;}"
-              "@keyframes sp{to{transform:rotate(360deg);}}"
-              "h2{margin:0 0 10px;font-size:22px;color:#38bdf8;} p{color:#94a3b8;font-size:14px;margin:0 0 18px;line-height:1.5;}"
-              "#sec{font-weight:700;color:#f8fafc;}"
-              "</style></head><body>"
-              "<div class='card'>"
-              "<div class='spin'></div>"
-              "<h2>Settings Saved!</h2>"
-              "<p>Kiwi is restarting to apply changes...<br>Redirecting to dashboard in <span id='sec'>4</span>s</p>"
-              "<script>var c=4;var iv=setInterval(function(){c--;var el=document.getElementById('sec');if(el)el.innerText=c;if(c<=0){clearInterval(iv);location.href='/';}},1000);</script>"
-              "</div></body></html>");
-  delay(1200);
+  server.sendHeader("Pragma", "no-cache");
+  server.sendHeader("Expires", "0");
+
+  if (!wifiChanged) {
+    server.send(200, "application/json", "{\"ok\":true,\"reboot\":false,\"message\":\"Settings saved and applied live!\"}");
+    Serial.println("[PORTAL] Settings saved and applied live (no reboot).");
+    return;
+  }
+
+  // Wi-Fi credentials changed; reboot required to connect to new network
+  server.send(200, "application/json", "{\"ok\":true,\"reboot\":true,\"message\":\"Wi-Fi credentials updated. Kiwi is reconnecting...\"}");
+  Serial.println("[PORTAL] Wi-Fi SSID or password changed. Restarting Kiwi to reconnect...");
+  delay(1000);
   ESP.restart();
 }
 

@@ -315,7 +315,7 @@ String recordAndTranscribe(uint32_t recordSeconds) {
 
   uint32_t waitStart = millis();
   while (!client.available() && client.connected() &&
-         millis() - waitStart < 25000) {
+         millis() - waitStart < 12000) {
     if (cancelRequest)
       return bail("cancelled");
     pumpUI();

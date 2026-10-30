@@ -34,14 +34,21 @@ static String escJson(String s) {
 
 // --- Chunked PROGMEM Dashboard Segments (Zero-Heap Streamed) ---
 static const char DASHBOARD_CSS[] PROGMEM = R"rawcss(
-
 <!doctype html>
 <html lang="en">
 
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="color-scheme" content="dark">
   <title>Kiwi Robot · System Console</title>
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+  <link rel="icon" type="image/png" href="/apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-title" content="Kiwi">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="theme-color" content="#06080d">
   <link rel="icon"
     href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%2306080d'/%3E%3Crect x='14' y='22' width='10' height='10' fill='%23f2b45c'/%3E%3Crect x='40' y='22' width='10' height='10' fill='%23f2b45c'/%3E%3Cpath d='M20 42h24' stroke='%23f2b45c' stroke-width='4'/%3E%3C/svg%3E">
   <style>
@@ -54,14 +61,14 @@ static const char DASHBOARD_CSS[] PROGMEM = R"rawcss(
       --line: #1d2533;
       --line-strong: #2c3648;
       --ink: #ece6d9;
-      --muted: #8a94a6;
+      --muted: #a0abbd;
       --astro: #ff4a3d;
       --astro-glow: rgba(255, 74, 61, .35);
       --amber: #f2b45c;
       --amber-dim: rgba(242, 180, 92, .16);
       --amber-glow: rgba(242, 180, 92, .38);
       --ok: #8fd19e;
-      --glass: rgba(13, 18, 27, .6);
+      --glass: rgba(13, 18, 27, .92);
       --glass-edge: rgba(70, 84, 108, .55);
       --display: "Avenir Next", "Helvetica Neue", sans-serif;
       --body: "Helvetica Neue", Arial, sans-serif;
@@ -71,11 +78,11 @@ static const char DASHBOARD_CSS[] PROGMEM = R"rawcss(
     }
 
     * {
-      box-sizing: border-box
+      box-sizing: border-box;
     }
 
     html {
-      scroll-behavior: smooth
+      scroll-behavior: smooth;
     }
 
     body {
@@ -84,7 +91,7 @@ static const char DASHBOARD_CSS[] PROGMEM = R"rawcss(
       color: var(--ink);
       background: var(--void);
       min-height: 100vh;
-      overflow-x: hidden
+      overflow-x: hidden;
     }
 
     body::before {
@@ -96,7 +103,7 @@ static const char DASHBOARD_CSS[] PROGMEM = R"rawcss(
       background-image: linear-gradient(rgba(242, 180, 92, .035) 1px, transparent 1px), linear-gradient(90deg, rgba(242, 180, 92, .035) 1px, transparent 1px);
       background-size: 48px 48px;
       -webkit-mask-image: linear-gradient(#000, transparent 55%);
-      mask-image: linear-gradient(#000, transparent 55%)
+      mask-image: linear-gradient(#000, transparent 55%);
     }
 
     #sky {
@@ -105,13 +112,37 @@ static const char DASHBOARD_CSS[] PROGMEM = R"rawcss(
       width: 100%;
       height: 100%;
       z-index: -2;
-      pointer-events: none
+      pointer-events: none;
     }
 
     .wrap {
       width: min(1260px, 100%);
       margin: 0 auto;
-      padding: 24px
+      padding: 24px;
+    }
+
+    /* Offline Alert Banner */
+    .offline-banner {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      padding: 10px 16px;
+      background: rgba(255, 74, 61, .15);
+      border: 1px solid rgba(255, 74, 61, .4);
+      color: #ff9d94;
+      font: 600 13px var(--mono);
+      margin-bottom: 16px;
+      border-radius: 4px;
+    }
+
+    .offline-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--astro);
+      box-shadow: 0 0 8px var(--astro-glow);
+      animation: blink 1.2s infinite;
     }
 
     /* Bridge header */
@@ -121,13 +152,13 @@ static const char DASHBOARD_CSS[] PROGMEM = R"rawcss(
       justify-content: space-between;
       gap: 16px;
       flex-wrap: wrap;
-      padding: 8px 0 20px
+      padding: 8px 0 20px;
     }
 
     .id {
       display: flex;
       align-items: center;
-      gap: 14px
+      gap: 14px;
     }
 
     .bezel {
@@ -142,7 +173,7 @@ static const char DASHBOARD_CSS[] PROGMEM = R"rawcss(
       justify-content: center;
       gap: 9px;
       position: relative;
-      overflow: hidden
+      overflow: hidden;
     }
 
     .bezel::after {
@@ -150,7 +181,7 @@ static const char DASHBOARD_CSS[] PROGMEM = R"rawcss(
       position: absolute;
       inset: 0;
       background: repeating-linear-gradient(0deg, rgba(255, 255, 255, .03) 0 1px, transparent 1px 3px);
-      pointer-events: none
+      pointer-events: none;
     }
 
     .bezel i {
@@ -158,94 +189,110 @@ static const char DASHBOARD_CSS[] PROGMEM = R"rawcss(
       height: 12px;
       background: var(--amber);
       box-shadow: 0 0 8px var(--amber-glow);
-      animation: blink 5s infinite
+      animation: blink 5s infinite;
     }
 
     .unit {
-      font: 600 10px/1 var(--display);
-      letter-spacing: .22em;
+      font: 600 12px/1 var(--display);
+      letter-spacing: .2em;
       text-transform: uppercase;
-      color: var(--muted)
+      color: var(--muted);
     }
 
     h1 {
       margin: 4px 0 2px;
-      font: 600 17px/1.1 var(--display);
-      letter-spacing: .28em;
-      text-transform: uppercase
+      font: 600 22px/1.1 var(--display);
+      letter-spacing: .24em;
+      text-transform: uppercase;
     }
 
     .mood {
       font: 12px var(--mono);
-      color: var(--amber)
+      color: var(--amber);
+      letter-spacing: .08em;
     }
 
     .nav {
       display: flex;
       gap: 8px;
-      flex-wrap: wrap
+      flex-wrap: wrap;
+      align-items: center;
     }
 
     .nb,
-    .qbtn,
-    button.save-btn {
-      font: 500 12px var(--body);
+    .qbtn {
+      font: 600 13px var(--body);
       color: var(--ink);
       text-decoration: none;
-      cursor: pointer;
       background: var(--well);
       border: 1px solid var(--line-strong);
-      padding: 8px 14px;
+      padding: 10px 16px;
+      min-height: 44px;
       clip-path: polygon(var(--cut-sm) 0, 100% 0, 100% calc(100% - var(--cut-sm)), calc(100% - var(--cut-sm)) 100%, 0 100%, 0 var(--cut-sm));
       transition: border-color .15s, background .15s, transform .1s;
       display: inline-flex;
       align-items: center;
-      justify-content: center
+      justify-content: center;
+      gap: 8px;
     }
 
     .nb:hover,
     .qbtn:hover {
       border-color: rgba(242, 180, 92, .6);
-      background: rgba(242, 180, 92, .06)
+      background: rgba(242, 180, 92, .06);
     }
 
     .nb:active,
-    .qbtn:active,
-    button.save-btn:active {
-      transform: scale(.97)
+    .qbtn:active {
+      transform: scale(.97);
     }
 
     .nb.on,
-    .qbtn.primary,
-    button.save-btn {
+    .qbtn.primary {
       background: var(--amber);
       border-color: var(--amber);
       color: #14100a;
-      font-weight: 600
+      font-weight: 600;
     }
 
     .nb.on:hover,
-    .qbtn.primary:hover,
-    button.save-btn:hover {
+    .qbtn.primary:hover {
       background: #ffc87a;
-      border-color: #ffc87a
+      border-color: #ffc87a;
     }
 
-    .qbtn:disabled {
-      opacity: .5;
-      cursor: default
+    .qbtn.astro {
+      background: rgba(255, 74, 61, .15);
+      border-color: rgba(255, 74, 61, .5);
+      color: #ff8e85;
     }
 
-    /* Segmented pill tabs */
+    .qbtn.astro:hover {
+      background: rgba(255, 74, 61, .28);
+      border-color: var(--astro);
+    }
+
+    .nb:focus-visible,
+    .qbtn:focus-visible,
+    .tab-btn:focus-visible,
+    .icon-btn:focus-visible,
+    input:focus-visible,
+    select:focus-visible,
+    textarea:focus-visible {
+      outline: 2px solid var(--amber);
+      outline-offset: 2px;
+    }
+
+    /* Segmented Navigation Tabs */
     .tabs {
-      display: inline-flex;
-      gap: 3px;
-      padding: 4px;
-      border-radius: 999px;
-      background: rgba(9, 12, 19, .75);
+      display: flex;
+      gap: 4px;
+      background: var(--well);
       border: 1px solid var(--line-strong);
-      margin-bottom: 20px;
-      box-shadow: inset 0 1px 3px rgba(0, 0, 0, .4);
+      padding: 4px;
+      margin: 18px 0 20px;
+      width: fit-content;
+      clip-path: polygon(var(--cut-sm) 0, 100% 0, 100% calc(100% - var(--cut-sm)), calc(100% - var(--cut-sm)) 100%, 0 100%, 0 var(--cut-sm));
     }
 
     .tab-btn {
@@ -254,11 +301,14 @@ static const char DASHBOARD_CSS[] PROGMEM = R"rawcss(
       text-transform: uppercase;
       color: var(--muted);
       background: transparent;
-      border: none;
-      padding: 7px 22px;
-      border-radius: 999px;
+      border: 0;
+      padding: 8px 20px;
+      min-height: 44px;
       cursor: pointer;
-      user-select: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      clip-path: polygon(var(--cut-sm) 0, 100% 0, 100% calc(100% - var(--cut-sm)), calc(100% - var(--cut-sm)) 100%, 0 100%, 0 var(--cut-sm));
       transition: background .15s, color .15s, box-shadow .15s;
     }
 
@@ -272,102 +322,51 @@ static const char DASHBOARD_CSS[] PROGMEM = R"rawcss(
       box-shadow: 0 0 12px var(--amber-glow);
     }
 
-    .live-hardware-grid {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 16px;
-      margin-top: 16px;
-    }
-    @media (max-width: 900px) {
-      .live-hardware-grid {
-        grid-template-columns: 1fr;
-      }
+    .unsaved-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--astro);
+      box-shadow: 0 0 6px var(--astro-glow);
+      display: inline-block;
     }
 
-    /* Live auto-save feedback tick */
-    .live-saved-tick {
-      display: inline-flex;
-      align-items: center;
-      gap: 5px;
-      font: 600 11px var(--mono);
-      color: #4ade80;
-      background: rgba(74, 222, 128, 0.12);
-      border: 1px solid rgba(74, 222, 128, 0.35);
-      border-radius: 999px;
-      padding: 2px 8px;
-      opacity: 0;
-      transform: translateY(-2px) scale(0.92);
-      transition: opacity .25s ease, transform .25s ease;
-      pointer-events: none;
-      box-shadow: 0 0 10px rgba(74, 222, 128, 0.25);
-    }
-
-    .live-saved-tick.show {
-      opacity: 1;
-      transform: translateY(0) scale(1);
-    }
-
-    /* Status strip */
+    /* Status Strip */
     .strip {
       display: grid;
-      grid-template-columns: repeat(5, minmax(0, 1fr));
-      margin-bottom: 20px;
-      background: var(--glass);
-      border: 1px solid var(--glass-edge);
-      backdrop-filter: blur(18px);
-      clip-path: polygon(var(--cut) 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, 0 100%, 0 var(--cut))
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 12px;
+      background: var(--well);
+      border: 1px solid var(--line);
+      padding: 12px 18px;
+      margin-bottom: 24px;
+      font-size: 13px;
     }
 
-    .cell {
-      padding: 12px 16px;
-      border-left: 1px solid var(--line);
-      min-width: 0;
-      position: relative
-    }
-
-    .cell:first-child {
-      border-left: 0
-    }
-
-    .k {
-      font: 600 10px var(--display);
+    .cell .k {
+      font: 600 11px var(--display);
       letter-spacing: .18em;
       text-transform: uppercase;
       color: var(--muted);
-      margin-bottom: 4px;
-      display: flex;
-      align-items: center;
-      gap: 6px
+      margin-bottom: 2px;
     }
 
-    .k::before {
-      content: "";
-      width: 5px;
-      height: 5px;
-      border-radius: 50%;
-      background: var(--amber);
-      box-shadow: 0 0 6px var(--amber-glow);
-      animation: blink 3s infinite
-    }
-
-    .v {
-      font: 12px var(--mono);
+    .cell .v {
+      font: 600 13px var(--mono);
       color: var(--ink);
+      white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
-      white-space: nowrap
     }
 
-    /* Hull cards */
+    /* Cards */
     .card {
       position: relative;
       background: linear-gradient(180deg, rgba(242, 180, 92, .06), transparent 30%), var(--glass);
       border: 1px solid var(--glass-edge);
-      padding: 20px;
-      min-width: 0;
-      backdrop-filter: blur(18px);
-      -webkit-backdrop-filter: blur(18px);
-      clip-path: polygon(var(--cut) 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, 0 100%, 0 var(--cut))
+      padding: 20px clamp(16px, 3vw, 24px);
+      margin-bottom: 20px;
+      clip-path: polygon(var(--cut) 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, 0 100%, 0 var(--cut));
     }
 
     .card::before {
@@ -378,256 +377,497 @@ static const char DASHBOARD_CSS[] PROGMEM = R"rawcss(
       width: 36px;
       height: 2px;
       background: var(--amber);
-      box-shadow: 0 0 8px var(--amber-glow)
+      box-shadow: 0 0 8px var(--amber-glow);
     }
 
-    .card-title,
-    .card-head {
-      font: 600 11px var(--display);
-      letter-spacing: .22em;
+    .card-title {
+      font: 600 13px var(--display);
+      letter-spacing: .2em;
       text-transform: uppercase;
-      color: var(--muted);
-      border-bottom: 1px solid var(--line);
-      padding-bottom: 10px;
-      margin: 0 0 14px;
+      color: var(--ink);
+      margin-bottom: 14px;
       display: flex;
-      justify-content: space-between;
       align-items: center;
       gap: 10px;
-      flex-wrap: wrap
     }
 
-    .card-head {
-      border: 0;
-      padding: 0;
-      margin: 0
-    }
-
+    /* Live Voice Console & Terminal */
     .live-card {
-      margin-bottom: 24px
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
     }
 
-    .form-grid {
-      columns: 2 460px;
-      column-gap: 16px
-    }
-
-    .form-grid>.card {
-      break-inside: avoid;
-      margin-bottom: 16px
-    }
-    .credentials-card {
-      column-span: all;
-      break-inside: avoid;
-      width: 100%;
-      margin-bottom: 16px;
-    }
-
-    .credentials-card .card-title {
-      font-size: 13px;
-      font-weight: 700;
-      letter-spacing: .12em;
-    }
-
-    .credentials-deck {
+    .console-grid {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      column-gap: 24px;
-      row-gap: 16px;
-      margin-top: 14px;
+      gap: 16px;
     }
 
-    .api-key-item {
-      min-width: 0;
+    .mic-button-deck {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 20px 16px;
+      background: var(--well);
+      border: 1px solid var(--line);
+      text-align: center;
+      height: 415px;
+      box-sizing: border-box;
     }
 
-    .api-key-item label {
-      font: 700 10.5px var(--display);
-      letter-spacing: .16em;
-      text-transform: uppercase;
+    .btn-mic {
+      width: 80px;
+      height: 80px;
+      border-radius: 50%;
+      background: var(--panel);
+      border: 2px solid var(--line-strong);
+      color: var(--ink);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all .2s;
+      position: relative;
+    }
+
+    .btn-mic:hover {
+      border-color: var(--amber);
       color: var(--amber);
-      margin: 0 0 6px;
+      box-shadow: 0 0 16px var(--amber-glow);
     }
 
-    .api-key-item small {
+    .btn-mic.recording {
+      border-color: var(--astro);
+      color: var(--astro);
+      box-shadow: 0 0 24px var(--astro-glow);
+      animation: pulse 1.5s infinite;
+    }
+
+    .prompt-row {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      margin-top: 10px;
+    }
+
+    .readout {
+      background: var(--well);
+      border: 1px solid var(--line);
+      padding: 10px 14px;
+      margin-top: 10px;
+      font: 13px var(--mono);
+      line-height: 1.45;
+    }
+
+    .readout-k {
+      font: 600 11px var(--display);
+      letter-spacing: .15em;
+      text-transform: uppercase;
+      margin-bottom: 4px;
+    }
+
+    .readout-k.blue { color: #38bdf8; }
+    .readout-k.green { color: var(--ok); }
+
+    .readout-v {
+      color: var(--ink);
+      word-break: break-word;
+    }
+
+    /* Terminal */
+    .term {
+      background: #020408;
+      border: 1px solid var(--line-strong);
+      display: flex;
+      flex-direction: column;
+      height: 415px;
+      font: 12px/1.5 var(--mono);
+      box-sizing: border-box;
+    }
+
+    .term-head {
+      background: var(--well);
+      border-bottom: 1px solid var(--line);
+      padding: 8px 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .lamps {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font: 600 11px var(--mono);
       color: var(--muted);
-      font-size: 11px;
-      margin-top: 5px;
-      line-height: 1.4;
-      letter-spacing: 0.02em;
     }
 
-    .ai-pipeline-deck {
-      column-span: all;
-      break-inside: avoid;
-      width: 100%;
+    .lamps i {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: #3b4252;
+    }
+
+    .lamps i:nth-child(1) { background: #ff5f56; }
+    .lamps i:nth-child(2) { background: #ffbd2e; }
+    .lamps i:nth-child(3) { background: #27c93f; }
+
+    .term-tools {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .term-filter {
+      background: #090c13;
+      border: 1px solid var(--line-strong);
+      color: var(--ink);
+      padding: 4px 8px;
+      font: 11px var(--mono);
+      border-radius: 3px;
+      width: 140px;
+      outline: none;
+    }
+
+    .term-filter:focus {
+      border-color: var(--amber);
+    }
+
+    #serialTerminal {
+      padding: 12px;
+      overflow-y: auto;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+
+    /* Live Hardware Adjustments (3-Column Deck) */
+    .live-hardware-grid {
       display: grid;
       grid-template-columns: repeat(3, minmax(0, 1fr));
       gap: 16px;
-      margin-bottom: 16px;
+      margin-top: 10px;
+      align-items: stretch;
     }
 
-    .ai-pipeline-deck>.card {
-      margin-bottom: 0;
-      break-inside: avoid;
-    }
-
-    @media (max-width: 1080px) {
-      .ai-pipeline-deck {
+    @media (max-width: 1024px) {
+      .live-hardware-grid {
         grid-template-columns: 1fr;
       }
     }
 
-    @media (max-width: 720px) {
-      .credentials-deck {
-        grid-template-columns: 1fr;
-      }
+    .live-saved-tick {
+      font: 600 11px var(--mono);
+      color: var(--ok);
+      background: rgba(143, 209, 158, .15);
+      border: 1px solid rgba(143, 209, 158, .4);
+      padding: 2px 8px;
+      border-radius: 999px;
+      opacity: 0;
+      transition: opacity .2s;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
     }
 
-    .save-wrap {
-      column-span: all;
-      break-inside: avoid;
-      margin-top: 4px
+    .live-saved-tick.show {
+      opacity: 1;
     }
 
-    h3 {
-      font: 600 10px var(--display);
+    /* Kiwi Brightness Card */
+    .kiwi-bright-card,
+    .rocky-bright-card {
+      background: linear-gradient(180deg, rgba(242, 180, 92, .08), transparent 35%), var(--glass);
+    }
+
+    .kiwi-card-header,
+    .rocky-card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 12px;
+    }
+
+    .kiwi-header-label,
+    .rocky-header-label {
+      font: 600 12px var(--display);
       letter-spacing: .2em;
       text-transform: uppercase;
-      color: var(--amber);
-      margin: 18px 0 4px
-    }
-
-    .muted,
-    small {
       color: var(--muted);
-      font-size: 12px;
-      display: block;
-      margin-top: 6px;
-      line-height: 1.45
     }
 
-    /* Form elements */
-    label {
-      display: block;
-      font: 600 10px var(--display);
+    .kiwi-slider-row,
+    .rocky-slider-row {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin-bottom: 10px;
+    }
+
+    .kiwi-slider-row input,
+    .rocky-slider-row input {
+      margin: 0;
+    }
+
+    .kiwi-percent-badge,
+    .rocky-percent-badge {
+      font: 600 13px var(--mono);
+      color: var(--amber);
+      min-width: 48px;
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .kiwi-section-title,
+    .rocky-section-title {
+      font: 600 12px var(--display);
       letter-spacing: .18em;
       text-transform: uppercase;
       color: var(--muted);
-      margin: 12px 0 5px
+      margin: 16px 0 8px;
     }
 
-    input:not([type=range]):not([type=checkbox]):not([type=radio]),
-    select,
-    textarea {
-      width: 100%;
+    .kiwi-pill-group,
+    .rocky-pill-group {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 6px;
+      margin-bottom: 12px;
+    }
+
+    .kiwi-pill,
+    .rocky-pill {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      padding: 6px 4px;
+      min-height: 40px;
       background: var(--well);
       border: 1px solid var(--line-strong);
       color: var(--ink);
-      padding: 9px 11px;
+      font-size: 11px;
+      cursor: pointer;
+      user-select: none;
+      margin: 0;
+      transition: border-color .15s, background .15s;
+      white-space: nowrap;
+    }
+
+    .kiwi-pill:hover,
+    .rocky-pill:hover {
+      border-color: rgba(242, 180, 92, .5);
+    }
+
+    .kiwi-pill input,
+    .rocky-pill input {
+      position: absolute;
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .kiwi-radio-dot,
+    .rocky-radio-dot {
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      border: 1px solid var(--muted);
+      position: relative;
+      flex-shrink: 0;
+    }
+
+    .kiwi-pill.active,
+    .rocky-pill.active {
+      border-color: var(--amber);
+      background: var(--amber-dim);
+      color: #fff;
+    }
+
+    .kiwi-pill.active .kiwi-radio-dot,
+    .rocky-pill.active .rocky-radio-dot {
+      border-color: var(--amber);
+    }
+
+    .kiwi-pill.active .kiwi-radio-dot::after,
+    .rocky-pill.active .rocky-radio-dot::after {
+      content: "";
+      position: absolute;
+      inset: 2px;
+      border-radius: 50%;
+      background: var(--amber);
+      box-shadow: 0 0 6px var(--amber-glow);
+    }
+
+    .kiwi-time-row,
+    .rocky-time-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-bottom: 12px;
+    }
+
+    .kiwi-time-label,
+    .rocky-time-label {
+      font: 12px var(--mono);
+      color: var(--muted);
+    }
+
+    .kiwi-time-picker,
+    .rocky-time-picker {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: var(--well);
+      border: 1px solid var(--line-strong);
+      padding: 6px 12px;
+      min-height: 44px;
+    }
+
+    select,
+    option,
+    optgroup {
+      color-scheme: dark;
+      background-color: #0b0f19;
+      color: #ece6d9;
+    }
+
+    .kiwi-time-picker,
+    .rocky-time-picker {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: var(--well);
+      border: 1px solid var(--line-strong);
+      padding: 4px 8px;
+      min-height: 38px;
       border-radius: 3px;
+    }
+
+    .kiwi-time-picker select,
+    .rocky-time-picker select {
+      color-scheme: dark;
+      background-color: transparent;
+      border: 0;
+      padding: 2px 8px 2px 0;
+      font: 600 12px var(--mono);
+      color: var(--ink);
+      width: 100%;
+      cursor: pointer;
+    }
+
+    .kiwi-time-picker select option,
+    .rocky-time-picker select option {
+      color-scheme: dark;
+      background-color: #0d121b;
+      color: #ece6d9;
+      padding: 6px 10px;
+    }
+
+    .kiwi-clock-icon,
+    .rocky-clock-icon {
+      font-size: 14px;
+      opacity: .6;
+    }
+
+    .kiwi-footnote,
+    .rocky-footnote {
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.5;
+      margin: 14px 0 0;
+      border-top: 1px solid var(--line);
+      padding-top: 10px;
+    }
+
+    /* Form Inputs */
+    label {
+      display: block;
+      font: 600 12px var(--display);
+      letter-spacing: .16em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin: 12px 0 6px;
+    }
+
+    input:not([type]),
+    input[type=text],
+    input[type=password],
+    input[type=url],
+    input[type=number],
+    input[type=search],
+    input[type=email],
+    select,
+    textarea {
+      display: block;
+      width: 100%;
+      box-sizing: border-box;
+      background: var(--well);
+      border: 1px solid var(--line-strong);
+      color: var(--ink);
       font: 13px var(--mono);
+      padding: 10px 12px;
+      min-height: 44px;
       outline: none;
-      transition: border-color .15s, box-shadow .15s
+      transition: border-color .15s, box-shadow .15s;
     }
 
-    select {
-      appearance: none;
-      -webkit-appearance: none;
-      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23f2b45c'/%3E%3C/svg%3E");
-      background-repeat: no-repeat;
-      background-position: right 11px center;
-      padding-right: 30px;
-      cursor: pointer
-    }
-
-    select option {
-      background: #0d121b;
-      color: var(--ink)
-    }
-
-    input:focus,
+    input:not([type]):focus,
+    input[type=text]:focus,
+    input[type=password]:focus,
+    input[type=url]:focus,
+    input[type=number]:focus,
+    input[type=search]:focus,
+    input[type=email]:focus,
     select:focus,
     textarea:focus {
       border-color: var(--amber);
-      box-shadow: 0 0 0 3px rgba(242, 180, 92, .18)
+      box-shadow: 0 0 0 3px rgba(242, 180, 92, .18);
+    }
+
+    input[type=range] {
+      width: 100%;
+      accent-color: var(--amber);
+      cursor: pointer;
+      min-height: 44px;
     }
 
     textarea {
-      min-height: 92px;
+      min-height: 90px;
       resize: vertical;
-      line-height: 1.5
-    }
-
-    input[type=password] {
-      letter-spacing: .1em
-    }
-
-    .row-2 {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 12px
+      font-family: var(--body);
+      line-height: 1.45;
     }
 
     .pw {
-      position: relative
-    }
-
-    .pw input {
-      padding-right: 40px
+      position: relative;
+      display: flex;
+      align-items: center;
     }
 
     .icon-btn {
       position: absolute;
-      right: 6px;
-      top: 50%;
-      transform: translateY(-50%);
-      background: none;
+      right: 4px;
+      background: transparent;
       border: 0;
-      cursor: pointer;
       color: var(--muted);
-      font: 600 10px var(--display);
-      letter-spacing: .14em;
-      text-transform: uppercase;
-      padding: 4px
+      font: 600 11px var(--mono);
+      padding: 8px 12px;
+      min-height: 44px;
+      cursor: pointer;
     }
 
     .icon-btn:hover {
-      color: var(--amber)
-    }
-
-    /* Sliders */
-    input[type=range] {
-      -webkit-appearance: none;
-      appearance: none;
-      width: 100%;
-      height: 4px;
-      padding: 0;
-      border: 0;
-      border-radius: 4px;
-      background: linear-gradient(90deg, var(--amber) var(--p, 50%), var(--line-strong) var(--p, 50%));
-      outline: none;
-      cursor: pointer;
-      margin: 10px 0
-    }
-
-    input[type=range]::-webkit-slider-thumb {
-      -webkit-appearance: none;
-      width: 16px;
-      height: 16px;
-      border-radius: 50%;
-      background: var(--void);
-      border: 2px solid var(--amber);
-      box-shadow: 0 0 10px var(--amber-glow)
-    }
-
-    input[type=range]::-moz-range-thumb {
-      width: 14px;
-      height: 14px;
-      border-radius: 50%;
-      background: var(--void);
-      border: 2px solid var(--amber);
-      box-shadow: 0 0 10px var(--amber-glow)
+      color: var(--ink);
     }
 
     /* Toggles */
@@ -637,26 +877,25 @@ static const char DASHBOARD_CSS[] PROGMEM = R"rawcss(
       gap: 10px;
       cursor: pointer;
       user-select: none;
-      font-size: 13px;
-      color: var(--ink);
-      margin: 0
+      min-height: 44px;
+      margin: 6px 0;
     }
 
     .toggle input {
       position: absolute;
       opacity: 0;
-      pointer-events: none
+      pointer-events: none;
     }
 
     .switch {
-      width: 36px;
-      height: 18px;
+      width: 38px;
+      height: 20px;
       border-radius: 999px;
       background: var(--well);
       border: 1px solid var(--line-strong);
       position: relative;
       flex-shrink: 0;
-      transition: background .2s, border-color .2s
+      transition: background .2s, border-color .2s;
     }
 
     .switch::after {
@@ -664,611 +903,232 @@ static const char DASHBOARD_CSS[] PROGMEM = R"rawcss(
       position: absolute;
       top: 2px;
       left: 2px;
-      width: 12px;
-      height: 12px;
+      width: 14px;
+      height: 14px;
       border-radius: 50%;
       background: var(--muted);
-      transition: transform .2s, background .2s, box-shadow .2s
+      transition: transform .2s, background .2s, box-shadow .2s;
     }
 
     .toggle input:checked+.switch {
       background: var(--amber-dim);
-      border-color: var(--amber)
+      border-color: var(--amber);
     }
 
     .toggle input:checked+.switch::after {
       transform: translateX(18px);
       background: var(--amber);
-      box-shadow: 0 0 8px var(--amber-glow)
+      box-shadow: 0 0 8px var(--amber-glow);
     }
 
-    .toggle input:focus-visible+.switch {
-      outline: 2px solid var(--amber);
-      outline-offset: 2px
-    }
-
-    /* Panels & notes */
+    /* Panels & Decks */
     .panel {
-      margin-top: 18px;
-      padding: 14px;
       background: var(--well);
       border: 1px solid var(--line);
-      border-radius: 3px
+      padding: 14px 16px;
+      margin-top: 10px;
     }
 
-    .panel-title {
-      font: 600 13px var(--body);
-      color: var(--ink);
-      margin-bottom: 8px
+    .credentials-deck {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
     }
 
-    /* Buttons */
-    button.save-btn {
+    .api-pipeline-deck {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+
+    .touch-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 14px;
+      margin-top: 10px;
+    }
+
+    .row-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    .save-wrap {
+      margin: 32px 0 16px;
+      text-align: center;
+    }
+
+    .save-btn {
       width: 100%;
-      padding: 14px;
-      font-size: 14px;
-      letter-spacing: .2em;
+      max-width: 460px;
+      min-height: 50px;
+      background: var(--amber);
+      border: 0;
+      color: #14100a;
+      font: 600 13px var(--display);
+      letter-spacing: .22em;
       text-transform: uppercase;
-      font-family: var(--display)
+      cursor: pointer;
+      clip-path: polygon(var(--cut-sm) 0, 100% 0, 100% calc(100% - var(--cut-sm)), calc(100% - var(--cut-sm)) 100%, 0 100%, 0 var(--cut-sm));
+      transition: background .15s, transform .1s;
     }
 
-    .status-pill {
+    .save-btn:hover {
+      background: #ffc87a;
+    }
+
+    .save-btn:active {
+      transform: scale(.98);
+    }
+
+    .save-hint {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.5;
+      margin-top: 10px;
+    }
+
+    .unsaved-notice {
       display: inline-flex;
       align-items: center;
-      gap: 7px;
-      padding: 5px 11px;
-      background: var(--well);
-      border: 1px solid var(--line-strong);
-      font: 11px var(--mono);
-      color: var(--ink);
-      clip-path: polygon(6px 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%, 0 6px)
+      gap: 8px;
+      padding: 6px 14px;
+      background: rgba(255, 74, 61, .15);
+      border: 1px solid rgba(255, 74, 61, .4);
+      color: #ff9d94;
+      font: 600 12px var(--mono);
+      margin-bottom: 12px;
+      border-radius: 4px;
     }
 
-    .dot {
-      width: 7px;
-      height: 7px;
+    /* Full-screen Reboot Overlay */
+    .reboot-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(6, 8, 13, .92);
+      backdrop-filter: blur(12px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 10000;
+      padding: 24px;
+      text-align: center;
+    }
+
+    .reboot-card {
+      background: var(--panel);
+      border: 1px solid var(--amber);
+      box-shadow: 0 0 30px var(--amber-glow);
+      padding: 36px 28px;
+      max-width: 460px;
+      width: 100%;
+      clip-path: polygon(var(--cut) 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, 0 100%, 0 var(--cut));
+    }
+
+    .reboot-spinner {
+      width: 48px;
+      height: 48px;
+      border: 3px solid rgba(242, 180, 92, .2);
+      border-top-color: var(--amber);
       border-radius: 50%;
-      background: var(--ok);
-      box-shadow: 0 0 6px rgba(143, 209, 158, .6);
-      animation: blink 3s infinite
+      margin: 0 auto 20px;
+      animation: spin 1s linear infinite;
     }
 
-    .dot.busy {
-      background: var(--amber);
-      box-shadow: 0 0 6px var(--amber-glow)
+    /* Toast */
+    .toast {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translate(-50%, 8px);
+      opacity: 0;
+      background: var(--panel);
+      border: 1px solid var(--amber);
+      color: var(--ink);
+      padding: 10px 18px;
+      font: 13px var(--mono);
+      box-shadow: 0 0 18px var(--amber-glow);
+      transition: opacity .25s, transform .25s;
+      pointer-events: none;
+      z-index: 9999;
     }
 
-    .dot.rec {
-      background: var(--astro);
-      box-shadow: 0 0 8px var(--astro-glow);
-      animation: pulse 1s ease-in-out infinite
-    }
-
-    .dot.sleep {
-      background: var(--muted);
-      box-shadow: none
-    }
-
-    @keyframes pulse {
-
-      0%,
-      100% {
-        opacity: 1
-      }
-
-      50% {
-        opacity: .3
-      }
+    .noscript-warn {
+      padding: 12px;
+      background: #451a1a;
+      color: #ffb4b4;
+      text-align: center;
+      font-weight: 600;
+      border-bottom: 1px solid #782a2a;
     }
 
     @keyframes blink {
-
-      0%,
-      92%,
-      100% {
-        opacity: 1
-      }
-
-      96% {
-        opacity: .25
-      }
+      0%, 92%, 100% { opacity: 1; }
+      96% { opacity: .25; }
     }
 
     @keyframes spin {
-      to {
-        transform: rotate(360deg)
+      to { transform: rotate(360deg); }
+    }
+
+    @keyframes pulse {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.05); }
+    }
+
+    @media(max-width:768px) {
+      .credentials-deck,
+      .api-pipeline-deck,
+      .console-grid,
+      .row-2 {
+        grid-template-columns: 1fr;
       }
-    }
-
-    .spin {
-      display: inline-block;
-      animation: spin 1s linear infinite
-    }
-
-    /* Live: mic + readouts */
-    .console-columns {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 16px
-    }
-
-    .stack {
-      display: flex;
-      flex-direction: column;
-      gap: 12px
-    }
-
-    .mic-btn {
-      display: flex;
-      align-items: center;
-      gap: 14px;
-      width: 100%;
-      padding: 14px 16px;
-      cursor: pointer;
-      color: var(--ink);
-      font: inherit;
-      text-align: left;
-      background: var(--well);
-      border: 1px solid var(--line-strong);
-      transition: border-color .15s, box-shadow .15s, transform .1s
-    }
-
-    .mic-btn:hover {
-      border-color: rgba(242, 180, 92, .6)
-    }
-
-    .mic-btn:active {
-      transform: scale(.98)
-    }
-
-    .mic-icon {
-      width: 14px;
-      height: 14px;
-      border-radius: 50%;
-      background: var(--amber);
-      box-shadow: 0 0 10px var(--amber-glow);
-      flex-shrink: 0
-    }
-
-    .mic-title {
-      font: 600 13px var(--display);
-      letter-spacing: .14em;
-      text-transform: uppercase
-    }
-
-    .mic-btn.recording {
-      border-color: var(--astro);
-      animation: pulseRec 1.5s ease-in-out infinite
-    }
-
-    .mic-btn.recording .mic-icon {
-      background: var(--astro);
-      box-shadow: 0 0 12px var(--astro-glow)
-    }
-
-    @keyframes pulseRec {
-
-      0%,
-      100% {
-        box-shadow: 0 0 0 0 var(--astro-glow)
-      }
-
-      50% {
-        box-shadow: 0 0 0 4px rgba(255, 74, 61, .08)
-      }
-    }
-
-    .prompt-row {
-      display: flex;
-      gap: 8px
-    }
-
-    .prompt-row input {
-      flex: 1
-    }
-
-    .readout {
-      background: var(--well);
-      border: 1px solid var(--line);
-      padding: 12px 14px
-    }
-
-    .readout-k {
-      font: 600 10px var(--display);
-      letter-spacing: .2em;
-      text-transform: uppercase;
-      margin-bottom: 6px
-    }
-
-    .readout-k.blue {
-      color: #8fb8e0
-    }
-
-    .readout-k.green {
-      color: var(--ok)
-    }
-
-    .readout-v {
-      font: 13px/1.5 var(--mono);
-      color: var(--ink);
-      min-height: 22px;
-      word-break: break-word
-    }
-
-    /* Terminal */
-    .term {
-      display: flex;
-      flex-direction: column;
-      background: #030407;
-      border: 1px solid var(--line-strong);
-      padding: 12px;
-      position: relative;
-      overflow: hidden
-    }
-
-    .term::after {
-      content: "";
-      position: absolute;
-      inset: 0;
-      pointer-events: none;
-      background: repeating-linear-gradient(0deg, rgba(255, 255, 255, .025) 0 1px, transparent 1px 3px)
-    }
-
-    .term-head {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 10px;
-      flex-wrap: wrap;
-      border-bottom: 1px solid var(--line);
-      padding-bottom: 8px;
-      margin-bottom: 8px;
-      font: 11px var(--mono);
-      color: var(--muted)
-    }
-
-    .term-head .lamps {
-      display: flex;
-      align-items: center;
-      gap: 6px
-    }
-
-    .term-head .lamps i {
-      width: 6px;
-      height: 6px;
-      border-radius: 50%;
-      background: var(--amber);
-      box-shadow: 0 0 6px var(--amber-glow)
-    }
-
-    .term-head label {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      margin: 0;
-      font: 11px var(--mono);
-      letter-spacing: 0;
-      text-transform: none;
-      color: var(--muted);
-      cursor: pointer
-    }
-
-    .term-head input[type=checkbox] {
-      width: 12px;
-      height: 12px;
-      margin: 0;
-      accent-color: var(--amber)
-    }
-
-    #serialTerminal {
-      flex: 1;
-      min-height: 210px;
-      max-height: 250px;
-      overflow-y: auto;
-      background: #000;
-      border: 1px solid var(--line);
-      padding: 10px;
-      font: 11.5px/1.45 var(--mono);
-      color: #8fd19e;
-      white-space: pre-wrap;
-      word-break: break-all
-    }
-
-    .prompt-char {
-      color: var(--amber)
-    }
-
-    /* Touch grid, bits */
-    .grid-2 {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 12px
-    }
-
-    .tip {
-      margin-top: 12px;
-      display: block;
-      color: var(--muted)
-    }
-
-    /* Rocky brightness card */
-    .rocky-bright-card {
-      background: linear-gradient(180deg, rgba(242, 180, 92, .08), transparent 35%), var(--glass)
-    }
-
-    .rocky-card-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-bottom: 12px
-    }
-
-    .rocky-header-label {
-      font: 600 11px var(--display);
-      letter-spacing: .22em;
-      text-transform: uppercase;
-      color: var(--muted)
-    }
-
-    .rocky-slider-row {
-      display: flex;
-      align-items: center;
-      gap: 14px;
-      margin-bottom: 10px
-    }
-
-    .rocky-slider-row input {
-      margin: 0
-    }
-
-    .rocky-percent-badge {
-      font: 600 12px var(--mono);
-      color: var(--amber);
-      min-width: 44px;
-      text-align: right;
-      font-variant-numeric: tabular-nums
-    }
-
-    .rocky-section-title {
-      font: 600 10px var(--display);
-      letter-spacing: .22em;
-      text-transform: uppercase;
-      color: var(--muted);
-      margin: 16px 0 8px
-    }
-
-    .rocky-pill-group {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-      margin-bottom: 14px
-    }
-
-    .rocky-pill {
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      padding: 7px 14px;
-      background: var(--well);
-      border: 1px solid var(--line-strong);
-      color: var(--ink);
-      font-size: 13px;
-      cursor: pointer;
-      user-select: none;
-      margin: 0;
-      text-transform: none;
-      letter-spacing: 0;
-      font-family: var(--body);
-      font-weight: 500;
-      transition: border-color .15s, background .15s
-    }
-
-    .rocky-pill:hover {
-      border-color: rgba(242, 180, 92, .5)
-    }
-
-    .rocky-pill input {
-      position: absolute;
-      opacity: 0;
-      pointer-events: none
-    }
-
-    .rocky-radio-dot {
-      width: 13px;
-      height: 13px;
-      border-radius: 50%;
-      border: 1px solid var(--muted);
-      position: relative;
-      flex-shrink: 0
-    }
-
-    .rocky-pill.active {
-      border-color: var(--amber);
-      background: var(--amber-dim);
-      color: #fff
-    }
-
-    .rocky-pill.active .rocky-radio-dot {
-      border-color: var(--amber)
-    }
-
-    .rocky-pill.active .rocky-radio-dot::after {
-      content: "";
-      position: absolute;
-      inset: 2px;
-      border-radius: 50%;
-      background: var(--amber);
-      box-shadow: 0 0 6px var(--amber-glow)
-    }
-
-    .rocky-time-row {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      flex-wrap: wrap;
-      margin-bottom: 12px
-    }
-
-    .rocky-time-label {
-      font: 12px var(--mono);
-      color: var(--muted)
-    }
-
-    .rocky-time-picker {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      background: var(--well);
-      border: 1px solid var(--line-strong);
-      padding: 4px 10px
-    }
-
-    .rocky-time-picker select {
-      background-color: transparent;
-      border: 0;
-      padding: 2px 22px 2px 0;
-      font: 600 13px var(--mono);
-      color: var(--ink);
-      background-position: right 0 center
-    }
-
-    .rocky-clock-icon {
-      font-size: 12px;
-      opacity: .5
-    }
-
-    .rocky-footnote {
-      font-size: 12px;
-      color: var(--muted);
-      line-height: 1.5;
-      margin: 14px 0 0;
-      border-top: 1px solid var(--line);
-      padding-top: 10px
-    }
-
-    .toast {
-      position: fixed;
-      left: 50%;
-      bottom: 24px;
-      transform: translate(-50%, 8px);
-      opacity: 0;
-      pointer-events: none;
-      background: var(--panel);
-      border: 1px solid var(--amber);
-      padding: 8px 14px;
-      font: 12px var(--mono);
-      transition: opacity .3s, transform .3s
-    }
-
-    /* Responsive */
-    @media(max-width:1100px) {
-      .strip {
-        grid-template-columns: repeat(3, minmax(0, 1fr))
-      }
-
-      .cell:nth-child(4) {
-        border-left: 0
-      }
-    }
-
-    @media(max-width:900px) {
-      .form-grid {
-        columns: 1
-      }
-
-      .console-columns {
-        grid-template-columns: 1fr
-      }
-    }
-
-    @media(max-width:640px) {
-      .wrap {
-        padding: 16px
-      }
-
-      .bezel {
-        width: 52px;
-        height: 40px
-      }
-
-      h1 {
-        font-size: 15px
-      }
-
-      .strip {
-        grid-template-columns: repeat(2, minmax(0, 1fr))
-      }
-
-      .cell {
-        border-left: 0;
-        border-top: 1px solid var(--line)
-      }
-
-      .cell:nth-child(-n+2) {
-        border-top: 0
-      }
-
-      .card {
-        padding: 16px
-      }
-
-      .row-2,
-      .grid-2 {
-        grid-template-columns: 1fr
-      }
-
-      .nav {
-        width: 100%;
-        display: grid;
-        grid-template-columns: repeat(4, minmax(0, 1fr))
-      }
-
-      .nb {
-        padding: 8px 4px;
-        font-size: 11px
-      }
-
-      .prompt-row {
-        flex-direction: column
-      }
+      .wrap { padding: 16px; }
+      .nav { width: 100%; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      .nb { padding: 8px 4px; font-size: 12px; justify-content: center; }
     }
 
     @media(prefers-reduced-motion:reduce) {
-
-      *,
-      *::before,
-      *::after {
+      *, *::before, *::after {
         animation: none !important;
         transition: none !important;
-        scroll-behavior: auto !important
       }
     }
   </style>
 </head>
 
 <body>
+  <noscript>
+    <div class="noscript-warn">JavaScript is required to manage Kiwi Robot settings and live interaction.</div>
+  </noscript>
+
   <canvas id="sky" aria-hidden="true"></canvas>
 
   <div class="wrap">
+    <div id="offlineBanner" class="offline-banner" style="display:none" role="alert">
+      <span class="offline-dot"></span> Kiwi unreachable &mdash; attempting to reconnect...
+    </div>
+
     <header class="bridge">
       <div class="id">
         <div class="bezel" aria-hidden="true"><i></i><i></i></div>
         <div>
-          <div class="unit">Kiwi Unit · <span id="clock">--:--</span></div>
+          <div class="unit">Kiwi Unit · <span id="fwVer">v1.0</span> · <span id="clock">--:--</span></div>
           <h1>Kiwi</h1>
           <div class="mood" id="moodLine">System Console</div>
         </div>
       </div>
-      <nav class="nav" aria-label="Pages">
+      <nav class="nav" aria-label="Main Navigation">
         <a class="nb on" href="/">Dashboard</a>
         <a class="nb" href="/faces">Faces</a>
         <a class="nb" href="/update">OTA</a>
       </nav>
     </header>
 
-    <div class="tabs" role="tablist" aria-label="Dashboard tabs">
-      <button type="button" class="tab-btn on" id="pillLive" onclick="setTab('live')">Live</button>
-      <button type="button" class="tab-btn" id="pillSettings" onclick="setTab('settings')">Settings</button>
+    <div class="tabs" role="tablist" aria-label="Dashboard tabs" id="dashboardTabs">
+      <button type="button" class="tab-btn on" id="pillLive" role="tab" aria-selected="true" aria-controls="liveSection" onclick="setTab('live')">Live Console</button>
+      <button type="button" class="tab-btn" id="pillSettings" role="tab" aria-selected="false" aria-controls="settingsSection" onclick="setTab('settings')">Settings &amp; AI</button>
     </div>
 
     )rawcss";
@@ -1297,38 +1157,42 @@ static const char DASHBOARD_STATUS_TEMPLATE[] PROGMEM = R"rawstat(<section class
     </section>
 
     <!-- LIVE SECTION (Real-Time Hardware & Voice Console - Zero Reboot Required) -->
-    <div id="liveSection">
+    <div id="liveSection" role="tabpanel" aria-labelledby="pillLive">
       <!-- Live voice interaction & serial monitor -->)rawstat";
 
 static const char DASHBOARD_LIVE_CONSOLE[] PROGMEM = R"rawconsole(<section id="live" class="card live-card" aria-labelledby="liveTitle">
         <div class="card-title">
           <span id="liveTitle">Live Voice Interaction &amp; Serial Monitor</span>
-          <span class="status-pill" id="liveStateBadge" role="status" aria-live="polite"><span class="dot"
-              id="liveStateDot"></span><span id="liveStateText">Ready</span></span>
+          <span class="live-saved-tick show" id="liveStateBadge">
+            <span class="dot" id="liveStateDot"></span>
+            <span id="liveStateText" role="status" aria-live="polite">Ready</span>
+          </span>
         </div>
 
-        <div class="console-columns">
-          <div class="stack">
-            <button type="button" id="btnWebMic" class="mic-btn">
-              <span class="mic-icon" aria-hidden="true"></span>
-              <div>
-                <div id="micBtnTitle" class="mic-title">Start Voice Recording</div>
-                <div id="micBtnSub" class="muted" style="margin:2px 0 0">Stops shortly after you finish speaking</div>
-              </div>
+        <div class="console-grid">
+          <div class="mic-button-deck">
+            <button type="button" class="btn-mic" id="btnWebMic" aria-label="Start Voice Recording">
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+                <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+                <line x1="12" y1="19" x2="12" y2="23"/>
+                <line x1="8" y1="23" x2="16" y2="23"/>
+              </svg>
             </button>
+            <div style="font-weight:600;font-size:13px">Tap to Speak with Kiwi</div>
+            <div id="micBtnSub" style="font-size:12px;color:var(--muted)">Stops automatically after you finish speaking</div>
 
-            <div class="prompt-row">
-              <input type="text" id="textPromptIn" placeholder="Type prompt or question for Kiwi..."
-                aria-label="Prompt for Kiwi">
+            <div class="prompt-row" style="width:100%">
+              <input type="text" id="textPromptIn" placeholder="Type prompt or question for Kiwi..." aria-label="Prompt for Kiwi">
               <button type="button" id="btnSendPrompt" class="qbtn primary" style="padding:0 18px">Send</button>
             </div>
 
-            <div class="readout">
+            <div class="readout" style="width:100%">
               <div class="readout-k blue">Speech-To-Text Transcription</div>
               <div id="boxQuestion" class="readout-v">Awaiting voice input or prompt...</div>
             </div>
 
-            <div class="readout">
+            <div class="readout" style="width:100%">
               <div class="readout-k green">Kiwi AI Response</div>
               <div id="boxAnswer" class="readout-v">Awaiting response...</div>
             </div>
@@ -1337,10 +1201,15 @@ static const char DASHBOARD_LIVE_CONSOLE[] PROGMEM = R"rawconsole(<section id="l
           <div class="term">
             <div class="term-head">
               <span class="lamps"><i></i><i></i><i></i>&nbsp;ESP32-C3 · 115200 BAUD</span>
-              <span style="display:flex;align-items:center;gap:10px">
-                <label><input type="checkbox" id="autoScrollCheck" checked> Auto-scroll</label>
-                <button type="button" id="btnClearLog" class="qbtn" style="padding:3px 10px;font-size:11px">Clear</button>
-              </span>
+              <div class="term-tools">
+                <input type="search" id="termFilter" class="term-filter" placeholder="Filter logs..." aria-label="Filter logs">
+                <label style="margin:0;display:inline-flex;align-items:center;gap:4px;font-size:11px;text-transform:none">
+                  <input type="checkbox" id="autoScrollCheck" checked> Scroll
+                </label>
+                <button type="button" id="btnCopyLog" class="qbtn" style="padding:2px 8px;min-height:30px;font-size:11px">Copy</button>
+                <button type="button" id="btnDownloadLog" class="qbtn" style="padding:2px 8px;min-height:30px;font-size:11px">Save</button>
+                <button type="button" id="btnClearLog" class="qbtn" style="padding:2px 8px;min-height:30px;font-size:11px">Clear</button>
+              </div>
             </div>
             <div id="serialTerminal" role="log" aria-label="Serial monitor" aria-live="off"></div>
           </div>
@@ -1349,143 +1218,149 @@ static const char DASHBOARD_LIVE_CONSOLE[] PROGMEM = R"rawconsole(<section id="l
 
       <!-- Live Hardware Adjustments Deck (Real-Time · No Reboot Required) -->
       <div class="live-hardware-grid">
-        <!-- Display brightness & night mode (Rocky Style) -->
-        <div class="card rocky-bright-card">
-          <div class="rocky-card-header" style="display:flex;align-items:center;justify-content:space-between">
-            <span class="rocky-header-label">Display Brightness</span>
-            <span class="live-saved-tick" id="tickBrightness"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Live</span>
-          </div>
-          <div class="rocky-slider-row">
-            <input type="range" name="live_disp_bright" id="dayBrightSlider" min="0" max="100" value="%BRIGHT%"
-              aria-label="Day brightness" oninput="onDayBrightChange(this.value)">
-            <span class="rocky-percent-badge" id="dayBrightVal">%BRIGHT%%</span>
+        <!-- Col 1: Display Brightness & Night Mode -->
+        <div class="card kiwi-bright-card rocky-bright-card" style="margin-bottom:0;display:flex;flex-direction:column;justify-content:space-between">
+          <div>
+            <div class="card-title" style="display:flex;align-items:center;justify-content:space-between">
+              <span>Display Brightness</span>
+              <span class="live-saved-tick" id="tickBrightness"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg> Live</span>
+            </div>
+            <div class="kiwi-slider-row rocky-slider-row" style="margin-bottom:12px">
+              <input type="range" name="live_disp_bright" id="dayBrightSlider" min="0" max="100" value="%BRIGHT%"
+                aria-label="Day brightness" oninput="onDayBrightChange(this.value)">
+              <span class="kiwi-percent-badge rocky-percent-badge" id="dayBrightVal">%BRIGHT%%</span>
+            </div>
+
+            <div class="kiwi-section-title rocky-section-title" style="margin:12px 0 8px">At Night Screen Mode</div>
+            <div class="kiwi-pill-group rocky-pill-group" role="radiogroup" aria-label="Night mode">
+              <label class="kiwi-pill rocky-pill %NIGHT_SEL_0%">
+                <input type="radio" name="live_night_mode" value="0" %NIGHT_CHECK_0% onchange="onNightModeChange(0)">
+                <span class="kiwi-radio-dot rocky-radio-dot"></span><span>Same</span>
+              </label>
+              <label class="kiwi-pill rocky-pill %NIGHT_SEL_1%">
+                <input type="radio" name="live_night_mode" value="1" %NIGHT_CHECK_1% onchange="onNightModeChange(1)">
+                <span class="kiwi-radio-dot rocky-radio-dot"></span><span>Dim</span>
+              </label>
+              <label class="kiwi-pill rocky-pill %NIGHT_SEL_2%">
+                <input type="radio" name="live_night_mode" value="2" %NIGHT_CHECK_2% onchange="onNightModeChange(2)">
+                <span class="kiwi-radio-dot rocky-radio-dot"></span><span>Off</span>
+              </label>
+            </div>
+
+            <div class="kiwi-slider-row rocky-slider-row" id="nightSliderRow" style="%NIGHT_SLIDER_STYLE%">
+              <input type="range" name="live_night_bright" id="nightBrightSlider" min="0" max="100" value="%NIGHT_BRIGHT%"
+                aria-label="Night brightness" oninput="onNightBrightChange(this.value)">
+              <span class="kiwi-percent-badge rocky-percent-badge" id="nightBrightVal">%NIGHT_BRIGHT%%</span>
+            </div>
           </div>
 
-          <div class="rocky-section-title">At Night Screen Mode</div>
-          <div class="rocky-pill-group" role="radiogroup" aria-label="Night mode">
-            <label class="rocky-pill %NIGHT_SEL_0%">
-              <input type="radio" name="live_night_mode" value="0" %NIGHT_CHECK_0% onchange="onNightModeChange(0)">
-              <span class="rocky-radio-dot"></span><span>Same as day</span>
-            </label>
-            <label class="rocky-pill %NIGHT_SEL_1%">
-              <input type="radio" name="live_night_mode" value="1" %NIGHT_CHECK_1% onchange="onNightModeChange(1)">
-              <span class="rocky-radio-dot"></span><span>Dim</span>
-            </label>
-            <label class="rocky-pill %NIGHT_SEL_2%">
-              <input type="radio" name="live_night_mode" value="2" %NIGHT_CHECK_2% onchange="onNightModeChange(2)">
-              <span class="rocky-radio-dot"></span><span>Screen off</span>
-            </label>
-          </div>
-
-          <div class="rocky-slider-row" id="nightSliderRow" style="%NIGHT_SLIDER_STYLE%">
-            <input type="range" name="live_night_bright" id="nightBrightSlider" min="0" max="100" value="%NIGHT_BRIGHT%"
-              aria-label="Night brightness" oninput="onNightBrightChange(this.value)">
-            <span class="rocky-percent-badge" id="nightBrightVal">%NIGHT_BRIGHT%%</span>
-          </div>
-
-          <p class="rocky-footnote">
-            Night screen mode applies during circadian night or when Kiwi is asleep. Changes apply instantly without restart.
+          <p class="kiwi-footnote rocky-footnote" style="margin-top:12px">
+            Night mode applies during sleep hours or when put to sleep. Changes apply instantly.
           </p>
         </div>
 
-        <!-- Live Speaker Volume & Desk Quirks -->
-        <div class="card">
-          <div class="card-title" style="display:flex;align-items:center;justify-content:space-between">
-            <span>Live Speaker Volume &amp; Desk Activity</span>
-            <span class="live-saved-tick" id="tickAudio"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Live</span>
-          </div>
-          <label for="volSlider">Speaker Volume: <span id="volLabel"
-              style="color:var(--amber);font-family:var(--mono);letter-spacing:0">%VOL%</span>%</label>
-          <input type="range" id="volSlider" name="live_vol" min="0" max="100" value="%VOL%"
-            oninput="onVolumeChangeLive(this.value)">
-
-          <div class="panel">
-            <label class="toggle">
-              <input type="checkbox" name="live_boredom" id="rootBoredomToggle" value="1" %BOREDOM_CHECKED%
-                onchange="toggleBoredomLive(this.checked)">
-              <span class="switch"></span>
-              <span style="font-weight:600">Autonomous Idle Desk Chatter &amp; Quirks</span>
-            </label>
-            <div style="margin-top:12px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-              <label for="boredomMinsSel" style="margin:0">Idle Chatter Time</label>
-              <select id="boredomMinsSel" onchange="setBoredomIntervalLive(this.value)"
-                style="width:auto;padding:6px 28px 6px 10px">
-                <option value="1" %BM_1_SEL%>Every 1 Minute (Lively)</option>
-                <option value="2" %BM_2_SEL%>Every 2 Minutes (Default)</option>
-                <option value="3" %BM_3_SEL%>Every 3 Minutes</option>
-                <option value="5" %BM_5_SEL%>Every 5 Minutes</option>
-                <option value="10" %BM_10_SEL%>Every 10 Minutes</option>
-                <option value="15" %BM_15_SEL%>Every 15 Minutes</option>
-                <option value="30" %BM_30_SEL%>Every 30 Minutes</option>
-              </select>
+        <!-- Col 2: Live Speaker Volume & Desk Quirks -->
+        <div class="card" style="margin-bottom:0;display:flex;flex-direction:column;justify-content:space-between">
+          <div>
+            <div class="card-title" style="display:flex;align-items:center;justify-content:space-between">
+              <span>Speaker Volume &amp; Desk</span>
+              <span class="live-saved-tick" id="tickAudio"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg> Live</span>
             </div>
-            <small>When left idle, Kiwi makes witty remarks, health/tea reminders, and banter. Changes apply instantly without restart.</small>
+            <div class="kiwi-slider-row rocky-slider-row" style="margin-bottom:12px">
+              <input type="range" id="volSlider" name="live_vol" min="0" max="100" value="%VOL%"
+                aria-label="Speaker volume" oninput="onVolumeChangeLive(this.value)">
+              <span class="kiwi-percent-badge rocky-percent-badge"><span id="volLabel">%VOL%</span>%</span>
+            </div>
+
+            <div class="panel" style="margin-top:12px">
+              <label class="toggle" style="margin:0 0 8px 0">
+                <input type="checkbox" name="live_boredom" id="rootBoredomToggle" value="1" %BOREDOM_CHECKED%
+                  onchange="toggleBoredomLive(this.checked)">
+                <span class="switch"></span>
+                <span style="font-weight:600;font-size:13px">Autonomous Idle Chatter</span>
+              </label>
+              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                <label for="boredomMinsSel" style="margin:0;font-size:11px">Interval:</label>
+                <select id="boredomMinsSel" onchange="setBoredomIntervalLive(this.value)"
+                  style="width:auto;flex:1;padding:4px 24px 4px 8px;font-size:12px;min-height:36px">
+                  <option value="1" %BM_1_SEL%>Every 1m (Lively)</option>
+                  <option value="2" %BM_2_SEL%>Every 2m (Default)</option>
+                  <option value="3" %BM_3_SEL%>Every 3m</option>
+                  <option value="5" %BM_5_SEL%>Every 5m</option>
+                  <option value="10" %BM_10_SEL%>Every 10m</option>
+                  <option value="15" %BM_15_SEL%>Every 15m</option>
+                  <option value="30" %BM_30_SEL%>Every 30m</option>
+                </select>
+              </div>
+            </div>
           </div>
+
+          <p class="kiwi-footnote rocky-footnote" style="margin-top:12px">
+            When idle, Kiwi makes witty remarks, health/tea reminders, and banter.
+          </p>
         </div>
 
-        <!-- Night Sleep Schedule (Circadian Sleep) & Instant Manual Sleep -->
-        <div class="card" style="grid-column:1 / -1">
-          <div class="card-title" style="display:flex;align-items:center;justify-content:space-between">
-            <span style="display:flex;align-items:center;gap:8px">
-              <span>Night Sleep Schedule &amp; Sleep Mode</span>
-            </span>
-            <span class="live-saved-tick" id="tickCircadian"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Live</span>
-          </div>
+        <!-- Col 3: Night Sleep Schedule & Manual Sleep -->
+        <div class="card" style="margin-bottom:0;display:flex;flex-direction:column;justify-content:space-between">
+          <div>
+            <div class="card-title" style="display:flex;align-items:center;justify-content:space-between">
+              <span>Night Sleep &amp; Mode</span>
+              <span class="live-saved-tick" id="tickCircadian"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg> Live</span>
+            </div>
 
-          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px;align-items:start">
-            <!-- Schedule Toggle & Time Picker -->
-            <div class="panel">
-              <label class="toggle">
+            <div style="margin-bottom:12px">
+              <button type="button" class="qbtn" id="btnManualSleep" onclick="toggleManualSleep()" style="width:100%;min-height:40px;display:flex;align-items:center;justify-content:center;gap:8px">
+                <span id="manualSleepIco" aria-hidden="true">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+                </span>
+                <span id="manualSleepTxt">Put Kiwi to Sleep</span>
+              </button>
+              <div id="sleepStateHint" style="font-size:11px;color:var(--muted);text-align:center;margin-top:4px">
+                Robot is awake and active
+              </div>
+            </div>
+
+            <div class="panel" style="margin-top:0">
+              <label class="toggle" style="margin:0 0 6px 0">
                 <input type="checkbox" id="liveCircEnToggle" %CIRC_EN_CHECKED% onchange="onCircadianToggle(this.checked)">
                 <span class="switch"></span>
-                <span style="font-weight:600">Enable Night Sleep Schedule</span>
+                <span style="font-weight:600;font-size:13px">Sleep Schedule</span>
               </label>
 
-              <div class="rocky-time-row" id="circTimeRow" style="margin-top:14px">
-                <span class="rocky-time-label">Sleep from</span>
-                <div class="rocky-time-picker">
-                  <select id="circStartSel" onchange="onScheduleChange()" aria-label="Night sleep start time">
-                    %CIRC_START_OPTIONS%
-                  </select>
-                  <span class="rocky-clock-icon" aria-hidden="true">◷</span>
+              <div id="circTimeRow" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px">
+                <div>
+                  <div style="font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted);margin-bottom:3px;font-family:var(--display);font-weight:600">Sleep At</div>
+                  <div class="kiwi-time-picker rocky-time-picker" style="width:100%;box-sizing:border-box">
+                    <select id="circStartSel" onchange="onScheduleChange()" aria-label="Night sleep start time">
+                      %CIRC_START_OPTIONS%
+                    </select>
+                  </div>
                 </div>
-                <span class="rocky-time-label">until</span>
-                <div class="rocky-time-picker">
-                  <select id="circEndSel" onchange="onScheduleChange()" aria-label="Night wake up time">
-                    %CIRC_END_OPTIONS%
-                  </select>
-                  <span class="rocky-clock-icon" aria-hidden="true">◷</span>
-                </div>
-              </div>
-
-              <small style="display:block;margin-top:10px;line-height:1.5;color:var(--muted)">
-                During these hours, Kiwi automatically enters sleep mode to save OLED display life and rest quietly.
-              </small>
-            </div>
-
-            <!-- Instant Manual Sleep / Wake Control -->
-            <div class="panel" style="display:flex;flex-direction:column;justify-content:space-between;min-height:120px">
-              <div>
-                <div style="font-weight:600;font-size:13px;color:var(--ink)">Instant Manual Sleep / Wake</div>
-                <div id="sleepStateHint" style="font-size:12px;color:var(--muted);margin-top:4px">
-                  Current state: Robot is awake and active
+                <div>
+                  <div style="font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted);margin-bottom:3px;font-family:var(--display);font-weight:600">Wake At</div>
+                  <div class="kiwi-time-picker rocky-time-picker" style="width:100%;box-sizing:border-box">
+                    <select id="circEndSel" onchange="onScheduleChange()" aria-label="Night wake up time">
+                      %CIRC_END_OPTIONS%
+                    </select>
+                  </div>
                 </div>
               </div>
 
-              <div style="margin-top:14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-                <button type="button" class="qbtn" id="btnManualSleep" onclick="toggleManualSleep()" style="padding:10px 18px;font-weight:600;display:inline-flex;align-items:center;gap:6px">
-                  <span id="manualSleepIco">😴</span> <span id="manualSleepTxt">Put Kiwi to Sleep</span>
-                </button>
-                <small style="color:var(--muted)">Hold head for 7s to sleep via touch</small>
+              <div id="circScheduleWarn" style="display:none;color:#ff9d94;font-size:11px;margin-top:6px">
+                Start and wake time cannot be identical.
               </div>
             </div>
           </div>
+
+          <p class="kiwi-footnote rocky-footnote" style="margin-top:12px">
+            Rests display during sleep hours. Touch head 7s to sleep/wake manually.
+          </p>
         </div>
       </div>
     </div> <!-- End #liveSection -->
 
     <!-- SETTINGS SECTION (Permanent Configuration Deck - Saves & Restarts) -->
-    <div id="settingsSection" style="display:none">
+    <div id="settingsSection" style="display:none" role="tabpanel" aria-labelledby="pillSettings">
 )rawconsole";
 
 static const char DASHBOARD_BODY_PART1[] PROGMEM = R"rawb1(<form method="POST" action="/save" class="form-grid" id="cfgForm">
@@ -1493,20 +1368,23 @@ static const char DASHBOARD_BODY_PART1[] PROGMEM = R"rawb1(<form method="POST" a
         <input type="hidden" name="vol" id="hiddenFormVol" value="%VOL%">
         <input type="hidden" name="disp_bright" id="hiddenFormBright" value="%BRIGHT%">
         <input type="hidden" name="night_bright" id="hiddenFormNightBright" value="%NIGHT_BRIGHT%">
-        <input type="hidden" name="night_mode" id="hiddenFormNightMode" value="1">
+        <input type="hidden" name="night_mode" id="hiddenFormNightMode" value="%NIGHT_MODE%">
         <input type="hidden" name="circ_start" id="hiddenFormCircStart" value="%CIRC_START%">
         <input type="hidden" name="circ_end" id="hiddenFormCircEnd" value="%CIRC_END%">
         <input type="hidden" name="circ_en" id="hiddenFormCircEn" value="%CIRC_EN_VAL%">
-        <input type="hidden" name="boredom" id="hiddenFormBoredom" value="%BOREDOM_CHECKED%">
+        <input type="hidden" name="boredom" id="hiddenFormBoredom" value="%BOREDOM_VAL%">
         <input type="hidden" name="boredom_mins" id="hiddenFormBoredomMins" value="%BOREDOM_MINS%">
 
-                        <!-- WI-FI & LOCAL NETWORK SETUP (Prominent Top Card) -->
+        <!-- WI-FI & LOCAL NETWORK SETUP -->
         <div class="card credentials-card" style="margin-bottom:16px">
-          <div class="card-head" style="margin-bottom:6px">
-            <div class="card-title" style="margin:0;border:0;padding:0">📶 WI-FI &amp; LOCAL NETWORK SETUP</div>
+          <div class="card-head" style="margin-bottom:6px;display:flex;align-items:center;justify-content:space-between">
+            <div class="card-title" style="margin:0;border:0;padding:0;display:flex;align-items:center;gap:8px">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></svg>
+              <span>WI-FI &amp; LOCAL NETWORK SETUP</span>
+            </div>
             <button type="button" id="btnScanWifi" class="qbtn" onclick="scanWifiNetworks()" style="padding:6px 14px;font-size:11px">
               <span id="scanSpinner" class="spin" style="display:none">↻</span>
-              <span id="scanBtnText">🔍 Scan Networks</span>
+              <span id="scanBtnText">Scan Networks</span>
             </button>
           </div>
           <p style="margin:0 0 14px;color:var(--muted);font-size:12px;line-height:1.4">
@@ -1515,95 +1393,100 @@ static const char DASHBOARD_BODY_PART1[] PROGMEM = R"rawb1(<form method="POST" a
           <div class="credentials-deck" style="margin-top:10px">
             <div>
               <label for="wifiScanSelect">DETECTED 2.4GHz NETWORKS</label>
-              <select id="wifiScanSelect" onchange="onSelectScannedWifi(this.value)">
-                <option value="">-- Click "Scan Networks" to search --</option>
+              <select id="wifiScanSelect" onchange="onNetworkSelect(this.value)">
+                <option value="">-- Click 'Scan Networks' to Search --</option>
               </select>
-              <small>Selecting a network automatically fills the SSID</small>
             </div>
             <div>
-              <label for="wifiSsidInput">WI-FI NETWORK (SSID)</label>
-              <input name="ssid" id="wifiSsidInput" value="%SSID%" required placeholder="Enter 2.4GHz Wi-Fi name">
-              <small>Case-sensitive 2.4GHz network name</small>
+              <label for="wifiSsidInput">WI-FI NETWORK (SSID) *</label>
+              <input type="text" name="ssid" id="wifiSsidInput" required value="%SSID%" placeholder="Enter Wi-Fi network name">
             </div>
             <div style="grid-column:1 / -1">
               <label for="wifiPassInput">WI-FI PASSWORD</label>
               <div class="pw">
                 <input name="pass" id="wifiPassInput" type="password" value="%PASS%" placeholder="Enter Wi-Fi password (leave blank for open)">
-                <button type="button" class="icon-btn" onclick="togglePassVisibility(this)" title="Show/Hide Password">SHOW</button>
+                <button type="button" class="icon-btn" onclick="togglePw('wifiPassInput', this)" title="Show/Hide Password" aria-label="Toggle password visibility">SHOW</button>
               </div>
-              <small>Your password is securely saved in ESP32 flash memory</small>
+              <small style="color:var(--muted)">Your password is securely saved in ESP32 flash memory</small>
             </div>
           </div>
         </div>
 
-<!-- CLOUD API KEYS & CREDENTIALS (Centralized Unified 2-Column Deck) -->
-        <div class="card credentials-card">
-          <div class="card-head" style="margin-bottom:6px">
-            <div class="card-title" style="margin:0;border:0;padding:0">🔑 CLOUD API KEYS &amp; CREDENTIALS</div>
+        <!-- CLOUD API KEYS & CREDENTIALS -->
+        <div class="card credentials-card" id="keysCard">
+          <div class="card-head" style="margin-bottom:6px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
+            <div class="card-title" style="margin:0;border:0;padding:0;display:flex;align-items:center;gap:8px">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+              <span>CLOUD API KEYS &amp; CREDENTIALS</span>
+            </div>
+            <label style="margin:0;display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);cursor:pointer;text-transform:none">
+              <input type="checkbox" id="showAllKeysToggle" style="margin:0;min-height:auto">
+              <span>Show all 6 provider keys</span>
+            </label>
           </div>
           <p style="margin:0 0 16px;color:var(--muted);font-size:12px;line-height:1.45;letter-spacing:0.02em">
-            Manage all cloud AI credentials in one unified 2-column deck. Keys are stored locally in ESP32 flash memory
+            API keys for active AI providers are shown below. Keys are stored locally in ESP32 flash memory.
           </p>
 
-          <div class="credentials-deck">
+          <div class="credentials-deck" id="credentialsDeck">
             <!-- Left Column: Google Gemini -->
-            <div class="api-key-item">
+            <div class="api-key-item" data-provider="gemini">
               <label for="geminiKeyIn">GOOGLE GEMINI API</label>
               <div class="pw">
                 <input name="llmkey" id="geminiKeyIn" type="password" value="%LLMKEY%" placeholder="AIzaSy...">
-                <button type="button" class="icon-btn" onclick="togglePw('geminiKeyIn', this)">SHOW</button>
+                <button type="button" class="icon-btn" onclick="togglePw('geminiKeyIn', this)" aria-label="Toggle Gemini API visibility">SHOW</button>
               </div>
-              <small>Google Gemini 2.0 Flash &amp; Flash-Lite reasoning</small>
+              <small style="color:var(--muted)">Google Gemini 2.0 Flash &amp; Flash-Lite reasoning</small>
             </div>
 
             <!-- Right Column: Sarvam AI -->
-            <div class="api-key-item">
+            <div class="api-key-item" data-provider="sarvam">
               <label for="sarvamKeyIn">SARVAM AI API</label>
               <div class="pw">
                 <input name="ttskey" id="sarvamKeyIn" type="password" value="%TTSKEY%" placeholder="Enter Sarvam API key">
-                <button type="button" class="icon-btn" onclick="togglePw('sarvamKeyIn', this)">SHOW</button>
+                <button type="button" class="icon-btn" onclick="togglePw('sarvamKeyIn', this)" aria-label="Toggle Sarvam API visibility">SHOW</button>
               </div>
-              <small>Indian regional languages STT (Saaras) &amp; TTS (Bulbul v3/v4)</small>
+              <small style="color:var(--muted)">Indian regional languages STT (Saaras) &amp; TTS (Bulbul v3/v4)</small>
             </div>
 
             <!-- Left Column: Groq Cloud -->
-            <div class="api-key-item">
+            <div class="api-key-item" data-provider="groq">
               <label for="groqKeyIn">GROQ CLOUD API</label>
               <div class="pw">
                 <input name="groqkey" id="groqKeyIn" type="password" value="%GROQKEY%" placeholder="gsk_...">
-                <button type="button" class="icon-btn" onclick="togglePw('groqKeyIn', this)">SHOW</button>
+                <button type="button" class="icon-btn" onclick="togglePw('groqKeyIn', this)" aria-label="Toggle Groq API visibility">SHOW</button>
               </div>
-              <small>Ultra-fast Groq LLM (LLaMA 3.3, Qwen) &amp; Groq Whisper STT</small>
+              <small style="color:var(--muted)">Ultra-fast Groq LLM (LLaMA 3.3, Qwen) &amp; Groq Whisper STT</small>
             </div>
 
             <!-- Right Column: ElevenLabs -->
-            <div class="api-key-item">
+            <div class="api-key-item" data-provider="elevenlabs">
               <label for="elevenKeyIn">ELEVENLABS API</label>
               <div class="pw">
                 <input name="elevkey" id="elevenKeyIn" type="password" value="%ELEVENKEY%" placeholder="Enter ElevenLabs API key">
-                <button type="button" class="icon-btn" onclick="togglePw('elevenKeyIn', this)">SHOW</button>
+                <button type="button" class="icon-btn" onclick="togglePw('elevenKeyIn', this)" aria-label="Toggle ElevenLabs API visibility">SHOW</button>
               </div>
-              <small>ElevenLabs ultra-realistic neural TTS voices</small>
+              <small style="color:var(--muted)">ElevenLabs ultra-realistic neural TTS voices</small>
             </div>
 
             <!-- Left Column: OpenAI -->
-            <div class="api-key-item">
+            <div class="api-key-item" data-provider="openai">
               <label for="openaiKeyIn">OPENAI API</label>
               <div class="pw">
                 <input name="openaikey" id="openaiKeyIn" type="password" value="%OPENAIKEY%" placeholder="sk-...">
-                <button type="button" class="icon-btn" onclick="togglePw('openaiKeyIn', this)">SHOW</button>
+                <button type="button" class="icon-btn" onclick="togglePw('openaiKeyIn', this)" aria-label="Toggle OpenAI API visibility">SHOW</button>
               </div>
-              <small>OpenAI GPT models (gpt-4o-mini), Whisper STT, and OpenAI TTS</small>
+              <small style="color:var(--muted)">OpenAI GPT models (gpt-4o-mini), Whisper STT, and OpenAI TTS</small>
             </div>
 
             <!-- Right Column: Fish Audio -->
-            <div class="api-key-item">
+            <div class="api-key-item" data-provider="fish">
               <label for="fishKeyIn">FISH AUDIO API</label>
               <div class="pw">
                 <input name="fishkey" id="fishKeyIn" type="password" value="%FISHKEY%" placeholder="Enter Fish Audio API key">
-                <button type="button" class="icon-btn" onclick="togglePw('fishKeyIn', this)">SHOW</button>
+                <button type="button" class="icon-btn" onclick="togglePw('fishKeyIn', this)" aria-label="Toggle Fish Audio API visibility">SHOW</button>
               </div>
-              <small>Fish Speech neural voice synthesis (S2.1)</small>
+              <small style="color:var(--muted)">Fish Speech neural voice synthesis (S2.1)</small>
             </div>
           </div>
         </div>
@@ -1618,26 +1501,26 @@ static const char DASHBOARD_BODY_PART1[] PROGMEM = R"rawb1(<form method="POST" a
               <option value="groq" %STT_GROQ_SEL%>Groq Whisper (fastest)</option>
               <option value="openai" %STT_OPENAI_SEL%>OpenAI Whisper</option>
             </select>
-            <label>STT LANGUAGE</label>
-            <select name="sttlang">
+            <label for="sttLangSel">STT LANGUAGE</label>
+            <select name="sttlang" id="sttLangSel">
               <option value="auto" %LANG_AUTO_SEL%>Auto (Hindi + English)</option>
               <option value="hi" %LANG_HI_SEL%>Force Hindi</option>
               <option value="en" %LANG_EN_SEL%>Force English</option>
             </select>
             <div id="sarvamBox">
               <h3>Sarvam AI Settings</h3>
-              <label>Endpoint</label><input name="stturl" value="%STTURL%">
-              <label>Model</label>
-              <select name="sttmodel">
+              <label for="sttUrlIn">Endpoint</label><input type="url" name="stturl" id="sttUrlIn" value="%STTURL%" placeholder="https://...">
+              <label for="sttModelSel">Model</label>
+              <select name="sttmodel" id="sttModelSel">
                 <option value="saaras:v3" %STT_SAARAS_SEL%>saaras:v3</option>
                 <option value="saarika:v2" %STT_SAARIKA_SEL%>saarika:v2</option>
               </select>
             </div>
             <div id="groqSttBox">
               <h3>Groq Whisper Settings</h3>
-              <label>Endpoint</label><input name="groqstturl" value="%GROQSTTURL%">
-              <label>Model</label>
-              <select name="groqsttmodel">
+              <label for="groqSttUrlIn">Endpoint</label><input type="url" name="groqstturl" id="groqSttUrlIn" value="%GROQSTTURL%" placeholder="https://...">
+              <label for="groqSttModelSel">Model</label>
+              <select name="groqsttmodel" id="groqSttModelSel">
                 <option value="whisper-large-v3-turbo" %GW3T_SEL%>whisper-large-v3-turbo (fast)</option>
                 <option value="whisper-large-v3" %GW3_SEL%>whisper-large-v3 (accurate)</option>
                 <option value="distil-whisper-large-v3-en" %GDW_SEL%>distil-whisper-large-v3-en</option>
@@ -1645,9 +1528,9 @@ static const char DASHBOARD_BODY_PART1[] PROGMEM = R"rawb1(<form method="POST" a
             </div>
             <div id="openaiSttBox">
               <h3>OpenAI Whisper Settings</h3>
-              <label>Endpoint</label><input name="opaistturl" value="%OPENAIURL%">
-              <label>Model</label>
-              <select name="opaisttmodel">
+              <label for="opaiSttUrlIn">Endpoint</label><input type="url" name="opaistturl" id="opaiSttUrlIn" value="%OPENAIURL%" placeholder="https://...">
+              <label for="opaiSttModelSel">Model</label>
+              <select name="opaisttmodel" id="opaiSttModelSel">
                 <option value="whisper-1" %OW1_SEL%>whisper-1</option>
                 <option value="gpt-4o-mini-transcribe" %OG4M_SEL%>gpt-4o-mini-transcribe</option>
                 <option value="gpt-4o-transcribe" %OG4_SEL%>gpt-4o-transcribe</option>
@@ -1666,196 +1549,209 @@ static const char DASHBOARD_BODY_PART1[] PROGMEM = R"rawb1(<form method="POST" a
             </select>
             <div id="geminiBox">
               <h3>Gemini Model &amp; Settings</h3>
-              <label>Model</label>
+              <label for="geminiModelSel">Model</label>
               <select name="llmmodel" id="geminiModelSel" onchange="updateGeminiUrl()">
                 <option value="gemini-2.0-flash-lite" %GE20L_SEL%>gemini-2.0-flash-lite</option>
                 <option value="gemini-2.5-flash" %GE25_SEL%>gemini-2.5-flash</option>
                 <option value="gemini-2.5-flash-lite" %GE25L_SEL%>gemini-2.5-flash-lite</option>
               </select>
-              <label>Endpoint</label><input name="llmurl" id="geminiUrlIn" value="%LLMURL%">
+              <label for="geminiUrlIn">Endpoint</label><input type="url" name="llmurl" id="geminiUrlIn" value="%LLMURL%" placeholder="https://...">
             </div>
             <div id="groqBox">
               <h3>Groq Model &amp; Settings</h3>
-              <label>Model</label>
-              <select name="groqmodel">
+              <label for="groqModelSel">Model</label>
+              <select name="groqmodel" id="groqModelSel">
                 <option value="openai/gpt-oss-120b" %G120B_SEL%>openai/gpt-oss-120b</option>
                 <option value="openai/gpt-oss-20b" %G20B_SEL%>openai/gpt-oss-20b</option>
                 <option value="qwen/qwen3-32b" %GQ32B_SEL%>qwen/qwen3-32b</option>
                 <option value="llama-3.3-70b-versatile" %GL33_SEL%>llama-3.3-70b-versatile</option>
               </select>
-              <label>Endpoint</label><input name="groqurl" value="%GROQURL%">
+              <label for="groqUrlIn">Endpoint</label><input type="url" name="groqurl" id="groqUrlIn" value="%GROQURL%" placeholder="https://...">
             </div>
             <div id="openaiBox">
               <h3>OpenAI GPT Model &amp; Settings</h3>
-              <label>Model</label>
+              <label for="openaiModelSel">Model</label>
               <select name="openaimodel" id="openaiModelSel" onchange="updateOpenAiUrl()">
                 <option value="gpt-4o-mini" %GPT4OM_SEL%>gpt-4o-mini (fast, recommended)</option>
                 <option value="gpt-4.1-mini" %GPT41M_SEL%>gpt-4.1-mini (quality)</option>
                 <option value="gpt-4.1-nano" %GPT41N_SEL%>gpt-4.1-nano (fastest)</option>
                 <option value="gpt-4o" %GPT4O_SEL%>gpt-4o (higher quality)</option>
               </select>
-              <label>Endpoint</label><input name="openaiurl" id="openaiUrlIn" value="%OPENAI_LLM_URL%">
+              <label for="openaiUrlIn">Endpoint</label><input type="url" name="openaiurl" id="openaiUrlIn" value="%OPENAI_LLM_URL%" placeholder="https://...">
             </div>
           </div>
+        </div>
 )rawb1";
 
 static const char DASHBOARD_BODY_PART2[] PROGMEM = R"rawb2(<!-- Text-to-Speech -->
-          <div class="card">
-            <div class="card-title">3. TEXT-TO-SPEECH (TTS)</div>
-            <label for="ttsProvSel">TTS PROVIDER</label>
-            <select name="ttsprovider" id="ttsProvSel" onchange="toggleTts()">
-              <option value="sarvam" %TTS_SARVAM_SEL%>Sarvam AI (bulbul:v3)</option>
-              <option value="openai" %TTS_OPENAI_SEL%>OpenAI TTS</option>
-              <option value="elevenlabs" %TTS_ELEVEN_SEL%>ElevenLabs</option>
-              <option value="fish" %TTS_FISH_SEL%>Fish Audio (Fish Speech)</option>
+        <div class="card">
+          <div class="card-title">3. TEXT-TO-SPEECH (TTS)</div>
+          <label for="ttsProvSel">TTS PROVIDER</label>
+          <select name="ttsprovider" id="ttsProvSel" onchange="toggleTts()">
+            <option value="sarvam" %TTS_SARVAM_SEL%>Sarvam AI (bulbul:v3)</option>
+            <option value="openai" %TTS_OPENAI_SEL%>OpenAI TTS</option>
+            <option value="elevenlabs" %TTS_ELEVEN_SEL%>ElevenLabs</option>
+            <option value="fish" %TTS_FISH_SEL%>Fish Audio (Fish Speech)</option>
+          </select>
+          <div id="ttsSarvamBox">
+            <h3>Sarvam TTS Settings</h3>
+            <label for="ttsSarvamUrl">Endpoint</label><input type="url" name="ttsurl" id="ttsSarvamUrl" value="%TTSURL%" placeholder="https://...">
+            <label for="ttsSarvamModel">Model</label>
+            <select name="ttsmodel" id="ttsSarvamModel">
+              <option value="bulbul:v4-flash" %SARVAM_V4F_SEL%>bulbul:v4-flash (fastest)</option>
+              <option value="bulbul:v3" %SARVAM_V3_SEL%>bulbul:v3 (recommended)</option>
+              <option value="bulbul:v2" %SARVAM_V2_SEL%>bulbul:v2</option>
             </select>
-            <div id="ttsSarvamBox">
-              <h3>Sarvam TTS Settings</h3>
-              <label>Endpoint</label><input name="ttsurl" value="%TTSURL%">
-              <label>Model</label>
-              <select name="ttsmodel">
-                <option value="bulbul:v4-flash" %SARVAM_V4F_SEL%>bulbul:v4-flash (⚡ New Flash Model · Ultra Fast)</option>
-                <option value="bulbul:v3" %SARVAM_V3_SEL%>bulbul:v3 (Latest Stable · Hindi/Hinglish/English)</option>
-                <option value="bulbul:v2" %SARVAM_V2_SEL%>bulbul:v2 (Legacy v2)</option>
-              </select>
-              <label>Voice / Speaker</label>
-              <select name="ttsvoice">
-                %SARVAM_VOICE_OPTIONS%
-              </select>
-            </div>
-            <div id="ttsOpenaiBox">
-              <h3>OpenAI TTS Settings</h3>
-              <label>Endpoint</label><input name="openaittsurl" value="%OPENAITTSURL%">
-              <label>Model</label><input name="openaittsmodel" value="%OPENAITTSMODEL%">
-              <label>Voice</label>
-              <select name="openaittsvoice">
-                <option value="alloy" %OA_ALLOY_SEL%>alloy</option>
-                <option value="echo" %OA_ECHO_SEL%>echo</option>
-                <option value="fable" %OA_FABLE_SEL%>fable</option>
-                <option value="onyx" %OA_ONYX_SEL%>onyx</option>
-                <option value="nova" %OA_NOVA_SEL%>nova</option>
-                <option value="shimmer" %OA_SHIMMER_SEL%>shimmer</option>
-              </select>
-            </div>
-            <div id="ttsElevenBox">
-              <h3>ElevenLabs Settings</h3>
-              <label>Endpoint</label><input name="elevurl" value="%ELEVURL%">
-              <label>Model</label><input name="elevmodel" value="%ELEVMODEL%">
-              <label>Voice ID</label><input name="elevvoice" value="%ELEVVOICE%">
-            </div>
-            <div id="ttsFishBox">
-              <h3>Fish Audio Settings</h3>
-              <label>Endpoint</label><input name="fishurl" value="%FISHURL%">
-              <label>Model</label><input name="fishmodel" value="%FISHMODEL%">
-              <label>Voice / Reference ID (Optional)</label>
-              <input name="fishvoice" value="%FISHVOICE%" placeholder="e.g. voice model reference ID">
-            </div>
+            <label for="ttsSarvamVoice">Voice / Speaker</label>
+            <select name="ttsvoice" id="ttsSarvamVoice">
+              %SARVAM_VOICE_OPTIONS%
+            </select>
           </div>
-        </div> <!-- End ai-pipeline-deck -->
+          <div id="ttsOpenAiBox">
+            <h3>OpenAI TTS Settings</h3>
+            <label for="openAiTtsUrl">Endpoint</label><input type="url" name="openaittsurl" id="openAiTtsUrl" value="%OPENAITTSURL%" placeholder="https://...">
+            <label for="openAiTtsModel">Model</label><input type="text" name="openaittsmodel" id="openAiTtsModel" value="%OPENAITTSMODEL%">
+            <label for="openAiTtsVoice">Voice</label>
+            <select name="openaittsvoice" id="openAiTtsVoice">
+              <option value="alloy" %OA_ALLOY_SEL%>Alloy (Neutral)</option>
+              <option value="echo" %OA_ECHO_SEL%>Echo (Warm Male)</option>
+              <option value="fable" %OA_FABLE_SEL%>Fable (British Accent)</option>
+              <option value="onyx" %OA_ONYX_SEL%>Onyx (Deep Male)</option>
+              <option value="nova" %OA_NOVA_SEL%>Nova (Energetic Female)</option>
+              <option value="shimmer" %OA_SHIMMER_SEL%>Shimmer (Clear Female)</option>
+            </select>
+          </div>
+          <div id="ttsElevenBox">
+            <h3>ElevenLabs Settings</h3>
+            <label for="elevUrl">Endpoint</label><input type="url" name="elevurl" id="elevUrl" value="%ELEVURL%" placeholder="https://...">
+            <label for="elevModel">Model</label><input type="text" name="elevmodel" id="elevModel" value="%ELEVMODEL%">
+            <label for="elevVoice">Voice ID</label><input type="text" name="elevvoice" id="elevVoice" value="%ELEVVOICE%">
+          </div>
+          <div id="ttsFishBox">
+            <h3>Fish Audio Settings</h3>
+            <label for="fishUrl">Endpoint</label><input type="url" name="fishurl" id="fishUrl" value="%FISHURL%" placeholder="https://...">
+            <label for="fishModel">Model</label><input type="text" name="fishmodel" id="fishModel" value="%FISHMODEL%">
+            <label for="fishVoice">Voice / Reference ID (Optional)</label><input type="text" name="fishvoice" id="fishVoice" value="%FISHVOICE%">
+          </div>
+        </div>
 
-        
-
-        <!-- Touch Controls & Hardware Sensitivity -->
-      <div class="card">
-        <div class="card-title">Touch Controls &amp; Hardware Sensitivity</div>
-        <small style="margin:0 0 14px">Customize touch sensor responsiveness, debounce filter, and capacitive gestures.</small>
-
-        <div class="panel" style="margin-bottom:14px">
+        <!-- Capacitive touch pad assignment -->
+        <div class="card">
+          <div class="card-title">Capacitive Touch Mapping &amp; Gestures</div>
           <label class="toggle" style="margin-bottom:10px">
             <input type="checkbox" name="tch_snd" value="1" %TCH_SND_CHECKED%>
             <span class="switch"></span>
-            <span style="font-weight:600">Instant Audio/Visual Feedback (Blip &amp; Wink)</span>
+            <span>Play Tone Sound on Touch</span>
           </label>
           <label for="tchDebSlider" style="margin-top:6px">Debounce Filter / Sensitivity: <span id="tchDebLabel"
-              style="color:var(--amber);font-family:var(--mono);letter-spacing:0">%TCH_DEB%</span> ms</label>
-          <input type="range" id="tchDebSlider" name="tch_deb" min="15" max="150" step="5" value="%TCH_DEB%"
+              style="color:var(--amber);font-family:var(--mono)">%TCH_DEB%</span> ms</label>
+          <input type="range" id="tchDebSlider" name="tch_deb" min="10" max="150" value="%TCH_DEB%"
             oninput="document.getElementById('tchDebLabel').textContent=this.value">
-          <small>Lower ms (15-30ms) = Ultra-responsive touch. Higher ms (50-100ms) = Filters out static &amp; accidental ghost touches.</small>
+          <div class="touch-grid">
+            <div><label for="actTopTap">Top Head (Single Tap)</label><select name="act_top_tap" id="actTopTap" class="touch-act-sel"
+                data-val="%ACT_TOP_TAP%"></select></div>
+            <div><label for="actTopDbl">Top Head (Double Tap)</label><select name="act_top_dbl" id="actTopDbl" class="touch-act-sel"
+                data-val="%ACT_TOP_DBL%"></select></div>
+            <div><label for="actLtTap">Left Cheek (Single Tap)</label><select name="act_lt_tap" id="actLtTap" class="touch-act-sel"
+                data-val="%ACT_LT_TAP%"></select></div>
+            <div><label for="actLtDbl">Left Cheek (Double Tap)</label><select name="act_lt_dbl" id="actLtDbl" class="touch-act-sel"
+                data-val="%ACT_LT_DBL%"></select></div>
+            <div><label for="actRtTap">Right Cheek (Single Tap)</label><select name="act_rt_tap" id="actRtTap" class="touch-act-sel"
+                data-val="%ACT_RT_TAP%"></select></div>
+            <div><label for="actRtDbl">Right Cheek (Double Tap)</label><select name="act_rt_dbl" id="actRtDbl" class="touch-act-sel"
+                data-val="%ACT_RT_DBL%"></select></div>
+            <div><label for="actLtHld">Left Cheek (Hold 1.5s)</label><select name="act_lt_hld" id="actLtHld" class="touch-act-sel"
+                data-val="%ACT_LT_HLD%"></select></div>
+            <div><label for="actRtHld">Right Cheek (Hold 1.5s)</label><select name="act_rt_hld" id="actRtHld" class="touch-act-sel"
+                data-val="%ACT_RT_HLD%"></select></div>
+          </div>
+          <small class="tip">Tip: Hold Top Head for 3s to show Clock; hold for 7s to enter Night Sleep.</small>
         </div>
 
-        <div class="grid-2" style="margin-top:14px">
-          <div><label>Top Head (Single Tap)</label><select name="act_top_tap" class="touch-act-sel"
-              data-val="%ACT_TOP_TAP%"></select></div>
-          <div><label>Top Head (Double Tap)</label><select name="act_top_dbl" class="touch-act-sel"
-              data-val="%ACT_TOP_DBL%"></select></div>
-          <div><label>Left Cheek (Single Tap)</label><select name="act_lt_tap" class="touch-act-sel"
-              data-val="%ACT_LT_TAP%"></select></div>
-          <div><label>Left Cheek (Double Tap)</label><select name="act_lt_dbl" class="touch-act-sel"
-              data-val="%ACT_LT_DBL%"></select></div>
-          <div><label>Right Cheek (Single Tap)</label><select name="act_rt_tap" class="touch-act-sel"
-              data-val="%ACT_RT_TAP%"></select></div>
-          <div><label>Right Cheek (Double Tap)</label><select name="act_rt_dbl" class="touch-act-sel"
-              data-val="%ACT_RT_DBL%"></select></div>
-          <div><label>Left Cheek (Hold 1.5s)</label><select name="act_lt_hld" class="touch-act-sel"
-              data-val="%ACT_LT_HLD%"></select></div>
-          <div><label>Right Cheek (Hold 1.5s)</label><select name="act_rt_hld" class="touch-act-sel"
-              data-val="%ACT_RT_HLD%"></select></div>
-        </div>
-        <small class="tip">Tip: Hold Top Head for 3s to show Clock; hold for 7s to enter Night Sleep.</small>
-      </div>
-
-      <!-- Weather & personality -->
-      <div class="card">
-        <div class="card-title">Weather &amp; Personality</div>
-        <label for="wCity">City Name</label><input id="wCity" name="wthr_city" value="%WTHR_CITY%">
-        <div class="row-2">
-          <div><label for="wLat">Latitude</label><input id="wLat" name="wthr_lat" value="%WTHR_LAT%"></div>
-          <div><label for="wLon">Longitude</label><input id="wLon" name="wthr_lon" value="%WTHR_LON%"></div>
-        </div>
-        <label for="skinSel" style="margin-top:16px">OLED Face &amp; Eye Skin</label>
-        <select name="skin" id="skinSel" onchange="toggleSkinLive(this.value)">
-          <option value="kiwi" %SKIN_KIWI_SEL%>Desk Buddy (Cute Block) [Default]</option>
-          <option value="default" %SKIN_DEFAULT_SEL%>Default (Clean Round Vector)</option>
-          <option value="cyberpunk" %SKIN_CYBER_SEL%>Cyberpunk Visor &amp; HUD</option>
-          <option value="cat" %SKIN_CAT_SEL%>Kawaii Cat Neko &amp; Ears</option>
-          <option value="retro" %SKIN_RETRO_SEL%>Retro 8-Bit Arcade</option>
-          <option value="anime" %SKIN_ANIME_SEL%>Anime Shounen (Starry Glint)</option>
-          <option value="hearts" %SKIN_HEARTS_SEL%>Lovestruck Heart Eyes</option>
-          <option value="steampunk" %SKIN_STEAM_SEL%>Steampunk Aviator Goggles</option>
-          <option value="demon" %SKIN_DEMON_SEL%>Demon Spooky (Fiery Horns)</option>
-          <option value="matrix" %SKIN_MATRIX_SEL%>Matrix Code Stream (Terminal)</option>
-          <option value="cyborg" %SKIN_CYBORG_SEL%>Cyborg T-800 (Targeting Aperture)</option>
-          <option value="mecha" %SKIN_MECHA_SEL%>Mecha Gundam (V-Fin Crest &amp; Core)</option>
-          <option value="sunglasses" %SKIN_SHADES_SEL%>Boss Shades (Cool Sunglasses)</option>
-          <option value="puppy" %SKIN_PUPPY_SEL%>Kawaii Puppy (Floppy Ears &amp; Boba)</option>
-          <option value="hypno" %SKIN_HYPNO_SEL%>Hypno Spiral (Mesmerizing Vortex)</option>
-          <option value="alien" %SKIN_ALIEN_SEL%>Cosmic Alien (UFO Orbit &amp; Antenna)</option>
-          <option value="ninja" %SKIN_NINJA_SEL%>Shinobi Ninja (Headband &amp; Stealth)</option>
-          <option value="round" %SKIN_ROUND_SEL%>Round Eyes (Classic Ocular)</option>
-        </select>
-        <label for="promptIn" style="margin-top:16px">Robot System Prompt</label>
-        <textarea id="promptIn" name="prompt">%PROMPT%</textarea>
-      </div>
-
-      <!-- Memory -->
-      <div class="card">
-        <div class="card-title">Personal Life Diary &amp; Long-Term Memory</div>
-        <label for="memName">Your Name (Owner)</label>
-        <input id="memName" name="mem_name" value="%MEM_NAME%" placeholder="e.g. Rohil">
-
-        <label style="margin-top:14px">Facts Kiwi Remembers About You</label>
-        <div class="readout" style="margin-bottom:12px;max-height:180px;overflow-y:auto">
-          %MEM_LIST_HTML%
+        <!-- Weather & personality -->
+        <div class="card">
+          <div class="card-title">Weather &amp; Personality</div>
+          <label for="wCity">City Name</label><input type="text" id="wCity" name="wthr_city" value="%WTHR_CITY%">
+          <div class="row-2">
+            <div><label for="wLat">Latitude (-90 to 90)</label><input type="number" step="any" min="-90" max="90" id="wLat" name="wthr_lat" value="%WTHR_LAT%"></div>
+            <div><label for="wLon">Longitude (-180 to 180)</label><input type="number" step="any" min="-180" max="180" id="wLon" name="wthr_lon" value="%WTHR_LON%"></div>
+          </div>
+          <label for="skinSel" style="margin-top:16px">OLED Face &amp; Eye Skin</label>
+          <select name="skin" id="skinSel" onchange="toggleSkinLive(this.value)">
+            <option value="kiwi" %SKIN_KIWI_SEL%>Desk Buddy (Cute Block) [Default]</option>
+            <option value="default" %SKIN_DEFAULT_SEL%>Default (Clean Round Vector)</option>
+            <option value="cyberpunk" %SKIN_CYBER_SEL%>Cyberpunk Visor &amp; HUD</option>
+            <option value="cat" %SKIN_CAT_SEL%>Kawaii Cat Neko &amp; Ears</option>
+            <option value="retro" %SKIN_RETRO_SEL%>Retro 8-Bit Arcade</option>
+            <option value="anime" %SKIN_ANIME_SEL%>Anime Shounen (Starry Glint)</option>
+            <option value="hearts" %SKIN_HEARTS_SEL%>Lovestruck Heart Eyes</option>
+            <option value="steampunk" %SKIN_STEAM_SEL%>Steampunk Aviator Goggles</option>
+            <option value="demon" %SKIN_DEMON_SEL%>Demon Spooky (Fiery Horns)</option>
+            <option value="matrix" %SKIN_MATRIX_SEL%>Matrix Code Stream (Terminal)</option>
+            <option value="cyborg" %SKIN_CYBORG_SEL%>Cyborg T-800 (Targeting Aperture)</option>
+            <option value="mecha" %SKIN_MECHA_SEL%>Mecha Gundam (V-Fin Crest &amp; Core)</option>
+            <option value="sunglasses" %SKIN_SHADES_SEL%>Boss Shades (Cool Sunglasses)</option>
+            <option value="puppy" %SKIN_PUPPY_SEL%>Kawaii Puppy (Floppy Ears &amp; Boba)</option>
+            <option value="hypno" %SKIN_HYPNO_SEL%>Hypno Spiral (Mesmerizing Vortex)</option>
+            <option value="alien" %SKIN_ALIEN_SEL%>Cosmic Alien (UFO Orbit &amp; Antenna)</option>
+            <option value="ninja" %SKIN_NINJA_SEL%>Shinobi Ninja (Headband &amp; Stealth)</option>
+            <option value="round" %SKIN_ROUND_SEL%>Round Eyes (Classic Ocular)</option>
+          </select>
+          <label for="promptIn" style="margin-top:16px">Robot System Prompt</label>
+          <textarea id="promptIn" name="prompt">%PROMPT%</textarea>
         </div>
 
-        <label for="newMem">Add New Memory Fact / Event</label>
-        <input id="newMem" name="new_mem" placeholder="e.g. Coding test tomorrow / Loves chai">
-        <small>Kiwi automatically learns facts while chatting, remembers them across reboots in Flash, and follows up on
-          events!</small>
+        <!-- Memory -->
+        <div class="card">
+          <div class="card-title">Personal Life Diary &amp; Long-Term Memory</div>
+          <label for="memName">Your Name (Owner)</label>
+          <input type="text" id="memName" name="mem_name" value="%MEM_NAME%" placeholder="e.g. Rohil">
 
-        <div style="display:flex;margin-top:14px">
-          <button type="button" class="qbtn" style="flex:1" onclick="clearMemories()">Clear Memories</button>
+          <label style="margin-top:14px">Facts Kiwi Remembers About You</label>
+          <div class="readout" style="margin-bottom:12px;max-height:180px;overflow-y:auto">
+            %MEM_LIST_HTML%
+          </div>
+
+          <label for="newMem">Add New Memory Fact / Event</label>
+          <input type="text" id="newMem" name="new_mem" placeholder="e.g. Coding test tomorrow / Loves chai">
+          <small style="display:block;margin-top:8px;color:var(--muted);font-size:12px;line-height:1.45">Kiwi automatically learns facts while chatting, remembers them across reboots in Flash, and follows up on events!</small>
+
+          <div style="margin-top:16px">
+            <div id="clearMemBox" style="display:none;background:rgba(255,74,61,0.12);border:1px solid rgba(255,74,61,0.35);padding:14px;margin-bottom:12px;border-radius:4px">
+              <div style="color:#ff9d94;font-size:13px;font-weight:600;margin-bottom:10px">Are you sure you want to delete all saved memories from flash? This action cannot be undone.</div>
+              <div style="display:flex;gap:10px">
+                <button type="button" class="qbtn astro" id="btnConfirmClearMem" style="flex:1">Yes, Delete All Memories</button>
+                <button type="button" class="qbtn" id="btnCancelClearMem" style="flex:1">Cancel</button>
+              </div>
+            </div>
+            <button type="button" class="qbtn" id="btnOpenClearMem" style="width:100%;min-height:44px;display:flex;align-items:center;justify-content:center">Clear All Memories</button>
+          </div>
         </div>
-      </div>
 
-      <div class="save-wrap">
-        <button type="submit" class="save-btn">Save Configuration &amp; Restart</button>
-      </div>
-    </form>
-  </div> <!-- End #settingsSection -->
-</div> <!-- End .wrap -->
+        <div class="save-wrap">
+          <div id="unsavedNotice" class="unsaved-notice" style="display:none">
+            <span class="unsaved-dot"></span> You have unsaved configuration changes
+          </div>
+          <button type="submit" class="save-btn" id="btnSaveConfig">Save All Settings</button>
+          <p class="save-hint">
+            Saves configuration to flash memory and applies changes live.
+            <br>A reboot is only performed if Wi-Fi network credentials are changed.
+          </p>
+        </div>
+      </form>
+    </div> <!-- End #settingsSection -->
+  </div> <!-- End .wrap -->
 
-<div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <!-- Fullscreen Reboot Overlay -->
+  <div id="rebootOverlay" class="reboot-overlay" style="display:none" role="dialog" aria-modal="true" aria-labelledby="rebootTitle">
+    <div class="reboot-card">
+      <div class="reboot-spinner"></div>
+      <h2 id="rebootTitle" style="margin:0 0 10px;font:600 18px var(--display);letter-spacing:.2em;text-transform:uppercase;color:var(--amber)">Restarting Kiwi...</h2>
+      <p id="rebootStatus" style="color:var(--muted);font-size:13px;line-height:1.5;margin:0">Applying configuration changes and reconnecting to Wi-Fi. Waiting for robot to come back online...</p>
+    </div>
+  </div>
 )rawb2";
 static String makeHourOptions(int selectedHour) {
   String out = "";
@@ -1890,6 +1786,7 @@ static String getDashboardLiveConsole() {
   h.replace("%NIGHT_CHECK_1%", nightMode == 1 ? "checked" : "");
   h.replace("%NIGHT_CHECK_2%", nightMode == 2 ? "checked" : "");
   h.replace("%NIGHT_SLIDER_STYLE%", nightMode == 2 ? "opacity:0.25;pointer-events:none" : "");
+  h.replace("%CIRC_EN_CHECKED%", circadianSleepEnabled ? "checked" : "");
   h.replace("%CIRC_START_OPTIONS%", makeHourOptions(circadianSleepStart));
   h.replace("%CIRC_END_OPTIONS%", makeHourOptions(circadianSleepEnd));
 
@@ -1936,7 +1833,10 @@ static String getDashboardBodyPart1() {
   h.replace("%NIGHT_MODE%", String(nightMode));
   h.replace("%CIRC_START%", String(circadianSleepStart));
   h.replace("%CIRC_END%", String(circadianSleepEnd));
-  h.replace("%BOREDOM_CHECKED%", boredomEnabled ? "1" : "0");
+  h.replace("%CIRC_EN_CHECKED%", circadianSleepEnabled ? "checked" : "");
+  h.replace("%CIRC_EN_VAL%", circadianSleepEnabled ? "1" : "0");
+  h.replace("%BOREDOM_CHECKED%", boredomEnabled ? "checked" : "");
+  h.replace("%BOREDOM_VAL%", boredomEnabled ? "1" : "0");
   h.replace("%BOREDOM_MINS%", String(boredomMinutes));
 
   h.replace("%STT_SARVAM_SEL%", sttProvider == "sarvam" ? "selected" : "");
@@ -2086,6 +1986,7 @@ static String getDashboardBodyPart2() {
   h.replace("%NIGHT_CHECK_1%", nightMode == 1 ? "checked" : "");
   h.replace("%NIGHT_CHECK_2%", nightMode == 2 ? "checked" : "");
   h.replace("%NIGHT_SLIDER_STYLE%", nightMode == 2 ? "opacity:0.25;pointer-events:none" : "");
+  h.replace("%CIRC_EN_CHECKED%", circadianSleepEnabled ? "checked" : "");
   h.replace("%CIRC_START_OPTIONS%", makeHourOptions(circadianSleepStart));
   h.replace("%CIRC_END_OPTIONS%", makeHourOptions(circadianSleepEnd));
 
@@ -2093,6 +1994,8 @@ static String getDashboardBodyPart2() {
   h.replace("%CIRC_EN_VAL%", circadianSleepEnabled ? "1" : "0");
   h.replace("%CIRC_START%", String(circadianSleepStart));
   h.replace("%CIRC_END%", String(circadianSleepEnd));
+  h.replace("%CIRC_EN_CHECKED%", circadianSleepEnabled ? "checked" : "");
+  h.replace("%CIRC_EN_VAL%", circadianSleepEnabled ? "1" : "0");
   h.replace("%BOREDOM_CHECKED%", boredomEnabled ? "checked" : "");
   h.replace("%BM_1_SEL%", boredomMinutes == 1 ? "selected" : "");
   h.replace("%BM_2_SEL%", boredomMinutes == 2 ? "selected" : "");
@@ -2154,468 +2057,905 @@ static String getDashboardBodyPart2() {
   return h;
 }
 static const char DASHBOARD_FOOT[] PROGMEM = R"rawfoot(<script>
-    /* ── Starfield (paused when hidden, static under reduced motion) ── */
     (function () {
-      var c = document.getElementById('sky'), x = c.getContext('2d'), stars = [], W, H, raf;
-      var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-      function size() {
-        W = c.width = innerWidth; H = c.height = innerHeight; stars = [];
-        var n = Math.min(220, Math.round(W * H / 9000));
-        for (var i = 0; i < n; i++)stars.push({ x: Math.random() * W, y: Math.random() * H, r: Math.random() * 1.2 + .2, s: Math.random() * .15 + .02, p: Math.random() * 6.28 });
-      }
-      function draw(t) {
-        x.clearRect(0, 0, W, H);
-        for (var i = 0; i < stars.length; i++) {
-          var s = stars[i];
-          if (!reduce) { s.y += s.s; if (s.y > H) { s.y = 0; s.x = Math.random() * W; } }
-          var a = .35 + .35 * Math.sin(t / 1200 + s.p);
-          x.fillStyle = 'rgba(236,230,217,' + a.toFixed(3) + ')';
-          x.beginPath(); x.arc(s.x, s.y, s.r, 0, 6.283); x.fill();
+      'use strict';
+
+      /* ── Starfield (throttled ~30fps, capped star count, paused when hidden) ── */
+      (function () {
+        var c = document.getElementById('sky');
+        if (!c) return;
+        var x = c.getContext('2d'), stars = [], W, H, raf, lastT = 0;
+        var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        function size() {
+          W = c.width = innerWidth; H = c.height = innerHeight; stars = [];
+          var n = Math.min(110, Math.round(W * H / 12000));
+          for (var i = 0; i < n; i++) {
+            stars.push({ x: Math.random() * W, y: Math.random() * H, r: Math.random() * 1.1 + .2, s: Math.random() * .14 + .02, p: Math.random() * 6.28 });
+          }
         }
-        if (!reduce) raf = requestAnimationFrame(draw);
+        function draw(t) {
+          if (t - lastT < 32 && !reduce) {
+            raf = requestAnimationFrame(draw);
+            return;
+          }
+          lastT = t;
+          x.clearRect(0, 0, W, H);
+          for (var i = 0; i < stars.length; i++) {
+            var s = stars[i];
+            if (!reduce) { s.y += s.s; if (s.y > H) { s.y = 0; s.x = Math.random() * W; } }
+            var a = .35 + .35 * Math.sin(t / 1200 + s.p);
+            x.fillStyle = 'rgba(236,230,217,' + a.toFixed(3) + ')';
+            x.beginPath(); x.arc(s.x, s.y, s.r, 0, 6.283); x.fill();
+          }
+          if (!reduce) raf = requestAnimationFrame(draw);
+        }
+        size(); window.addEventListener('resize', size);
+        if (reduce) { draw(0); } else {
+          raf = requestAnimationFrame(draw);
+          document.addEventListener('visibilitychange', function () {
+            if (document.hidden) { cancelAnimationFrame(raf); } else { raf = requestAnimationFrame(draw); }
+          });
+        }
+      })();
+
+      /* ── Clock ── */
+      (function () {
+        var el = document.getElementById('clock');
+        if (!el) return;
+        function tick() {
+          var d = new Date();
+          el.textContent = String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+        }
+        tick(); setInterval(tick, 15000);
+      })();
+
+      /* ── Toast ── */
+      function toast(msg) {
+        var t = document.getElementById('toast');
+        if (!t) return;
+        t.textContent = msg;
+        t.style.opacity = '1';
+        t.style.transform = 'translate(-50%,0)';
+        clearTimeout(toast._t);
+        toast._t = setTimeout(function () {
+          t.style.opacity = '0';
+          t.style.transform = 'translate(-50%,8px)';
+        }, 2000);
       }
-      size(); window.addEventListener('resize', size);
-      if (reduce) { draw(0); } else {
-        raf = requestAnimationFrame(draw);
-        document.addEventListener('visibilitychange', function () {
-          if (document.hidden) { cancelAnimationFrame(raf); } else { raf = requestAnimationFrame(draw); }
-        });
+
+      /* ── Central API Helper with Failure Tracking & Offline Banner ── */
+      var consecutiveFailures = 0;
+      var offlineBanner = document.getElementById('offlineBanner');
+
+      function api(url, opts) {
+        return fetch(url, opts || { cache: 'no-store' })
+          .then(function (res) {
+            if (!res.ok) throw new Error('HTTP ' + res.status);
+            consecutiveFailures = 0;
+            if (offlineBanner) offlineBanner.style.display = 'none';
+            return res.json();
+          })
+          .catch(function (err) {
+            consecutiveFailures++;
+            if (consecutiveFailures >= 3 && offlineBanner) {
+              offlineBanner.style.display = 'flex';
+            }
+            throw err;
+          });
       }
-    })();
 
-    /* ── Clock ── */
-    (function () {
-      var el = document.getElementById('clock');
-      function tick() { var d = new Date(); el.textContent = String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); }
-      tick(); setInterval(tick, 15000);
-    })();
-
-    /* ── Range fill helper for amber progress track ── */
-    document.querySelectorAll('input[type=range]').forEach(function (r) {
-      function fill() { r.style.setProperty('--p', ((r.value - r.min) / (r.max - r.min) * 100) + '%'); }
-      r.addEventListener('input', fill); fill();
-    });
-
-    /* ── Tab switcher (Live vs Settings - Zero Scrolling) ── */
-    function setTab(tab) {
-      var isSettings = (tab === 'settings');
-      var pLive = document.getElementById('pillLive');
-      var pSet = document.getElementById('pillSettings');
+      /* ── Tab Switching & Accessibility ── */
+      var currentTab = 'live';
+      var pillLive = document.getElementById('pillLive');
+      var pillSettings = document.getElementById('pillSettings');
       var liveSec = document.getElementById('liveSection');
       var setSec = document.getElementById('settingsSection');
       var mood = document.getElementById('moodLine');
 
-      if (pLive) pLive.classList.toggle('on', !isSettings);
-      if (pSet) pSet.classList.toggle('on', isSettings);
+      window.setTab = function (tab) {
+        currentTab = tab;
+        var isSettings = (tab === 'settings');
 
-      if (liveSec) liveSec.style.display = isSettings ? 'none' : 'block';
-      if (setSec) setSec.style.display = isSettings ? 'block' : 'none';
-      if (mood) mood.textContent = isSettings ? 'Configuration & APIs' : 'System Console';
-    }
-
-    /* ── Toast ── */
-    function toast(msg) {
-      var t = document.getElementById('toast'); t.textContent = msg; t.style.opacity = '1'; t.style.transform = 'translate(-50%,0)';
-      clearTimeout(toast._t); toast._t = setTimeout(function () { t.style.opacity = '0'; t.style.transform = 'translate(-50%,8px)'; }, 1800);
-    }
-
-    /* ── Live adjustment visual feedback (green tick badge) ── */
-    function showLiveTick(tickId) {
-      var el = document.getElementById(tickId);
-      if (!el) return;
-      el.classList.add('show');
-      clearTimeout(el._t);
-      el._t = setTimeout(function () {
-        el.classList.remove('show');
-      }, 1800);
-    }
-
-    /* ── Real-Time Hardware Adjustments (No Save/Reboot Needed) ── */
-    var volDebounce = null;
-    function onVolumeChangeLive(val) {
-      var lbl = document.getElementById('volLabel');
-      if (lbl) lbl.textContent = val;
-      var hid = document.getElementById('hiddenFormVol');
-      if (hid) hid.value = val;
-      showLiveTick('tickAudio');
-      clearTimeout(volDebounce);
-      volDebounce = setTimeout(function () {
-        fetch('/do?vol=' + encodeURIComponent(val)).catch(function () { });
-      }, 100);
-    }
-
-    var brightDebounce = null;
-    function onDayBrightChange(val) {
-      var b = document.getElementById('dayBrightVal');
-      if (b) b.textContent = val + '%';
-      var hid = document.getElementById('hiddenFormBright');
-      if (hid) hid.value = val;
-      showLiveTick('tickBrightness');
-      clearTimeout(brightDebounce);
-      brightDebounce = setTimeout(function () {
-        fetch('/do?brightness=' + encodeURIComponent(val)).catch(function () { });
-      }, 100);
-    }
-
-    var nightBrightDebounce = null;
-    function onNightBrightChange(val) {
-      var b = document.getElementById('nightBrightVal');
-      if (b) b.textContent = val + '%';
-      var hid = document.getElementById('hiddenFormNightBright');
-      if (hid) hid.value = val;
-      showLiveTick('tickBrightness');
-      clearTimeout(nightBrightDebounce);
-      nightBrightDebounce = setTimeout(function () {
-        fetch('/do?night_bright=' + encodeURIComponent(val)).catch(function () { });
-      }, 100);
-    }
-
-    function onNightModeChange(mode) {
-      var pills = document.querySelectorAll('.rocky-pill');
-      pills.forEach(function (p, idx) {
-        if (idx === mode) p.classList.add('active');
-        else p.classList.remove('active');
-      });
-      var row = document.getElementById('nightSliderRow');
-      if (row) {
-        row.style.opacity = (mode === 2) ? '0.25' : '1.0';
-        row.style.pointerEvents = (mode === 2) ? 'none' : 'auto';
-      }
-      var hid = document.getElementById('hiddenFormNightMode');
-      if (hid) hid.value = mode;
-      showLiveTick('tickBrightness');
-      fetch('/do?night_mode=' + encodeURIComponent(mode)).catch(function () { });
-    }
-
-    function onCircadianToggle(en) {
-      var s = document.getElementById('circStartSel');
-      var e = document.getElementById('circEndSel');
-      var sVal = s ? s.value : '23';
-      var eVal = e ? e.value : '7';
-      var row = document.getElementById('circTimeRow');
-      if (row) {
-        row.style.opacity = en ? '1.0' : '0.4';
-        row.style.pointerEvents = en ? 'auto' : 'none';
-      }
-      var hc = document.getElementById('hiddenFormCircEn');
-      if (hc) hc.value = en ? '1' : '0';
-      showLiveTick('tickCircadian');
-      fetch('/do?circ_en=' + (en ? '1' : '0') + '&circ_start=' + encodeURIComponent(sVal) + '&circ_end=' + encodeURIComponent(eVal)).catch(function () { });
-    }
-
-    function onScheduleChange() {
-      var s = document.getElementById('circStartSel');
-      var e = document.getElementById('circEndSel');
-      var tog = document.getElementById('liveCircEnToggle');
-      if (!s || !e) return;
-      var hs = document.getElementById('hiddenFormCircStart');
-      if (hs) hs.value = s.value;
-      var he = document.getElementById('hiddenFormCircEnd');
-      if (he) he.value = e.value;
-      var en = (!tog || tog.checked) ? '1' : '0';
-      showLiveTick('tickCircadian');
-      fetch('/do?circ_en=' + en + '&circ_start=' + encodeURIComponent(s.value) + '&circ_end=' + encodeURIComponent(e.value)).catch(function () { });
-    }
-
-    function toggleManualSleep() {
-      fetch('/do?sleep=toggle').then(function (r) { return r.json(); }).then(function (d) {
-        if (d && typeof d.sleeping !== 'undefined') updateSleepUI(d.sleeping);
-      }).catch(function () {
-        pollStatus();
-      });
-    }
-
-    function updateSleepUI(isSleeping) {
-      var btn = document.getElementById('btnManualSleep');
-      var ico = document.getElementById('manualSleepIco');
-      var txt = document.getElementById('manualSleepTxt');
-      var hint = document.getElementById('sleepStateHint');
-      if (isSleeping) {
-        if (ico) ico.textContent = '☀️';
-        if (txt) txt.textContent = 'Wake Up Kiwi';
-        if (btn) btn.classList.add('primary');
-        if (hint) {
-          hint.textContent = 'Current state: Robot is sleeping (Tap head or click to wake)';
-          hint.style.color = 'var(--amber)';
+        if (pillLive) {
+          pillLive.classList.toggle('on', !isSettings);
+          pillLive.setAttribute('aria-selected', !isSettings ? 'true' : 'false');
         }
-      } else {
-        if (ico) ico.textContent = '😴';
-        if (txt) txt.textContent = 'Put Kiwi to Sleep';
-        if (btn) btn.classList.remove('primary');
-        if (hint) {
-          hint.textContent = 'Current state: Robot is awake and active';
-          hint.style.color = 'var(--muted)';
+        if (pillSettings) {
+          pillSettings.classList.toggle('on', isSettings);
+          pillSettings.setAttribute('aria-selected', isSettings ? 'true' : 'false');
         }
-      }
-    }
 
-    function scanWifiNetworks() {
-      var btn = document.getElementById('btnScanWifi');
-      var txt = document.getElementById('scanBtnText');
-      var spin = document.getElementById('scanSpinner');
-      var sel = document.getElementById('wifiScanSelect');
-      if (btn) btn.disabled = true;
-      if (txt) txt.textContent = 'Scanning...';
-      if (spin) spin.style.display = 'inline-block';
-      if (sel) sel.innerHTML = '<option value="">Scanning surrounding 2.4GHz Wi-Fi networks...</option>';
+        if (liveSec) liveSec.style.display = isSettings ? 'none' : 'block';
+        if (setSec) setSec.style.display = isSettings ? 'block' : 'none';
+        if (mood) mood.textContent = isSettings ? 'Configuration & APIs' : 'System Console';
 
-      fetch('/scan')
-        .then(function (r) { return r.json(); })
-        .then(function (networks) {
-          if (btn) btn.disabled = false;
-          if (txt) txt.textContent = 'Scan Networks';
-          if (spin) spin.style.display = 'none';
-          if (!sel) return;
+        // Trigger an immediate poll when switching back to live
+        if (!isSettings) {
+          pollConsole();
+        }
+      };
 
-          if (!networks || networks.length === 0) {
-            sel.innerHTML = '<option value="">No networks found (click Scan to retry)</option>';
-            return;
+      // Tab Keyboard Navigation
+      var tabsContainer = document.getElementById('dashboardTabs');
+      if (tabsContainer) {
+        tabsContainer.addEventListener('keydown', function (e) {
+          if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+            e.preventDefault();
+            var target = (currentTab === 'live') ? 'settings' : 'live';
+            window.setTab(target);
+            var btn = (target === 'settings') ? pillSettings : pillLive;
+            if (btn) btn.focus();
           }
-
-          var currentSSID = (document.getElementById('wifiSsidInput') || {}).value || '';
-          var html = '<option value="">-- ' + networks.length + ' Networks Found (Select One) --</option>';
-
-          networks.forEach(function (net) {
-            var lock = net.secure ? '🔒' : '🔓';
-            var signal = (net.rssi >= -60) ? '📶 4/4' : (net.rssi >= -70) ? '📶 3/4' : (net.rssi >= -80) ? '📶 2/4' : '📶 1/4';
-            var isCurrent = (net.ssid === currentSSID);
-            html += '<option value="' + encodeURIComponent(net.ssid) + '"' + (isCurrent ? ' selected' : '') + '>';
-            html += net.ssid + ' (' + signal + ' ' + net.rssi + 'dBm ' + lock + ')';
-            html += '</option>';
-          });
-          sel.innerHTML = html;
-        })
-        .catch(function (err) {
-          if (btn) btn.disabled = false;
-          if (txt) txt.textContent = 'Scan Networks';
-          if (spin) spin.style.display = 'none';
-          if (sel) sel.innerHTML = '<option value="">Scan failed (Click to retry)</option>';
         });
-    }
-
-    function onSelectScannedWifi(val) {
-      if (!val) return;
-      var ssid = decodeURIComponent(val);
-      var inp = document.getElementById('wifiSsidInput');
-      if (inp) inp.value = ssid;
-      var passInp = document.getElementById('wifiPassInput');
-      if (passInp) passInp.focus();
-    }
-
-    function togglePw(id, btn) {
-      var el = document.getElementById(id);
-      if (!el) return;
-      if (el.type === 'password') {
-        el.type = 'text';
-        if (btn) btn.innerText = 'HIDE';
-      } else {
-        el.type = 'password';
-        if (btn) btn.innerText = 'SHOW';
       }
-    }
-    function togglePassVisibility(btn) {
-      var p = document.getElementById('wifiPassInput');
-      if (!p) return;
-      if (p.type === 'password') {
-        p.type = 'text';
-        if (btn) btn.innerText = 'HIDE';
-      } else {
-        p.type = 'password';
-        if (btn) btn.innerText = 'SHOW';
-      }
-    }
 
+      /* ── Unsaved Changes Tracker ── */
+      var hasUnsavedSettings = false;
+      var isSubmitting = false;
+      var cfgForm = document.getElementById('cfgForm');
+      var unsavedNotice = document.getElementById('unsavedNotice');
 
-    function toggleSkinLive(v) {
-      fetch('/do?skin=' + encodeURIComponent(v)).catch(function () { });
-    }
-    function toggleBoredomLive(val) {
-      var hid = document.getElementById('hiddenFormBoredom');
-      if (hid) hid.value = val ? '1' : '0';
-      showLiveTick('tickAudio');
-      fetch('/do?boredom=' + (val ? '1' : '0')).catch(function () { });
-    }
-    function setBoredomIntervalLive(val) {
-      var hid = document.getElementById('hiddenFormBoredomMins');
-      if (hid) hid.value = val;
-      showLiveTick('tickAudio');
-      fetch('/do?boredom_mins=' + encodeURIComponent(val)).catch(function () { });
-    }
-    function clearMemories() {
-      if (confirm("Are you sure you want to clear all Kiwi's memories?")) {
-        fetch('/do?clearmem=1').then(function () { alert("All memories cleared!"); location.reload(); });
+      if (cfgForm) {
+        cfgForm.addEventListener('input', function (e) {
+          // Ignore live controls that sync automatically
+          if (e.target.name && e.target.name.startsWith('live_')) return;
+          hasUnsavedSettings = true;
+          if (unsavedNotice) unsavedNotice.style.display = 'inline-flex';
+          if (pillSettings && !pillSettings.querySelector('.unsaved-dot')) {
+            var dot = document.createElement('span');
+            dot.className = 'unsaved-dot';
+            dot.title = 'Unsaved changes';
+            pillSettings.appendChild(dot);
+          }
+        });
       }
-    }
-    function toggleModels() {
-      var p = document.getElementById('provSel').value;
-      document.getElementById('groqBox').style.display = (p === 'groq') ? 'block' : 'none';
-      document.getElementById('geminiBox').style.display = (p === 'gemini') ? 'block' : 'none';
-      document.getElementById('openaiBox').style.display = (p === 'openai') ? 'block' : 'none';
-    }
-    function updateGeminiUrl() {
-      var m = document.getElementById('geminiModelSel').value;
-      var u = document.getElementById('geminiUrlIn');
-      if (u && (u.value.includes('generativelanguage.googleapis.com') || u.value === '')) {
-        u.value = 'https://generativelanguage.googleapis.com/v1beta/models/' + m + ':generateContent';
-      }
-    }
-    function updateOpenAiUrl() {
-      var u = document.getElementById('openaiUrlIn');
-      if (u && (u.value.includes('api.openai.com') || u.value === '')) {
-        u.value = 'https://api.openai.com/v1/chat/completions';
-      }
-    }
-    function toggleStt() {
-      var p = document.getElementById('sttProvSel').value;
-      document.getElementById('sarvamBox').style.display = (p === 'sarvam') ? 'block' : 'none';
-      document.getElementById('groqSttBox').style.display = (p === 'groq') ? 'block' : 'none';
-      document.getElementById('openaiSttBox').style.display = (p === 'openai') ? 'block' : 'none';
-    }
-    function toggleTts() {
-      var p = document.getElementById('ttsProvSel').value;
-      document.getElementById('ttsSarvamBox').style.display = (p === 'sarvam') ? 'block' : 'none';
-      document.getElementById('ttsOpenaiBox').style.display = (p === 'openai') ? 'block' : 'none';
-      document.getElementById('ttsElevenBox').style.display = (p === 'elevenlabs') ? 'block' : 'none';
-      document.getElementById('ttsFishBox').style.display = (p === 'fish' || p === 'fishaudio') ? 'block' : 'none';
-    }
-    toggleModels(); toggleStt(); toggleTts();
 
-    /* ── Terminal & live console ── */
-    var autoScroll = true;
-    var lastLogCount = 0;
-    var chkAuto = document.getElementById('autoScrollCheck');
-    if (chkAuto) chkAuto.addEventListener('change', function () { autoScroll = this.checked; });
-
-    var btnClear = document.getElementById('btnClearLog');
-    if (btnClear) {
-      btnClear.addEventListener('click', function () {
-        fetch('/do?clearlog=1').then(function () {
-          var t = document.getElementById('serialTerminal');
-          if (t) t.innerHTML = '';
-          lastLogCount = 0;
-        }).catch(function () { });
+      window.addEventListener('beforeunload', function (e) {
+        if (hasUnsavedSettings && !isSubmitting) {
+          e.preventDefault();
+          e.returnValue = '';
+        }
       });
-    }
 
-    var btnMic = document.getElementById('btnWebMic');
-    if (btnMic) {
-      btnMic.addEventListener('click', function () {
-        fetch('/do?record=1').then(function (r) { return r.json(); }).then(function (j) {
-          if (!j.ok && j.reason === 'busy') alert('Kiwi is busy processing audio/AI.');
-        }).catch(function () { });
-      });
-    }
+      /* ── Live adjustment visual feedback (green tick badge) ── */
+      function showLiveTick(tickId) {
+        var el = document.getElementById(tickId);
+        if (!el) return;
+        el.classList.add('show');
+        clearTimeout(el._t);
+        el._t = setTimeout(function () {
+          el.classList.remove('show');
+        }, 1500);
+      }
 
-    var btnSend = document.getElementById('btnSendPrompt');
-    var promptIn = document.getElementById('textPromptIn');
-    if (btnSend && promptIn) {
-      btnSend.addEventListener('click', sendPrompt);
-      promptIn.addEventListener('keypress', function (e) {
-        if (e.key === 'Enter') { e.preventDefault(); sendPrompt(); }
-      });
-    }
+      var volDebounce, brightDebounce, nightBrightDebounce;
 
-    function sendPrompt() {
-      var inp = document.getElementById('textPromptIn');
-      var txt = inp.value.trim();
-      if (!txt) return;
-      fetch('/do?ask=' + encodeURIComponent(txt))
-        .then(function (r) { return r.json(); })
-        .then(function (j) {
-          if (j.ok) inp.value = '';
-          else if (j.reason === 'busy') alert('Kiwi is currently busy!');
-        }).catch(function () { });
-    }
+      window.onVolumeChangeLive = function (val) {
+        var lbl = document.getElementById('volLabel');
+        if (lbl) lbl.textContent = val;
+        var hid = document.getElementById('hiddenFormVol');
+        if (hid) hid.value = val;
+        clearTimeout(volDebounce);
+        volDebounce = setTimeout(function () {
+          api('/do?vol=' + encodeURIComponent(val))
+            .then(function () { showLiveTick('tickAudio'); })
+            .catch(function () { toast('Failed to update volume'); });
+        }, 120);
+      };
 
-    function pollConsole() {
-      fetch('/status', { cache: 'no-store' }).then(function (r) { return r.json(); }).then(function (j) {
-        var mic = document.getElementById('btnWebMic');
-        var badgeDot = document.getElementById('liveStateDot');
-        var badgeTxt = document.getElementById('liveStateText');
-        var micSub = document.getElementById('micBtnSub');
-        var mood = document.getElementById('moodLine');
+      window.onDayBrightChange = function (val) {
+        var v = document.getElementById('dayBrightVal');
+        if (v) v.textContent = val + '%';
+        var hid = document.getElementById('hiddenFormBright');
+        if (hid) hid.value = val;
+        clearTimeout(brightDebounce);
+        brightDebounce = setTimeout(function () {
+          api('/do?brightness=' + encodeURIComponent(val))
+            .then(function () { showLiveTick('tickBrightness'); })
+            .catch(function () { toast('Failed to update brightness'); });
+        }, 120);
+      };
 
-        var state = j.state || (j.busy ? 'Busy Processing' : 'Ready');
-        if (badgeTxt) badgeTxt.textContent = state;
-        if (mood) mood.textContent = state;
+      window.onNightBrightChange = function (val) {
+        var v = document.getElementById('nightBrightVal');
+        if (v) v.textContent = val + '%';
+        var hid = document.getElementById('hiddenFormNightBright');
+        if (hid) hid.value = val;
+        clearTimeout(nightBrightDebounce);
+        nightBrightDebounce = setTimeout(function () {
+          api('/do?night_bright=' + encodeURIComponent(val))
+            .then(function () { showLiveTick('tickBrightness'); })
+            .catch(function () { toast('Failed to update night brightness'); });
+        }, 120);
+      };
 
-        if (state.indexOf('Listening') >= 0 || state.indexOf('Recording') >= 0) {
-          if (mic) mic.classList.add('recording');
-          if (badgeDot) badgeDot.className = 'dot rec';
-          if (micSub) micSub.textContent = 'Listening to microphone now...';
-        } else if (j.busy) {
-          if (mic) mic.classList.remove('recording');
-          if (badgeDot) badgeDot.className = 'dot busy';
-          if (micSub) micSub.textContent = 'AI processing request...';
-        } else if (j.sleeping) {
-          if (mic) mic.classList.remove('recording');
-          if (badgeDot) badgeDot.className = 'dot sleep';
-          if (micSub) micSub.textContent = 'Robot sleeping · Tap mic or head to wake';
+      window.onNightModeChange = function (mode) {
+        var pills = document.querySelectorAll('.kiwi-pill, .rocky-pill');
+        pills.forEach(function (p, i) { p.classList.toggle('active', i === mode); });
+        var row = document.getElementById('nightSliderRow');
+        if (row) {
+          row.style.opacity = (mode === 2) ? '0.25' : '1.0';
+          row.style.pointerEvents = (mode === 2) ? 'none' : 'auto';
+        }
+        var hid = document.getElementById('hiddenFormNightMode');
+        if (hid) hid.value = mode;
+        api('/do?night_mode=' + encodeURIComponent(mode))
+          .then(function () { showLiveTick('tickBrightness'); })
+          .catch(function () { toast('Failed to set night mode'); });
+      };
+
+      window.onCircadianToggle = function (en) {
+        var s = document.getElementById('circStartSel');
+        var e = document.getElementById('circEndSel');
+        var row = document.getElementById('circTimeRow');
+        if (row) row.style.opacity = en ? '1.0' : '0.4';
+        var sVal = s ? s.value : '23';
+        var eVal = e ? e.value : '7';
+        var hc = document.getElementById('hiddenFormCircEn');
+        if (hc) hc.value = en ? '1' : '0';
+        api('/do?circ_en=' + (en ? '1' : '0') + '&circ_start=' + encodeURIComponent(sVal) + '&circ_end=' + encodeURIComponent(eVal))
+          .then(function () { showLiveTick('tickCircadian'); })
+          .catch(function () { toast('Failed to update schedule'); });
+      };
+
+      window.onScheduleChange = function () {
+        var s = document.getElementById('circStartSel');
+        var e = document.getElementById('circEndSel');
+        var warn = document.getElementById('circScheduleWarn');
+        if (!s || !e) return;
+        if (s.value === e.value) {
+          if (warn) warn.style.display = 'block';
         } else {
-          if (mic) mic.classList.remove('recording');
-          if (badgeDot) badgeDot.className = 'dot';
-          if (micSub) micSub.textContent = 'Stops shortly after you finish speaking';
+          if (warn) warn.style.display = 'none';
         }
+        var hs = document.getElementById('hiddenFormCircStart');
+        var he = document.getElementById('hiddenFormCircEnd');
+        if (hs) hs.value = s.value;
+        if (he) he.value = e.value;
+        var tog = document.getElementById('liveCircEnToggle');
+        var en = (!tog || tog.checked) ? '1' : '0';
+        api('/do?circ_en=' + en + '&circ_start=' + encodeURIComponent(s.value) + '&circ_end=' + encodeURIComponent(e.value))
+          .then(function () { showLiveTick('tickCircadian'); })
+          .catch(function () { toast('Failed to update sleep schedule'); });
+      };
 
-        updateSleepUI(Boolean(j.sleeping));
+      var isSleepToggling = false;
 
-        if (j.question) {
-          var qEl = document.getElementById('boxQuestion');
-          if (qEl) qEl.textContent = j.question;
-        }
-        if (j.answer) {
-          var aEl = document.getElementById('boxAnswer');
-          if (aEl) aEl.textContent = j.answer;
-        }
+      window.toggleManualSleep = function () {
+        var btn = document.getElementById('btnManualSleep');
+        if (isSleepToggling) return;
+        isSleepToggling = true;
+        if (btn) btn.disabled = true;
 
-        if (j.logs && Array.isArray(j.logs)) {
-          var term = document.getElementById('serialTerminal');
-          if (term && (j.logs.length !== lastLogCount || term.innerHTML === '')) {
-            var h = '';
-            for (var i = 0; i < j.logs.length; i++) {
-              var line = j.logs[i];
-              var col = '#8fd19e';
-              if (line.indexOf('[REC]') >= 0) col = '#ff4a3d';
-              else if (line.indexOf('[STT]') >= 0) col = '#38bdf8';
-              else if (line.indexOf('[LLM]') >= 0) col = '#f2b45c';
-              else if (line.indexOf('[TTS]') >= 0) col = '#c084fc';
-              else if (line.indexOf('Error') >= 0 || line.indexOf('fail') >= 0 || line.indexOf('Failed') >= 0) col = '#ef4444';
-              else if (line.indexOf('[CMD]') >= 0) col = '#a3e635';
-              h += '<div style="color:' + col + '">' + line + '</div>';
+        api('/do?sleep=toggle')
+          .then(function (d) {
+            if (d && typeof d.sleeping !== 'undefined') {
+              updateSleepUI(Boolean(d.sleeping));
             }
-            term.innerHTML = h;
-            lastLogCount = j.logs.length;
-            if (autoScroll) term.scrollTop = term.scrollHeight;
+          })
+          .catch(function () {
+            toast('Failed to toggle sleep mode');
+          })
+          .finally(function () {
+            isSleepToggling = false;
+            if (btn) btn.disabled = false;
+          });
+      };
+
+      function updateSleepUI(isSleeping) {
+        var btn = document.getElementById('btnManualSleep');
+        var ico = document.getElementById('manualSleepIco');
+        var txt = document.getElementById('manualSleepTxt');
+        var hint = document.getElementById('sleepStateHint');
+        if (isSleeping) {
+          if (ico) ico.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>';
+          if (txt) txt.textContent = 'Wake Up Kiwi';
+          if (btn) btn.classList.add('primary');
+          if (hint) {
+            hint.textContent = 'Current state: Robot is sleeping (Tap head or click to wake)';
+            hint.style.color = 'var(--amber)';
+          }
+        } else {
+          if (ico) ico.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>';
+          if (txt) txt.textContent = 'Put Kiwi to Sleep';
+          if (btn) btn.classList.remove('primary');
+          if (hint) {
+            hint.textContent = 'Current state: Robot is awake and active';
+            hint.style.color = 'var(--muted)';
           }
         }
-      }).catch(function () { });
-    }
-    setInterval(pollConsole, 900);
-    pollConsole();
+      }
 
-    /* ── Touch action options ── */
-    var touchActs = [
-      { val: "listen", lbl: "Voice Prompt / Mic Record" },
-      { val: "clock", lbl: "Show Clock Screen" },
-      { val: "weather", lbl: "Show Weather Screen" },
-      { val: "skin", lbl: "Cycle OLED Eye Skin" },
-      { val: "pet", lbl: "Pet Reaction / Cuddle" },
-      { val: "tickle", lbl: "Tickle Laugh Mode" },
-      { val: "vol_up", lbl: "Volume Up (+10%)" },
-      { val: "vol_dn", lbl: "Volume Down (-10%)" },
-      { val: "dismiss", lbl: "Look Around / Dismiss" },
-      { val: "none", lbl: "Disabled" }
-    ];
-    document.querySelectorAll('.touch-act-sel').forEach(function (sel) {
-      var cur = sel.getAttribute('data-val');
-      touchActs.forEach(function (a) {
-        var opt = document.createElement('option');
-        opt.value = a.val;
-        opt.textContent = a.lbl;
-        if (a.val === cur) opt.selected = true;
-        sel.appendChild(opt);
+      window.scanWifiNetworks = function () {
+        var btn = document.getElementById('btnScanWifi');
+        var txt = document.getElementById('scanBtnText');
+        var spin = document.getElementById('scanSpinner');
+        var sel = document.getElementById('wifiScanSelect');
+        if (btn) btn.disabled = true;
+        if (spin) spin.style.display = 'inline-block';
+        if (txt) txt.textContent = 'Scanning...';
+
+        api('/scan')
+          .then(function (nets) {
+            if (sel) {
+              sel.innerHTML = '';
+              if (!nets || nets.length === 0) {
+                var opt = document.createElement('option');
+                opt.value = '';
+                opt.textContent = '-- No Networks Detected --';
+                sel.appendChild(opt);
+                return;
+              }
+              var def = document.createElement('option');
+              def.value = '';
+              def.textContent = '-- Select Detected Network (' + nets.length + ' found) --';
+              sel.appendChild(def);
+              nets.forEach(function (net) {
+                var o = document.createElement('option');
+                o.value = net.ssid;
+                var lock = net.secure ? ' [Encrypted]' : ' [Open]';
+                var signal = (net.rssi >= -60) ? '4/4' : (net.rssi >= -70) ? '3/4' : (net.rssi >= -80) ? '2/4' : '1/4';
+                o.textContent = net.ssid + ' (' + signal + ' ' + net.rssi + 'dBm)' + lock;
+                sel.appendChild(o);
+              });
+            }
+          })
+          .catch(function () {
+            toast('Wi-Fi scan failed');
+          })
+          .finally(function () {
+            if (btn) btn.disabled = false;
+            if (spin) spin.style.display = 'none';
+            if (txt) txt.textContent = 'Scan Networks';
+          });
+      };
+
+      window.onNetworkSelect = function (ssid) {
+        if (!ssid) return;
+        var inp = document.getElementById('wifiSsidInput');
+        if (inp) {
+          inp.value = ssid;
+          inp.dispatchEvent(new Event('input'));
+        }
+        var p = document.getElementById('wifiPassInput');
+        if (p) p.focus();
+      };
+
+      /* ── Password Visibility Toggle (Single unified function) ── */
+      window.togglePw = function (id, btn) {
+        var el = document.getElementById(id);
+        if (!el) return;
+        if (el.type === 'password') {
+          el.type = 'text';
+          if (btn) btn.textContent = 'HIDE';
+        } else {
+          el.type = 'password';
+          if (btn) btn.textContent = 'SHOW';
+        }
+      };
+
+      /* ── Provider Settings Toggles & Dynamic Keys Filter ── */
+      window.toggleStt = function () {
+        var p = document.getElementById('sttProvSel');
+        var val = p ? p.value : 'sarvam';
+        var sb = document.getElementById('sarvamBox');
+        var gb = document.getElementById('groqSttBox');
+        var ob = document.getElementById('openaiSttBox');
+        if (sb) sb.style.display = (val === 'sarvam') ? 'block' : 'none';
+        if (gb) gb.style.display = (val === 'groq') ? 'block' : 'none';
+        if (ob) ob.style.display = (val === 'openai') ? 'block' : 'none';
+        syncVisibleKeys();
+      };
+
+      window.toggleModels = function () {
+        var p = document.getElementById('provSel');
+        var val = p ? p.value : 'gemini';
+        var gb = document.getElementById('geminiBox');
+        var qb = document.getElementById('groqBox');
+        var ob = document.getElementById('openaiBox');
+        if (gb) gb.style.display = (val === 'gemini') ? 'block' : 'none';
+        if (qb) qb.style.display = (val === 'groq') ? 'block' : 'none';
+        if (ob) ob.style.display = (val === 'openai') ? 'block' : 'none';
+        syncVisibleKeys();
+      };
+
+      window.toggleTts = function () {
+        var p = document.getElementById('ttsProvSel');
+        var val = p ? p.value : 'sarvam';
+        var sb = document.getElementById('ttsSarvamBox');
+        var ob = document.getElementById('ttsOpenAiBox');
+        var eb = document.getElementById('ttsElevenBox');
+        var fb = document.getElementById('ttsFishBox');
+        if (sb) sb.style.display = (val === 'sarvam') ? 'block' : 'none';
+        if (ob) ob.style.display = (val === 'openai') ? 'block' : 'none';
+        if (eb) eb.style.display = (val === 'elevenlabs') ? 'block' : 'none';
+        if (fb) fb.style.display = (val === 'fish') ? 'block' : 'none';
+        syncVisibleKeys();
+      };
+
+      function syncVisibleKeys() {
+        var showAll = document.getElementById('showAllKeysToggle');
+        var isShowAll = showAll && showAll.checked;
+
+        var sttProv = document.getElementById('sttProvSel');
+        var llmProv = document.getElementById('provSel');
+        var ttsProv = document.getElementById('ttsProvSel');
+
+        var activeProvs = new Set();
+        if (sttProv) activeProvs.add(sttProv.value);
+        if (llmProv) activeProvs.add(llmProv.value);
+        if (ttsProv) activeProvs.add(ttsProv.value);
+
+        document.querySelectorAll('.api-key-item[data-provider]').forEach(function (card) {
+          var prov = card.getAttribute('data-provider');
+          if (isShowAll || activeProvs.has(prov)) {
+            card.style.display = 'block';
+          } else {
+            card.style.display = 'none';
+          }
+        });
+      }
+
+      var showAllKeysToggle = document.getElementById('showAllKeysToggle');
+      if (showAllKeysToggle) {
+        showAllKeysToggle.addEventListener('change', syncVisibleKeys);
+      }
+
+      window.updateGeminiUrl = function () {
+        var s = document.getElementById('geminiModelSel');
+        var u = document.getElementById('geminiUrlIn');
+        if (!s || !u) return;
+        var cur = u.value;
+        var m = cur.indexOf(':generateContent');
+        if (m > 0) {
+          var base = cur.substring(0, cur.lastIndexOf('/', m));
+          u.value = base + '/' + s.value + ':generateContent';
+        }
+      };
+
+      window.updateOpenAiUrl = function () {
+        var s = document.getElementById('openaiModelSel');
+        var u = document.getElementById('openaiUrlIn');
+        if (!s || !u) return;
+        var cur = u.value;
+        var m = cur.indexOf('/v1/chat/completions');
+        if (m > 0) {
+          u.value = cur.substring(0, m) + '/v1/chat/completions';
+        }
+      };
+
+      window.toggleSkinLive = function (v) {
+        api('/do?skin=' + encodeURIComponent(v))
+          .then(function () { toast('Skin applied: ' + v); })
+          .catch(function () { toast('Failed to apply skin'); });
+      };
+
+      window.toggleBoredomLive = function (val) {
+        var hid = document.getElementById('hiddenFormBoredom');
+        if (hid) hid.value = val ? '1' : '0';
+        api('/do?boredom=' + (val ? '1' : '0'))
+          .then(function () { showLiveTick('tickAudio'); })
+          .catch(function () { toast('Failed to update idle remarks'); });
+      };
+
+      window.setBoredomIntervalLive = function (val) {
+        var hid = document.getElementById('hiddenFormBoredomMins');
+        if (hid) hid.value = val;
+        api('/do?boredom_mins=' + encodeURIComponent(val))
+          .then(function () { showLiveTick('tickAudio'); })
+          .catch(function () { toast('Failed to update idle interval'); });
+      };
+
+      /* ── Inline Clear Memories Confirmation ── */
+      var btnOpenClearMem = document.getElementById('btnOpenClearMem');
+      var clearMemBox = document.getElementById('clearMemBox');
+      var btnConfirmClearMem = document.getElementById('btnConfirmClearMem');
+      var btnCancelClearMem = document.getElementById('btnCancelClearMem');
+
+      if (btnOpenClearMem && clearMemBox) {
+        btnOpenClearMem.addEventListener('click', function () {
+          clearMemBox.style.display = 'block';
+          btnOpenClearMem.style.display = 'none';
+        });
+      }
+
+      if (btnCancelClearMem && clearMemBox && btnOpenClearMem) {
+        btnCancelClearMem.addEventListener('click', function () {
+          clearMemBox.style.display = 'none';
+          btnOpenClearMem.style.display = 'block';
+        });
+      }
+
+      if (btnConfirmClearMem) {
+        btnConfirmClearMem.addEventListener('click', function () {
+          api('/do?clearmem=1')
+            .then(function () {
+              toast('All memories deleted successfully');
+              setTimeout(function () { location.reload(); }, 800);
+            })
+            .catch(function () {
+              toast('Failed to clear memories');
+            });
+        });
+      }
+
+      /* ── Terminal Management (Filtering, Incremental Append, Copy, Download) ── */
+      var autoScroll = true;
+      var lastLogCount = 0;
+      var cachedLogs = [];
+      var termFilter = document.getElementById('termFilter');
+      var term = document.getElementById('serialTerminal');
+
+      function colorize(line) {
+        var col = '#8fd19e';
+        if (line.indexOf('[REC]') >= 0) col = '#ff4a3d';
+        else if (line.indexOf('[STT]') >= 0) col = '#38bdf8';
+        else if (line.indexOf('[LLM]') >= 0) col = '#f2b45c';
+        else if (line.indexOf('[TTS]') >= 0) col = '#c084fc';
+        else if (line.indexOf('Error') >= 0 || line.indexOf('fail') >= 0 || line.indexOf('Failed') >= 0) col = '#ef4444';
+        else if (line.indexOf('[CMD]') >= 0) col = '#a3e635';
+        return col;
+      }
+
+      function renderTerminal() {
+        if (!term) return;
+        var filterText = termFilter ? termFilter.value.trim().toLowerCase() : '';
+        var frag = document.createDocumentFragment();
+
+        cachedLogs.forEach(function (line) {
+          if (filterText && line.toLowerCase().indexOf(filterText) === -1) return;
+          var div = document.createElement('div');
+          div.style.color = colorize(line);
+          div.textContent = line;
+          frag.appendChild(div);
+        });
+
+        term.innerHTML = '';
+        term.appendChild(frag);
+        if (autoScroll) term.scrollTop = term.scrollHeight;
+      }
+
+      if (termFilter) {
+        termFilter.addEventListener('input', renderTerminal);
+      }
+
+      var chkAuto = document.getElementById('autoScrollCheck');
+      if (chkAuto) chkAuto.addEventListener('change', function () { autoScroll = this.checked; });
+
+      var btnClear = document.getElementById('btnClearLog');
+      if (btnClear) {
+        btnClear.addEventListener('click', function () {
+          api('/do?clearlog=1')
+            .then(function () {
+              cachedLogs = [];
+              lastLogCount = 0;
+              if (term) term.innerHTML = '';
+            })
+            .catch(function () { toast('Failed to clear logs'); });
+        });
+      }
+
+      var btnCopyLog = document.getElementById('btnCopyLog');
+      if (btnCopyLog) {
+        btnCopyLog.addEventListener('click', function () {
+          if (cachedLogs.length === 0) return toast('Terminal is empty');
+          navigator.clipboard.writeText(cachedLogs.join(String.fromCharCode(10)))
+            .then(function () { toast('Logs copied to clipboard'); })
+            .catch(function () { toast('Clipboard permission denied'); });
+        });
+      }
+
+      var btnDownloadLog = document.getElementById('btnDownloadLog');
+      if (btnDownloadLog) {
+        btnDownloadLog.addEventListener('click', function () {
+          if (cachedLogs.length === 0) return toast('Terminal is empty');
+          var blob = new Blob([cachedLogs.join(String.fromCharCode(10))], { type: 'text/plain' });
+          var url = URL.createObjectURL(blob);
+          var a = document.createElement('a');
+          a.href = url;
+          a.download = 'kiwi-console-' + new Date().toISOString().slice(0, 10) + '.txt';
+          a.click();
+          URL.revokeObjectURL(url);
+        });
+      }
+
+      /* ── Voice & Prompt Dispatch ── */
+      var btnMic = document.getElementById('btnWebMic');
+      if (btnMic) {
+        btnMic.addEventListener('click', function () {
+          api('/do?record=1')
+            .then(function (j) {
+              if (!j.ok && j.reason === 'busy') toast('Kiwi is busy processing audio/AI.');
+            })
+            .catch(function () { toast('Failed to initiate recording'); });
+        });
+      }
+
+      var btnSend = document.getElementById('btnSendPrompt');
+      var promptIn = document.getElementById('textPromptIn');
+
+      function sendPrompt() {
+        var inp = document.getElementById('textPromptIn');
+        var txt = inp ? inp.value.trim() : '';
+        if (!txt) return;
+
+        if (btnSend) {
+          btnSend.disabled = true;
+          btnSend.textContent = '...';
+        }
+
+        api('/do?ask=' + encodeURIComponent(txt))
+          .then(function (j) {
+            if (j.ok) {
+              inp.value = '';
+              toast('Prompt sent to Kiwi');
+            } else if (j.reason === 'busy') {
+              toast('Kiwi is currently busy!');
+            }
+          })
+          .catch(function () {
+            toast('Network error sending prompt');
+          })
+          .finally(function () {
+            if (btnSend) {
+              btnSend.disabled = false;
+              btnSend.textContent = 'Send';
+            }
+          });
+      }
+
+      if (btnSend && promptIn) {
+        btnSend.addEventListener('click', sendPrompt);
+        promptIn.addEventListener('keydown', function (e) {
+          if (e.isComposing || e.keyCode === 229) return;
+          if (e.key === 'Enter') {
+            if (e.shiftKey) return;
+            e.preventDefault();
+            sendPrompt();
+          }
+        });
+      }
+
+      /* ── Polling Loop with Exponential Backoff & Smart Tab Lifecycle ── */
+      var isStatusFetching = false;
+      var lastAnnouncedState = '';
+      var pollDelay = 2500; // 2.5s default idle poll (smooth & responsive without flooding ESP32)
+      var pollTimer = null;
+
+      function pollConsole() {
+        clearTimeout(pollTimer);
+
+        // Never poll if tab is in background, phone is locked, or settings tab is open
+        if (document.hidden || currentTab !== 'live') {
+          return;
+        }
+
+        if (isStatusFetching) {
+          pollTimer = setTimeout(pollConsole, pollDelay);
+          return;
+        }
+
+        isStatusFetching = true;
+
+        var controller = null;
+        var signal = null;
+        if (window.AbortController) {
+          controller = new AbortController();
+          signal = controller.signal;
+        }
+        var timeoutId = setTimeout(function () {
+          if (controller) controller.abort();
+        }, 3500);
+
+        fetch('/status', { cache: 'no-store', signal: signal })
+          .then(function (r) {
+            if (!r.ok) throw new Error('HTTP ' + r.status);
+            consecutiveFailures = 0;
+            if (offlineBanner) offlineBanner.style.display = 'none';
+            return r.json();
+          })
+          .then(function (j) {
+            var mic = document.getElementById('btnWebMic');
+            var badgeDot = document.getElementById('liveStateDot');
+            var badgeTxt = document.getElementById('liveStateText');
+            var micSub = document.getElementById('micBtnSub');
+            var mood = document.getElementById('moodLine');
+
+            var state = j.state || (j.busy ? 'Busy Processing' : 'Ready');
+            if (badgeTxt && lastAnnouncedState !== state) {
+              badgeTxt.textContent = state;
+              lastAnnouncedState = state;
+            }
+            if (mood && currentTab === 'live') mood.textContent = state;
+
+            // Dynamically speed up polling when actively speaking or processing
+            if (state.indexOf('Listening') >= 0 || state.indexOf('Recording') >= 0) {
+              pollDelay = 1200;
+              if (mic) mic.classList.add('recording');
+              if (badgeDot) badgeDot.className = 'dot rec';
+              if (micSub) micSub.textContent = 'Listening to microphone now...';
+            } else if (j.busy) {
+              pollDelay = 1200;
+              if (mic) mic.classList.remove('recording');
+              if (badgeDot) badgeDot.className = 'dot busy';
+              if (micSub) micSub.textContent = 'AI processing request...';
+            } else if (j.sleeping) {
+              pollDelay = 3500;
+              if (mic) mic.classList.remove('recording');
+              if (badgeDot) badgeDot.className = 'dot sleep';
+              if (micSub) micSub.textContent = 'Robot sleeping · Tap mic or head to wake';
+            } else {
+              pollDelay = 2500;
+              if (mic) mic.classList.remove('recording');
+              if (badgeDot) badgeDot.className = 'dot';
+              if (micSub) micSub.textContent = 'Stops shortly after you finish speaking';
+            }
+
+            if (!isSleepToggling) {
+              updateSleepUI(Boolean(j.sleeping));
+            }
+
+            if (j.version) {
+              var vEl = document.getElementById('fwVer');
+              if (vEl) vEl.textContent = j.version.startsWith('v') ? j.version : ('v' + j.version);
+            }
+            if (j.question) {
+              var qEl = document.getElementById('boxQuestion');
+              if (qEl && qEl.textContent !== j.question) qEl.textContent = j.question;
+            }
+            if (j.answer) {
+              var aEl = document.getElementById('boxAnswer');
+              if (aEl && aEl.textContent !== j.answer) aEl.textContent = j.answer;
+            }
+
+            if (j.logs && Array.isArray(j.logs)) {
+              if (j.logs.length !== lastLogCount) {
+                cachedLogs = j.logs.slice(-150); // Cap at 150 lines
+                lastLogCount = j.logs.length;
+                renderTerminal();
+              }
+            }
+          })
+          .catch(function () {
+            consecutiveFailures++;
+            if (consecutiveFailures >= 3 && offlineBanner) {
+              offlineBanner.style.display = 'flex';
+            }
+            pollDelay = Math.min(pollDelay * 1.5, 10000);
+          })
+          .finally(function () {
+            clearTimeout(timeoutId);
+            isStatusFetching = false;
+            if (!document.hidden && currentTab === 'live') {
+              pollTimer = setTimeout(pollConsole, pollDelay);
+            }
+          });
+      }
+
+      // Resume polling immediately when tab becomes visible or phone is unlocked
+      document.addEventListener('visibilitychange', function () {
+        if (!document.hidden && currentTab === 'live') {
+          pollConsole();
+        }
       });
-    });
+
+      /* ── Form Save & Device Reboot Feedback ── */
+      if (cfgForm) {
+        cfgForm.addEventListener('submit', function (e) {
+          e.preventDefault();
+          isSubmitting = true;
+
+          var saveBtn = cfgForm.querySelector('button[type="submit"]');
+          var origText = saveBtn ? saveBtn.textContent : 'Save All Settings';
+          if (saveBtn) {
+            saveBtn.disabled = true;
+            saveBtn.textContent = 'Saving Settings...';
+          }
+
+          var fd = new FormData(cfgForm);
+          var params = new URLSearchParams(fd);
+
+          fetch('/save', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8'
+            },
+            body: params.toString()
+          })
+            .then(function (r) {
+              if (!r.ok) {
+                return r.text().then(function (txt) { throw new Error(txt || ('HTTP ' + r.status)); });
+              }
+              return r.json();
+            })
+            .then(function (data) {
+              if (data && data.reboot) {
+                // Wi-Fi was changed, robot must reboot to reconnect to new network
+                hasUnsavedSettings = false;
+                var overlay = document.getElementById('rebootOverlay');
+                var statusTxt = document.getElementById('rebootStatus');
+                if (overlay) overlay.style.display = 'flex';
+                if (statusTxt) statusTxt.textContent = 'Wi-Fi credentials updated. Kiwi is reconnecting to your network...';
+
+                var rebootAttempts = 0;
+                var pollRebootInterval = setInterval(function () {
+                  rebootAttempts++;
+                  fetch('/status', { cache: 'no-store' })
+                    .then(function (r) {
+                      if (r.ok) {
+                        clearInterval(pollRebootInterval);
+                        if (statusTxt) statusTxt.textContent = '✓ Kiwi reconnected! Reloading system console...';
+                        setTimeout(function () { window.location.reload(); }, 1000);
+                      }
+                    })
+                    .catch(function () {
+                      if (rebootAttempts > 25) {
+                        clearInterval(pollRebootInterval);
+                        if (statusTxt) statusTxt.innerHTML = 'Reboot taking longer than usual.<br><button type="button" class="qbtn primary" onclick="location.reload()" style="margin-top:12px">Reload Now</button>';
+                      }
+                    });
+                }, 2500);
+              } else {
+                // Live save successful! No reboot, no reload!
+                hasUnsavedSettings = false;
+                if (unsavedNotice) unsavedNotice.style.display = 'none';
+                if (pillSettings) {
+                  var dot = pillSettings.querySelector('.unsaved-dot');
+                  if (dot) dot.remove();
+                }
+                toast('✓ Settings saved and applied instantly!');
+                if (saveBtn) {
+                  saveBtn.disabled = false;
+                  saveBtn.textContent = '✓ Saved Live!';
+                  setTimeout(function () {
+                    saveBtn.textContent = origText;
+                  }, 2500);
+                }
+                isSubmitting = false;
+              }
+            })
+            .catch(function (err) {
+              toast('❌ Error saving settings: ' + (err.message || 'Network error'));
+              if (saveBtn) {
+                saveBtn.disabled = false;
+                saveBtn.textContent = origText;
+              }
+              isSubmitting = false;
+            });
+        });
+      }
+
+      /* ── Touch action options setup ── */
+      var touchActs = [
+        { val: "listen", lbl: "Voice Prompt / Mic Record" },
+        { val: "clock", lbl: "Show Clock Screen" },
+        { val: "weather", lbl: "Show Weather Screen" },
+        { val: "skin", lbl: "Cycle OLED Eye Skin" },
+        { val: "pet", lbl: "Pet Reaction / Cuddle" },
+        { val: "tickle", lbl: "Tickle Laugh Mode" },
+        { val: "vol_up", lbl: "Volume Up (+10%)" },
+        { val: "vol_dn", lbl: "Volume Down (-10%)" },
+        { val: "dismiss", lbl: "Look Around / Dismiss" },
+        { val: "none", lbl: "Disabled" }
+      ];
+
+      document.querySelectorAll('.touch-act-sel').forEach(function (sel) {
+        var cur = sel.getAttribute('data-val');
+        touchActs.forEach(function (a) {
+          var opt = document.createElement('option');
+          opt.value = a.val;
+          opt.textContent = a.lbl;
+          if (a.val === cur) opt.selected = true;
+          sel.appendChild(opt);
+        });
+      });
+
+      // Initialize
+      if (typeof window.toggleStt === 'function') window.toggleStt();
+      if (typeof window.toggleModels === 'function') window.toggleModels();
+      if (typeof window.toggleTts === 'function') window.toggleTts();
+      pollConsole();
+    })();
   </script>
 </body>
 
@@ -2624,6 +2964,8 @@ static const char DASHBOARD_FOOT[] PROGMEM = R"rawfoot(<script>
 )rawfoot";
 
 void handleRoot() {
+  server.sendHeader("Access-Control-Allow-Origin", "*");
+  server.sendHeader("Connection", "close");
   server.sendHeader("Cache-Control", "no-cache, no-store, must-revalidate");
   server.sendHeader("Pragma", "no-cache");
   server.sendHeader("Expires", "0");
@@ -2632,26 +2974,31 @@ void handleRoot() {
 
   // 1. Static HTML head, styles & navbar (0 bytes RAM heap)
   server.sendContent_P(DASHBOARD_CSS);
+  yield();
 
   // 2. Small dynamic status summary pill (< 1 KB RAM heap)
   String statusHtml = getDashboardStatusHtml();
   server.sendContent(statusHtml);
   statusHtml = "";
+  yield();
 
   // 3. Live Console and Real-Time Hardware Adjustments
   String liveHtml = getDashboardLiveConsole();
   server.sendContent(liveHtml);
   liveHtml = "";
+  yield();
 
   // 4. Form Part 1: Wi-Fi, STT, LLM (~6 KB RAM heap)
   String body1 = getDashboardBodyPart1();
   server.sendContent(body1);
   body1 = "";
+  yield();
 
   // 5. Form Part 2: TTS, Audio, Touch, Weather, Memory (~11 KB RAM heap)
   String body2 = getDashboardBodyPart2();
   server.sendContent(body2);
   body2 = "";
+  yield();
 
   // 6. Scripts & Footer (0 bytes RAM heap)
   server.sendContent_P(DASHBOARD_FOOT);

@@ -10,6 +10,8 @@ if sys.platform == "win32":
         pass
 
 import json
+
+FIRMWARE_VERSION = "v1.0"
 import time
 import urllib.request
 import urllib.parse
@@ -239,12 +241,14 @@ def render_dashboard():
         "%NIGHT_SEL_1%": "selected" if cfg.get("nightMode") == 1 else "",
         "%NIGHT_SEL_2%": "selected" if cfg.get("nightMode") == 2 else "",
         "%NIGHT_BRIGHT%": str(cfg.get("nightBrightness", 15)),
+        "%NIGHT_MODE%": str(cfg.get("nightMode", 1)),
         "%NIGHT_SLIDER_STYLE%": "display:none;" if cfg.get("nightMode") == 0 else "",
         "%CIRC_EN_CHECKED%": "checked" if cfg.get("circadianSleepEnabled", True) else "",
         "%CIRC_EN_VAL%": "1" if cfg.get("circadianSleepEnabled", True) else "0",
         "%CIRC_START%": str(cfg.get("circadianSleepStart", 23)),
         "%CIRC_END%": str(cfg.get("circadianSleepEnd", 7)),
         "%BOREDOM_CHECKED%": "checked" if cfg.get("boredomEnabled") else "",
+        "%BOREDOM_VAL%": "1" if cfg.get("boredomEnabled") else "0",
         "%BM_1_SEL%": "selected" if cfg.get("boredomMinutes") == 1 else "",
         "%BM_2_SEL%": "selected" if cfg.get("boredomMinutes") == 2 else "",
         "%BM_3_SEL%": "selected" if cfg.get("boredomMinutes") == 3 else "",
@@ -360,6 +364,21 @@ class DevPortalHandler(BaseHTTPRequestHandler):
         path = parsed.path
         query = urllib.parse.parse_qs(parsed.query)
 
+                # Apple Touch Icon & Favicon
+        if path in ["/apple-touch-icon.png", "/apple-touch-icon-precomposed.png", "/favicon.ico"]:
+            icon_path = os.path.join(os.path.dirname(__file__), "apple-touch-icon.png")
+            if not os.path.exists(icon_path):
+                icon_path = os.path.join(WORKSPACE, "apple-touch-icon.png")
+            if os.path.exists(icon_path):
+                with open(icon_path, "rb") as f:
+                    icon_data = f.read()
+                self.send_response(200)
+                self.send_header("Content-Type", "image/png")
+                self.send_header("Cache-Control", "public, max-age=86400")
+                self.end_headers()
+                self.wfile.write(icon_data)
+                return
+
         # Dev endpoints
         if path == "/api/dev/status":
             self.send_response(200)
@@ -448,6 +467,7 @@ class DevPortalHandler(BaseHTTPRequestHandler):
                 "state": ("Sleeping" if cfg_curr.get("sleeping", False) else "Idle & Happy"),
                 "question": "What's up Kiwi?",
                 "answer": "Surviving on 3.3V and pure attitude! What are we building today?",
+                "version": FIRMWARE_VERSION,
                 "logs": simulated_logs
             }
             self.send_response(200)

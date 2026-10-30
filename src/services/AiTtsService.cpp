@@ -308,7 +308,7 @@ int ttsSarvam(const String &text) {
     if (n < 0)
       break;
     if (n == 0) {
-      if (millis() - readStart > 30000)
+      if (millis() - readStart > 12000)
         break;
       pumpUI();
       delay(1);

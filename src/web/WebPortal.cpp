@@ -1,4 +1,5 @@
 #include "web/WebPortal.h"
+#include "web/icon.h"
 #include "config/AppConfig.h"
 #include "config/ConfigManager.h"
 #include "hardware/AudioEngine.h"
@@ -211,6 +212,18 @@ void restoreWebAndAP(bool apWasUp) {
 
 void startWeb() {
   if (!webRoutesSet) {
+        // Apple Touch Icon & Favicon (Direct PROGMEM binary delivery, no template processor)
+    auto handleAppleIcon = []() {
+      server.sendHeader("Access-Control-Allow-Origin", "*");
+      server.sendHeader("Connection", "close");
+      server.sendHeader("Content-Type", "image/png");
+      server.sendHeader("Cache-Control", "public, max-age=86400");
+      server.send_P(200, "image/png", (const char *)APPLE_ICON, APPLE_ICON_LEN);
+    };
+    server.on("/apple-touch-icon.png", HTTP_GET, handleAppleIcon);
+    server.on("/apple-touch-icon-precomposed.png", HTTP_GET, handleAppleIcon);
+    server.on("/favicon.ico", HTTP_GET, handleAppleIcon);
+
     server.on("/", HTTP_GET, handleRoot);
     server.on("/save", HTTP_POST, handleSave);
     server.on("/faces", HTTP_GET, handleFacesPage);
@@ -300,6 +313,7 @@ void startWeb() {
       server.send(404, "text/plain", "Not Found");
     });
 
+    server.enableCORS(true);
     webRoutesSet = true;
   }
   server.begin();

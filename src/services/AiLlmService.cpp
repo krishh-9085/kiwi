@@ -168,7 +168,7 @@ static String processSseStream(HTTPClient &http, WiFiClient *stream, SentenceCal
   bool isSSE = false;
   uint32_t tStart = millis();
 
-  while (millis() - tStart < 10000) {
+  while (millis() - tStart < 20000) {
     if (cancelRequest)
       break;
     if (!http.connected() && (!stream || !stream->available()))
@@ -295,7 +295,7 @@ String askGemini(const String &question, SentenceCallback onSentence) {
           jsonEscape(sys) +
           "\"}]},"
           "\"generationConfig\":{\"maxOutputTokens\":" +
-          String(LLM_MAX_TOKENS) + ",\"temperature\":0.8}}";
+          String(LLM_MAX_TOKENS) + ",\"temperature\":0.85,\"stopSequences\":[\"[DONE]\",\"\\n\\n\\n\"]}}";
 
   String fullAns;
   String resp;
@@ -306,16 +306,21 @@ String askGemini(const String &question, SentenceCallback onSentence) {
     client.setTimeout(15);
     HTTPClient http;
     http.setReuse(false);
-    http.setTimeout(12000);
-    http.setConnectTimeout(6000);
+    http.setTimeout(20000);
+    http.setConnectTimeout(8000);
     uint32_t t0 = millis();
     Serial.println("[GEMINI] Asking (streaming)...");
 
     String targetEp = llmEndpoint;
     if (targetEp == DEFAULT_LLM_URL ||
         targetEp.indexOf("generativelanguage.googleapis.com") >= 0) {
+      // Always build the streaming URL from current model name
       targetEp = "https://generativelanguage.googleapis.com/v1beta/models/" +
                  llmModel + ":streamGenerateContent?alt=sse";
+    } else if (targetEp.indexOf(":streamGenerateContent") < 0) {
+      // Custom Gemini-compatible endpoint - append streaming suffix
+      targetEp.replace(":generateContent", "");
+      targetEp += ":streamGenerateContent?alt=sse";
     }
     if (!http.begin(client, targetEp)) {
       Serial.println("[GEMINI] Bad URL.");

@@ -191,8 +191,9 @@ bool suspendLocalNet() {
       apMode = false;
       delay(20);
     }
-    server.stop();
-    delay(10);
+    // Note: Do NOT stop the WebServer during AI calls in STA mode.
+    // Stopping server causes any in-flight web dashboard requests (like /save, /status)
+    // to instantly fail with "Failed to fetch" / connection refused while Kiwi is speaking.
   }
   return originalApState;
 }
@@ -202,6 +203,8 @@ void restoreWebAndAP(bool apWasUp) {
     netSuspendDepth = 0;
     if (apWasUp || originalApState)
       startAPParallel();
+    // In STA mode the server was never stopped, so no need to restart it.
+    // If not running, make sure it is up:
     startWeb();
     Serial.printf("[NET] Free heap: %u\n", (unsigned)ESP.getFreeHeap());
   }

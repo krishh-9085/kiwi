@@ -2855,14 +2855,21 @@ static const char DASHBOARD_FOOT[] PROGMEM = R"rawfoot(<script>
           var fd = new FormData(cfgForm);
           var params = new URLSearchParams(fd);
 
+          var saveCtrl = window.AbortController ? new AbortController() : null;
+          var saveTimeout = setTimeout(function () {
+            if (saveCtrl) saveCtrl.abort();
+          }, 15000);
+
           fetch('/save', {
             method: 'POST',
             headers: {
               'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8'
             },
-            body: params.toString()
+            body: params.toString(),
+            signal: saveCtrl ? saveCtrl.signal : undefined
           })
             .then(function (r) {
+              clearTimeout(saveTimeout);
               if (!r.ok) {
                 return r.text().then(function (txt) { throw new Error(txt || ('HTTP ' + r.status)); });
               }
@@ -2915,6 +2922,7 @@ static const char DASHBOARD_FOOT[] PROGMEM = R"rawfoot(<script>
               }
             })
             .catch(function (err) {
+              clearTimeout(saveTimeout);
               toast('❌ Error saving settings: ' + (err.message || 'Network error'));
               if (saveBtn) {
                 saveBtn.disabled = false;

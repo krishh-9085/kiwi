@@ -49,8 +49,8 @@ const char *DEFAULT_PROMPT =
     "Use emojis only when they fit the user's tone. No markdown, no asterisks.";
 const char *DEFAULT_LLM_URL =
     "https://generativelanguage.googleapis.com/v1beta/models/"
-    "gemini-2.0-flash-lite:generateContent";
-const char *DEFAULT_LLM_MODEL = "gemini-2.0-flash-lite";
+    "gemini-2.5-flash-lite:generateContent";
+const char *DEFAULT_LLM_MODEL = "gemini-2.5-flash-lite";
 const char *DEFAULT_OPENAI_LLM_URL =
     "https://api.openai.com/v1/chat/completions";
 const char *DEFAULT_GROQ_URL =

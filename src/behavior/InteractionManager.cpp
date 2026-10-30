@@ -15,6 +15,7 @@ void pumpUI() {
   updateTouch();
   updateTonePlayer();
   tickFace();
+  pumpWeb();
 }
 
 // ============================================================

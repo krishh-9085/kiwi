@@ -42,7 +42,7 @@ extern const char *NTP_SERVER_2;
 #define MIC_SLOT_OFFSET 0
 #define MIC_GAIN 2.2f
 #define UPLOAD_BATCH 1024
-#define LLM_MAX_TOKENS 80
+#define LLM_MAX_TOKENS 200
 #define TTS_MAX_CHARS 360
 #define NOISE_GATE_THRESHOLD 60
 

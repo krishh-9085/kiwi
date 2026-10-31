@@ -127,9 +127,7 @@ void drawClockScreen() {
            months[timeinfo.tm_mon % 12], timeinfo.tm_year + 1900);
   printCentered(String(dateStr), 50 + shiftY, shiftX);
 
-  // Hairline seconds progress along the bottom edge
-  int barW = (timeinfo.tm_sec * SCREEN_WIDTH) / 60 + 1;
-  display.drawFastHLine(0, SCREEN_HEIGHT - 1, barW, SSD1306_WHITE);
+// Seconds bar removed as requested
 
   presentDisplay();
 }

@@ -19,8 +19,8 @@ bool httpReadLine(WiFiClient &c, String &line, uint32_t timeoutMs) {
     } else {
       if (!c.connected())
         return false;
-      if ((uint32_t)(millis() - idleT0) > 5000)
-        return false; // 5s idle gap limit
+      if ((uint32_t)(millis() - idleT0) > timeoutMs)
+        return false; // Idle gap limit aligned with caller timeout (prevents premature TTS stream cutoff)
       delay(1);
     }
   }

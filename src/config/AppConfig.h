@@ -11,8 +11,8 @@ extern const char *FIRMWARE_VER;
 // ============================================================
 // HARDWARE PIN MAP (ESP32-C3 Super Mini)
 // ============================================================
-#define PIN_TOUCH_LEFT 20
-#define PIN_TOUCH_RIGHT 21
+#define PIN_TOUCH_LEFT 10
+#define PIN_TOUCH_RIGHT 20
 #define PIN_TOUCH_TOP 3
 #define PIN_MIC_SD 4
 #define PIN_I2S_BCLK 5
@@ -42,8 +42,8 @@ extern const char *NTP_SERVER_2;
 #define MIC_SLOT_OFFSET 0
 #define MIC_GAIN 2.2f
 #define UPLOAD_BATCH 1024
-#define LLM_MAX_TOKENS 200
-#define TTS_MAX_CHARS 360
+#define LLM_MAX_TOKENS 300
+#define TTS_MAX_CHARS 600
 #define NOISE_GATE_THRESHOLD 60
 
 // ============================================================

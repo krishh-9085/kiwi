@@ -220,53 +220,67 @@ bool handleEmotionCommand(const String &qIn) {
 bool handleSkinCommand(const String &qIn) {
   String q = qIn;
   q.toLowerCase();
-  if (!hasAny(q, {"skin", "eyes", "eye skin", "looks", "chashma", "theme", "थीम", "स्किन", "आंखें", "चश्मा", "चेहरा", "look", "rakho", "lagao", "karo", "रखो", "लगाओ", "करो", "बदलो"}))
-    return false;
+  q.trim();
+
+  // Support all phrases: "theme change to cyberpunk", "change theme to desk buddy", "desk buddy kardo", "cyberpunk theme", etc.
+  bool isThemeIntent = hasAny(q, {
+      "skin", "eyes", "eye skin", "looks", "chashma", "theme", "थीम", "स्किन",
+      "आंखें", "चश्मा", "चेहरा", "look", "rakho", "lagao", "karo", "रखो", "लगाओ",
+      "करो", "बदलो", "change", "switch", "set", "mode", "bana", "banao", "kardo"
+  });
 
   String name = "";
+  EyeSkin targetSkin = currentEyeSkin;
+
   if (hasAny(q, {"cyberpunk", "cyber", "hud", "sci-fi", "साइबरपंक", "साइबर"})) {
-    currentEyeSkin = SKIN_CYBERPUNK; name = "Cyberpunk Visor";
+    targetSkin = SKIN_CYBERPUNK; name = "Cyberpunk";
+  } else if (hasAny(q, {"desk buddy", "deskbuddy", "desk body", "that body", "kiwi", "buddy", "कीवी"})) {
+    targetSkin = SKIN_KIWI; name = "Desk Buddy";
   } else if (hasAny(q, {"cat", "neko", "billi", "kitty", "कैट", "बिल्ली"})) {
-    currentEyeSkin = SKIN_CAT; name = "Kawaii Cat";
+    targetSkin = SKIN_CAT; name = "Cat";
   } else if (hasAny(q, {"retro", "8bit", "8-bit", "pixel", "arcade", "रेट्रो"})) {
-    currentEyeSkin = SKIN_RETRO8BIT; name = "Retro 8-Bit";
+    targetSkin = SKIN_RETRO8BIT; name = "Retro 8-Bit";
   } else if (hasAny(q, {"anime", "star", "shounen", "starry", "एनिमे", "एनीमे"})) {
-    currentEyeSkin = SKIN_ANIME; name = "Anime Star";
+    targetSkin = SKIN_ANIME; name = "Anime";
   } else if (hasAny(q, {"heart", "hearts", "dil", "love", "हार्ट", "दिल"})) {
-    currentEyeSkin = SKIN_HEARTS; name = "Heart Eyes";
+    targetSkin = SKIN_HEARTS; name = "Hearts";
   } else if (hasAny(q, {"steampunk", "goggles", "aviator", "स्टीमपंक"})) {
-    currentEyeSkin = SKIN_STEAMPUNK; name = "Steampunk Goggles";
+    targetSkin = SKIN_STEAMPUNK; name = "Steampunk";
   } else if (hasAny(q, {"demon", "devil", "horns", "shaitan", "डेमन", "शैतान"})) {
-    currentEyeSkin = SKIN_DEMON; name = "Demon Horns";
+    targetSkin = SKIN_DEMON; name = "Demon";
   } else if (hasAny(q, {"matrix", "terminal", "code", "hacker", "मैट्रिक्स"})) {
-    currentEyeSkin = SKIN_MATRIX; name = "Matrix Code";
+    targetSkin = SKIN_MATRIX; name = "Matrix";
   } else if (hasAny(q, {"cyborg", "terminator", "t800", "t-800", "साइबोर्ग"})) {
-    currentEyeSkin = SKIN_CYBORG; name = "Cyborg T-800";
+    targetSkin = SKIN_CYBORG; name = "Cyborg";
   } else if (hasAny(q, {"mecha", "gundam", "robot eyes", "v-fin", "मेका"})) {
-    currentEyeSkin = SKIN_MECHA; name = "Mecha Gundam";
+    targetSkin = SKIN_MECHA; name = "Mecha";
   } else if (hasAny(q, {"sunglass", "sunglasses", "shades", "thug life", "boss", "काला चश्मा"})) {
-    currentEyeSkin = SKIN_SUNGLASSES; name = "Boss Shades";
+    targetSkin = SKIN_SUNGLASSES; name = "Sunglasses";
   } else if (hasAny(q, {"puppy", "dog", "doggy", "kutta", "पपी", "कुत्ता"})) {
-    currentEyeSkin = SKIN_PUPPY; name = "Kawaii Puppy";
+    targetSkin = SKIN_PUPPY; name = "Puppy";
   } else if (hasAny(q, {"hypno", "spiral", "vortex", "dizzy", "हिप्नो"})) {
-    currentEyeSkin = SKIN_HYPNO; name = "Hypno Spiral";
+    targetSkin = SKIN_HYPNO; name = "Hypno";
   } else if (hasAny(q, {"alien", "ufo", "cosmic", "galaxy", "एलियन"})) {
-    currentEyeSkin = SKIN_ALIEN; name = "Cosmic Alien";
+    targetSkin = SKIN_ALIEN; name = "Alien";
   } else if (hasAny(q, {"ninja", "shinobi", "naruto", "headband", "निंजा"})) {
-    currentEyeSkin = SKIN_NINJA; name = "Shinobi Ninja";
+    targetSkin = SKIN_NINJA; name = "Ninja";
   } else if (hasAny(q, {"round", "circle", "gol", "rounded", "गोल"})) {
-    currentEyeSkin = SKIN_ROUND; name = "Round Vector";
-  } else if (hasAny(q, {"kiwi", "desk buddy", "buddy", "कीवी"})) {
-    currentEyeSkin = SKIN_KIWI; name = "Desk Buddy (Cute Block)";
+    targetSkin = SKIN_ROUND; name = "Round";
   } else if (hasAny(q, {"default", "normal", "clean", "reset skin", "डिफ़ॉल्ट", "डिफॉल्ट"})) {
-    currentEyeSkin = SKIN_DEFAULT; name = "Default Eyes";
-  } else {
-    return false;
+    targetSkin = SKIN_DEFAULT; name = "Default";
   }
 
+  if (name.length() == 0)
+    return false;
+
+  // If a theme name was matched, only trigger if it's a theme intent OR a short direct command (<= 25 chars)
+  if (!isThemeIntent && q.length() > 25)
+    return false;
+
+  currentEyeSkin = targetSkin;
   saveConfig();
   soundPetSparkle();
-  if (sttLang == "hi" || containsDevanagari(qIn) || hasAny(q, {"rakho", "karo", "lagao", "थीम", "बदलो", "रखो", "लगाओ"})) {
+  if (sttLang == "hi" || containsDevanagari(qIn) || hasAny(q, {"rakho", "karo", "lagao", "थीम", "बदलो", "रखो", "लगाओ", "kardo"})) {
     speakText("Theme " + name + " set kar di hai!");
   } else {
     speakText("Theme set to " + name + "!");

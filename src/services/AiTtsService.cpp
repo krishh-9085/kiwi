@@ -8,6 +8,11 @@
 #include "behavior/InteractionManager.h"
 #include <WiFiClientSecure.h>
 
+// Unified shared audio buffers (prevents out-of-memory on ESP32-C3)
+static const size_t TTS_PREBUF_SAMPLES = 2560; // 107ms @ 24kHz / 160ms @ 16kHz
+static int16_t ttsPrebuf[TTS_PREBUF_SAMPLES];
+static uint8_t ttsRbuf[2048];
+
 // ============================================================
 bool speakText(const String &text) {
   String toSpeak = (ttsProvider == "fish" || ttsProvider == "fishaudio") ? text : stripAudioCues(text);
@@ -187,8 +192,8 @@ int ttsSarvam(const String &text) {
   uint8_t lo = 0;
 
   // Jitter Pre-Buffer (256ms @ 16kHz): Prevents Wi-Fi packet latency from causing audio gaps
-  const size_t PREBUF_SAMPLES = 4096;
-  static int16_t prebuf[PREBUF_SAMPLES];
+  const size_t PREBUF_SAMPLES = TTS_PREBUF_SAMPLES;
+  int16_t *prebuf = ttsPrebuf;
   size_t prebufCount = 0;
   bool prebufDone = false;
 
@@ -269,7 +274,7 @@ int ttsSarvam(const String &text) {
           dataSeen = true;
           step = (float)srcRate / (float)SAMPLE_RATE;
           setEmotion(EMOTION_SPEAKING);
-          gFaceFrameMs = 60;
+          gFaceFrameMs = 100;
           playing = true;
           for (size_t i = 44; i < hdrLen; i++) {
             uint8_t b2 = hdr[i];
@@ -296,7 +301,7 @@ int ttsSarvam(const String &text) {
     }
   };
 
-  static uint8_t rbuf[4096];
+  uint8_t *rbuf = ttsRbuf;
   int n;
   uint32_t readStart = millis();
   while (st != S_DONE) {
@@ -304,7 +309,7 @@ int ttsSarvam(const String &text) {
       aborted = true;
       break;
     }
-    n = httpReadBlock(hs, rbuf, sizeof(rbuf));
+    n = httpReadBlock(hs, rbuf, sizeof(ttsRbuf));
     if (n < 0)
       break;
     if (n == 0) {
@@ -476,15 +481,15 @@ int ttsPcmOpenAI(const String &text) {
     return 0;
   }
   setEmotion(EMOTION_SPEAKING);
-  gFaceFrameMs = 60;
+  gFaceFrameMs = 100;
   bool playing = false, haveLo = false;
   uint8_t lo = 0;
-  static uint8_t rbuf[2048];
+  uint8_t *rbuf = ttsRbuf;
   int n;
   uint32_t readStart = millis();
 
-  const size_t PREBUF_SAMPLES = 4096;
-  static int16_t prebuf[PREBUF_SAMPLES];
+  const size_t PREBUF_SAMPLES = TTS_PREBUF_SAMPLES;
+  int16_t *prebuf = ttsPrebuf;
   size_t prebufCount = 0;
   bool prebufDone = false;
 
@@ -502,16 +507,20 @@ int ttsPcmOpenAI(const String &text) {
     }
   };
 
+  uint32_t lastUiPump = 0;
   while (true) {
     if (cancelRequest)
       break;
-    n = httpReadBlock(hs, rbuf, sizeof(rbuf));
+    n = httpReadBlock(hs, rbuf, sizeof(ttsRbuf));
     if (n < 0)
       break;
     if (n == 0) {
       if (millis() - readStart > 15000)
         break;
-      pumpUI();
+      if (millis() - lastUiPump >= 60) {
+        pumpUI();
+        lastUiPump = millis();
+      }
       delay(1);
       continue;
     }
@@ -527,7 +536,10 @@ int ttsPcmOpenAI(const String &text) {
         pushWithPrebuf(s);
       }
     }
-    pumpUI();
+    if (millis() - lastUiPump >= 60) {
+      pumpUI();
+      lastUiPump = millis();
+    }
   }
   client.stop();
   if (!prebufDone && prebufCount > 0) {
@@ -627,15 +639,15 @@ int ttsPcmEleven(const String &text) {
     return 0;
   }
   setEmotion(EMOTION_SPEAKING);
-  gFaceFrameMs = 60;
+  gFaceFrameMs = 100;
   bool playing = false, haveLo = false;
   uint8_t lo = 0;
-  static uint8_t rbuf[2048];
+  uint8_t *rbuf = ttsRbuf;
   int n;
   uint32_t readStart = millis();
 
-  const size_t PREBUF_SAMPLES = 4096;
-  static int16_t prebuf[PREBUF_SAMPLES];
+  const size_t PREBUF_SAMPLES = TTS_PREBUF_SAMPLES;
+  int16_t *prebuf = ttsPrebuf;
   size_t prebufCount = 0;
   bool prebufDone = false;
 
@@ -653,16 +665,20 @@ int ttsPcmEleven(const String &text) {
     }
   };
 
+  uint32_t lastUiPump = 0;
   while (true) {
     if (cancelRequest)
       break;
-    n = httpReadBlock(hs, rbuf, sizeof(rbuf));
+    n = httpReadBlock(hs, rbuf, sizeof(ttsRbuf));
     if (n < 0)
       break;
     if (n == 0) {
       if (millis() - readStart > 15000)
         break;
-      pumpUI();
+      if (millis() - lastUiPump >= 60) {
+        pumpUI();
+        lastUiPump = millis();
+      }
       delay(1);
       continue;
     }
@@ -678,7 +694,10 @@ int ttsPcmEleven(const String &text) {
         pushWithPrebuf(s);
       }
     }
-    pumpUI();
+    if (millis() - lastUiPump >= 60) {
+      pumpUI();
+      lastUiPump = millis();
+    }
   }
   client.stop();
   if (!prebufDone && prebufCount > 0) {
@@ -785,15 +804,15 @@ int ttsFishAudio(const String &text) {
     return 0;
   }
   setEmotion(EMOTION_SPEAKING);
-  gFaceFrameMs = 60;
+  gFaceFrameMs = 100;
   bool playing = false, haveLo = false;
   uint8_t lo = 0;
-  static uint8_t rbuf[2048];
+  uint8_t *rbuf = ttsRbuf;
   int n;
   uint32_t readStart = millis();
 
-  const size_t PREBUF_SAMPLES = 4096;
-  static int16_t prebuf[PREBUF_SAMPLES];
+  const size_t PREBUF_SAMPLES = TTS_PREBUF_SAMPLES;
+  int16_t *prebuf = ttsPrebuf;
   size_t prebufCount = 0;
   bool prebufDone = false;
 
@@ -811,16 +830,20 @@ int ttsFishAudio(const String &text) {
     }
   };
 
+  uint32_t lastUiPump = 0;
   while (true) {
     if (cancelRequest)
       break;
-    n = httpReadBlock(hs, rbuf, sizeof(rbuf));
+    n = httpReadBlock(hs, rbuf, sizeof(ttsRbuf));
     if (n < 0)
       break;
     if (n == 0) {
       if (millis() - readStart > 15000)
         break;
-      pumpUI();
+      if (millis() - lastUiPump >= 60) {
+        pumpUI();
+        lastUiPump = millis();
+      }
       delay(1);
       continue;
     }
@@ -836,7 +859,10 @@ int ttsFishAudio(const String &text) {
         pushWithPrebuf(s);
       }
     }
-    pumpUI();
+    if (millis() - lastUiPump >= 60) {
+      pumpUI();
+      lastUiPump = millis();
+    }
   }
   client.stop();
   if (!prebufDone && prebufCount > 0) {

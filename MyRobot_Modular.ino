@@ -202,10 +202,18 @@ void loop() {
       robotStateDesc = "STT: " + sttFail;
       addTerminalLog("[STT] Speech not recognized: " + sttFail);
       Serial.printf("[ROBOT] STT failed: %s\n", sttFail.c_str());
+      setEmotion(EMOTION_CONFUSED);
       if (sttFail == "quiet" || sttFail == "empty" || sttFail == "") {
-        showStatus("Didn't hear you", "try again", 1300);
+        showStatus("Didn't hear you", "try again", 1400);
+        static const char *const quietReplies[] = {
+            "Kuch bola kya? Mujhe theek se sunai nahi diya!",
+            "Did you say something? Sunai nahi diya mujhe!",
+            "Arey kuch kaha kya? Ek baar firse bolo!"
+        };
+        speakText(quietReplies[random(0, 3)]);
       } else {
-        showStatus("STT error", sttFail.c_str(), 2500);
+        showStatus("STT error", sttFail.c_str(), 1800);
+        speakText("Awaaz theek se nahi aayi, ek baar firse try karo!");
       }
     }
     bool wasCancelled = cancelRequest;

@@ -20,6 +20,7 @@ void makeWavHeader(uint8_t *h, uint32_t dataSize);
 // ---------- Tone Synthesis Engine ----------
 void playToneQueue(Tone *tones, int count);
 void updateTonePlayer();
+bool isTonePlaying();
 
 // ---------- Robotic Sound Effects ----------
 void soundPetLove();

@@ -264,14 +264,15 @@ static void updateOneTouch(TouchSensor &ts, uint32_t now) {
       if (bootInfoUntil > 0) {
         bootInfoUntil = 0;
       }
-      Serial.printf("[TOUCH] Pin %d PRESSED\n", ts.pin);
+      Serial.printf("[TOUCH] Pin %d PRESSED (feedback=%d, busy=%d)\n", ts.pin, touchFeedbackSound, busyProcessing);
 
       // Instant Audio & Visual Touch Response
       static uint32_t lastTouchBlipAt = 0;
       if (!inCircadianSleep && !manualSleep) {
-        if (touchFeedbackSound && !busyProcessing && (now - lastTouchBlipAt >= 250)) {
+        if (touchFeedbackSound && !busyProcessing && (now - lastTouchBlipAt >= 200)) {
           lastTouchBlipAt = now;
           soundTouchBlip();
+          updateTonePlayer();
         }
         if (ts.pin == PIN_TOUCH_LEFT) {
           activeWinkLeft = true;

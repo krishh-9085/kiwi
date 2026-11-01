@@ -37,10 +37,10 @@ extern const char *NTP_SERVER_1;
 extern const char *NTP_SERVER_2;
 
 #define SAMPLE_RATE 24000
-#define RECORD_SECONDS 4
+#define RECORD_SECONDS 5
 #define AUDIO_FRAMES 256
 #define MIC_SLOT_OFFSET 0
-#define MIC_GAIN 2.2f
+#define MIC_GAIN 3.2f
 #define UPLOAD_BATCH 1024
 #define LLM_MAX_TOKENS 300
 #define TTS_MAX_CHARS 600

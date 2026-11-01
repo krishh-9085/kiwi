@@ -245,8 +245,7 @@ String sarvamSttLangCode() {
     return "en-IN";
   if (sttLang == "hi")
     return "hi-IN";
-  return ""; // Sarvam AI saaras:v3 auto-detects Hindi, English, and
-                    // Hinglish! Empty string = let the API auto-detect.
+  return "unknown"; // Sarvam AI official code for auto-detection
 }
 
 String whisperSttLangCode() {
@@ -254,7 +253,8 @@ String whisperSttLangCode() {
     return "en";
   if (sttLang == "hi")
     return "hi";
-  return "";
+  // Default to Hindi so Whisper never hallucinates Welsh/Spanish/Indonesian on short clips
+  return "hi";
 }
 
 // ============================================================

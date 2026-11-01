@@ -25,7 +25,7 @@ SttCfg resolveStt() {
     c.sarvam = false;
   } else {
     c.url = sttEndpoint;
-    c.key = sttKey;
+    c.key = sttKey.length() ? sttKey : (ttsKey.length() ? ttsKey : llmKey);
     c.model = sttModel;
     c.sarvam = true;
   }
@@ -60,8 +60,17 @@ String recordAndTranscribe(uint32_t recordSeconds) {
   Serial.printf("[STT] Free heap: %u  max block: %u\n",
                 (unsigned)ESP.getFreeHeap(), (unsigned)ESP.getMaxAllocHeap());
   setEmotion(EMOTION_LISTENING);
+  pumpUI();  // Render listening face immediately before blocking work
+
+  // Finish any active prompt tone before blocking network/TLS calls
+  uint32_t toneWaitStart = millis();
+  while (isTonePlaying() && (millis() - toneWaitStart < 250)) {
+    updateTonePlayer();
+    delay(4);
+  }
 
   bool apWasUp = suspendLocalNet();
+  pumpUI();  // Keep face alive after network suspend
   WiFiClientSecure client;
   client.setInsecure();
   client.setTimeout(20);
@@ -79,15 +88,20 @@ String recordAndTranscribe(uint32_t recordSeconds) {
     return bail("low memory");
   if (WiFi.status() != WL_CONNECTED) {
     uint32_t tw = millis();
-    while (WiFi.status() != WL_CONNECTED && millis() - tw < 4000)
-      delay(100);
+    while (WiFi.status() != WL_CONNECTED && millis() - tw < 4000) {
+      pumpUI();
+      delay(50);
+    }
     if (WiFi.status() != WL_CONNECTED)
       return bail("Wi-Fi dropped");
   }
+  pumpUI();
   if (!ensureDns(host))
     return bail("DNS failed");
+  pumpUI();
   if (!tlsConnect(client, host, "STT"))
     return bail("connect failed");
+  pumpUI();
 
   const String boundary = "----MyRobotBoundary9A7F";
   const uint32_t recordSamples = SAMPLE_RATE * recordSeconds;
@@ -138,12 +152,7 @@ String recordAndTranscribe(uint32_t recordSeconds) {
     part2 += "--" + boundary +
              "\r\n"
              "Content-Disposition: form-data; name=\"prompt\"\r\n\r\n"
-             "Transcribe exactly what is spoken. Do not translate. If the "
-             "speaker uses Hindi, write Hindi in Devanagari script. If the "
-             "speaker uses English, write English in Latin script. If the "
-             "speaker uses Hinglish, preserve the spoken Roman Hinglish. "
-             "Kiwi, hello, namaste, kaisa hai, kaise ho, kya hal hai, suno, "
-             "bolo, mausam, time, jokes, desk robot conversation.\r\n";
+             "नमस्ते कीवी, क्या हाल है? कैसे हो? आज का मौसम कैसा है? क्या समय हुआ है? Hello Kiwi, how are you? सुनो कीवी, एक जोक सुनाओ। Suno kiwi, time kya hua hai, mausam kaisa hai, mera naam kya hai.\r\n";
   }
 
   String ending = "--" + boundary + "--\r\n";
@@ -168,9 +177,12 @@ String recordAndTranscribe(uint32_t recordSeconds) {
     return bail("upload failed");
 
   setEmotion(EMOTION_LISTENING);
+  pumpUI();
   drainMic();
+  pumpUI();
   if (!micSlotLocked) {
     detectMicSlot();
+    pumpUI();
   }
   Serial.printf("[STT] Recording %lu s (mic slot %d%s, gain %.1f)...\n",
                 (unsigned long)recordSeconds, micSlot, micSlotLocked ? " [cached]" : "",
@@ -190,10 +202,11 @@ String recordAndTranscribe(uint32_t recordSeconds) {
   bool captureStopped = false;
   uint32_t silenceSamples = 0;
   const uint32_t MIN_SPEECH_SAMPLES = SAMPLE_RATE / 2;
-  const uint32_t TRAILING_SILENCE_SAMPLES = (SAMPLE_RATE * 35) / 100;
-  const uint32_t INITIAL_SILENCE_TIMEOUT_SAMPLES = (SAMPLE_RATE * 15) / 10;
+  const uint32_t TRAILING_SILENCE_SAMPLES = (SAMPLE_RATE * 80) / 100; // 800ms natural speech pause (prevents cutoffs)
+  const uint32_t INITIAL_SILENCE_TIMEOUT_SAMPLES = (SAMPLE_RATE * 25) / 10; // 2.5s start timeout
   float noiseSum = 0;
   uint32_t noiseSamples = 0;
+  float calibSumL = 0, calibSumR = 0;
   float speechActivityGate = NOISE_GATE_THRESHOLD * 1.5f;
 
   while (sent < recordSamples && !captureStopped) {
@@ -226,14 +239,25 @@ String recordAndTranscribe(uint32_t recordSeconds) {
       uint32_t a = abs((int)pcm);
       sumAbs += a;
       if (sent < SAMPLE_RATE / 5) {
+        calibSumL += fabsf((float)(raw[i * 2] >> 16));
+        calibSumR += fabsf((float)(raw[i * 2 + 1] >> 16));
         noiseSum += a;
         noiseSamples++;
         if (noiseSamples == SAMPLE_RATE / 5) {
+          if (!micSlotLocked) {
+            if (calibSumL > 2.2f * calibSumR && calibSumL > 10.0f) {
+              micSlot = 0;
+            } else if (calibSumR > 2.2f * calibSumL && calibSumR > 10.0f) {
+              micSlot = 1;
+            }
+            Serial.printf("[STT] Auto-calibrated Mic Slot: %d (L=%.1f, R=%.1f)\n",
+                          micSlot, calibSumL / noiseSamples, calibSumR / noiseSamples);
+          }
           float noiseAverage = noiseSum / noiseSamples;
           speechActivityGate =
               max((float)(NOISE_GATE_THRESHOLD * 1.5f), noiseAverage * 1.15f);
-          Serial.printf("[STT] Noise floor %.0f, speech gate %.0f\n",
-                        noiseAverage, speechActivityGate);
+          Serial.printf("[STT] Noise floor %.0f, speech gate %.0f (Mic Slot %d)\n",
+                        noiseAverage, speechActivityGate, micSlot);
         }
       }
       if (a > vuMax)

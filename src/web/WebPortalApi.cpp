@@ -645,8 +645,8 @@ void handleSave() {
     if (td >= 10 && td <= 200) {
       touchDebounceMs = td;
     }
+    touchFeedbackSound = server.hasArg("tch_snd");
   }
-  touchFeedbackSound = server.hasArg("tch_snd");
 
   if (server.hasArg("act_top_tap")) touchActTopTap = parseTouchAction(server.arg("act_top_tap"), TOUCH_ACT_LISTEN);
   if (server.hasArg("act_top_dbl")) touchActTopDbl = parseTouchAction(server.arg("act_top_dbl"), TOUCH_ACT_CYCLE_SKIN);

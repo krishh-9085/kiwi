@@ -1503,9 +1503,9 @@ static const char DASHBOARD_BODY_PART1[] PROGMEM = R"rawb1(<form method="POST" a
             </select>
             <label for="sttLangSel">STT LANGUAGE</label>
             <select name="sttlang" id="sttLangSel">
+              <option value="hi" %LANG_HI_SEL%>Hindi (हिन्दी / Hinglish) — Recommended</option>
               <option value="auto" %LANG_AUTO_SEL%>Auto (Hindi + English)</option>
-              <option value="hi" %LANG_HI_SEL%>Force Hindi</option>
-              <option value="en" %LANG_EN_SEL%>Force English</option>
+              <option value="en" %LANG_EN_SEL%>English Only</option>
             </select>
             <div id="sarvamBox">
               <h3>Sarvam AI Settings</h3>
@@ -1808,7 +1808,7 @@ static String getDashboardStatusHtml() {
   h.reserve(1200);
   h = FPSTR(DASHBOARD_STATUS_TEMPLATE);
 
-  String langName = (sttLang == "hi") ? "Hindi" : (sttLang == "en") ? "English" : "Auto (HI+EN)";
+  String langName = (sttLang == "hi") ? "Hindi (हिन्दी)" : (sttLang == "en") ? "English" : "Auto (HI+EN)";
   h.replace("%AP%", esc(apSSID));
   h.replace("%LLMPROV%", esc(llmProvider));
   h.replace("%ACTIVEMODEL%", esc(llmProvider == "groq" ? groqModel : llmModel));

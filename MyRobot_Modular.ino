@@ -171,6 +171,14 @@ void loop() {
                    " seconds; stops after speech ends...");
 
     setEmotion(EMOTION_LISTENING);
+    pumpUI();  // Immediately render listening face before blocking STT setup
+
+    // Drain and let the listening chime finish playing before blocking on network TLS!
+    uint32_t toneDrainStart = millis();
+    while (isTonePlaying() && (millis() - toneDrainStart < 250)) {
+      updateTonePlayer();
+      delay(4);
+    }
 
     if (WiFi.status() != WL_CONNECTED) {
       handleOfflineBuddyTap();

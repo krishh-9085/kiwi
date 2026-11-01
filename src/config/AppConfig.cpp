@@ -65,7 +65,7 @@ String wifiSSID = "";
 String wifiPassword = "";
 
 String sttProvider = "sarvam";
-String sttLang = "auto";
+String sttLang = "hi";
 String sttEndpoint = DEFAULT_STT_URL;
 String sttKey = "";
 String sttModel = DEFAULT_STT_MODEL;

@@ -81,45 +81,17 @@ static String getSmartActionInstruction() {
 }
 
 static String getVoiceExpressionInstruction() {
-
-
-
   if (ttsProvider == "fish" || ttsProvider == "fishaudio") {
-
-
-
-    // Compact: saves ~500 chars vs original (fixes HTTP -3 body overflow)
-
-
-
-    return " VOCAL TAGS: Add 1-2 bracketed tags where natural: "
-
-
-
-           "Tones: [angry] [sad] [embarrassed] [emphasis] [whispering] [soft] [breathy] [excited] "
-
-
-
-           "FX: [laughing] [chuckling] [clear throat] [sobbing] [sighing] [panting] [groaning] [pause]. "
-
-
-
-           "Use sparingly; never overuse.";
-
-
-
+    // Fish Audio S2: Emotion tags MUST be in [square brackets] at the START of sentences/clauses
+    return " VOCAL TAGS: You can use Fish Audio emotion cues in [brackets]. "
+           "CRITICAL: Always put the tag at the START of the sentence or clause! "
+           "Examples: '[happy] Haan bilkul!', '[laugh] Haha sahi kaha!', '[sad] Mujhe dukh hua.', '[whisper] Dheere se bolta hoon.'. "
+           "Allowed tags: [happy] [excited] [sad] [angry] [calm] [nervous] [surprised] [scared] [proud] "
+           "[laugh] [chuckle] [whisper] [sigh] [gasp] [pant] [sob] [pause]. "
+           "Max 1-2 per sentence, use where natural.";
   } else {
-
-
-
     return " VOICE: Plain text only. No bracketed tone or sound tags.";
-
-
-
   }
-
-
-
 }
 
 

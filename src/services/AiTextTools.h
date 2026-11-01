@@ -9,6 +9,8 @@ String jsonTextField(const String &json, const char *key);
 String jsonEscape(const String &s);
 String cleanForSpeech(const String &s);
 String stripAudioCues(const String &text);
+String stripRobotTags(const String &text);
+String normalizeFishAudioTags(const String &text);
 bool parseUrl(const String &url, String &host, String &path);
 bool containsDevanagari(const String &s);
 String sarvamSttLangCode();

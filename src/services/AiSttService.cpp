@@ -202,8 +202,9 @@ String recordAndTranscribe(uint32_t recordSeconds) {
   bool captureStopped = false;
   uint32_t silenceSamples = 0;
   const uint32_t MIN_SPEECH_SAMPLES = SAMPLE_RATE / 2;
-  const uint32_t TRAILING_SILENCE_SAMPLES = (SAMPLE_RATE * 80) / 100; // 800ms natural speech pause (prevents cutoffs)
-  const uint32_t INITIAL_SILENCE_TIMEOUT_SAMPLES = (SAMPLE_RATE * 25) / 10; // 2.5s start timeout
+  const uint32_t TRAILING_SILENCE_SAMPLES = (SAMPLE_RATE * 50) / 100; // 500ms pause after speaking
+  float silenceGate = NOISE_GATE_THRESHOLD * 1.2f;
+  const uint32_t INITIAL_SILENCE_TIMEOUT_SAMPLES = (SAMPLE_RATE * 15) / 10; // 1.5s start timeout
   float noiseSum = 0;
   uint32_t noiseSamples = 0;
   float calibSumL = 0, calibSumR = 0;
@@ -255,9 +256,11 @@ String recordAndTranscribe(uint32_t recordSeconds) {
           }
           float noiseAverage = noiseSum / noiseSamples;
           speechActivityGate =
-              max((float)(NOISE_GATE_THRESHOLD * 1.5f), noiseAverage * 1.15f);
-          Serial.printf("[STT] Noise floor %.0f, speech gate %.0f (Mic Slot %d)\n",
-                        noiseAverage, speechActivityGate, micSlot);
+              max((float)(NOISE_GATE_THRESHOLD * 1.8f), noiseAverage * 1.5f);
+          silenceGate =
+              max((float)(NOISE_GATE_THRESHOLD * 1.2f), noiseAverage * 1.2f);
+          Serial.printf("[STT] Noise floor %.0f, speech gate %.0f, silence gate %.0f (Mic Slot %d)\n",
+                        noiseAverage, speechActivityGate, silenceGate, micSlot);
         }
       }
       if (a > vuMax)
@@ -271,11 +274,13 @@ String recordAndTranscribe(uint32_t recordSeconds) {
           speechStarted = true;
           silenceSamples = 0;
         } else if (speechStarted && sent >= MIN_SPEECH_SAMPLES) {
-          silenceSamples += BLK;
-          if (silenceSamples >= TRAILING_SILENCE_SAMPLES) {
-            captureStopped = true;
-            Serial.printf("[STT] Speech ended after %.1f s; stopping early\n",
-                          (float)sent / SAMPLE_RATE);
+          if (avg <= silenceGate) {
+            silenceSamples += BLK;
+            if (silenceSamples >= TRAILING_SILENCE_SAMPLES) {
+              captureStopped = true;
+              Serial.printf("[STT] Speech ended after %.1f s; stopping early\n",
+                            (float)sent / SAMPLE_RATE);
+            }
           }
         } else if (!speechStarted && sent >= INITIAL_SILENCE_TIMEOUT_SAMPLES) {
           captureStopped = true;

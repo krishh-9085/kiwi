@@ -15,7 +15,7 @@ static uint8_t ttsRbuf[2048];
 
 // ============================================================
 bool speakText(const String &text) {
-  String toSpeak = (ttsProvider == "fish" || ttsProvider == "fishaudio") ? text : stripAudioCues(text);
+  String toSpeak = (ttsProvider == "fish" || ttsProvider == "fishaudio") ? normalizeFishAudioTags(stripRobotTags(text)) : stripAudioCues(stripRobotTags(text));
   toSpeak.trim();
   Serial.printf("[TTS] speakText() prov='%s' len=%d heap=%u txHandle=%s\n",
                 ttsProvider.c_str(), (int)toSpeak.length(), (unsigned)ESP.getFreeHeap(),

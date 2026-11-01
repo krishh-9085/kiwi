@@ -75,6 +75,107 @@ void triggerPetReaction() {
 // ============================================================
 // QUESTION & AI INTERACTION PIPELINE
 // ============================================================
+// ============================================================
+// FISH AUDIO & LLM VOCAL EMOTION DETECTOR
+// Maps Fish Audio tags ([happy], [laugh], [whisper], etc.) to Kiwi emotions
+// ============================================================
+Emotion detectVocalEmotion(const String &text) {
+  String lower = text;
+  lower.toLowerCase();
+
+  auto hasTag = [&](const char *tag) -> bool {
+    String t = tag;
+    return (lower.indexOf("[" + t + "]") >= 0 || lower.indexOf("(" + t + ")") >= 0);
+  };
+
+  // 1. Laughing / Amused
+  if (hasTag("laugh") || hasTag("laughs") || hasTag("laughing") ||
+      hasTag("chuckle") || hasTag("chuckles") || hasTag("chuckling") ||
+      hasTag("giggle") || hasTag("giggles") || hasTag("giggling")) {
+    return EMOTION_LAUGHING;
+  }
+
+  // 2. Crying / Sobbing / Heartbroken
+  if (hasTag("crying") || hasTag("cry") || hasTag("sob") || hasTag("sobbing") ||
+      hasTag("crying loudly") || hasTag("tears")) {
+    return EMOTION_CRYING;
+  }
+
+  // 3. Anger / Frustration
+  if (hasTag("angry") || hasTag("furious") || hasTag("frustrated") ||
+      hasTag("annoyed") || hasTag("mad")) {
+    return EMOTION_ANGRY;
+  }
+
+  // 4. Sadness / Melancholy
+  if (hasTag("sad") || hasTag("melancholic") || hasTag("gloomy") ||
+      hasTag("heartbroken")) {
+    return EMOTION_SAD;
+  }
+
+  // 5. Excited / Energetic / Celebration
+  if (hasTag("excited") || hasTag("enthusiastic") || hasTag("celebration") ||
+      hasTag("energetic")) {
+    return EMOTION_EXCITED;
+  }
+
+  // 6. Happy / Joy / Delighted / Satisfied
+  if (hasTag("happy") || hasTag("delighted") || hasTag("satisfied") ||
+      hasTag("cheerful") || hasTag("joyful") || hasTag("glad")) {
+    return EMOTION_HAPPY;
+  }
+
+  // 7. Surprised / Shocked / Gasp
+  if (hasTag("surprised") || hasTag("shocked") || hasTag("amazed") ||
+      hasTag("astonished") || hasTag("gasp") || hasTag("gasps")) {
+    return EMOTION_SURPRISED;
+  }
+
+  // 8. Scared / Fearful / Worried
+  if (hasTag("scared") || hasTag("fearful") || hasTag("terrified") ||
+      hasTag("worried") || hasTag("frightened")) {
+    return EMOTION_SCARED;
+  }
+
+  // 9. Nervous / Anxious / Embarrassed / Hesitant
+  if (hasTag("nervous") || hasTag("anxious") || hasTag("embarrassed") ||
+      hasTag("hesitant") || hasTag("shy")) {
+    return EMOTION_NERVOUS;
+  }
+
+  // 10. Whispering / Soft / Breathy (Cute face)
+  if (hasTag("whisper") || hasTag("whispers") || hasTag("whispering") ||
+      hasTag("soft") || hasTag("breathy") || hasTag("gentle")) {
+    return EMOTION_CUTE;
+  }
+
+  // 11. Relieved / Calm / Sigh / Groan
+  if (hasTag("calm") || hasTag("relieved") || hasTag("peaceful") ||
+      hasTag("relaxed") || hasTag("sigh") || hasTag("sighs") ||
+      hasTag("sighing") || hasTag("groan") || hasTag("groaning") ||
+      hasTag("pant") || hasTag("panting")) {
+    return EMOTION_RELIEVED;
+  }
+
+  // 12. Proud / Confident / Assertive
+  if (hasTag("proud") || hasTag("confident") || hasTag("assertive")) {
+    return EMOTION_PROUD;
+  }
+
+  // 13. Bored / Tired / Sleepy
+  if (hasTag("bored") || hasTag("tired") || hasTag("exhausted") ||
+      hasTag("sleepy") || hasTag("yawn")) {
+    return EMOTION_BORED;
+  }
+
+  // 14. Curious / Confused / Inquisitive
+  if (hasTag("curious") || hasTag("confused") || hasTag("puzzled")) {
+    return EMOTION_CURIOUS;
+  }
+
+  return EMOTION_SPEAKING;
+}
+
 void handleQuestion(const String &q) {
   lastUserInteractionAt = millis();
   Serial.print("[ROBOT] Q: ");
@@ -143,31 +244,8 @@ void handleQuestion(const String &q) {
 
   robotStateDesc = "Speaking...";
   {
-    if (ttsProvider == "fish" || ttsProvider == "fishaudio") {
-      String lower = answer;
-      lower.toLowerCase();
-      if (lower.indexOf("[laughing]") >= 0 || lower.indexOf("[chuckling]") >= 0 || lower.indexOf("laugh") >= 0) {
-        setEmotion(EMOTION_LAUGHING);
-      } else if (lower.indexOf("[crying loudly]") >= 0 || lower.indexOf("[sobbing]") >= 0) {
-        setEmotion(EMOTION_CRYING);
-      } else if (lower.indexOf("[angry]") >= 0) {
-        setEmotion(EMOTION_ANGRY);
-      } else if (lower.indexOf("[sad]") >= 0) {
-        setEmotion(EMOTION_SAD);
-      } else if (lower.indexOf("[excited]") >= 0) {
-        setEmotion(EMOTION_EXCITED);
-      } else if (lower.indexOf("[whispering]") >= 0 || lower.indexOf("[soft]") >= 0 || lower.indexOf("[breathy]") >= 0) {
-        setEmotion(EMOTION_CUTE);
-      } else if (lower.indexOf("[sighing]") >= 0 || lower.indexOf("[groaning]") >= 0) {
-        setEmotion(EMOTION_RELIEVED);
-      } else if (lower.indexOf("[embarrassed]") >= 0) {
-        setEmotion(EMOTION_CONFUSED);
-      } else {
-        setEmotion(EMOTION_SPEAKING);
-      }
-    } else {
-      setEmotion(EMOTION_SPEAKING);
-    }
+    Emotion vocalEmotion = detectVocalEmotion(answer);
+    setEmotion(vocalEmotion);
 
     if (cancelRequest)
       return;

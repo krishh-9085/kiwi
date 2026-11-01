@@ -165,6 +165,47 @@ String stripAudioCues(const String &text) {
   return s;
 }
 
+String stripRobotTags(const String &text) {
+  String s = text;
+  int i = 0;
+  while (i < (int)s.length()) {
+    int b1 = s.indexOf('[', i);
+    if (b1 < 0) break;
+    int b2 = s.indexOf(']', b1);
+    if (b2 < 0) break;
+    String tag = s.substring(b1 + 1, b2);
+    tag.trim();
+    String tagUpper = tag;
+    tagUpper.toUpperCase();
+    if (tagUpper.startsWith("ACTION:") || tagUpper.startsWith("MEM:") || tagUpper.startsWith("FOLLOWUP:")) {
+      s.remove(b1, (b2 - b1) + 1);
+    } else {
+      i = b2 + 1;
+    }
+  }
+  s.trim();
+  return s;
+}
+
+String normalizeFishAudioTags(const String &text) {
+  String s = text;
+  static const char *knownTags[] = {
+      "happy", "sad", "angry", "excited", "calm", "nervous", "confident",
+      "surprised", "scared", "worried", "proud", "delighted", "satisfied",
+      "laugh", "laughs", "laughing", "chuckle", "chuckles", "chuckling",
+      "giggle", "giggles", "giggling", "whisper", "whispers", "whispering",
+      "sigh", "sighs", "sighing", "gasp", "gasps", "pant", "panting",
+      "sob", "sobbing", "groan", "groaning", "pause", "emphasis", "soft",
+      "breathy", nullptr};
+
+  for (int k = 0; knownTags[k] != nullptr; k++) {
+    String legacyTag = "(" + String(knownTags[k]) + ")";
+    String modernTag = "[" + String(knownTags[k]) + "]";
+    s.replace(legacyTag, modernTag);
+  }
+  return s;
+}
+
 String cleanForSpeech(const String &in) {
   String s = in;
   int t1 = s.indexOf("<think>");
@@ -180,9 +221,14 @@ String cleanForSpeech(const String &in) {
   }
   s.trim();
 
-  // If NOT using Fish Audio, strip bracketed audio/emotion cues so other TTS don't speak them
-  if (ttsProvider != "fish" && ttsProvider != "fishaudio") {
+  // For Fish Audio: keep vocal emotion tags, remove internal robot tags & normalize tags
+  if (ttsProvider == "fish" || ttsProvider == "fishaudio") {
+    s = stripRobotTags(s);
+    s = normalizeFishAudioTags(s);
+  } else {
+    // For other TTS: strip all vocal emotion cues and internal robot tags
     s = stripAudioCues(s);
+    s = stripRobotTags(s);
   }
 
   String o;

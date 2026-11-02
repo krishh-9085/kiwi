@@ -1,13 +1,14 @@
 #include "behavior/InteractionManager.h"
+#include "behavior/ActionExecutor.h"
+#include "behavior/CommandHandler.h"
 #include "config/AppConfig.h"
 #include "core/CoreTypes.h"
 #include "face/FaceEngine.h"
 #include "hardware/AudioEngine.h"
 #include "hardware/TouchController.h"
 #include "services/AiService.h"
-#include "behavior/CommandHandler.h"
-#include "behavior/ActionExecutor.h"
 #include "web/WebPortal.h"
+
 
 // ============================================================
 // UI PUMP (Display + Touch + Tone Update)
@@ -85,7 +86,8 @@ Emotion detectVocalEmotion(const String &text) {
 
   auto hasTag = [&](const char *tag) -> bool {
     String t = tag;
-    return (lower.indexOf("[" + t + "]") >= 0 || lower.indexOf("(" + t + ")") >= 0);
+    return (lower.indexOf("[" + t + "]") >= 0 ||
+            lower.indexOf("(" + t + ")") >= 0);
   };
 
   // 1. Laughing / Amused
@@ -196,27 +198,27 @@ void handleQuestion(const String &q) {
     return;
   if (handleLightCommand(q))
     return;
-  if (hasAny(q, {"new topic", "naya topic", "naya sawal", "reset chat", "clear memory", "bhool jao", "forget that", "forget everything"})) {
+  if (hasAny(q, {"new topic", "naya topic", "naya sawal", "reset chat",
+                 "clear memory", "bhool jao", "forget that",
+                 "forget everything"})) {
     clearConversationHistory();
     showEmotionFor(EMOTION_CONFUSED);
     speakText("Theek hai, sab bhool gaya. Naya sawal poocho!");
     return;
   }
 
-  // Save the emotion Kiwi was displaying before answering
-  Emotion prevEmotion = (currentEmotion != EMOTION_THINKING && currentEmotion != EMOTION_LISTENING && currentEmotion != EMOTION_SPEAKING)
-                            ? currentEmotion
-                            : EMOTION_IDLE;
-
   setEmotion(EMOTION_THINKING);
   if (cancelRequest)
     return;
   lastTranscribedQuestion = q;
   robotStateDesc = "Thinking...";
-  addTerminalLog("[LLM] Sending to " + (llmProvider == "groq" ? groqModel : llmModel) + ": \"" + q + "\"");
+  addTerminalLog("[LLM] Sending to " +
+                 (llmProvider == "groq" ? groqModel : llmModel) + ": \"" + q +
+                 "\"");
 
   // Single-core ESP32-C3: Complete LLM cleanly first so max heap (~75KB) is
-  // available for TLS TTS and no simultaneous TLS collisions or socket stalling occurs.
+  // available for TLS TTS and no simultaneous TLS collisions or socket stalling
+  // occurs.
   String answer = askLLM(q, nullptr);
   if (cancelRequest)
     return;
@@ -231,7 +233,8 @@ void handleQuestion(const String &q) {
     robotStateDesc = "LLM Empty / Error";
     addTerminalLog("[LLM] Empty response or error received");
     Serial.println("[ROBOT] LLM empty");
-    lastLlmAnswer = "Error: No response from AI. Please check Wi-Fi, model, or API key.";
+    lastLlmAnswer =
+        "Error: No response from AI. Please check Wi-Fi, model, or API key.";
     setEmotion(EMOTION_CONFUSED);
     showStatus("AI No Response", "Check key/model", 1800);
     speakText("Sorry, abhi answer nahi de pa raha hoon. Ek baar firse poocho!");
@@ -247,6 +250,12 @@ void handleQuestion(const String &q) {
   robotStateDesc = "Speaking...";
   {
     Emotion vocalEmotion = detectVocalEmotion(answer);
+    if (vocalEmotion == EMOTION_SPEAKING &&
+        currentEmotion != EMOTION_THINKING &&
+        currentEmotion != EMOTION_LISTENING && currentEmotion != EMOTION_IDLE) {
+      vocalEmotion =
+          currentEmotion; // Retain emotion set by [ACTION: emotion ...]
+    }
     setEmotion(vocalEmotion);
 
     if (cancelRequest)
@@ -263,12 +272,19 @@ void handleQuestion(const String &q) {
       returnIdleAt = millis() + 500;
       return;
     }
+
+    // If an expressive emotion was shown (e.g. excited, happy, laughing),
+    // hold that face for 2.5s after speaking, then auto-return to IDLE!
+    if (vocalEmotion != EMOTION_SPEAKING && vocalEmotion != EMOTION_IDLE) {
+      setEmotion(vocalEmotion);
+      returnIdleAt = millis() + 2500;
+    } else {
+      setEmotion(EMOTION_IDLE);
+      returnIdleAt = 0;
+    }
   }
 
   robotStateDesc = "Ready";
   addTerminalLog("[ROBOT] Turn completed. Ready.");
-  // Revert immediately to previous emotion once speech is finished
-  setEmotion(prevEmotion);
-  returnIdleAt = 0;
   emotionAutoReturnAt = 0;
 }

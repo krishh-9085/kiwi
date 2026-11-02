@@ -441,6 +441,9 @@ void holdFace(uint32_t ms) {
 void showEmotionFor(Emotion e, uint32_t ms) {
   setEmotion(e);
   holdFace(ms);
+  if (e != EMOTION_SLEEPING) {
+    setEmotion(EMOTION_IDLE);
+  }
 }
 
 void showPetMood(PetMood m, uint32_t ms) {
@@ -482,6 +485,7 @@ void showPetMood(PetMood m, uint32_t ms) {
     break;
   }
   holdFace(ms);
+  setEmotion(EMOTION_IDLE);
 }
 
 bool triggerEmotionByName(const String &nameIn, uint32_t holdMs,
@@ -554,7 +558,7 @@ bool triggerEmotionByName(const String &nameIn, uint32_t holdMs,
       if (m.e == EMOTION_IDLE)
         emotionAutoReturnAt = 0;
       else
-        emotionAutoReturnAt = millis() + (holdMs > 0 ? holdMs : 60000);
+        emotionAutoReturnAt = millis() + (holdMs > 0 ? holdMs : 4000);
       if (withSound && m.e != EMOTION_SLEEPING) {
         if (m.e == EMOTION_HAPPY || m.e == EMOTION_PARTY)
           soundPetPlayful();
@@ -610,7 +614,7 @@ bool triggerEmotionByName(const String &nameIn, uint32_t holdMs,
     flourishT0 = millis();
     flourish = flourishForMood(mood);
     setEmotion(EMOTION_PETTED);
-    emotionAutoReturnAt = millis() + (holdMs > 0 ? holdMs : 60000);
+    emotionAutoReturnAt = millis() + (holdMs > 0 ? holdMs : 4000);
     if (withSound)
       pendingSound = (int8_t)mood;
     return true;

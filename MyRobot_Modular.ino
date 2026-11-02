@@ -42,12 +42,11 @@
 #include "services/AiService.h"
 #include "services/MemoryService.h"
 #include "services/WeatherService.h"
+#include "services/WledService.h"
 #include "web/WebPortal.h"
 #include <Arduino.h>
 #include <ESPmDNS.h>
-#include "services/WledService.h"
 #include <WiFi.h>
-
 
 // ============================================================
 // MAIN SETUP
@@ -156,7 +155,9 @@ void loop() {
     handleQuestion(q);
     bool wasCancelled = cancelRequest;
     cancelRequest = false;
-    setEmotion(EMOTION_IDLE);
+    if (returnIdleAt == 0) {
+      setEmotion(EMOTION_IDLE);
+    }
     resyncTouch();
     busyProcessing = false;
     if (wasCancelled) {
@@ -173,9 +174,10 @@ void loop() {
                    " seconds; stops after speech ends...");
 
     setEmotion(EMOTION_LISTENING);
-    pumpUI();  // Immediately render listening face before blocking STT setup
+    pumpUI(); // Immediately render listening face before blocking STT setup
 
-    // Drain and let the listening chime finish playing before blocking on network TLS!
+    // Drain and let the listening chime finish playing before blocking on
+    // network TLS!
     uint32_t toneDrainStart = millis();
     while (isTonePlaying() && (millis() - toneDrainStart < 250)) {
       updateTonePlayer();
@@ -218,8 +220,7 @@ void loop() {
         static const char *const quietReplies[] = {
             "Kuch bola kya? Mujhe theek se sunai nahi diya!",
             "Did you say something? Sunai nahi diya mujhe!",
-            "Arey kuch kaha kya? Ek baar firse bolo!"
-        };
+            "Arey kuch kaha kya? Ek baar firse bolo!"};
         speakText(quietReplies[random(0, 3)]);
       } else {
         showStatus("STT error", sttFail.c_str(), 1800);
@@ -228,7 +229,9 @@ void loop() {
     }
     bool wasCancelled = cancelRequest;
     cancelRequest = false;
-    setEmotion(EMOTION_IDLE);
+    if (returnIdleAt == 0) {
+      setEmotion(EMOTION_IDLE);
+    }
     resyncTouch();
     busyProcessing = false;
     if (wasCancelled) {
@@ -242,7 +245,8 @@ void loop() {
     if (busyWatchdogStart == 0) {
       busyWatchdogStart = millis();
     } else if (millis() - busyWatchdogStart > 20000) {
-      Serial.println("[WATCHDOG] Operation timed out! Force recovering Kiwi to Ready.");
+      Serial.println(
+          "[WATCHDOG] Operation timed out! Force recovering Kiwi to Ready.");
       addTerminalLog("[WATCHDOG] Request timed out. Recovering to Ready.");
       busyProcessing = false;
       cancelRequest = false;

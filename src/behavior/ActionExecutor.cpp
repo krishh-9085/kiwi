@@ -8,6 +8,7 @@
 #include "hardware/AudioEngine.h"
 #include "services/AiService.h"
 #include "behavior/CommandHandler.h"
+#include "services/WledService.h"
 #include "behavior/InteractionManager.h"
 #include <WiFi.h>
 
@@ -276,6 +277,16 @@ bool executeRobotAction(const String &actionCmd) {
     handleTimeCommand("time");
     addTerminalLog("[ACTION] Displayed clock");
     return true;
+  }
+
+  // 11. WLED SMART LIGHT CONTROL
+  if (actionType == "light" || actionType == "wled" || actionType == "lamp") {
+    if (executeWledAction(param)) {
+      soundPetSparkle();
+      addTerminalLog("[ACTION] Light control: " + param);
+      return true;
+    }
+    return false;
   }
 
   // 10. SOUND FX

@@ -46,7 +46,7 @@ static String getSmartActionInstruction() {
 
 
 
-         "[ACTION: sleep] [ACTION: weather] [ACTION: time] [ACTION: sound NAME] "
+         "[ACTION: sleep] [ACTION: weather] [ACTION: time] [ACTION: sound NAME] [ACTION: light COLOR/on/off/dim/bright/bri N/rainbow/fire/breathe/mode] "
 
 
 

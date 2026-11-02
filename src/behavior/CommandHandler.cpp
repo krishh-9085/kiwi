@@ -6,6 +6,7 @@
 #include "hardware/TouchController.h"
 #include "services/AiService.h"
 #include "services/WeatherService.h"
+#include "services/WledService.h"
 #include "web/WebPortal.h"
 #include "behavior/InteractionManager.h"
 #include "behavior/ActionExecutor.h"
@@ -377,5 +378,196 @@ bool handleTimerCommand(const String &qIn) {
     speakText(reply);
     return true;
   }
+  return false;
+}
+
+bool handleLightCommand(const String &qIn) {
+  String q = qIn;
+  q.toLowerCase();
+  q.trim();
+
+  // Check if query is talking about light / lights / batti / bulb / lamp / wled / brightness / roshni
+  bool hasLightTrigger = hasAny(q, {"light", "lights", "batti", "bulb", "lamp", "roshni", "wled", "brightness"});
+  int directFxId = -1;
+  String directFxName = "";
+
+  if (!hasLightTrigger) {
+    // If "light" is not explicitly mentioned, only match if query has "mode" or "effect" AND matches a valid WLED effect
+    if (hasAny(q, {"mode", "effect"})) {
+      directFxId = findWledEffectId(q, &directFxName);
+      if (directFxId < 0)
+        return false;
+    } else {
+      return false;
+    }
+  }
+
+  // 1. Turn OFF
+  if (hasAny(q, {"band", "off", "bujha", "turn off", "switch off", "close light"})) {
+    if (executeWledAction("off")) {
+      showEmotionFor(EMOTION_HAPPY, 1800);
+      soundPetSparkle();
+      speakText((sttLang == "hi") ? "Light band kar di!" : "Lights turned off!");
+      return true;
+    }
+  }
+
+  // 2. Turn ON
+  if (hasAny(q, {"chalu", "turn on", "switch on", "jalao", "on kar", "open light"})) {
+    if (executeWledAction("on")) {
+      showEmotionFor(EMOTION_HAPPY, 1800);
+      soundPetSparkle();
+      speakText((sttLang == "hi") ? "Light on kar di!" : "Lights turned on!");
+      return true;
+    }
+  }
+
+  // 3. Brightness Control
+  // 3a. Explicit percentage or numeric brightness (e.g. "brightness 50", "roshni 80 percent", "30%")
+  if (hasAny(q, {"brightness", "bri", "roshni", "percent", "%"}) ||
+      (hasAny(q, {"light", "lights", "bulb", "batti"}) && hasAny(q, {"percent", "%"}))) {
+    int val = -1;
+    for (int i = 0; i < (int)q.length(); i++) {
+      if (isdigit(q[i])) {
+        int v = 0;
+        while (i < (int)q.length() && isdigit(q[i])) {
+          v = v * 10 + (q[i] - '0');
+          i++;
+        }
+        if (v >= 0 && v <= 100) {
+          val = v;
+          break;
+        }
+      }
+    }
+    if (val >= 0) {
+      uint8_t bri = (uint8_t)((val * 255) / 100);
+      if (setWledBrightness(bri)) {
+        showEmotionFor(EMOTION_HAPPY, 1800);
+        soundPetSparkle();
+        String reply = (sttLang == "hi")
+                           ? "Light brightness " + String(val) + " percent kar di!"
+                           : "Light brightness set to " + String(val) + " percent!";
+        speakText(reply);
+        return true;
+      }
+    }
+  }
+
+  // 3b. Relative / Preset Brightness
+  if (hasAny(q, {"dim", "kam", "ghatao", "low", "dheemi", "decrease"})) {
+    if (executeWledAction("dim")) {
+      showEmotionFor(EMOTION_RELIEVED, 1800);
+      soundPetSparkle();
+      speakText((sttLang == "hi") ? "Light dim kar di!" : "Lights dimmed!");
+      return true;
+    }
+  }
+  if (hasAny(q, {"tez", "full", "max", "bright", "badhao", "increase", "poori", "puri"})) {
+    if (executeWledAction("full")) {
+      showEmotionFor(EMOTION_EXCITED, 1800);
+      soundPetSparkle();
+      speakText((sttLang == "hi") ? "Light full bright kar di!" : "Lights set to full brightness!");
+      return true;
+    }
+  }
+  if (hasAny(q, {"medium", "half", "aadhi", "adha"})) {
+    if (executeWledAction("medium")) {
+      showEmotionFor(EMOTION_HAPPY, 1800);
+      soundPetSparkle();
+      speakText((sttLang == "hi") ? "Light 50 percent brightness kar di!" : "Light set to 50 percent brightness!");
+      return true;
+    }
+  }
+
+  // 4. Effects / Modes
+  // 4a. Next / Change Mode
+  if (hasAny(q, {"mode badlo", "mode badal", "effect badlo", "effect badal", "change mode", "next mode",
+                 "switch mode", "koi aur mode", "aur koi mode", "dusra mode", "doosra mode", "agla mode",
+                 "next effect", "aur effect", "koi aur effect", "dusra effect", "doosra effect", "agla effect",
+                 "random mode", "random effect", "kuch aur dikhao", "aur mode", "mode change", "effect change"})) {
+    if (setWledNextEffect()) {
+      showEmotionFor(EMOTION_PARTY, 2000);
+      soundPetSparkle();
+      speakText((sttLang == "hi") ? "Light ka agla mode laga diya!" : "Switched to next light mode!");
+      return true;
+    }
+  }
+
+  // 4b. Find ANY named effect (from all 160+ WLED effects!)
+  String effectQuery = q;
+  if (hasAny(q, {"aag", "mombatti"})) effectQuery += " fire candle";
+  if (hasAny(q, {"rang birang", "disco", "party"})) effectQuery += " rainbow";
+  if (hasAny(q, {"jugnu", "taare", "tare"})) effectQuery += " twinkle";
+  if (hasAny(q, {"samundar", "lahar", "pani"})) effectQuery += " pacifica waves";
+  if (hasAny(q, {"bijli", "tufan"})) effectQuery += " lightning";
+  if (hasAny(q, {"barish"})) effectQuery += " rain";
+  if (hasAny(q, {"patakha", "diwali"})) effectQuery += " fireworks";
+  if (hasAny(q, {"suraj", "subah", "dhoop"})) effectQuery += " sunrise";
+  if (hasAny(q, {"dhadkan"})) effectQuery += " heartbeat";
+  if (hasAny(q, {"bhoot"})) effectQuery += " halloween eyes";
+  if (hasAny(q, {"siren"})) effectQuery += " police";
+
+  String matchedFx = directFxName;
+  int fxId = (directFxId >= 0) ? directFxId : findWledEffectId(effectQuery, &matchedFx);
+  if (fxId >= 0) {
+    if (setWledEffectById(fxId, matchedFx)) {
+      showEmotionFor(EMOTION_PARTY, 2200);
+      soundPetSparkle();
+      String reply = (sttLang == "hi")
+                         ? "Light ka " + matchedFx + " mode laga diya!"
+                         : "Light set to " + matchedFx + " mode!";
+      speakText(reply);
+      return true;
+    }
+  }
+
+  // 5. Colors (Leaves brightness untouched!)
+  struct ColorMatch {
+    const char *names[5];
+    const char *action;
+    const char *hiReply;
+    const char *enReply;
+  } colors[] = {
+      {{"red", "laal", nullptr}, "red", "Light red kar di!", "Light set to red!"},
+      {{"green", "hara", "haree", nullptr}, "green", "Light green kar di!", "Light set to green!"},
+      {{"blue", "neela", "neeli", nullptr}, "blue", "Light blue kar di!", "Light set to blue!"},
+      {{"yellow", "peela", "peeli", nullptr}, "yellow", "Light yellow kar di!", "Light set to yellow!"},
+      {{"pink", "gulabi", nullptr}, "pink", "Light pink kar di!", "Light set to pink!"},
+      {{"purple", "violet", "baingani", nullptr}, "purple", "Light purple kar di!", "Light set to purple!"},
+      {{"orange", "narangi", nullptr}, "orange", "Light orange kar di!", "Light set to orange!"},
+      {{"cyan", "aqua", "firozi", nullptr}, "cyan", "Light cyan kar di!", "Light set to cyan!"},
+      {{"white", "safed", nullptr}, "white", "Light white kar di!", "Light set to white!"},
+      {{"warm", "night", nullptr}, "warm", "Warm light on kar di!", "Warm light activated!"},
+      {{"cool", nullptr}, "cool", "Cool white light on kar di!", "Cool white light activated!"},
+      {{nullptr}, nullptr, nullptr, nullptr}
+  };
+
+  for (int i = 0; colors[i].action != nullptr; i++) {
+    for (int k = 0; colors[i].names[k] != nullptr; k++) {
+      if (q.indexOf(colors[i].names[k]) >= 0) {
+        if (executeWledAction(colors[i].action)) {
+          showEmotionFor(EMOTION_HAPPY, 1800);
+          soundPetSparkle();
+          speakText((sttLang == "hi") ? colors[i].hiReply : colors[i].enReply);
+          return true;
+        }
+      }
+    }
+  }
+
+  // 6. Status / Discover query
+  if (hasAny(q, {"status", "connected", "kahan hai", "dhundo", "scan"})) {
+    if (discoverWled(true)) {
+      showEmotionFor(EMOTION_HAPPY, 1800);
+      speakText("WLED light connected at " + getWledIp());
+      return true;
+    } else {
+      showEmotionFor(EMOTION_CONFUSED, 1800);
+      speakText("Mujhe network par WLED light nahi mili. Check karo ki light on hai!");
+      return true;
+    }
+  }
+
   return false;
 }

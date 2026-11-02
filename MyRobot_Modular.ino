@@ -45,6 +45,7 @@
 #include "web/WebPortal.h"
 #include <Arduino.h>
 #include <ESPmDNS.h>
+#include "services/WledService.h"
 #include <WiFi.h>
 
 
@@ -107,6 +108,7 @@ void setup() {
   if (MDNS.begin("myrobot")) {
     MDNS.addService("http", "tcp", 80);
     Serial.println("[MDNS] http://myrobot.local");
+    discoverWled();
   }
 
   initOfflineBrain();

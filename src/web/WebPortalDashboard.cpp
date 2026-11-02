@@ -119,6 +119,10 @@ static const char DASHBOARD_CSS[] PROGMEM = R"rawcss(
       width: min(1260px, 100%);
       margin: 0 auto;
       padding: 24px;
+      padding-top: max(20px, env(safe-area-inset-top, 20px));
+      padding-left: max(16px, env(safe-area-inset-left, 16px));
+      padding-right: max(16px, env(safe-area-inset-right, 16px));
+      padding-bottom: max(24px, env(safe-area-inset-bottom, 24px));
     }
 
     /* Offline Alert Banner */
@@ -431,6 +435,14 @@ static const char DASHBOARD_CSS[] PROGMEM = R"rawcss(
       justify-content: center;
       transition: all .2s;
       position: relative;
+      touch-action: manipulation;
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    .btn-mic:active {
+      transform: scale(.92);
     }
 
     .btn-mic:hover {
@@ -1084,9 +1096,118 @@ static const char DASHBOARD_CSS[] PROGMEM = R"rawcss(
       .row-2 {
         grid-template-columns: 1fr;
       }
-      .wrap { padding: 16px; }
-      .nav { width: 100%; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
-      .nb { padding: 8px 4px; font-size: 12px; justify-content: center; }
+      .wrap {
+        padding: 12px;
+        padding-top: calc(env(safe-area-inset-top, 0px) + 8px);
+        padding-left: max(12px, env(safe-area-inset-left, 12px));
+        padding-right: max(12px, env(safe-area-inset-right, 12px));
+        padding-bottom: max(16px, env(safe-area-inset-bottom, 16px));
+      }
+      .bridge {
+        padding: 2px 0 8px;
+        gap: 8px;
+      }
+      .bezel {
+        width: 44px;
+        height: 34px;
+        border-radius: 8px;
+        gap: 6px;
+      }
+      .bezel i {
+        width: 6px;
+        height: 9px;
+      }
+      .id {
+        gap: 10px;
+      }
+      .id h1 {
+        font-size: 17px;
+        margin: 0;
+        letter-spacing: .16em;
+      }
+      .id .unit {
+        font-size: 10px;
+        letter-spacing: .12em;
+      }
+      .id .mood {
+        font-size: 11px;
+      }
+      .nav {
+        width: 100%;
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 6px;
+      }
+      .nb {
+        padding: 6px 4px;
+        font-size: 12px;
+        min-height: 36px;
+        justify-content: center;
+      }
+      .tabs {
+        margin: 8px 0 10px;
+        width: 100%;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 4px;
+        padding: 3px;
+      }
+      .tab-btn {
+        min-height: 38px;
+        padding: 6px 8px;
+        font-size: 11px;
+        justify-content: center;
+        letter-spacing: .1em;
+      }
+      .strip {
+        margin-bottom: 12px;
+        padding: 10px 14px;
+        gap: 8px;
+      }
+      .cell .k {
+        font-size: 10px;
+        margin-bottom: 1px;
+      }
+      .cell .v {
+        font-size: 12px;
+      }
+      .console-grid {
+        gap: 12px;
+      }
+      .mic-button-deck {
+        height: auto !important;
+        min-height: unset;
+        padding: 18px 14px;
+        gap: 10px;
+        justify-content: center;
+      }
+      .btn-mic {
+        width: 76px;
+        height: 76px;
+        margin: 2px auto;
+      }
+      .prompt-row {
+        width: 100%;
+        display: flex;
+        gap: 8px;
+        margin-top: 6px;
+      }
+      #textPromptIn {
+        flex: 1;
+        min-width: 0;
+        height: 42px;
+        font-size: 13px;
+      }
+      #btnSendPrompt {
+        height: 42px;
+        min-height: 42px;
+        padding: 0 16px;
+        font-size: 13px;
+        flex-shrink: 0;
+      }
+      .term {
+        height: 280px;
+      }
     }
 
     @media(prefers-reduced-motion:reduce) {
@@ -2664,11 +2785,20 @@ static const char DASHBOARD_FOOT[] PROGMEM = R"rawfoot(<script>
       var btnMic = document.getElementById('btnWebMic');
       if (btnMic) {
         btnMic.addEventListener('click', function () {
+          var micSub = document.getElementById('micBtnSub');
+          if (micSub) micSub.textContent = 'Listening to microphone now...';
+          btnMic.classList.add('recording');
           api('/do?record=1')
             .then(function (j) {
-              if (!j.ok && j.reason === 'busy') toast('Kiwi is busy processing audio/AI.');
+              if (!j.ok && j.reason === 'busy') {
+                btnMic.classList.remove('recording');
+                toast('Kiwi is busy processing audio/AI.');
+              }
             })
-            .catch(function () { toast('Failed to initiate recording'); });
+            .catch(function () {
+              btnMic.classList.remove('recording');
+              toast('Failed to initiate recording');
+            });
         });
       }
 

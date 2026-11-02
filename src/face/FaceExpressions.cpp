@@ -121,10 +121,10 @@ void faceTargetsForEmotion(Emotion e, PetMood pm) {
     faceTgt.mouthCurve = -0.9f;
     break;
   case EMOTION_SLEEPING:
-    setFace(34, 4, 30, 34, 2);
+    setFace(30, 3, 30, 34, 1);
     faceTgt.gazeLock = true;
-    faceTgt.mouthW = 10;
-    faceTgt.mouthH = 1;
+    faceTgt.mouthW = 0;
+    faceTgt.mouthH = 0;
     faceTgt.mouthCurve = 0.0f;
     break;
   case EMOTION_ERROR:

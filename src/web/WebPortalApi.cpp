@@ -343,6 +343,11 @@ void handleDoAction() {
     server.send(200, "application/json", "{\"ok\":true}");
     return;
   }
+  if (server.hasArg("setfriends")) {
+    setFriendsFamily(server.arg("setfriends"));
+    server.send(200, "application/json", "{\"ok\":true}");
+    return;
+  }
 
   String e = server.hasArg("e") ? server.arg("e") : "";
   uint32_t ms = server.hasArg("ms") ? (uint32_t)server.arg("ms").toInt() : 60000;
@@ -484,7 +489,7 @@ void handleConfigApi() {
   const char *skinNames[] = {"default", "cyberpunk", "cat", "retro", "anime", "hearts", "steampunk", "demon", "matrix", "cyborg", "mecha", "sunglasses", "puppy", "hypno", "alien", "ninja", "round", "kiwi"};
   int skinIndex = (int)currentEyeSkin;
   if (skinIndex < 0 || skinIndex >= SKIN_COUNT) skinIndex = 0;
-  j += "\"skin\":\"" + String(skinNames[skinIndex]) + "\",\"showMouth\":" + String(showMouth ? "true" : "false") + ",\"memory\":{\"name\":\"" + escJson(getOwnerName()) + "\",\"facts\":[";
+  j += "\"skin\":\"" + String(skinNames[skinIndex]) + "\",\"showMouth\":" + String(showMouth ? "true" : "false") + ",\"memory\":{\"name\":\"" + escJson(getOwnerName()) + "\",\"friends\":\"" + escJson(getFriendsFamily()) + "\",\"facts\":[";
   for (int i = 0; i < kiwiMemory.memoryCount; i++) {
     if (i) j += ",";
     j += "\"" + escJson(kiwiMemory.memories[i]) + "\"";
@@ -682,6 +687,8 @@ void handleSave() {
 
   if (server.hasArg("mem_name"))
     setOwnerName(server.arg("mem_name"));
+  if (server.hasArg("mem_friends"))
+    setFriendsFamily(server.arg("mem_friends"));
   if (server.hasArg("new_mem") && server.arg("new_mem").length() > 0)
     addMemoryFact(server.arg("new_mem"));
 

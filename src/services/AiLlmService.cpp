@@ -518,10 +518,7 @@ String askGemini(const String &question, SentenceCallback onSentence) {
 
 
 
-  // Owner name only injected (full memory system disabled)
-  if (kiwiMemory.userName.length() > 0) {
-    sys += " User's name is " + kiwiMemory.userName + ". If they ask their name ('mera naam kya hai', 'who am I'), answer directly: Tumhara naam " + kiwiMemory.userName + " hai.";
-  }
+  sys += getFormattedMemoryPrompt();
   sys += getSmartActionInstruction();
 
   sys += getVoiceExpressionInstruction();
@@ -710,10 +707,7 @@ String askGroq(const String &question, SentenceCallback onSentence) {
 
 
 
-  // Owner name only injected (full memory system disabled)
-  if (kiwiMemory.userName.length() > 0) {
-    sys += " User's name is " + kiwiMemory.userName + ". If they ask their name ('mera naam kya hai', 'who am I'), answer directly: Tumhara naam " + kiwiMemory.userName + " hai.";
-  }
+  sys += getFormattedMemoryPrompt();
   sys += getSmartActionInstruction();
 
   sys += getVoiceExpressionInstruction();
@@ -906,10 +900,7 @@ String askOpenAI(const String &question, SentenceCallback onSentence) {
 
       "generic assistant filler. Normally use 2 to 4 natural sentences.";
 
-  // Owner name only injected (full memory system disabled)
-  if (kiwiMemory.userName.length() > 0) {
-    sys += " User's name is " + kiwiMemory.userName + ". If they ask their name ('mera naam kya hai', 'who am I'), answer directly: Tumhara naam " + kiwiMemory.userName + " hai.";
-  }
+  sys += getFormattedMemoryPrompt();
   sys += getSmartActionInstruction();
 
   sys += getVoiceExpressionInstruction();

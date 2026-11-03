@@ -261,6 +261,7 @@ def render_dashboard():
         "%WTHR_LON%": cfg.get("weatherLon", ""),
         "%PROMPT%": cfg.get("systemPrompt", ""),
         "%MEM_NAME%": cfg.get("ownerName", "Rohil"),
+        "%MEM_FRIENDS%": cfg.get("friendsFamily", ""),
         "%TCH_DEB%": "50",
         "%TCH_SND_CHECKED%": "checked",
         "%ACT_TOP_TAP%": "listen",

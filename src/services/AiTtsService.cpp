@@ -41,6 +41,7 @@ bool speakText(const String &text) {
   else
     res = ttsSarvam(toSpeak);
 
+  spkEndSpeech();
   Serial.printf("[TTS] speakText() returned %d\n", res);
   return res == 1;
 }
@@ -380,7 +381,7 @@ int ttsSarvam(const String &text) {
   spkFlush();
   for (int i = 0; i < SAMPLE_RATE / 10; i++)
     spkPushSample(0);
-  spkFlush();
+  spkEndSpeech();
   gFaceFrameMs = 33;
   restoreWebAndAP(apWasUp);
   return playing ? 1 : 0;
@@ -551,7 +552,7 @@ int ttsPcmOpenAI(const String &text) {
   spkFlush();
   for (int i = 0; i < SAMPLE_RATE / 10; i++)
     spkPushSample(0);
-  spkFlush();
+  spkEndSpeech();
   gFaceFrameMs = 33;
   restoreWebAndAP(apWasUp);
   return playing ? 1 : 0;
@@ -709,7 +710,7 @@ int ttsPcmEleven(const String &text) {
   spkFlush();
   for (int i = 0; i < SAMPLE_RATE / 10; i++)
     spkPushSample(0);
-  spkFlush();
+  spkEndSpeech();
   gFaceFrameMs = 33;
   restoreWebAndAP(apWasUp);
   return playing ? 1 : 0;
@@ -874,7 +875,7 @@ int ttsFishAudio(const String &text) {
   spkFlush();
   for (int i = 0; i < SAMPLE_RATE / 10; i++)
     spkPushSample(0);
-  spkFlush();
+  spkEndSpeech();
   gFaceFrameMs = 33;
   restoreWebAndAP(apWasUp);
   return playing ? 1 : 0;

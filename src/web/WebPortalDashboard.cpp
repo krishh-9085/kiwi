@@ -1829,6 +1829,10 @@ static const char DASHBOARD_BODY_PART2[] PROGMEM = R"rawb2(<!-- Text-to-Speech -
           <label for="memName">Your Name (Owner)</label>
           <input type="text" id="memName" name="mem_name" value="%MEM_NAME%" placeholder="e.g. Rohil">
 
+          <label for="memFriends" style="margin-top:14px">Friends &amp; Family Members</label>
+          <input type="text" id="memFriends" name="mem_friends" value="%MEM_FRIENDS%" placeholder="e.g. Rohan (best friend), Priya (sister), Papa, Mummy">
+          <small style="display:block;margin-top:4px;color:var(--muted);font-size:12px;line-height:1.45">Kiwi remembers your friends, family and their relationship with you!</small>
+
           <label style="margin-top:14px">Facts Kiwi Remembers About You</label>
           <div class="readout" style="margin-bottom:12px;max-height:180px;overflow-y:auto">
             %MEM_LIST_HTML%
@@ -2162,6 +2166,7 @@ static String getDashboardBodyPart2() {
   h.replace("%SKIN_KIWI_SEL%", currentEyeSkin == SKIN_KIWI ? "selected" : "");
 
   h.replace("%MEM_NAME%", esc(getOwnerName()));
+  h.replace("%MEM_FRIENDS%", esc(getFriendsFamily()));
 
   String memListHtml;
   memListHtml.reserve(1000);

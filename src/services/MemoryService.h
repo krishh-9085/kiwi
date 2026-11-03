@@ -5,6 +5,7 @@
 
 struct MemoryProfile {
   String userName;
+  String friendsFamily;
   String memories[MAX_PERSISTENT_MEMORIES];
   int memoryCount;
   String pendingFollowUp;
@@ -19,6 +20,9 @@ void saveMemory();
 void setOwnerName(const String &name);
 void setOwnerNameNoSave(const String &name);
 String getOwnerName();
+void setFriendsFamily(const String &ff);
+void setFriendsFamilyNoSave(const String &ff);
+String getFriendsFamily();
 bool addMemoryFact(const String &fact);
 bool addMemoryFactNoSave(const String &fact);
 void removeMemoryFact(int index);

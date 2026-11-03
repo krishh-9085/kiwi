@@ -159,6 +159,7 @@ void loop() {
       setEmotion(EMOTION_IDLE);
     }
     resyncTouch();
+    spkEndSpeech();
     busyProcessing = false;
     if (wasCancelled) {
       startRecording = true;
@@ -233,6 +234,7 @@ void loop() {
       setEmotion(EMOTION_IDLE);
     }
     resyncTouch();
+    spkEndSpeech();
     busyProcessing = false;
     if (wasCancelled) {
       Serial.println("[ROBOT] Cancelled - restarting listen");
@@ -254,6 +256,7 @@ void loop() {
       robotStateDesc = "Ready";
       setEmotion(EMOTION_IDLE);
       resyncTouch();
+      spkEndSpeech();
     }
   } else {
     busyWatchdogStart = 0;

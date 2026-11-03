@@ -15,6 +15,8 @@ void detectMicSlot();
 bool spkWriteAll(const void *data, size_t bytes);
 void spkFlush();
 void spkPushSample(int16_t s);
+void spkBeginSpeech();
+void spkEndSpeech();
 void makeWavHeader(uint8_t *h, uint32_t dataSize);
 
 // ---------- Tone Synthesis Engine ----------

@@ -72,8 +72,14 @@ static bool tonePlaying = false;
 static float tonePhase = 0.0f;
 
 void playToneQueue(Tone *tones, int count) {
-  if (spkOwner == SPK_SPEECH)
-    return;
+  if (spkOwner == SPK_SPEECH) {
+    if (!busyProcessing) {
+      // Auto-recover if speech finished but speaker lock was left held
+      spkOwner = SPK_NONE;
+    } else {
+      return;
+    }
+  }
   if (count <= 0 || !tones)
     return;
   if (count > 8)
@@ -416,8 +422,7 @@ void spkBeginSpeech() {
 // the speaker so tones can play again.
 void spkEndSpeech() {
   spkFlush();
-  if (spkOwner == SPK_SPEECH)
-    spkOwner = SPK_NONE;
+  spkOwner = SPK_NONE;
 }
 
 void spkPushSample(int16_t s) {

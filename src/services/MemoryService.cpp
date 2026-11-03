@@ -3,11 +3,12 @@
 #include "config/AppConfig.h"
 
 static Preferences memPrefs;
-MemoryProfile kiwiMemory = {"", {}, 0, "", 0, false};
+MemoryProfile kiwiMemory = {"", "", {}, 0, "", 0, false};
 
 void initMemory() {
   memPrefs.begin("kiwimem", true);
   kiwiMemory.userName = memPrefs.getString("name", "");
+  kiwiMemory.friendsFamily = memPrefs.getString("friends", "");
   kiwiMemory.memoryCount = memPrefs.getInt("count", 0);
   if (kiwiMemory.memoryCount > MAX_PERSISTENT_MEMORIES)
     kiwiMemory.memoryCount = MAX_PERSISTENT_MEMORIES;
@@ -20,14 +21,15 @@ void initMemory() {
   kiwiMemory.followUpTriggered = memPrefs.getBool("f_done", false);
   memPrefs.end();
 
-  Serial.printf("[MEMORY] Loaded: Owner='%s', %d facts stored, pending followup='%s'\n",
-                kiwiMemory.userName.c_str(), kiwiMemory.memoryCount,
-                kiwiMemory.pendingFollowUp.c_str());
+  Serial.printf("[MEMORY] Loaded: Owner='%s', Friends='%s', %d facts stored, pending followup='%s'\n",
+                kiwiMemory.userName.c_str(), kiwiMemory.friendsFamily.c_str(),
+                kiwiMemory.memoryCount, kiwiMemory.pendingFollowUp.c_str());
 }
 
 void saveMemory() {
   memPrefs.begin("kiwimem", false);
   memPrefs.putString("name", kiwiMemory.userName);
+  memPrefs.putString("friends", kiwiMemory.friendsFamily);
   memPrefs.putInt("count", kiwiMemory.memoryCount);
   for (int i = 0; i < kiwiMemory.memoryCount; i++) {
     String key = "m" + String(i);
@@ -42,8 +44,6 @@ void saveMemory() {
 void setOwnerNameNoSave(const String &name) {
   String n = name;
   n.trim();
-  if (!n.length())
-    return;
   kiwiMemory.userName = n;
   Serial.printf("[MEMORY] Owner name set to: %s\n", n.c_str());
 }
@@ -55,6 +55,22 @@ void setOwnerName(const String &name) {
 
 String getOwnerName() {
   return kiwiMemory.userName;
+}
+
+void setFriendsFamilyNoSave(const String &ff) {
+  String f = ff;
+  f.trim();
+  kiwiMemory.friendsFamily = f;
+  Serial.printf("[MEMORY] Friends & family set to: %s\n", f.c_str());
+}
+
+void setFriendsFamily(const String &ff) {
+  setFriendsFamilyNoSave(ff);
+  saveMemory();
+}
+
+String getFriendsFamily() {
+  return kiwiMemory.friendsFamily;
 }
 
 bool addMemoryFactNoSave(const String &factIn) {
@@ -106,6 +122,7 @@ void clearAllMemory() {
   memPrefs.end();
 
   kiwiMemory.userName = "";
+  kiwiMemory.friendsFamily = "";
   kiwiMemory.memoryCount = 0;
   kiwiMemory.pendingFollowUp = "";
   kiwiMemory.followUpTriggered = false;
@@ -113,18 +130,22 @@ void clearAllMemory() {
 }
 
 String getFormattedMemoryPrompt() {
-  String p = "OWNER PROFILE & REMEMBERED MEMORIES: ";
+  String p;
   if (kiwiMemory.userName.length() > 0) {
-    p += "The user's name is " + kiwiMemory.userName +
-         ". Remember it, but do not repeatedly say it or use it as a greeting; "
-         "only use the name when it is genuinely natural or specifically relevant. ";
+    p += " The owner/user's name is " + kiwiMemory.userName +
+         ". If they ask their name ('mera naam kya hai', 'who am I'), answer directly: Tumhara naam " + kiwiMemory.userName + " hai. ";
+  } else {
+    p += " You do not know the user's name yet. If they ask ('mera naam kya hai', 'who am I'), politely say you don't know yet and ask their name. ";
+  }
+  if (kiwiMemory.friendsFamily.length() > 0) {
+    p += " Friends & Family members: " + kiwiMemory.friendsFamily +
+         ". You recognize and know these people and their relation to the user. ";
   }
   if (kiwiMemory.memoryCount > 0) {
-    p += "Facts you remember about the user: ";
+    p += " Remembered facts about the user: ";
     for (int i = 0; i < kiwiMemory.memoryCount; i++) {
       p += "(" + String(i + 1) + ") " + kiwiMemory.memories[i] + ". ";
     }
-    p += "Use these details only when relevant to the current question. Never force a memory into a reply. ";
   }
   return p;
 }

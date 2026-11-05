@@ -11,8 +11,10 @@ static uint32_t bootStartMs = 0;
 static EyeSkin wakeSkin = SKIN_KIWI;
 
 static inline float easeOutCubic(float t) {
-  if (t <= 0.0f) return 0.0f;
-  if (t >= 1.0f) return 1.0f;
+  if (t <= 0.0f)
+    return 0.0f;
+  if (t >= 1.0f)
+    return 1.0f;
   float f = 1.0f - t;
   return 1.0f - f * f * f;
 }
@@ -35,9 +37,7 @@ bool bootWakeTick() {
   return true;
 }
 
-bool bootWakeDone() {
-  return (bootState == BootWakeState::Done);
-}
+bool bootWakeDone() { return (bootState == BootWakeState::Done); }
 
 void bootWakeDraw(Adafruit_SSD1306 &d) {
   if (!oledOK || bootState == BootWakeState::Idle)
@@ -93,11 +93,13 @@ void bootWakeDraw(Adafruit_SSD1306 &d) {
 
   // Scaled height:
   int h = (int)lroundf(32.0f * o);
-  if (h < 2) h = 2;
+  if (h < 2)
+    h = 2;
 
   // Corner radius clamped to eye bounds
   int r = baseR;
-  if (r * 2 > h) r = h / 2;
+  if (r * 2 > h)
+    r = h / 2;
 
   d.clearDisplay();
 
@@ -111,7 +113,8 @@ void bootWakeDraw(Adafruit_SSD1306 &d) {
   drawEye(cxL, cy, w, h, r, 0, 0, 0, true, false);
   drawEye(cxR, cy, w, h, r, 0, 0, 0, false, false);
 
-  // Accents / decorations (ears, horns, HUD brackets, etc.) appear near end (o >= 0.85)
+  // Accents / decorations (ears, horns, HUD brackets, etc.) appear near end (o
+  // >= 0.85)
   if (o >= 0.85f) {
     drawSkinAccents(now, cxL, cxR, cy, w, h, 0, 0);
   }

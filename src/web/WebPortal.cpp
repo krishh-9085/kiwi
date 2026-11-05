@@ -61,123 +61,6 @@ bool isMaskedSecret(const String &s) {
   return s.startsWith("****") || s.startsWith("••••");
 }
 
-bool constantTimeStringEquals(const String &a, const String &b) {
-  size_t lenA = a.length();
-  size_t lenB = b.length();
-  size_t maxLen = (lenA > lenB) ? lenA : lenB;
-  volatile uint8_t diff = (lenA ^ lenB);
-  for (size_t i = 0; i < maxLen; i++) {
-    char ca = (i < lenA) ? a[i] : 0;
-    char cb = (i < lenB) ? b[i] : 0;
-    diff |= (uint8_t)(ca ^ cb);
-  }
-  return (diff == 0);
-}
-
-bool isAuthorized() {
-  if (portalToken.length() == 0) {
-    return true;
-  }
-
-  // Check Cookie header: "kiwi_auth=<token>"
-  if (server.hasHeader("Cookie")) {
-    String cookieHeader = server.header("Cookie");
-    int idx = cookieHeader.indexOf("kiwi_auth=");
-    if (idx >= 0) {
-      int start = idx + 10;
-      int end = cookieHeader.indexOf(';', start);
-      String tok = (end == -1) ? cookieHeader.substring(start)
-                               : cookieHeader.substring(start, end);
-      tok.trim();
-      if (constantTimeStringEquals(tok, portalToken)) {
-        return true;
-      }
-    }
-  }
-
-  // Check X-Kiwi-Token header
-  if (server.hasHeader("X-Kiwi-Token")) {
-    String hdrTok = server.header("X-Kiwi-Token");
-    hdrTok.trim();
-    if (constantTimeStringEquals(hdrTok, portalToken)) {
-      return true;
-    }
-  }
-
-  // Auth failure rate limited to once per 10 seconds
-  static uint32_t lastAuthFailLogAt = 0;
-  uint32_t now = millis();
-  if (now - lastAuthFailLogAt >= 10000) {
-    lastAuthFailLogAt = now;
-    Serial.printf("[AUTH] auth fail from %s\n",
-                  server.client().remoteIP().toString().c_str());
-  }
-  return false;
-}
-
-void handleLogin() {
-  if (server.method() == HTTP_POST && server.hasArg("token")) {
-    String candidate = server.arg("token");
-    candidate.trim();
-    if (constantTimeStringEquals(candidate, portalToken)) {
-      server.sendHeader("Set-Cookie",
-                        "kiwi_auth=" + portalToken +
-                            "; Path=/; HttpOnly; SameSite=Strict");
-      server.sendHeader("Location", "/");
-      server.send(302, "text/plain", "Authorized");
-      return;
-    } else {
-      static uint32_t lastAuthFailLogAt = 0;
-      uint32_t now = millis();
-      if (now - lastAuthFailLogAt >= 10000) {
-        lastAuthFailLogAt = now;
-        Serial.printf("[AUTH] auth fail from %s\n",
-                      server.client().remoteIP().toString().c_str());
-      }
-    }
-  }
-
-  String html =
-      "<!DOCTYPE html><html><head><meta charset='utf-8'>"
-      "<meta name='viewport' content='width=device-width,initial-scale=1'>"
-      "<title>Kiwi - Login</title>"
-      "<style>"
-      "body{margin:0;background:#0d1117;color:#e6edf3;font-family:-apple-"
-      "system,BlinkMacSystemFont,Segoe "
-      "UI,Helvetica,Arial,sans-serif;display:flex;align-items:center;justify-"
-      "content:center;min-height:100vh;padding:20px;box-sizing:border-box}"
-      ".box{background:#161b22;border:1px solid "
-      "#30363d;border-radius:12px;padding:32px "
-      "28px;width:100%;max-width:360px;box-shadow:0 8px 24px rgba(0,0,0,0.4)}"
-      "h1{margin:0 0 8px 0;font-size:22px;color:#f2b45c;text-align:center}"
-      "p{margin:0 0 20px "
-      "0;font-size:13px;color:#8b949e;text-align:center;line-height:1.4}"
-      "input{width:100%;padding:12px "
-      "14px;box-sizing:border-box;border-radius:8px;border:1px solid "
-      "#30363d;background:#0d1117;color:#fff;font-size:14px;margin-bottom:16px;"
-      "outline:none}"
-      "input:focus{border-color:#f2b45c}"
-      "button{width:100%;padding:12px;background:#f2b45c;border:none;border-"
-      "radius:8px;color:#161b22;font-size:14px;font-weight:700;cursor:pointer;"
-      "transition:background .2s}"
-      "button:hover{background:#ffc77d}"
-      ".err{color:#ff7b72;font-size:12px;text-align:center;margin-bottom:12px}"
-      "</style></head><body>"
-      "<div class='box'>"
-      "<h1>Unlock Kiwi</h1>"
-      "<p>Enter your 32-character Portal Token to access settings</p>";
-  if (server.method() == HTTP_POST) {
-    html += "<div class='err'>Invalid token. Check Serial log from boot.</div>";
-  }
-  html += "<form method='POST' action='/login'>"
-          "<input type='password' name='token' placeholder='Paste Portal "
-          "Token' required autofocus autocomplete='off'>"
-          "<button type='submit'>Unlock</button>"
-          "</form></div></body></html>";
-
-  server.send(server.method() == HTTP_POST ? 401 : 200, "text/html", html);
-}
-
 // ============================================================
 // WIFI & AP MANAGEMENT
 // ============================================================
@@ -310,10 +193,10 @@ void maintainWiFi() {
       }
     }
     static uint32_t lastWeatherAttempt = 0;
-    if ((lastWeatherFetchAt == 0 ||
+    if (bootCompleted && (lastWeatherFetchAt == 0 ||
          millis() - lastWeatherFetchAt > 30UL * 60UL * 1000UL) &&
         (millis() - lastWeatherAttempt > 60000UL || lastWeatherAttempt == 0)) {
-      if (millis() > 3000) {
+      if (millis() > 8000) {
         lastWeatherAttempt = millis();
         fetchWeather();
       }
@@ -407,8 +290,8 @@ void restoreWebAndAP(bool apWasUp) {
 
 void startWeb() {
   if (!webRoutesSet) {
-    const char *headers[] = {"Cookie", "X-Kiwi-Token", "Content-Length"};
-    server.collectHeaders(headers, 3);
+    const char *headers[] = {"Content-Length"};
+    server.collectHeaders(headers, 1);
 
     // Apple Touch Icon & Favicon (Direct PROGMEM binary delivery, no template
     // processor)
@@ -423,36 +306,13 @@ void startWeb() {
     server.on("/apple-touch-icon-precomposed.png", HTTP_GET, handleAppleIcon);
     server.on("/favicon.ico", HTTP_GET, handleAppleIcon);
 
-    server.on("/login", HTTP_ANY, handleLogin);
-
-    server.on("/", HTTP_GET, []() {
-      if (!isAuthorized()) {
-        server.sendHeader("Location", "/login");
-        server.send(302, "text/plain", "Please log in");
-        return;
-      }
-      handleRoot();
-    });
+    server.on("/", HTTP_GET, handleRoot);
 
     server.on("/save", HTTP_POST, handleSave);
 
-    server.on("/faces", HTTP_GET, []() {
-      if (!isAuthorized()) {
-        server.sendHeader("Location", "/login");
-        server.send(302, "text/plain", "Please log in");
-        return;
-      }
-      handleFacesPage();
-    });
+    server.on("/faces", HTTP_GET, handleFacesPage);
 
-    server.on("/wiring", HTTP_GET, []() {
-      if (!isAuthorized()) {
-        server.sendHeader("Location", "/login");
-        server.send(302, "text/plain", "Please log in");
-        return;
-      }
-      handleWiring();
-    });
+    server.on("/wiring", HTTP_GET, handleWiring);
 
     server.on("/do", HTTP_GET, handleDoAction);
 
@@ -463,11 +323,6 @@ void startWeb() {
     server.on(
         "/animation-upload", HTTP_POST,
         []() {
-          if (!isAuthorized()) {
-            server.send(401, "application/json",
-                        "{\"ok\":false,\"error\":\"Unauthorized\"}");
-            return;
-          }
           server.send(
               customAnimationUploadResult ? 200 : 400, "application/json",
               customAnimationUploadResult
@@ -475,8 +330,6 @@ void startWeb() {
                   : "{\"ok\":false,\"error\":\"Expected 1024 bitmap bytes\"}");
         },
         []() {
-          if (!isAuthorized())
-            return;
           HTTPUpload &upload = server.upload();
           if (upload.status == UPLOAD_FILE_START) {
             stopAnimation();
@@ -496,22 +349,11 @@ void startWeb() {
     server.on("/config", HTTP_GET, handleConfigApi);
     server.on("/scan", HTTP_GET, handleScanNetworks);
 
-    server.on("/update", HTTP_GET, []() {
-      if (!isAuthorized()) {
-        server.sendHeader("Location", "/login");
-        server.send(302, "text/plain", "Please log in");
-        return;
-      }
-      handleOtaPage();
-    });
+    server.on("/update", HTTP_GET, handleOtaPage);
 
     server.on(
         "/update", HTTP_POST,
         []() {
-          if (!isAuthorized()) {
-            server.send(401, "text/plain", "Unauthorized");
-            return;
-          }
           if (busyProcessing) {
             server.send(503, "text/plain",
                         "FAIL: Robot is busy processing audio/AI. Please wait "
@@ -529,7 +371,7 @@ void startWeb() {
           }
         },
         []() {
-          if (!isAuthorized() || busyProcessing) {
+          if (busyProcessing) {
             Update.abort();
             return;
           }

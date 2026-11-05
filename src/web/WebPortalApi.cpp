@@ -27,10 +27,6 @@ static String escJson(String s) {
 }
 
 void handleDoAction() {
-  if (!isAuthorized()) {
-    server.send(401, "application/json", "{\"ok\":false,\"error\":\"Unauthorized\"}");
-    return;
-  }
   lastUserInteractionAt = millis();
 
   // Web Mic Audio Record Trigger
@@ -255,7 +251,7 @@ void handleDoAction() {
     p.begin("myrobot", false);
     if (server.hasArg("circ_en")) {
       String en = server.arg("circ_en");
-      circadianSleepEnabled = (en == "1" || en == "true");
+      circadianSleepEnabled = (en == "1" || en == "true" || en == "on");
       p.putBool("circ_en", circadianSleepEnabled);
       Serial.printf("[PORTAL] Circadian sleep toggle live set to: %d\n", circadianSleepEnabled);
     }
@@ -277,6 +273,19 @@ void handleDoAction() {
     }
     p.end();
     server.send(200, "application/json", "{\"ok\":true,\"circ_en\":" + String(circadianSleepEnabled ? "true" : "false") + ",\"circ_start\":" + String(circadianSleepStart) + ",\"circ_end\":" + String(circadianSleepEnd) + "}");
+    return;
+  }
+
+  // Live Greetings Toggle
+  if (server.hasArg("greet_en")) {
+    String ge = server.arg("greet_en");
+    greetingsEnabled = (ge == "1" || ge == "true" || ge == "on");
+    Preferences p;
+    p.begin("myrobot", false);
+    p.putBool("greet_en", greetingsEnabled);
+    p.end();
+    Serial.printf("[PORTAL] Greetings toggle live set to: %d\n", greetingsEnabled);
+    server.send(200, "application/json", "{\"ok\":true,\"greet_en\":" + String(greetingsEnabled ? "true" : "false") + "}");
     return;
   }
 
@@ -519,6 +528,7 @@ void handleConfigApi() {
   j += "\"volume\":" + String(speakerVolume) + ",\"replyLang\":\"" + escJson(replyLang) + "\",\"prompt\":\"" + escJson(systemPrompt) + "\",";
   j += "\"brightness\":" + String(displayBrightness) + ",\"nightMode\":" + String(nightMode) + ",\"nightBrightness\":" + String(nightBrightness) + ",";
   j += "\"circadian\":{\"enabled\":" + String(circadianSleepEnabled ? "true" : "false") + ",\"start\":" + String(circadianSleepStart) + ",\"end\":" + String(circadianSleepEnd) + "},";
+  j += "\"greetings\":{\"enabled\":" + String(greetingsEnabled ? "true" : "false") + "},";
   j += "\"boredom\":{\"enabled\":" + String(boredomEnabled ? "true" : "false") + ",\"minutes\":" + String(boredomMinutes) + "},";
   j += "\"weather\":{\"city\":\"" + escJson(weatherCity) + "\",\"lat\":\"" + escJson(weatherLat) + "\",\"lon\":\"" + escJson(weatherLon) + "\"},";
   j += "\"hostname\":\"" + escJson(mdnsHostname) + "\",\"host\":\"" + escJson(mdnsHostname + ".local") + "\",\"faceTweenMs\":" + String(faceTweenMs) + ",\"maxChatHistory\":" + String(maxChatHistory) + ",";
@@ -540,10 +550,6 @@ void handleConfigApi() {
 }
 
 void handleSave() {
-  if (!isAuthorized()) {
-    server.send(401, "application/json", "{\"ok\":false,\"error\":\"Unauthorized\"}");
-    return;
-  }
   if (!server.hasArg("ssid")) {
     server.send(400, "text/plain", "SSID required");
     return;
@@ -648,24 +654,6 @@ void handleSave() {
   fishModel = sanitizeField(server.arg("fishmodel"), DEFAULT_FISH_TTS_MODEL);
   fishVoice = sanitizeField(server.arg("fishvoice"));
 
-  // Portal Token change
-  if (server.hasArg("new_token") && server.arg("new_token").length() > 0) {
-    String currentTok = server.arg("current_token");
-    currentTok.trim();
-    if (constantTimeStringEquals(currentTok, portalToken)) {
-      String newTok = sanitizeField(server.arg("new_token"));
-      if (newTok.length() >= 8) {
-        portalToken = newTok;
-        Preferences p;
-        p.begin("myrobot", false);
-        p.putString("portal_tok", portalToken);
-        p.end();
-        server.sendHeader("Set-Cookie", "kiwi_auth=" + portalToken + "; Path=/; HttpOnly; SameSite=Strict");
-        Serial.println("[AUTH] Portal token changed by authorized user");
-      }
-    }
-  }
-
   // mDNS Hostname
   if (server.hasArg("hostname")) {
     String newHost = sanitizeHostname(server.arg("hostname"));
@@ -718,8 +706,10 @@ void handleSave() {
   if (server.hasArg("circ_en")) {
     String ce = server.arg("circ_en");
     circadianSleepEnabled = (ce == "1" || ce == "true" || ce == "on");
-  } else {
-    circadianSleepEnabled = false;
+  }
+  if (server.hasArg("greet_en")) {
+    String ge = server.arg("greet_en");
+    greetingsEnabled = (ge == "1" || ge == "true" || ge == "on");
   }
   if (server.hasArg("circ_start"))
     circadianSleepStart = server.arg("circ_start").toInt();

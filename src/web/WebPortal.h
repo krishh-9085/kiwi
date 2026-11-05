@@ -29,9 +29,6 @@ void restoreWebAndAP(bool apWasUp);
 
 // ---------- Web Server & Endpoints ----------
 void startWeb();
-bool constantTimeStringEquals(const String &a, const String &b);
-bool isAuthorized();
-void handleLogin();
 String maskSecret(const String &s);
 bool isMaskedSecret(const String &s);
 void initMdns(const char *mode);

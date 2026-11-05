@@ -245,6 +245,8 @@ def render_dashboard():
         "%NIGHT_SLIDER_STYLE%": "display:none;" if cfg.get("nightMode") == 0 else "",
         "%CIRC_EN_CHECKED%": "checked" if cfg.get("circadianSleepEnabled", True) else "",
         "%CIRC_EN_VAL%": "1" if cfg.get("circadianSleepEnabled", True) else "0",
+        "%GREET_EN_CHECKED%": "checked" if cfg.get("greetingsEnabled", False) else "",
+        "%GREET_EN_VAL%": "1" if cfg.get("greetingsEnabled", False) else "0",
         "%CIRC_START%": str(cfg.get("circadianSleepStart", 23)),
         "%CIRC_END%": str(cfg.get("circadianSleepEnd", 7)),
         "%BOREDOM_CHECKED%": "checked" if cfg.get("boredomEnabled") else "",
@@ -465,6 +467,9 @@ class DevPortalHandler(BaseHTTPRequestHandler):
                     "start": cfg_curr.get("circadianSleepStart", 23),
                     "end": cfg_curr.get("circadianSleepEnd", 7)
                 },
+                "greetings": {
+                    "enabled": cfg_curr.get("greetingsEnabled", False)
+                },
                 "state": ("Sleeping" if cfg_curr.get("sleeping", False) else "Idle & Happy"),
                 "question": "What's up Kiwi?",
                 "answer": "Surviving on 3.3V and pure attitude! What are we building today?",
@@ -527,6 +532,8 @@ class DevPortalHandler(BaseHTTPRequestHandler):
                     cfg["currentEyeSkin"] = val; cfg_changed = True
                 elif k == "circ_en":
                     cfg["circadianSleepEnabled"] = (val == "1" or val == "true"); cfg_changed = True
+                elif k == "greet_en":
+                    cfg["greetingsEnabled"] = (val == "1" or val == "true" or val == "on"); cfg_changed = True
                 elif k == "circ_start":
                     cfg["circadianSleepStart"] = int(val); cfg_changed = True
                 elif k == "circ_end":

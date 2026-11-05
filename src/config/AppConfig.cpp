@@ -178,6 +178,8 @@ int displayBrightness = 80; // Daytime brightness (0-100%, Rocky default 80%)
 int nightMode = 1; // 0: Same as day, 1: Dim, 2: Screen off (Rocky default: Dim)
 int nightBrightness = 10; // Night brightness (0-100%, Rocky default 10%)
 bool circadianSleepEnabled = true;
+bool greetingsEnabled = false;
+bool bootCompleted = false;
 int circadianSleepStart = 23; // 11:00 PM
 int circadianSleepEnd = 7;    // 07:00 AM
 bool inCircadianSleep = false;
@@ -228,7 +230,6 @@ float gazeTgtX = 0, gazeTgtY = 0;
 uint32_t gazeLockUntil = 0;
 
 // ---------- System Security & mDNS ----------
-String portalToken = "";
 String mdnsHostname = "kiwi";
 bool showBatteryIcon = false;
 LogLevel currentLogLevel = LOG_LEVEL_INFO;

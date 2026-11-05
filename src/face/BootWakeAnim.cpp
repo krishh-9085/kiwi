@@ -30,7 +30,7 @@ bool bootWakeTick() {
     return false;
   }
   uint32_t elapsed = millis() - bootStartMs;
-  if (elapsed >= 6000UL) {
+  if (elapsed >= 3600UL) {
     bootState = BootWakeState::Done;
     return false;
   }
@@ -47,35 +47,34 @@ void bootWakeDraw(Adafruit_SSD1306 &d) {
   uint32_t t = now - bootStartMs;
   float o = 0.0f;
 
-  if (t >= 6000UL) {
+  if (t >= 3600UL) {
     bootState = BootWakeState::Done;
     o = 1.0f;
-  } else if (t < 1200UL) {
-    // 0 to 1200 ms: asleep (o = 0.0)
+  } else if (t < 350UL) {
+    // 0 to 350 ms: asleep (o = 0.0)
     o = 0.0f;
-  } else if (t < 2900UL) {
-    // 1200 to 2900 ms: opening (0.0 -> 0.45, easeInOutCubic)
-    float prog = (float)(t - 1200UL) / 1700.0f;
+  } else if (t < 1500UL) {
+    // 350 to 1500 ms: opening (0.0 -> 0.45, easeInOutCubic)
+    float prog = (float)(t - 350UL) / 1150.0f;
     o = 0.45f * easeInOutCubic(prog);
+  } else if (t < 1900UL) {
+    // 1500 to 1900 ms: squint (0.45 -> 0.22, easeInOutCubic)
+    float prog = (float)(t - 1500UL) / 400.0f;
+    o = 0.45f - 0.23f * easeInOutCubic(prog);
+  } else if (t < 2200UL) {
+    // 1900 to 2200 ms: ease into yawn peak at 2200 ms (0.22 -> 0.06)
+    float prog = (float)(t - 1900UL) / 300.0f;
+    o = 0.22f - 0.16f * easeInOutCubic(prog);
+  } else if (t < 2700UL) {
+    // 2200 to 2700 ms: yawn out (0.06 -> 0.38, easeOutCubic)
+    float prog = (float)(t - 2200UL) / 500.0f;
+    o = 0.06f + 0.32f * easeOutCubic(prog);
   } else if (t < 3300UL) {
-    // 2900 to 3300 ms: squint (0.45 -> 0.25, easeInOutCubic)
-    float prog = (float)(t - 2900UL) / 400.0f;
-    o = 0.45f - 0.20f * easeInOutCubic(prog);
-  } else if (t < 3500UL) {
-    // 3300 to 3500 ms: ease into yawn peak at 3500 ms (0.25 -> 0.05)
-    float prog = (float)(t - 3300UL) / 200.0f;
-    o = 0.25f - 0.20f * easeInOutCubic(prog);
-  } else if (t < 4100UL) {
-    // 3500 to 4100 ms: yawn out (0.05 -> 0.35, easeOutCubic)
-    float prog = (float)(t - 3500UL) / 600.0f;
-    o = 0.05f + 0.30f * easeOutCubic(prog);
-  } else if (t < 4600UL) {
-    // 4100 to 4600 ms: awake (0.35 -> 1.0, easeOutCubic)
-    float prog = (float)(t - 4100UL) / 500.0f;
-    o = 0.35f + 0.65f * easeOutCubic(prog);
+    // 2700 to 3300 ms: awake (0.38 -> 1.0, easeOutCubic)
+    float prog = (float)(t - 2700UL) / 600.0f;
+    o = 0.38f + 0.62f * easeOutCubic(prog);
   } else {
-    // 4600 to 5600 ms: awake hold (o = 1.0)
-    // 5600 to 6000 ms: settle (o stays 1.0)
+    // 3300 to 3600 ms: awake hold / settle into live face
     o = 1.0f;
   }
 

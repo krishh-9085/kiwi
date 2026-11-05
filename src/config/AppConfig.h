@@ -177,6 +177,8 @@ extern int displayBrightness; // Daytime display brightness (0-100%, default 80)
 extern int nightMode;       // 0: Same as day, 1: Dim, 2: Screen off (default 1)
 extern int nightBrightness; // Night display brightness (0-100%, default 10)
 extern bool circadianSleepEnabled;
+extern bool greetingsEnabled;
+extern bool bootCompleted;
 extern int circadianSleepStart;
 extern int circadianSleepEnd;
 extern bool inCircadianSleep;
@@ -228,7 +230,6 @@ extern float gazeTgtX, gazeTgtY;
 extern uint32_t gazeLockUntil;
 
 // ---------- System Security & mDNS ----------
-extern String portalToken;
 extern String mdnsHostname;
 extern bool showBatteryIcon;
 

@@ -281,6 +281,7 @@ void loadConfig() {
 
 
   circadianSleepEnabled = prefs.getBool("circ_en", true);
+  greetingsEnabled = prefs.getBool("greet_en", false);
 
   circadianSleepStart = prefs.getInt("circ_start", 23);
 
@@ -368,31 +369,6 @@ void loadConfig() {
   strncpy(apPasswordBuf, savedApPass.c_str(), sizeof(apPasswordBuf) - 1);
   apPasswordBuf[sizeof(apPasswordBuf) - 1] = 0;
   Serial.printf("[AP] AP Password: %s\n", apPasswordBuf);
-
-  // Portal Token (16 random bytes hex-encoded on first boot)
-  portalToken = prefs.getString("portal_tok", "");
-  if (portalToken.length() == 0) {
-    uint8_t randBytes[16];
-    for (int i = 0; i < 4; i++) {
-      uint32_t r = esp_random();
-      memcpy(randBytes + i * 4, &r, 4);
-    }
-    char hexBuf[33];
-    for (int i = 0; i < 16; i++) {
-      snprintf(hexBuf + i * 2, 3, "%02x", randBytes[i]);
-    }
-    hexBuf[32] = 0;
-    portalToken = String(hexBuf);
-    prefs.end();
-    prefs.begin("myrobot", false);
-    prefs.putString("portal_tok", portalToken);
-    prefs.end();
-    prefs.begin("myrobot", true);
-  }
-
-  Serial.println("[AUTH] ========================================");
-  Serial.printf("[AUTH] Portal Token: %s\n", portalToken.c_str());
-  Serial.println("[AUTH] ========================================");
 
   mdnsHostname = sanitizeHostname(prefs.getString("hostname", "kiwi"));
   maxChatHistory = prefs.getInt("chat_hist", 4);
@@ -499,6 +475,7 @@ void saveConfig() {
   prefs.putInt("night_bright", nightBrightness);
 
   prefs.putBool("circ_en", circadianSleepEnabled);
+  prefs.putBool("greet_en", greetingsEnabled);
 
   prefs.putInt("circ_start", circadianSleepStart);
 
@@ -548,7 +525,6 @@ void saveConfig() {
   prefs.putString("hostname", mdnsHostname);
   prefs.putInt("face_tween", faceTweenMs);
   prefs.putInt("chat_hist", maxChatHistory);
-  prefs.putString("portal_tok", portalToken);
   prefs.putString("ap_pass", String(apPasswordBuf));
 
   prefs.end();

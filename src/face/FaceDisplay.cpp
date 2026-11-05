@@ -201,9 +201,30 @@ void updateDisplayBrightnessMode() {
 
 bool initDisplay() {
   Wire.begin(PIN_OLED_SDA, PIN_OLED_SCL);
-  Wire.setClock(FACE_I2C_CLK_DURING);
+  uint32_t targetClock = FACE_I2C_CLK_DURING;
+  Wire.setClock(targetClock);
 
   oledOK = display.begin(SSD1306_SWITCHCAPVCC, OLED_ADDR);
+  if (oledOK && targetClock > 400000UL) {
+    // Self-test first frame at high speed
+    display.clearDisplay();
+    display.display();
+    Wire.beginTransmission(OLED_ADDR);
+    if (Wire.endTransmission() != 0) {
+      oledOK = false;
+    }
+  }
+
+  if (!oledOK && targetClock > 400000UL) {
+    Serial.printf("[OLED] %lu kHz failed, falling back to 400 kHz\n", targetClock / 1000UL);
+    Wire.setClock(400000UL);
+    oledOK = display.begin(SSD1306_SWITCHCAPVCC, OLED_ADDR);
+    if (oledOK) {
+      Serial.println("[OLED] Fallback to 400 kHz succeeded");
+    } else {
+      Serial.println("[OLED] Fallback to 400 kHz also failed");
+    }
+  }
 
   brightnessKnown = false;
   powerKnown = false;

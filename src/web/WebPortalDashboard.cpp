@@ -119,10 +119,6 @@ static const char DASHBOARD_CSS[] PROGMEM = R"rawcss(
       width: min(1260px, 100%);
       margin: 0 auto;
       padding: 24px;
-      padding-top: max(20px, env(safe-area-inset-top, 20px));
-      padding-left: max(16px, env(safe-area-inset-left, 16px));
-      padding-right: max(16px, env(safe-area-inset-right, 16px));
-      padding-bottom: max(24px, env(safe-area-inset-bottom, 24px));
     }
 
     /* Offline Alert Banner */
@@ -435,14 +431,6 @@ static const char DASHBOARD_CSS[] PROGMEM = R"rawcss(
       justify-content: center;
       transition: all .2s;
       position: relative;
-      touch-action: manipulation;
-      -webkit-tap-highlight-color: transparent;
-      user-select: none;
-      -webkit-user-select: none;
-    }
-
-    .btn-mic:active {
-      transform: scale(.92);
     }
 
     .btn-mic:hover {
@@ -1096,118 +1084,9 @@ static const char DASHBOARD_CSS[] PROGMEM = R"rawcss(
       .row-2 {
         grid-template-columns: 1fr;
       }
-      .wrap {
-        padding: 12px;
-        padding-top: calc(env(safe-area-inset-top, 0px) + 8px);
-        padding-left: max(12px, env(safe-area-inset-left, 12px));
-        padding-right: max(12px, env(safe-area-inset-right, 12px));
-        padding-bottom: max(16px, env(safe-area-inset-bottom, 16px));
-      }
-      .bridge {
-        padding: 2px 0 8px;
-        gap: 8px;
-      }
-      .bezel {
-        width: 44px;
-        height: 34px;
-        border-radius: 8px;
-        gap: 6px;
-      }
-      .bezel i {
-        width: 6px;
-        height: 9px;
-      }
-      .id {
-        gap: 10px;
-      }
-      .id h1 {
-        font-size: 17px;
-        margin: 0;
-        letter-spacing: .16em;
-      }
-      .id .unit {
-        font-size: 10px;
-        letter-spacing: .12em;
-      }
-      .id .mood {
-        font-size: 11px;
-      }
-      .nav {
-        width: 100%;
-        display: grid;
-        grid-template-columns: repeat(3, minmax(0, 1fr));
-        gap: 6px;
-      }
-      .nb {
-        padding: 6px 4px;
-        font-size: 12px;
-        min-height: 36px;
-        justify-content: center;
-      }
-      .tabs {
-        margin: 8px 0 10px;
-        width: 100%;
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 4px;
-        padding: 3px;
-      }
-      .tab-btn {
-        min-height: 38px;
-        padding: 6px 8px;
-        font-size: 11px;
-        justify-content: center;
-        letter-spacing: .1em;
-      }
-      .strip {
-        margin-bottom: 12px;
-        padding: 10px 14px;
-        gap: 8px;
-      }
-      .cell .k {
-        font-size: 10px;
-        margin-bottom: 1px;
-      }
-      .cell .v {
-        font-size: 12px;
-      }
-      .console-grid {
-        gap: 12px;
-      }
-      .mic-button-deck {
-        height: auto !important;
-        min-height: unset;
-        padding: 18px 14px;
-        gap: 10px;
-        justify-content: center;
-      }
-      .btn-mic {
-        width: 76px;
-        height: 76px;
-        margin: 2px auto;
-      }
-      .prompt-row {
-        width: 100%;
-        display: flex;
-        gap: 8px;
-        margin-top: 6px;
-      }
-      #textPromptIn {
-        flex: 1;
-        min-width: 0;
-        height: 42px;
-        font-size: 13px;
-      }
-      #btnSendPrompt {
-        height: 42px;
-        min-height: 42px;
-        padding: 0 16px;
-        font-size: 13px;
-        flex-shrink: 0;
-      }
-      .term {
-        height: 280px;
-      }
+      .wrap { padding: 16px; }
+      .nav { width: 100%; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      .nb { padding: 8px 4px; font-size: 12px; justify-content: center; }
     }
 
     @media(prefers-reduced-motion:reduce) {
@@ -1624,9 +1503,9 @@ static const char DASHBOARD_BODY_PART1[] PROGMEM = R"rawb1(<form method="POST" a
             </select>
             <label for="sttLangSel">STT LANGUAGE</label>
             <select name="sttlang" id="sttLangSel">
-              <option value="hi" %LANG_HI_SEL%>Hindi (हिन्दी / Hinglish) — Recommended</option>
               <option value="auto" %LANG_AUTO_SEL%>Auto (Hindi + English)</option>
-              <option value="en" %LANG_EN_SEL%>English Only</option>
+              <option value="hi" %LANG_HI_SEL%>Force Hindi</option>
+              <option value="en" %LANG_EN_SEL%>Force English</option>
             </select>
             <div id="sarvamBox">
               <h3>Sarvam AI Settings</h3>
@@ -1774,6 +1653,8 @@ static const char DASHBOARD_BODY_PART2[] PROGMEM = R"rawb2(<!-- Text-to-Speech -
                 data-val="%ACT_TOP_TAP%"></select></div>
             <div><label for="actTopDbl">Top Head (Double Tap)</label><select name="act_top_dbl" id="actTopDbl" class="touch-act-sel"
                 data-val="%ACT_TOP_DBL%"></select></div>
+            <div><label for="actTopHld">Top Head (Hold 3s)</label><select name="act_top_hld" id="actTopHld" class="touch-act-sel"
+                data-val="%ACT_TOP_HLD%"></select></div>
             <div><label for="actLtTap">Left Cheek (Single Tap)</label><select name="act_lt_tap" id="actLtTap" class="touch-act-sel"
                 data-val="%ACT_LT_TAP%"></select></div>
             <div><label for="actLtDbl">Left Cheek (Double Tap)</label><select name="act_lt_dbl" id="actLtDbl" class="touch-act-sel"
@@ -1787,7 +1668,7 @@ static const char DASHBOARD_BODY_PART2[] PROGMEM = R"rawb2(<!-- Text-to-Speech -
             <div><label for="actRtHld">Right Cheek (Hold 1.5s)</label><select name="act_rt_hld" id="actRtHld" class="touch-act-sel"
                 data-val="%ACT_RT_HLD%"></select></div>
           </div>
-          <small class="tip">Tip: Hold Top Head for 3s to show Clock; hold for 7s to enter Night Sleep.</small>
+          <small class="tip">Tip: Hold Top Head for 3s to change face skin; hold for 7s to enter Night Sleep.</small>
         </div>
 
         <!-- Weather & personality -->
@@ -1818,6 +1699,9 @@ static const char DASHBOARD_BODY_PART2[] PROGMEM = R"rawb2(<!-- Text-to-Speech -
             <option value="alien" %SKIN_ALIEN_SEL%>Cosmic Alien (UFO Orbit &amp; Antenna)</option>
             <option value="ninja" %SKIN_NINJA_SEL%>Shinobi Ninja (Headband &amp; Stealth)</option>
             <option value="round" %SKIN_ROUND_SEL%>Round Eyes (Classic Ocular)</option>
+            <option value="squircle_solid" %SKIN_SQ_SOLID_SEL%>Squircle Solid</option>
+            <option value="squircle_outline" %SKIN_SQ_OUTLINE_SEL%>Squircle Outline</option>
+            <option value="squircle_glint" %SKIN_SQ_GLINT_SEL%>Squircle Glint</option>
           </select>
           <label for="promptIn" style="margin-top:16px">Robot System Prompt</label>
           <textarea id="promptIn" name="prompt">%PROMPT%</textarea>
@@ -1950,7 +1834,7 @@ static String getDashboardBodyPart1() {
   h = FPSTR(DASHBOARD_BODY_PART1);
 
   h.replace("%SSID%", esc(wifiSSID));
-  h.replace("%PASS%", esc(wifiPassword));
+  h.replace("%PASS%", esc(maskSecret(wifiPassword)));
 
   h.replace("%VOL%", String(speakerVolume));
   h.replace("%BRIGHT%", String(displayBrightness));
@@ -1972,16 +1856,16 @@ static String getDashboardBodyPart1() {
   h.replace("%LANG_EN_SEL%", sttLang == "en" ? "selected" : "");
 
   h.replace("%STTURL%", esc(sttEndpoint));
-  h.replace("%STTKEY%", esc(sttKey));
+  h.replace("%STTKEY%", esc(maskSecret(sttKey)));
   h.replace("%STT_SAARAS_SEL%", sttModel == "saaras:v3" ? "selected" : "");
   h.replace("%STT_SAARIKA_SEL%", sttModel == "saarika:v2" ? "selected" : "");
   h.replace("%GROQSTTURL%", esc(groqSttEndpoint));
-  h.replace("%GROQSTTKEY%", esc(groqSttKey));
+  h.replace("%GROQSTTKEY%", esc(maskSecret(groqSttKey)));
   h.replace("%GW3T_SEL%", groqSttModel == "whisper-large-v3-turbo" ? "selected" : "");
   h.replace("%GW3_SEL%", groqSttModel == "whisper-large-v3" ? "selected" : "");
   h.replace("%GDW_SEL%", groqSttModel == "distil-whisper-large-v3-en" ? "selected" : "");
   h.replace("%OPENAIURL%", esc(openaiSttEndpoint));
-  h.replace("%OPENAIKEY%", esc(openaiSttKey));
+  h.replace("%OPENAIKEY%", esc(maskSecret(openaiSttKey)));
   h.replace("%OW1_SEL%", openaiSttModel == "whisper-1" ? "selected" : "");
   h.replace("%OG4M_SEL%", openaiSttModel == "gpt-4o-mini-transcribe" ? "selected" : "");
   h.replace("%OG4_SEL%", openaiSttModel == "gpt-4o-transcribe" ? "selected" : "");
@@ -2002,15 +1886,15 @@ static String getDashboardBodyPart1() {
   h.replace("%GPT41N_SEL%", llmModel == "gpt-4.1-nano" ? "selected" : "");
   h.replace("%GPT4O_SEL%", llmModel == "gpt-4o" ? "selected" : "");
   h.replace("%LLMURL%", esc(llmEndpoint));
-  h.replace("%LLMKEY%", esc(llmKey));
+  h.replace("%LLMKEY%", esc(maskSecret(llmKey)));
   h.replace("%OPENAI_LLM_URL%", esc(llmEndpoint));
-  h.replace("%OPENAI_LLM_KEY%", esc(llmKey));
-  h.replace("%OPENAIKEY%", esc(openaiSttKey.length() ? openaiSttKey : (openaiTtsKey.length() ? openaiTtsKey : (llmProvider == "openai" ? llmKey : ""))));
+  h.replace("%OPENAI_LLM_KEY%", esc(maskSecret(llmKey)));
+  h.replace("%OPENAIKEY%", esc(maskSecret(openaiSttKey.length() ? openaiSttKey : (openaiTtsKey.length() ? openaiTtsKey : (llmProvider == "openai" ? llmKey : "")))));
   h.replace("%GROQURL%", esc(groqEndpoint));
-  h.replace("%GROQKEY%", esc(groqKey));
-  h.replace("%TTSKEY%", esc(ttsKey.length() ? ttsKey : sttKey));
-  h.replace("%ELEVENKEY%", esc(elevenKey));
-  h.replace("%FISHKEY%", esc(fishKey));
+  h.replace("%GROQKEY%", esc(maskSecret(groqKey)));
+  h.replace("%TTSKEY%", esc(maskSecret(ttsKey.length() ? ttsKey : sttKey)));
+  h.replace("%ELEVENKEY%", esc(maskSecret(elevenKey)));
+  h.replace("%FISHKEY%", esc(maskSecret(fishKey)));
 
   return h;
 }
@@ -2025,7 +1909,7 @@ static String getDashboardBodyPart2() {
   h.replace("%TTS_ELEVEN_SEL%", ttsProvider == "elevenlabs" ? "selected" : "");
   h.replace("%TTS_FISH_SEL%", (ttsProvider == "fish" || ttsProvider == "fishaudio") ? "selected" : "");
   h.replace("%TTSURL%", esc(ttsEndpoint));
-  h.replace("%TTSKEY%", esc(ttsKey));
+  h.replace("%TTSKEY%", esc(maskSecret(ttsKey)));
   h.replace("%SARVAM_V4F_SEL%", (ttsModel == "bulbul:v4-flash" || ttsModel == "bulbul:v4") ? "selected" : "");
   h.replace("%SARVAM_V3_SEL%", (ttsModel == "bulbul:v3" || ttsModel == "" || ttsModel == "DEFAULT") ? "selected" : "");
   h.replace("%SARVAM_V2_SEL%", ttsModel == "bulbul:v2" ? "selected" : "");
@@ -2079,7 +1963,7 @@ static String getDashboardBodyPart2() {
   h.replace("%SARVAM_VOICE_OPTIONS%", voiceOpts);
 
   h.replace("%OPENAITTSURL%", esc(openaiTtsEndpoint));
-  h.replace("%OPENAITTSKEY%", esc(openaiTtsKey));
+  h.replace("%OPENAITTSKEY%", esc(maskSecret(openaiTtsKey)));
   h.replace("%OPENAITTSMODEL%", esc(openaiTtsModel));
   h.replace("%OPENAITTSVOICE%", esc(openaiTtsVoice));
   h.replace("%OA_ALLOY_SEL%", (openaiTtsVoice == "alloy" || openaiTtsVoice == "") ? "selected" : "");
@@ -2090,12 +1974,12 @@ static String getDashboardBodyPart2() {
   h.replace("%OA_SHIMMER_SEL%", openaiTtsVoice == "shimmer" ? "selected" : "");
 
   h.replace("%ELEVURL%", esc(elevenEndpoint));
-  h.replace("%ELEVKEY%", esc(elevenKey));
+  h.replace("%ELEVKEY%", esc(maskSecret(elevenKey)));
   h.replace("%ELEVMODEL%", esc(elevenModel));
   h.replace("%ELEVVOICE%", esc(elevenVoice));
 
   h.replace("%FISHURL%", esc(fishEndpoint));
-  h.replace("%FISHKEY%", esc(fishKey));
+  h.replace("%FISHKEY%", esc(maskSecret(fishKey)));
   h.replace("%FISHMODEL%", esc(fishModel));
   h.replace("%FISHVOICE%", esc(fishVoice));
 
@@ -2135,6 +2019,7 @@ static String getDashboardBodyPart2() {
 
   h.replace("%ACT_TOP_TAP%", touchActionToString(touchActTopTap));
   h.replace("%ACT_TOP_DBL%", touchActionToString(touchActTopDbl));
+  h.replace("%ACT_TOP_HLD%", touchActionToString(touchActTopHold));
   h.replace("%ACT_LT_TAP%", touchActionToString(touchActLeftTap));
   h.replace("%ACT_LT_DBL%", touchActionToString(touchActLeftDbl));
   h.replace("%ACT_RT_TAP%", touchActionToString(touchActRightTap));
@@ -2164,6 +2049,9 @@ static String getDashboardBodyPart2() {
   h.replace("%SKIN_NINJA_SEL%", currentEyeSkin == SKIN_NINJA ? "selected" : "");
   h.replace("%SKIN_ROUND_SEL%", currentEyeSkin == SKIN_ROUND ? "selected" : "");
   h.replace("%SKIN_KIWI_SEL%", currentEyeSkin == SKIN_KIWI ? "selected" : "");
+  h.replace("%SKIN_SQ_SOLID_SEL%", currentEyeSkin == SKIN_SQUIRCLE_SOLID ? "selected" : "");
+  h.replace("%SKIN_SQ_OUTLINE_SEL%", currentEyeSkin == SKIN_SQUIRCLE_OUTLINE ? "selected" : "");
+  h.replace("%SKIN_SQ_GLINT_SEL%", currentEyeSkin == SKIN_SQUIRCLE_GLINT ? "selected" : "");
 
   h.replace("%MEM_NAME%", esc(getOwnerName()));
   h.replace("%MEM_FRIENDS%", esc(getFriendsFamily()));
@@ -2790,20 +2678,11 @@ static const char DASHBOARD_FOOT[] PROGMEM = R"rawfoot(<script>
       var btnMic = document.getElementById('btnWebMic');
       if (btnMic) {
         btnMic.addEventListener('click', function () {
-          var micSub = document.getElementById('micBtnSub');
-          if (micSub) micSub.textContent = 'Listening to microphone now...';
-          btnMic.classList.add('recording');
           api('/do?record=1')
             .then(function (j) {
-              if (!j.ok && j.reason === 'busy') {
-                btnMic.classList.remove('recording');
-                toast('Kiwi is busy processing audio/AI.');
-              }
+              if (!j.ok && j.reason === 'busy') toast('Kiwi is busy processing audio/AI.');
             })
-            .catch(function () {
-              btnMic.classList.remove('recording');
-              toast('Failed to initiate recording');
-            });
+            .catch(function () { toast('Failed to initiate recording'); });
         });
       }
 

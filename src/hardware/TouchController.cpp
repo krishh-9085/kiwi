@@ -153,10 +153,12 @@ void executeTouchAction(TouchAction act, uint8_t pin) {
 
   switch (act) {
     case TOUCH_ACT_LISTEN:
-      if (busyProcessing) {
-        Serial.println("[TOUCH] Action LISTEN -> Cancel current request");
+      if (busyProcessing || startRecording) {
+        Serial.println("[TOUCH] Action LISTEN -> Cancel current request / listening");
         cancelRequest = true;
+        startRecording = false;
         soundPetSparkle();
+        setEmotion(EMOTION_IDLE);
       } else {
         Serial.println("[TOUCH] Action LISTEN -> Enter Listening Mode!");
         setEmotion(EMOTION_LISTENING);
@@ -189,7 +191,7 @@ void executeTouchAction(TouchAction act, uint8_t pin) {
       break;
 
     case TOUCH_ACT_CYCLE_SKIN: {
-      int nextSkin = ((int)currentEyeSkin + 1) % 18;
+      int nextSkin = ((int)currentEyeSkin + 1) % SKIN_COUNT;
       currentEyeSkin = (EyeSkin)nextSkin;
       soundCoin();
       saveConfig();
@@ -220,7 +222,13 @@ void executeTouchAction(TouchAction act, uint8_t pin) {
       break;
 
     case TOUCH_ACT_DISMISS:
-      if (showClockScreen) {
+      if (busyProcessing || startRecording) {
+        Serial.println("[TOUCH] Action DISMISS -> Cancel current request / listening");
+        cancelRequest = true;
+        startRecording = false;
+        soundPetSparkle();
+        setEmotion(EMOTION_IDLE);
+      } else if (showClockScreen) {
         showClockScreen = false;
       } else if (showWeatherScreen) {
         showWeatherScreen = false;
@@ -350,15 +358,11 @@ static void updateOneTouch(TouchSensor &ts, uint32_t now) {
       executeTouchAction(touchActRightHold, ts.pin);
     }
 
-    // Hold 3s on Top -> Clock
-    if (ts.pin == PIN_TOUCH_TOP && held >= TOUCH_CLOCK_MS && !ts.holdHandled && !busyProcessing) {
+    // Hold 3s on Top -> Change Face Skin (Cycle Face Skin)
+    if (ts.pin == PIN_TOUCH_TOP && held >= TOUCH_CLOCK_MS && !ts.holdHandled && !busyProcessing && !inCircadianSleep && !manualSleep) {
       ts.holdHandled = true;
-      if (!showClockScreen && !inCircadianSleep && !manualSleep) {
-        soundClock();
-        showClockScreen = true;
-        if (!timeSynced && WiFi.status() == WL_CONNECTED)
-          syncTimeFromNTP();
-      }
+      Serial.println("[TOUCH] Top Held 3s -> Changing Face Skin");
+      executeTouchAction(touchActTopHold, ts.pin);
     }
     // Hold 7-10s on Top -> Sleep Mode Toggle!
     if (ts.pin == PIN_TOUCH_TOP && held >= SLEEP_HOLD_MS && !ts.sleepHandled && !busyProcessing) {

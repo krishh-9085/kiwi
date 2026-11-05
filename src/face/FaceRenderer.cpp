@@ -4,11 +4,11 @@
 #include "face/FaceExpressions.h"
 #include "face/FaceIdle.h"
 #include "face/FaceSkins.h"
+#include "hardware/Battery.h"
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 #include <Wire.h>
 #include <math.h>
-
 
 // ---------------------------------------------------------------------------
 // Small math helpers
@@ -244,8 +244,10 @@ static void drawSleepingFace(uint32_t now) {
   const int SLEEP_W = 30;
   const int SLEEP_H = 3;
   const int SLEEP_R = 1;
-  display.fillRoundRect(cL - SLEEP_W / 2, sleepY - 1, SLEEP_W, SLEEP_H, SLEEP_R, SSD1306_WHITE);
-  display.fillRoundRect(cR - SLEEP_W / 2, sleepY - 1, SLEEP_W, SLEEP_H, SLEEP_R, SSD1306_WHITE);
+  display.fillRoundRect(cL - SLEEP_W / 2, sleepY - 1, SLEEP_W, SLEEP_H, SLEEP_R,
+                        SSD1306_WHITE);
+  display.fillRoundRect(cR - SLEEP_W / 2, sleepY - 1, SLEEP_W, SLEEP_H, SLEEP_R,
+                        SSD1306_WHITE);
 
   // 4. Two floating Z snore glyphs rising from right eye corner
   for (int i = 0; i < 2; i++) {
@@ -273,12 +275,77 @@ static void drawSleepingFace(uint32_t now) {
 // ---------------------------------------------------------------------------
 // Main face renderer
 // ---------------------------------------------------------------------------
+static EyeTween eyeTween;
+static EyeSkin lastEyeSkin = (EyeSkin)-1;
+static FaceParams lastTgt = {0, 0, 0, 0, 0, 0, 0, 0};
+static bool eyeTweenInit = false;
+
 void drawFace() {
   if (!oledOK)
     return;
   if (bootInfoUntil && millis() < bootInfoUntil)
     return;
   uint32_t now = millis();
+
+  bool skinChanged = false;
+  if (lastEyeSkin != currentEyeSkin) {
+    skinChanged = true;
+    lastEyeSkin = currentEyeSkin;
+  }
+
+  FaceParams newTgt = {faceTgt.gap,    faceTgt.y,    faceTgt.w,
+                       faceTgt.h,      faceTgt.r,    faceTgt.lidIn,
+                       faceTgt.lidOut, faceTgt.cheek};
+
+  if (!eyeTweenInit) {
+    eyeTween.from = newTgt;
+    eyeTween.to = newTgt;
+    eyeTween.cur = newTgt;
+    eyeTween.t0 = now;
+    eyeTween.durMs = (uint16_t)faceTweenMs;
+    eyeTween.active = false;
+    lastTgt = newTgt;
+    eyeTweenInit = true;
+  } else {
+    bool targetChanged =
+        (newTgt.cx != lastTgt.cx || newTgt.cy != lastTgt.cy ||
+         newTgt.w != lastTgt.w || newTgt.h != lastTgt.h ||
+         newTgt.r != lastTgt.r || newTgt.lidIn != lastTgt.lidIn ||
+         newTgt.lidOut != lastTgt.lidOut || newTgt.cheek != lastTgt.cheek);
+    if (targetChanged) {
+      if (faceTweenMs <= 0 || skinChanged) {
+        eyeTween.cur = newTgt;
+        eyeTween.to = newTgt;
+        eyeTween.from = newTgt;
+        eyeTween.active = false;
+      } else {
+        eyeTween.from = eyeTween.cur;
+        eyeTween.to = newTgt;
+        eyeTween.t0 = now;
+        eyeTween.durMs = (uint16_t)faceTweenMs;
+        eyeTween.active = true;
+      }
+      lastTgt = newTgt;
+    }
+  }
+
+  if (eyeTween.active) {
+    float t =
+        clampf((float)(now - eyeTween.t0) / (float)eyeTween.durMs, 0.0f, 1.0f);
+    float k = easeInOutCubic(t);
+    eyeTween.cur.cx = lerpf(eyeTween.from.cx, eyeTween.to.cx, k);
+    eyeTween.cur.cy = lerpf(eyeTween.from.cy, eyeTween.to.cy, k);
+    eyeTween.cur.w = lerpf(eyeTween.from.w, eyeTween.to.w, k);
+    eyeTween.cur.h = lerpf(eyeTween.from.h, eyeTween.to.h, k);
+    eyeTween.cur.r = lerpf(eyeTween.from.r, eyeTween.to.r, k);
+    eyeTween.cur.lidIn = lerpf(eyeTween.from.lidIn, eyeTween.to.lidIn, k);
+    eyeTween.cur.lidOut = lerpf(eyeTween.from.lidOut, eyeTween.to.lidOut, k);
+    eyeTween.cur.cheek = lerpf(eyeTween.from.cheek, eyeTween.to.cheek, k);
+    if (t >= 1.0f) {
+      eyeTween.cur = eyeTween.to;
+      eyeTween.active = false;
+    }
+  }
 
   float dt =
       (lastRenderAt == 0) ? 0.033f : (float)(now - lastRenderAt) / 1000.0f;
@@ -287,6 +354,17 @@ void drawFace() {
 
   // Keep integrating even while asleep so waking up animates from a closed eye
   stepFace(dt);
+
+  if (faceTweenMs > 0) {
+    faceNow.w = eyeTween.cur.w;
+    faceNow.h = eyeTween.cur.h;
+    faceNow.gap = eyeTween.cur.cx;
+    faceNow.y = eyeTween.cur.cy;
+    faceNow.r = eyeTween.cur.r;
+    faceNow.lidIn = eyeTween.cur.lidIn;
+    faceNow.lidOut = eyeTween.cur.lidOut;
+    faceNow.cheek = eyeTween.cur.cheek;
+  }
 
   if (currentEmotion == EMOTION_SLEEPING) {
     drawSleepingFace(now);
@@ -732,6 +810,18 @@ void drawFace() {
     }
   }
 
+  if (showBatteryIcon && currentEmotion == EMOTION_IDLE) {
+    int bp = batteryPercent();
+    if (bp >= 0) {
+      display.drawRect(115, 2, 10, 5, SSD1306_WHITE);
+      display.drawFastVLine(125, 3, 3, SSD1306_WHITE);
+      int fillW = (bp * 8 + 50) / 100;
+      if (fillW > 0) {
+        display.fillRect(116, 3, fillW, 3, SSD1306_WHITE);
+      }
+    }
+  }
+
   drawFlourishAt(now);
-  presentDisplay();
+  presentDisplay(eyeTween.active);
 }

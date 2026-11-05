@@ -1,5 +1,6 @@
 #include "behavior/OfflineBrain.h"
 #include "config/AppConfig.h"
+#include "core/Timing.h"
 #include "core/CoreTypes.h"
 #include "face/FaceEngine.h"
 #include "face/FaceExpressions.h"
@@ -108,12 +109,7 @@ void handleOfflineBuddyTap() {
       // Cute Desk Buddy Toast Notice (non-intrusive, friendly)
       drawMessage("Kiwi Desk Buddy", "Offline Mode <3");
       soundPetSparkle();
-      uint32_t t0 = millis();
-      while (millis() - t0 < 1200) {
-        if (cancelRequest) break;
-        pumpUI();
-        delay(10);
-      }
+      waitMs(1200, []() -> bool { return (bool)cancelRequest; });
       setEmotion(EMOTION_HAPPY);
       break;
   }

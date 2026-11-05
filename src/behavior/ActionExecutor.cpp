@@ -1,5 +1,6 @@
 #include "behavior/ActionExecutor.h"
 #include "config/AppConfig.h"
+#include "core/Timing.h"
 #include "config/ConfigManager.h"
 #include "core/CoreTypes.h"
 #include "face/FaceEngine.h"
@@ -133,9 +134,9 @@ void checkRobotTimer() {
       // Wait briefly for chime while pumping UI so touch can interrupt instantly
       uint32_t chimeStart = millis();
       while (isTonePlaying() && (millis() - chimeStart < 700)) {
-        pumpUI();
+        serviceUi();
         if (!robotTimerRinging) return;
-        delay(5);
+        yield();
       }
 
       if (!robotTimerRinging) return;
@@ -240,6 +241,15 @@ bool setEyeSkinByName(const String &nameIn) {
   }
   if (n == "default" || n == "normal" || n == "clean" || n == "reset" || n == "डिफ़ॉल्ट" || n == "डिफॉल्ट") {
     currentEyeSkin = SKIN_DEFAULT; return true;
+  }
+  if (n == "squircle_solid" || n == "squircle solid" || n == "squircle" || n == "स्क्वार्कल") {
+    currentEyeSkin = SKIN_SQUIRCLE_SOLID; return true;
+  }
+  if (n == "squircle_outline" || n == "squircle outline") {
+    currentEyeSkin = SKIN_SQUIRCLE_OUTLINE; return true;
+  }
+  if (n == "squircle_glint" || n == "squircle glint") {
+    currentEyeSkin = SKIN_SQUIRCLE_GLINT; return true;
   }
   return false;
 }

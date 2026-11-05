@@ -151,9 +151,12 @@ enum EyeSkin : uint8_t {
   SKIN_ALIEN = 14,
   SKIN_NINJA = 15,
   SKIN_ROUND = 16,
-  SKIN_KIWI = 17
+  SKIN_KIWI = 17,
+  SKIN_SQUIRCLE_SOLID = 18,
+  SKIN_SQUIRCLE_OUTLINE = 19,
+  SKIN_SQUIRCLE_GLINT = 20
 };
-#define SKIN_COUNT 18
+#define SKIN_COUNT 21
 
 enum IdleEye : uint8_t {
   IE_NORMAL,

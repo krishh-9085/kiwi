@@ -2,6 +2,7 @@
 #include "config/AppConfig.h"
 #include "animation/DogAnimationFrames.h"
 #include "face/FaceEngine.h"
+#include "face/FaceDisplay.h"
 #include <Adafruit_SSD1306.h>
 #include <math.h>
 #include <Preferences.h>
@@ -66,7 +67,7 @@ void drawBuiltInFrame(uint8_t animation, uint16_t frame) {
                          SSD1306_WHITE);
     break;
   }
-  display.display();
+  presentDisplay(true);
 }
 } // namespace
 

@@ -1,12 +1,26 @@
 #include "config/ConfigManager.h"
-
 #include "config/AppConfig.h"
-
+#include "services/AiChatHistory.h"
 #include <Preferences.h>
-
-
+#include <WiFi.h>
 
 static Preferences prefs;
+
+String sanitizeHostname(const String &raw) {
+  String out = "";
+  out.reserve(32);
+  for (size_t i = 0; i < raw.length() && out.length() < 31; i++) {
+    char c = raw[i];
+    if (c >= 'A' && c <= 'Z') c = c + 32;
+    if ((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-') {
+      out += c;
+    }
+  }
+  while (out.startsWith("-")) out.remove(0, 1);
+  while (out.endsWith("-")) out.remove(out.length() - 1);
+  if (out.length() == 0) out = "kiwi";
+  return out;
+}
 
 
 
@@ -307,9 +321,12 @@ void loadConfig() {
 
 
   touchActTopTap    = (TouchAction)prefs.getInt("act_top_tap", (int)TOUCH_ACT_LISTEN);
-
-  touchActTopDbl    = (TouchAction)prefs.getInt("act_top_dbl", (int)TOUCH_ACT_CYCLE_SKIN);
-
+  touchActTopDbl    = (TouchAction)prefs.getInt("act_top_dbl", (int)TOUCH_ACT_NONE);
+  touchActTopHold   = (TouchAction)prefs.getInt("act_top_hld", (int)TOUCH_ACT_CYCLE_SKIN);
+  // Migrate from old default where top double tap was skin cycling
+  if (touchActTopDbl == TOUCH_ACT_CYCLE_SKIN && touchActTopHold == TOUCH_ACT_CYCLE_SKIN) {
+    touchActTopDbl = TOUCH_ACT_NONE;
+  }
   touchActLeftTap   = (TouchAction)prefs.getInt("act_lt_tap",  (int)TOUCH_ACT_DISMISS);
 
   touchActLeftDbl   = (TouchAction)prefs.getInt("act_lt_dbl",  (int)TOUCH_ACT_CLOCK);
@@ -325,21 +342,66 @@ void loadConfig() {
 
 
   int savedMic = prefs.getInt("micslot", -1);
-
   if (savedMic == 0 || savedMic == 1) {
-
     micSlot = savedMic;
-
     micSlotLocked = true;
-
     Serial.printf("[MIC] Slot %d cached from NVS\n", micSlot);
-
   }
 
+  // AP password (MAC last 4 hex + random suffix)
+  String savedApPass = prefs.getString("ap_pass", "");
+  if (savedApPass.length() < 8 || savedApPass == "25691128") {
+    uint8_t mac[6];
+    WiFi.macAddress(mac);
+    char mac4[5];
+    snprintf(mac4, sizeof(mac4), "%02X%02X", mac[4], mac[5]);
+    uint16_t r = (uint16_t)(esp_random() & 0xFFFF);
+    char sfx[5];
+    snprintf(sfx, sizeof(sfx), "%04X", r);
+    savedApPass = "kiwi-" + String(mac4) + "-" + String(sfx);
+    prefs.end();
+    prefs.begin("myrobot", false);
+    prefs.putString("ap_pass", savedApPass);
+    prefs.end();
+    prefs.begin("myrobot", true);
+  }
+  strncpy(apPasswordBuf, savedApPass.c_str(), sizeof(apPasswordBuf) - 1);
+  apPasswordBuf[sizeof(apPasswordBuf) - 1] = 0;
+  Serial.printf("[AP] AP Password: %s\n", apPasswordBuf);
 
+  // Portal Token (16 random bytes hex-encoded on first boot)
+  portalToken = prefs.getString("portal_tok", "");
+  if (portalToken.length() == 0) {
+    uint8_t randBytes[16];
+    for (int i = 0; i < 4; i++) {
+      uint32_t r = esp_random();
+      memcpy(randBytes + i * 4, &r, 4);
+    }
+    char hexBuf[33];
+    for (int i = 0; i < 16; i++) {
+      snprintf(hexBuf + i * 2, 3, "%02x", randBytes[i]);
+    }
+    hexBuf[32] = 0;
+    portalToken = String(hexBuf);
+    prefs.end();
+    prefs.begin("myrobot", false);
+    prefs.putString("portal_tok", portalToken);
+    prefs.end();
+    prefs.begin("myrobot", true);
+  }
+
+  Serial.println("[AUTH] ========================================");
+  Serial.printf("[AUTH] Portal Token: %s\n", portalToken.c_str());
+  Serial.println("[AUTH] ========================================");
+
+  mdnsHostname = sanitizeHostname(prefs.getString("hostname", "kiwi"));
+  maxChatHistory = prefs.getInt("chat_hist", 4);
+  if (maxChatHistory < 1 || maxChatHistory > 8) maxChatHistory = 4;
+
+  faceTweenMs = prefs.getInt("face_tween", FACE_TWEEN_MS);
+  if (faceTweenMs < 0 || faceTweenMs > 1000) faceTweenMs = FACE_TWEEN_MS;
 
   prefs.end();
-
 }
 
 
@@ -463,9 +525,8 @@ void saveConfig() {
 
 
   prefs.putInt("act_top_tap", (int)touchActTopTap);
-
   prefs.putInt("act_top_dbl", (int)touchActTopDbl);
-
+  prefs.putInt("act_top_hld", (int)touchActTopHold);
   prefs.putInt("act_lt_tap",  (int)touchActLeftTap);
 
   prefs.putInt("act_lt_dbl",  (int)touchActLeftDbl);
@@ -481,12 +542,14 @@ void saveConfig() {
 
 
   if (micSlotLocked) {
-
     prefs.putInt("micslot", micSlot);
-
   }
 
-
+  prefs.putString("hostname", mdnsHostname);
+  prefs.putInt("face_tween", faceTweenMs);
+  prefs.putInt("chat_hist", maxChatHistory);
+  prefs.putString("portal_tok", portalToken);
+  prefs.putString("ap_pass", String(apPasswordBuf));
 
   prefs.end();
 

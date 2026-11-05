@@ -31,6 +31,13 @@ extern const char *FIRMWARE_VER;
 #define SCREEN_HEIGHT 64
 #define OLED_ADDR 0x3C
 
+#ifndef FACE_I2C_CLK_DURING
+#define FACE_I2C_CLK_DURING 800000UL
+#endif
+
+#define FACE_TWEEN_MS 220
+extern int faceTweenMs;
+
 #define TZ_OFFSET_SEC (5 * 3600 + 30 * 60) // IST (UTC +5:30)
 #define TZ_DST_SEC 0
 extern const char *NTP_SERVER_1;
@@ -53,6 +60,7 @@ constexpr uint32_t TOUCH_DEBOUNCE = 30;
 constexpr uint32_t TOUCH_HOLD_MS = 1500;
 constexpr uint32_t TOUCH_TAP_MAX_MS = 1200;
 constexpr uint32_t TOUCH_CLOCK_MS = 3000;
+constexpr uint32_t TOUCH_HOLD_TOP_MS = 3000;
 constexpr uint32_t TICKLE_CHEEK_WINDOW_MS = 1800;
 constexpr uint32_t TICKLE_COOLDOWN_MS = 6000;
 constexpr uint32_t DUAL_CHEEK_HOLD_MS = 600;
@@ -62,6 +70,7 @@ constexpr uint32_t SLEEP_HOLD_MS = 7000;
 // ============================================================
 // DEFAULT AI SERVICE ENDPOINTS & MODELS
 // ============================================================
+extern char apPasswordBuf[32];
 extern const char *AP_PASSWORD;
 extern const int AP_CHANNEL;
 extern IPAddress apIP;
@@ -151,6 +160,7 @@ extern bool touchFeedbackSound;
 // ---------- Touch Gesture Remapping ----------
 extern TouchAction touchActTopTap;
 extern TouchAction touchActTopDbl;
+extern TouchAction touchActTopHold;
 extern TouchAction touchActLeftTap;
 extern TouchAction touchActLeftDbl;
 extern TouchAction touchActRightTap;
@@ -196,6 +206,7 @@ extern uint32_t lastNtpTryAt;
 extern volatile bool startRecording;
 extern volatile bool busyProcessing;
 extern volatile bool cancelRequest;
+extern volatile uint32_t lastProgressAt;
 
 extern int micSlot;
 extern bool micSlotLocked;
@@ -205,7 +216,7 @@ extern String sttFail;
 extern Emotion currentEmotion;
 extern PetMood petMood;
 extern Flourish flourish;
-extern uint32_t returnIdleAt;
+extern volatile uint32_t returnIdleAt;
 extern uint32_t emotionAutoReturnAt;
 extern uint32_t errorFaceUntil;
 extern uint32_t bootInfoUntil;
@@ -215,6 +226,19 @@ extern uint32_t lastFaceDrawAt;
 extern float gazeX, gazeY;
 extern float gazeTgtX, gazeTgtY;
 extern uint32_t gazeLockUntil;
+
+// ---------- System Security & mDNS ----------
+extern String portalToken;
+extern String mdnsHostname;
+extern bool showBatteryIcon;
+
+enum LogLevel {
+  LOG_LEVEL_ERROR = 0,
+  LOG_LEVEL_WARN = 1,
+  LOG_LEVEL_INFO = 2,
+  LOG_LEVEL_DEBUG = 3
+};
+extern LogLevel currentLogLevel;
 
 // ---------- Autonomous Desk Quirks & Custom Banner ----------
 extern bool boredomEnabled;

@@ -2,6 +2,7 @@
 #include "services/AiTransport.h"
 #include "services/AiTextTools.h"
 #include "config/AppConfig.h"
+#include "core/Timing.h"
 #include "hardware/AudioEngine.h"
 #include "face/FaceEngine.h"
 #include "web/WebPortal.h"
@@ -66,16 +67,18 @@ int ttsSarvam(const String &text) {
   }
   Serial.printf("[TTS/Sarvam] Free heap before: %u\n", (unsigned)ESP.getFreeHeap());
   bool apWasUp = suspendLocalNet();
-  if (ESP.getFreeHeap() < 35000) {
-    Serial.printf("[TTS/Sarvam] Low heap: %u < 35000\n", (unsigned)ESP.getFreeHeap());
-    addTerminalLog("[TTS] Low heap (" + String(ESP.getFreeHeap()) + " < 35000)");
+  if (ESP.getMaxAllocHeap() < 35000) {
+    Serial.printf("[TTS/Sarvam] Low max alloc heap: %u < 35000\n", (unsigned)ESP.getMaxAllocHeap());
+    addTerminalLog("[TTS] Low heap max alloc (" + String(ESP.getMaxAllocHeap()) + " < 35000)");
     restoreWebAndAP(apWasUp);
     return 0;
   }
   if (WiFi.status() != WL_CONNECTED) {
     uint32_t tw = millis();
-    while (WiFi.status() != WL_CONNECTED && millis() - tw < 4000)
-      delay(100);
+    while (WiFi.status() != WL_CONNECTED && millis() - tw < 4000) {
+      serviceUi();
+      yield();
+    }
     if (WiFi.status() != WL_CONNECTED) {
       Serial.println("[TTS/Sarvam] Wi-Fi lost while waiting.");
       addTerminalLog("[TTS] Error: Wi-Fi lost");
@@ -129,8 +132,8 @@ int ttsSarvam(const String &text) {
 
   WiFiClientSecure client;
   client.setInsecure();
-  client.setTimeout(20);
-  client.setHandshakeTimeout(10);
+  client.setTimeout(6000);
+  client.setHandshakeTimeout(6);
   if (!tlsConnect(client, host, "TTS")) {
     client.stop();
     restoreWebAndAP(apWasUp);
@@ -165,7 +168,10 @@ int ttsSarvam(const String &text) {
   Serial.printf("[TTS] HTTP %d%s\n", status, hs.chunked ? " (chunked)" : "");
   if (status != 200) {
     uint32_t tErr = millis();
-    while (!client.available() && client.connected() && millis() - tErr < 1200) delay(10);
+    while (!client.available() && client.connected() && millis() - tErr < 1200) {
+      serviceUi();
+      yield();
+    }
     String errBody;
     while (client.available() && errBody.length() < 400)
       errBody += (char)client.read();
@@ -316,8 +322,8 @@ int ttsSarvam(const String &text) {
     if (n == 0) {
       if (millis() - readStart > 12000)
         break;
-      pumpUI();
-      delay(1);
+      serviceUi();
+      yield();
       continue;
     }
     readStart = millis();
@@ -407,16 +413,18 @@ int ttsPcmOpenAI(const String &text) {
   }
 
   bool apWasUp = suspendLocalNet();
-  if (ESP.getFreeHeap() < 35000) {
-    Serial.printf("[TTS/OpenAI] Low heap (%u < 35000)\n", (unsigned)ESP.getFreeHeap());
-    addTerminalLog("[TTS/OpenAI] Low heap (" + String(ESP.getFreeHeap()) + " < 35000)");
+  if (ESP.getMaxAllocHeap() < 35000) {
+    Serial.printf("[TTS/OpenAI] Low max alloc heap (%u < 35000)\n", (unsigned)ESP.getMaxAllocHeap());
+    addTerminalLog("[TTS/OpenAI] Low heap max alloc (" + String(ESP.getMaxAllocHeap()) + " < 35000)");
     restoreWebAndAP(apWasUp);
     return 0;
   }
   if (WiFi.status() != WL_CONNECTED) {
     uint32_t tw = millis();
-    while (WiFi.status() != WL_CONNECTED && millis() - tw < 4000)
-      delay(100);
+    while (WiFi.status() != WL_CONNECTED && millis() - tw < 4000) {
+      serviceUi();
+      yield();
+    }
     if (WiFi.status() != WL_CONNECTED) {
       Serial.println("[TTS/OpenAI] Wi-Fi lost while waiting.");
       addTerminalLog("[TTS/OpenAI] Wi-Fi lost.");
@@ -443,8 +451,8 @@ int ttsPcmOpenAI(const String &text) {
 
   WiFiClientSecure client;
   client.setInsecure();
-  client.setTimeout(20);
-  client.setHandshakeTimeout(10);
+  client.setTimeout(6000);
+  client.setHandshakeTimeout(6);
   if (!tlsConnect(client, host, "TTS")) {
     client.stop();
     restoreWebAndAP(apWasUp);
@@ -518,11 +526,8 @@ int ttsPcmOpenAI(const String &text) {
     if (n == 0) {
       if (millis() - readStart > 15000)
         break;
-      if (millis() - lastUiPump >= 60) {
-        pumpUI();
-        lastUiPump = millis();
-      }
-      delay(1);
+      serviceUi();
+      yield();
       continue;
     }
     readStart = millis();
@@ -575,14 +580,16 @@ int ttsPcmEleven(const String &text) {
   String path = basePath + elevenVoice + "?output_format=pcm_24000";
 
   bool apWasUp = suspendLocalNet();
-  if (ESP.getFreeHeap() < 35000) {
+  if (ESP.getMaxAllocHeap() < 35000) {
     restoreWebAndAP(apWasUp);
     return 0;
   }
   if (WiFi.status() != WL_CONNECTED) {
     uint32_t tw = millis();
-    while (WiFi.status() != WL_CONNECTED && millis() - tw < 4000)
-      delay(100);
+    while (WiFi.status() != WL_CONNECTED && millis() - tw < 4000) {
+      serviceUi();
+      yield();
+    }
     if (WiFi.status() != WL_CONNECTED) {
       restoreWebAndAP(apWasUp);
       return 0;
@@ -600,8 +607,8 @@ int ttsPcmEleven(const String &text) {
 
   WiFiClientSecure client;
   client.setInsecure();
-  client.setTimeout(20);
-  client.setHandshakeTimeout(10);
+  client.setTimeout(6000);
+  client.setHandshakeTimeout(6);
   if (!tlsConnect(client, host, "TTS")) {
     client.stop();
     restoreWebAndAP(apWasUp);
@@ -676,11 +683,8 @@ int ttsPcmEleven(const String &text) {
     if (n == 0) {
       if (millis() - readStart > 15000)
         break;
-      if (millis() - lastUiPump >= 60) {
-        pumpUI();
-        lastUiPump = millis();
-      }
-      delay(1);
+      serviceUi();
+      yield();
       continue;
     }
     readStart = millis();
@@ -730,14 +734,16 @@ int ttsFishAudio(const String &text) {
     return 0;
 
   bool apWasUp = suspendLocalNet();
-  if (ESP.getFreeHeap() < 35000) {
+  if (ESP.getMaxAllocHeap() < 35000) {
     restoreWebAndAP(apWasUp);
     return 0;
   }
   if (WiFi.status() != WL_CONNECTED) {
     uint32_t tw = millis();
-    while (WiFi.status() != WL_CONNECTED && millis() - tw < 4000)
-      delay(100);
+    while (WiFi.status() != WL_CONNECTED && millis() - tw < 4000) {
+      serviceUi();
+      yield();
+    }
     if (WiFi.status() != WL_CONNECTED) {
       restoreWebAndAP(apWasUp);
       return 0;
@@ -757,8 +763,8 @@ int ttsFishAudio(const String &text) {
 
   WiFiClientSecure client;
   client.setInsecure();
-  client.setTimeout(20);
-  client.setHandshakeTimeout(10);
+  client.setTimeout(6000);
+  client.setHandshakeTimeout(6);
   if (!tlsConnect(client, host, "TTS/FishAudio")) {
     client.stop();
     restoreWebAndAP(apWasUp);
@@ -795,7 +801,10 @@ int ttsFishAudio(const String &text) {
   }
   if (status != 200) {
     uint32_t tErr = millis();
-    while (!client.available() && client.connected() && millis() - tErr < 1200) delay(10);
+    while (!client.available() && client.connected() && millis() - tErr < 1200) {
+      serviceUi();
+      yield();
+    }
     String errBody;
     while (client.available() && errBody.length() < 400)
       errBody += (char)client.read();
@@ -841,11 +850,8 @@ int ttsFishAudio(const String &text) {
     if (n == 0) {
       if (millis() - readStart > 15000)
         break;
-      if (millis() - lastUiPump >= 60) {
-        pumpUI();
-        lastUiPump = millis();
-      }
-      delay(1);
+      serviceUi();
+      yield();
       continue;
     }
     readStart = millis();

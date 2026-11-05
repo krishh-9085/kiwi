@@ -36,6 +36,7 @@
 #include "config/AppConfig.h"
 #include "config/ConfigManager.h"
 #include "core/CoreTypes.h"
+#include "core/Timing.h"
 #include "face/FaceEngine.h"
 #include "hardware/AudioEngine.h"
 #include "hardware/TouchController.h"
@@ -55,11 +56,11 @@ void setup() {
   Serial.begin(115200);
 #if ARDUINO_USB_CDC_ON_BOOT
   uint32_t t0 = millis();
-  while (!Serial && millis() - t0 < 300) {
+  while (!Serial && millis() - t0 < 2000) {
     delay(10);
   }
 #else
-  delay(50);
+  delay(100);
 #endif
   Serial.println();
   Serial.println("==========================================");
@@ -104,11 +105,7 @@ void setup() {
     startAP();
   }
 
-  if (MDNS.begin("myrobot")) {
-    MDNS.addService("http", "tcp", 80);
-    Serial.println("[MDNS] http://myrobot.local");
-    discoverWled();
-  }
+  discoverWled();
 
   initOfflineBrain();
   startWeb();
@@ -140,7 +137,8 @@ static void checkBootGreeting() {
   if (isTonePlaying())
     return;
 
-  // Give up to 4 seconds for WiFi NTP time sync so the greeting matches the exact time of day
+  // Give up to 4 seconds for WiFi NTP time sync so the greeting matches the
+  // exact time of day
   if (!timeSynced && millis() < 4000)
     return;
 
@@ -169,12 +167,14 @@ static void checkBootGreeting() {
 
   String speech = "Hi Krishna, " + timeGreeting + "! What's up?";
 
-  Serial.printf("[BOOT] Greeting Krishna: %s (hour=%d)\n", speech.c_str(), hour);
+  Serial.printf("[BOOT] Greeting Krishna: %s (hour=%d)\n", speech.c_str(),
+                hour);
   setEmotion(EMOTION_HAPPY);
   flourish = FL_STAR;
   flourishT0 = millis();
 
-  if (WiFi.status() == WL_CONNECTED && (ttsKey.length() || sttKey.length() || llmKey.length())) {
+  if (WiFi.status() == WL_CONNECTED &&
+      (ttsKey.length() || sttKey.length() || llmKey.length())) {
     speakText(speech);
   }
   setEmotion(EMOTION_IDLE);
@@ -203,6 +203,7 @@ void loop() {
     String q = webQueuedQuestion;
     webQueuedQuestion = "";
     busyProcessing = true;
+    lastProgressAt = millis();
     cancelRequest = false;
     lastTranscribedQuestion = q;
     addTerminalLog("[WEB] Prompt received: \"" + q + "\"");
@@ -210,20 +211,23 @@ void loop() {
     handleQuestion(q);
     bool wasCancelled = cancelRequest;
     cancelRequest = false;
-    if (returnIdleAt == 0) {
+    if (wasCancelled) {
+      returnIdleAt = 0;
+      setEmotion(EMOTION_IDLE);
+      robotStateDesc = "Ready";
+      Serial.println("[ROBOT] Web request cancelled");
+    } else if (returnIdleAt == 0) {
       setEmotion(EMOTION_IDLE);
     }
     resyncTouch();
     spkEndSpeech();
     busyProcessing = false;
-    if (wasCancelled) {
-      startRecording = true;
-    }
   }
 
   if (startRecording && !busyProcessing) {
     startRecording = false;
     busyProcessing = true;
+    lastProgressAt = millis();
     cancelRequest = false;
     robotStateDesc = "Listening...";
     addTerminalLog("[REC] Listening for up to " + String(RECORD_SECONDS) +
@@ -231,10 +235,15 @@ void loop() {
 
     setEmotion(EMOTION_LISTENING);
     // Smoothly ease face into listening pose before blocking network STT setup
-    uint32_t easeStart = millis();
-    while (millis() - easeStart < 120) {
-      pumpUI();
-      delay(12);
+    waitMs(120);
+
+    if (cancelRequest) {
+      Serial.println("[ROBOT] Cancelled before recording");
+      setEmotion(EMOTION_IDLE);
+      robotStateDesc = "Ready";
+      resyncTouch();
+      busyProcessing = false;
+      return;
     }
 
     if (WiFi.status() != WL_CONNECTED) {
@@ -281,36 +290,35 @@ void loop() {
     }
     bool wasCancelled = cancelRequest;
     cancelRequest = false;
-    if (returnIdleAt == 0) {
+    if (wasCancelled) {
+      returnIdleAt = 0;
+      setEmotion(EMOTION_IDLE);
+      robotStateDesc = "Ready";
+      Serial.println("[ROBOT] Cancelled - returning to Ready");
+    } else if (returnIdleAt == 0) {
       setEmotion(EMOTION_IDLE);
     }
     resyncTouch();
     spkEndSpeech();
     busyProcessing = false;
-    if (wasCancelled) {
-      Serial.println("[ROBOT] Cancelled - restarting listen");
-      startRecording = true;
-    }
   }
 
-  static uint32_t busyWatchdogStart = 0;
+  // 30s Inactivity Watchdog
   if (busyProcessing) {
-    if (busyWatchdogStart == 0) {
-      busyWatchdogStart = millis();
-    } else if (millis() - busyWatchdogStart > 20000) {
+    if (millis() - lastProgressAt > 30000UL) {
       Serial.println(
-          "[WATCHDOG] Operation timed out! Force recovering Kiwi to Ready.");
-      addTerminalLog("[WATCHDOG] Request timed out. Recovering to Ready.");
+          "[WATCHDOG] Inactive for >30s! Force recovering Kiwi to Ready.");
+      addTerminalLog("[WATCHDOG] Request timed out (>30s inactivity). "
+                     "Recovering to Ready.");
+      spkFlush();
+      spkEndSpeech();
+      cancelRequest = true;
       busyProcessing = false;
-      cancelRequest = false;
-      busyWatchdogStart = 0;
+      lastProgressAt = millis();
       robotStateDesc = "Ready";
       setEmotion(EMOTION_IDLE);
       resyncTouch();
-      spkEndSpeech();
     }
-  } else {
-    busyWatchdogStart = 0;
   }
 
   if (returnIdleAt && millis() >= returnIdleAt && !busyProcessing) {
@@ -320,5 +328,28 @@ void loop() {
       setEmotion(EMOTION_IDLE);
   }
 
-  delay(1);
+  // Heap monitor: log every 10s, warn once if max alloc drops below 20KB
+  static uint32_t lastHeapCheck = 0;
+  static bool lowMemWarned = false;
+  if (millis() - lastHeapCheck > 10000UL) {
+    lastHeapCheck = millis();
+    uint32_t freeH = ESP.getFreeHeap();
+    uint32_t maxAlloc = ESP.getMaxAllocHeap();
+    if (currentLogLevel >= LOG_LEVEL_DEBUG) {
+      Serial.printf("[HEAP] Free: %u, MaxAlloc: %u\n", (unsigned)freeH,
+                    (unsigned)maxAlloc);
+    }
+    if (maxAlloc < 20480UL) {
+      if (!lowMemWarned) {
+        Serial.printf("[HEAP] WARNING: Low memory! MaxAlloc below 20KB (%u "
+                      "bytes, free %u bytes)\n",
+                      (unsigned)maxAlloc, (unsigned)freeH);
+        lowMemWarned = true;
+      }
+    } else {
+      lowMemWarned = false;
+    }
+  }
+
+  yield();
 }

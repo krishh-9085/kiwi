@@ -99,10 +99,6 @@ static const char FACE_PAGE_HTML[] PROGMEM = R"RAWFACE(<!doctype html>
       width: min(1260px, 100%);
       margin: 0 auto;
       padding: 24px;
-      padding-top: max(20px, env(safe-area-inset-top, 20px));
-      padding-left: max(16px, env(safe-area-inset-left, 16px));
-      padding-right: max(16px, env(safe-area-inset-right, 16px));
-      padding-bottom: max(24px, env(safe-area-inset-bottom, 24px));
     }
 
     /* Bridge header */
@@ -776,58 +772,29 @@ static const char FACE_PAGE_HTML[] PROGMEM = R"RAWFACE(<!doctype html>
       }
     }
 
-    @media(max-width:768px) {
+    @media(max-width:640px) {
       .wrap {
-        padding: 12px;
-        padding-top: calc(env(safe-area-inset-top, 0px) + 8px);
-        padding-left: max(12px, env(safe-area-inset-left, 12px));
-        padding-right: max(12px, env(safe-area-inset-right, 12px));
-        padding-bottom: max(16px, env(safe-area-inset-bottom, 16px));
-      }
-
-      .bridge {
-        padding: 2px 0 8px;
-        gap: 8px;
+        padding: 16px;
       }
 
       .bezel {
-        width: 44px;
-        height: 34px;
-        border-radius: 8px;
-        gap: 6px;
-      }
-
-      .bezel i {
-        width: 6px;
-        height: 9px;
-      }
-
-      .id {
-        gap: 10px;
+        width: 52px;
+        height: 40px;
       }
 
       h1 {
-        font-size: 17px;
-        margin: 0;
-        letter-spacing: .16em;
-      }
-
-      .id .unit {
-        font-size: 10px;
-        letter-spacing: .12em;
+        font-size: 15px;
       }
 
       .nav {
         width: 100%;
         display: grid;
         grid-template-columns: repeat(3, minmax(0, 1fr));
-        gap: 6px;
       }
 
       .nb {
-        padding: 6px 4px;
+        padding: 8px 4px;
         font-size: 12px;
-        min-height: 36px;
         justify-content: center;
       }
 
@@ -945,6 +912,9 @@ static const char FACE_PAGE_HTML[] PROGMEM = R"RAWFACE(<!doctype html>
         <button class="skin-btn" data-skin="alien"><span class="px-skin" aria-hidden="true"></span><span class="skin-name">Cosmic Alien</span></button>
         <button class="skin-btn" data-skin="ninja"><span class="px-skin" aria-hidden="true"></span><span class="skin-name">Shinobi Ninja</span></button>
         <button class="skin-btn" data-skin="round"><span class="px-skin" aria-hidden="true"></span><span class="skin-name">Round Ocular</span></button>
+        <button class="skin-btn" data-skin="squircle_solid"><span class="px-skin" aria-hidden="true"></span><span class="skin-name">Squircle Solid</span></button>
+        <button class="skin-btn" data-skin="squircle_outline"><span class="px-skin" aria-hidden="true"></span><span class="skin-name">Squircle Outline</span></button>
+        <button class="skin-btn" data-skin="squircle_glint"><span class="px-skin" aria-hidden="true"></span><span class="skin-name">Squircle Glint</span></button>
       </div>
 
       <div class="options-bar">
@@ -1453,7 +1423,10 @@ static const char FACE_PAGE_HTML[] PROGMEM = R"RAWFACE(<!doctype html>
         alien: '<line x1="32" y1="2" x2="32" y2="10" stroke="currentColor" stroke-width="1.5"/><circle cx="32" cy="2.5" r="2" fill="currentColor"/><path d="M12 16 Q20 8 26 16 Q20 24 12 16 Z" fill="currentColor"/><circle cx="19" cy="16" r="2" fill="#000"/><path d="M52 16 Q44 8 38 16 Q44 24 52 16 Z" fill="currentColor"/><circle cx="45" cy="16" r="2" fill="#000"/>',
         ninja: '<line x1="0" y1="4" x2="64" y2="4" stroke="currentColor" stroke-width="1.5"/><rect x="24" y="2" width="16" height="5" rx="1" fill="#000" stroke="currentColor" stroke-width="1"/><circle cx="32" cy="4.5" r="1.2" fill="currentColor"/><polygon points="13,13 27,15 26,19 13,18" fill="currentColor"/><circle cx="19" cy="16" r="1.5" fill="#000"/><polygon points="37,15 51,13 51,18 38,19" fill="currentColor"/><circle cx="45" cy="16" r="1.5" fill="#000"/>',
         round: '<line x1="14" y1="5" x2="26" y2="7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><line x1="50" y1="5" x2="38" y2="7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="20" cy="17" r="8" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="20" cy="17" r="5" fill="currentColor"/><circle cx="20" cy="17" r="2" fill="#000"/><circle cx="44" cy="17" r="8" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="44" cy="17" r="5" fill="currentColor"/><circle cx="44" cy="17" r="2" fill="#000"/>',
-        kiwi: '<path d="M13 8 H27 V17 C27 21 24 23 20 23 C16 23 13 21 13 17 Z" fill="currentColor"/><path d="M16 8 H24 V14 C24 16 22 17 20 17 C18 17 16 16 16 14 Z" fill="#000"/><rect x="21" y="9" width="2" height="2" fill="currentColor"/><path d="M37 8 H51 V17 C51 21 48 23 44 23 C40 23 37 21 37 17 Z" fill="currentColor"/><path d="M40 8 H48 V14 C48 16 46 17 44 17 C42 17 40 16 40 14 Z" fill="#000"/><rect x="45" y="9" width="2" height="2" fill="currentColor"/>'
+        kiwi: '<path d="M13 8 H27 V17 C27 21 24 23 20 23 C16 23 13 21 13 17 Z" fill="currentColor"/><path d="M16 8 H24 V14 C24 16 22 17 20 17 C18 17 16 16 16 14 Z" fill="#000"/><rect x="21" y="9" width="2" height="2" fill="currentColor"/><path d="M37 8 H51 V17 C51 21 48 23 44 23 C40 23 37 21 37 17 Z" fill="currentColor"/><path d="M40 8 H48 V14 C48 16 46 17 44 17 C42 17 40 16 40 14 Z" fill="#000"/><rect x="45" y="9" width="2" height="2" fill="currentColor"/>',
+        squircle_solid: '<rect x="12" y="9" width="15" height="13" rx="5" fill="currentColor"/><rect x="37" y="9" width="15" height="13" rx="5" fill="currentColor"/><rect x="17" y="13" width="5" height="5" fill="#000"/><rect x="42" y="13" width="5" height="5" fill="#000"/>',
+        squircle_outline: '<rect x="13" y="10" width="13" height="11" rx="4" fill="none" stroke="currentColor" stroke-width="1.2"/><rect x="38" y="10" width="13" height="11" rx="4" fill="none" stroke="currentColor" stroke-width="1.2"/><circle cx="19.5" cy="15.5" r="2.5" fill="currentColor"/><circle cx="44.5" cy="15.5" r="2.5" fill="currentColor"/>',
+        squircle_glint: '<rect x="12" y="9" width="15" height="13" rx="5" fill="currentColor"/><rect x="37" y="9" width="15" height="13" rx="5" fill="currentColor"/><rect x="17" y="13" width="5" height="5" fill="#000"/><rect x="42" y="13" width="5" height="5" fill="#000"/><rect x="20" y="13" width="1.5" height="1.5" fill="currentColor"/><rect x="45" y="13" width="1.5" height="1.5" fill="currentColor"/>'
       };
 
       function renderSkinPreviews() {

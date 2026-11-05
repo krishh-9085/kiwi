@@ -1,7 +1,8 @@
 #pragma once
 #include <Arduino.h>
 
-static const int MAX_CHAT_HISTORY = 4;
+static const int MAX_CHAT_HISTORY = 8;
+extern int maxChatHistory;
 
 struct ChatTurn {
   String question;

@@ -7,7 +7,8 @@ const char *FIRMWARE_VER = FIRMWARE_VERSION;
 const char *NTP_SERVER_1 = "pool.ntp.org";
 const char *NTP_SERVER_2 = "time.nist.gov";
 
-const char *AP_PASSWORD = "25691128";
+char apPasswordBuf[32] = "25691128";
+const char *AP_PASSWORD = apPasswordBuf;
 const int AP_CHANNEL = 1;
 IPAddress apIP(192, 168, 4, 1);
 IPAddress apMask(255, 255, 255, 0);
@@ -111,7 +112,8 @@ bool touchFeedbackSound = true; // Instant audio/visual feedback on touch
 
 // ---------- Touch Gesture Remapping ----------
 TouchAction touchActTopTap = TOUCH_ACT_LISTEN;
-TouchAction touchActTopDbl = TOUCH_ACT_CYCLE_SKIN;
+TouchAction touchActTopDbl = TOUCH_ACT_NONE;
+TouchAction touchActTopHold = TOUCH_ACT_CYCLE_SKIN;
 TouchAction touchActLeftTap = TOUCH_ACT_DISMISS;
 TouchAction touchActLeftDbl = TOUCH_ACT_CLOCK;
 TouchAction touchActRightTap = TOUCH_ACT_DISMISS;
@@ -203,16 +205,18 @@ uint32_t lastNtpTryAt = 0;
 volatile bool startRecording = false;
 volatile bool busyProcessing = false;
 volatile bool cancelRequest = false;
+volatile uint32_t lastProgressAt = 0;
 
 int micSlot = MIC_SLOT_OFFSET;
 bool micSlotLocked = false;
 String sttFail = "";
 
 // ---------- Face & Emotions State ----------
+int faceTweenMs = FACE_TWEEN_MS;
 Emotion currentEmotion = EMOTION_IDLE;
 PetMood petMood = PET_LOVE;
 Flourish flourish = FL_NONE;
-uint32_t returnIdleAt = 0;
+volatile uint32_t returnIdleAt = 0;
 uint32_t emotionAutoReturnAt = 0;
 uint32_t errorFaceUntil = 0;
 uint32_t bootInfoUntil = 0;
@@ -222,6 +226,12 @@ uint32_t lastFaceDrawAt = 0;
 float gazeX = 0, gazeY = 0;
 float gazeTgtX = 0, gazeTgtY = 0;
 uint32_t gazeLockUntil = 0;
+
+// ---------- System Security & mDNS ----------
+String portalToken = "";
+String mdnsHostname = "kiwi";
+bool showBatteryIcon = false;
+LogLevel currentLogLevel = LOG_LEVEL_INFO;
 
 // ---------- Autonomous Desk Quirks & Custom Banner ----------
 bool boredomEnabled = false;

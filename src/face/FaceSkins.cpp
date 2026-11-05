@@ -10,6 +10,104 @@
 static inline int minI(int a, int b) { return a < b ? a : b; }
 static inline int maxI(int a, int b) { return a > b ? a : b; }
 
+// Precomputed 32-point unit squircle table (n = 4 superellipse: |cos t|^(1/2), |sin t|^(1/2))
+static float squircleUnitX[32];
+static float squircleUnitY[32];
+static bool squircleTableReady = false;
+
+static void initSquircleTable() {
+  if (squircleTableReady)
+    return;
+  for (int i = 0; i < 32; i++) {
+    float t = (float)i * (6.283185307f / 32.0f);
+    float c = cosf(t);
+    float s = sinf(t);
+    float signC = (c >= 0.0f) ? 1.0f : -1.0f;
+    float signS = (s >= 0.0f) ? 1.0f : -1.0f;
+    squircleUnitX[i] = signC * sqrtf(fabsf(c));
+    squircleUnitY[i] = signS * sqrtf(fabsf(s));
+  }
+  squircleTableReady = true;
+}
+
+static void computeSquirclePoints(int cx, int cy, int w, int h, int ptsX[32], int ptsY[32]) {
+  initSquircleTable();
+  float a = (float)w * 0.5f;
+  float b = (float)h * 0.5f;
+  for (int i = 0; i < 32; i++) {
+    ptsX[i] = (int)lroundf((float)cx + a * squircleUnitX[i]);
+    ptsY[i] = (int)lroundf((float)cy + b * squircleUnitY[i]);
+  }
+}
+
+static void fillSquircle(int x0, int top, int w, int h, int cx, int cy) {
+  if (w < 12 || h < 10) {
+    int rad = minI(w, h) / 3;
+    if (rad < 1) rad = 1;
+    display.fillRoundRect(x0, top, w, h, rad, SSD1306_WHITE);
+    return;
+  }
+  int ptsX[32];
+  int ptsY[32];
+  computeSquirclePoints(cx, cy, w, h, ptsX, ptsY);
+
+  int minY = ptsY[0], maxY = ptsY[0];
+  for (int i = 1; i < 32; i++) {
+    if (ptsY[i] < minY) minY = ptsY[i];
+    if (ptsY[i] > maxY) maxY = ptsY[i];
+  }
+  if (minY < top) minY = top;
+  if (maxY > top + h - 1) maxY = top + h - 1;
+
+  for (int y = minY; y <= maxY; y++) {
+    int minX = 9999;
+    int maxX = -9999;
+    for (int i = 0; i < 32; i++) {
+      int j = (i + 1) % 32;
+      int y1 = ptsY[i];
+      int y2 = ptsY[j];
+      int x1 = ptsX[i];
+      int x2 = ptsX[j];
+      if (y1 == y2) {
+        if (y1 == y) {
+          int lx = minI(x1, x2);
+          int rx = maxI(x1, x2);
+          if (lx < minX) minX = lx;
+          if (rx > maxX) maxX = rx;
+        }
+        continue;
+      }
+      if ((y1 <= y && y <= y2) || (y2 <= y && y <= y1)) {
+        int xCross = x1 + (int)((int64_t)(y - y1) * (x2 - x1) / (y2 - y1));
+        if (xCross < minX) minX = xCross;
+        if (xCross > maxX) maxX = xCross;
+      }
+    }
+    if (minX <= maxX) {
+      if (minX < x0) minX = x0;
+      if (maxX > x0 + w - 1) maxX = x0 + w - 1;
+      display.drawFastHLine(minX, y, maxX - minX + 1, SSD1306_WHITE);
+    }
+  }
+}
+
+static void drawSquircleOutline(int x0, int top, int w, int h, int cx, int cy) {
+  if (w < 12 || h < 10) {
+    int rad = minI(w, h) / 3;
+    if (rad < 1) rad = 1;
+    display.drawRoundRect(x0, top, w, h, rad, SSD1306_WHITE);
+    return;
+  }
+  int ptsX[32];
+  int ptsY[32];
+  computeSquirclePoints(cx, cy, w, h, ptsX, ptsY);
+
+  for (int i = 0; i < 32; i++) {
+    int j = (i + 1) % 32;
+    display.drawLine(ptsX[i], ptsY[i], ptsX[j], ptsY[j], SSD1306_WHITE);
+  }
+}
+
 // Slanted eyelid mask (angry / sad / sleepy / thinking). Two black triangles
 // form a quad that slopes from the left lid height to the right lid height.
 static inline void maskLids(int x0, int x1, int top, int lidIn, int lidOut,
@@ -447,6 +545,130 @@ void drawEye(int cx, int cy, int w, int h, int r, int lidIn, int lidOut,
         }
       }
     }
+    maskLids(x0, x1, top, lidIn, lidOut, isLeft);
+    maskCheek(cx, bot, w, cheek);
+    return;
+  }
+
+  // 17. SQUIRCLE SOLID SKIN
+  if (currentEyeSkin == SKIN_SQUIRCLE_SOLID) {
+    if (h <= 3) {
+      display.fillRoundRect(x0, cy - 1, w, maxI(2, h), 1, SSD1306_WHITE);
+      return;
+    }
+
+    fillSquircle(x0, top, w, h, cx, cy);
+
+    // Black square pupil: side = min(w, h) * 0.38
+    int pupilSide = (int)lroundf(minI(w, h) * 0.38f);
+    if (pupilSide < 3)
+      pupilSide = 3;
+    int maxOffX = maxI(0, (w - pupilSide) / 2 - 2);
+    int maxOffY = maxI(0, (h - pupilSide) / 2 - 2);
+    int shiftX = (int)lroundf(gazeX * 0.45f);
+    int shiftY = (int)lroundf(gazeY * 0.45f);
+    if (shiftX < -maxOffX) shiftX = -maxOffX;
+    if (shiftX > maxOffX) shiftX = maxOffX;
+    if (shiftY < -maxOffY) shiftY = -maxOffY;
+
+    int px = cx + shiftX - pupilSide / 2;
+    int py = cy + shiftY - pupilSide / 2;
+    if (px < x0 + 2) px = x0 + 2;
+    if (px + pupilSide > x1 - 2) px = x1 - 2 - pupilSide;
+    if (py < top + 2) py = top + 2;
+    if (py + pupilSide > bot - 2) py = bot - 2 - pupilSide;
+
+    if (h > 6) {
+      display.fillRect(px, py, pupilSide, pupilSide, SSD1306_BLACK);
+    }
+
+    maskLids(x0, x1, top, lidIn, lidOut, isLeft);
+    maskCheek(cx, bot, w, cheek);
+    return;
+  }
+
+  // 18. SQUIRCLE OUTLINE SKIN
+  if (currentEyeSkin == SKIN_SQUIRCLE_OUTLINE) {
+    if (h <= 3) {
+      display.drawFastHLine(x0, cy, w, SSD1306_WHITE);
+      return;
+    }
+
+    drawSquircleOutline(x0, top, w, h, cx, cy);
+
+    // Solid white circular pupil: radius = min(w, h) * 0.18
+    int pupilR = (int)lroundf(minI(w, h) * 0.18f);
+    if (pupilR < 1)
+      pupilR = 1;
+    int maxOffX = maxI(0, w / 2 - pupilR - 2);
+    int maxOffY = maxI(0, h / 2 - pupilR - 2);
+    int shiftX = (int)lroundf(gazeX * 0.45f);
+    int shiftY = (int)lroundf(gazeY * 0.45f);
+    if (shiftX < -maxOffX) shiftX = -maxOffX;
+    if (shiftX > maxOffX) shiftX = maxOffX;
+    if (shiftY < -maxOffY) shiftY = -maxOffY;
+
+    int px = cx + shiftX;
+    int py = cy + shiftY;
+    if (px - pupilR < x0 + 2) px = x0 + 2 + pupilR;
+    if (px + pupilR > x1 - 2) px = x1 - 2 - pupilR;
+    if (py - pupilR < top + 2) py = top + 2 + pupilR;
+    if (py + pupilR > bot - 2) py = bot - 2 - pupilR;
+
+    if (h > 6) {
+      display.fillCircle(px, py, pupilR, SSD1306_WHITE);
+    }
+
+    maskLids(x0, x1, top, lidIn, lidOut, isLeft);
+    maskCheek(cx, bot, w, cheek);
+    if (lidIn > 0 || lidOut > 0) {
+      int lL = isLeft ? lidOut : lidIn;
+      int lR = isLeft ? lidIn : lidOut;
+      display.drawLine(x0, top + lL, x1, top + lR, SSD1306_WHITE);
+    }
+    return;
+  }
+
+  // 19. SQUIRCLE GLINT SKIN
+  if (currentEyeSkin == SKIN_SQUIRCLE_GLINT) {
+    if (h <= 3) {
+      display.fillRoundRect(x0, cy - 1, w, maxI(2, h), 1, SSD1306_WHITE);
+      return;
+    }
+
+    fillSquircle(x0, top, w, h, cx, cy);
+
+    // Black square pupil: side = min(w, h) * 0.38
+    int pupilSide = (int)lroundf(minI(w, h) * 0.38f);
+    if (pupilSide < 3)
+      pupilSide = 3;
+    int maxOffX = maxI(0, (w - pupilSide) / 2 - 2);
+    int maxOffY = maxI(0, (h - pupilSide) / 2 - 2);
+    int shiftX = (int)lroundf(gazeX * 0.45f);
+    int shiftY = (int)lroundf(gazeY * 0.45f);
+    if (shiftX < -maxOffX) shiftX = -maxOffX;
+    if (shiftX > maxOffX) shiftX = maxOffX;
+    if (shiftY < -maxOffY) shiftY = -maxOffY;
+
+    int px = cx + shiftX - pupilSide / 2;
+    int py = cy + shiftY - pupilSide / 2;
+    if (px < x0 + 2) px = x0 + 2;
+    if (px + pupilSide > x1 - 2) px = x1 - 2 - pupilSide;
+    if (py < top + 2) py = top + 2;
+    if (py + pupilSide > bot - 2) py = bot - 2 - pupilSide;
+
+    if (h > 6) {
+      display.fillRect(px, py, pupilSide, pupilSide, SSD1306_BLACK);
+
+      // Small white square glint inside the pupil (top-right, offset 1px from edges)
+      if (pupilSide >= 5) {
+        int glintSide = maxI(1, pupilSide / 4);
+        int gx = px + pupilSide - 1 - glintSide;
+        int gy = py + 1;
+        display.fillRect(gx, gy, glintSide, glintSide, SSD1306_WHITE);
+      }
+    }
+
     maskLids(x0, x1, top, lidIn, lidOut, isLeft);
     maskCheek(cx, bot, w, cheek);
     return;

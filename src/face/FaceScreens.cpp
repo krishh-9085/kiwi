@@ -1,4 +1,5 @@
 #include "face/FaceScreens.h"
+#include "core/Timing.h"
 #include "animation/AnimationEngine.h"
 #include "behavior/InteractionManager.h"
 #include "config/AppConfig.h"
@@ -248,13 +249,7 @@ void showErrorFace(uint32_t ms) {
   setEmotion(EMOTION_ERROR);
   soundError();
   errorFaceUntil = millis() + ms + 300;
-  uint32_t t0 = millis();
-  while (millis() - t0 < ms) {
-    if (cancelRequest)
-      break;
-    pumpUI();
-    delay(2);
-  }
+  waitMs(ms, []() -> bool { return (bool)cancelRequest; });
 }
 
 static void drawStatusHeader(const char *badge, bool inverted, int badgeX,
@@ -396,27 +391,41 @@ static void drawConnectedBase(const char *title, float checkProgress) {
 void drawConnectedNotice(const char *title, uint32_t holdMs) {
   if (!oledOK)
     return;
-  // Quick draw-in of the checkmark (~200 ms), then hold
-  const int STEPS = 8;
-  for (int i = 1; i <= STEPS; i++) {
-    drawConnectedBase(title, smooth01((float)i / (float)STEPS));
-    presentDisplay(true);
-    delay(24);
+  const uint32_t animMs = 200;
+  uint32_t t0 = millis();
+  uint32_t totalMs = animMs + (holdMs > animMs ? holdMs - animMs : 0);
+  uint32_t lastStepAt = 0;
+
+  while (millis() - t0 < totalMs) {
+    uint32_t elapsed = millis() - t0;
+    if (elapsed <= animMs) {
+      if (millis() - lastStepAt >= 24) {
+        lastStepAt = millis();
+        float progress = (float)elapsed / (float)animMs;
+        drawConnectedBase(title, smooth01(progress));
+        presentDisplay(true);
+      }
+    }
+    serviceUi();
+    yield();
   }
-  if (holdMs > 200)
-    delay(holdMs - 200);
 }
 
 void showStatus(const char *l1, const char *l2, uint32_t ms) {
   drawMessage(l1, l2);
   soundError();
   uint32_t t0 = millis();
+  uint32_t lastTick = 0;
   while (millis() - t0 < ms) {
     if (cancelRequest)
       break;
-    updateTonePlayer();
-    pumpUI();
-    delay(2);
+    uint32_t now = millis();
+    if (now - lastTick >= 5) {
+      lastTick = now;
+      updateTonePlayer();
+      serviceUi();
+    }
+    yield();
   }
 }
 

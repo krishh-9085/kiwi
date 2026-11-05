@@ -88,10 +88,6 @@ void handleOtaPage() {
       width: min(1260px, 100%);
       margin: 0 auto;
       padding: 24px;
-      padding-top: max(20px, env(safe-area-inset-top, 20px));
-      padding-left: max(16px, env(safe-area-inset-left, 16px));
-      padding-right: max(16px, env(safe-area-inset-right, 16px));
-      padding-bottom: max(24px, env(safe-area-inset-bottom, 24px));
     }
 
     /* Bridge header */
@@ -478,63 +474,30 @@ void handleOtaPage() {
       }
     }
 
-    @media(max-width:768px) {
+    @media(max-width:640px) {
       .wrap {
-        padding: 12px;
-        padding-top: calc(env(safe-area-inset-top, 0px) + 8px);
-        padding-left: max(12px, env(safe-area-inset-left, 12px));
-        padding-right: max(12px, env(safe-area-inset-right, 12px));
-        padding-bottom: max(16px, env(safe-area-inset-bottom, 16px));
-      }
-
-      .bridge {
-        padding: 2px 0 8px;
-        gap: 8px;
+        padding: 16px;
       }
 
       .bezel {
-        width: 44px;
-        height: 34px;
-        border-radius: 8px;
-        gap: 6px;
-      }
-
-      .bezel i {
-        width: 6px;
-        height: 9px;
-      }
-
-      .id {
-        gap: 10px;
+        width: 52px;
+        height: 40px;
       }
 
       h1.brand {
-        font-size: 17px;
-        margin: 0;
-        letter-spacing: .16em;
-      }
-
-      .id .unit {
-        font-size: 10px;
-        letter-spacing: .12em;
+        font-size: 15px;
       }
 
       .nav {
         width: 100%;
         display: grid;
         grid-template-columns: repeat(3, minmax(0, 1fr));
-        gap: 6px;
       }
 
       .nb {
-        padding: 6px 4px;
+        padding: 8px 4px;
         font-size: 12px;
-        min-height: 36px;
         justify-content: center;
-      }
-
-      .hull {
-        padding: 18px 14px;
       }
     }
 

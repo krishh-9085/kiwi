@@ -1,10 +1,9 @@
 #include "services/AiChatHistory.h"
 #include "services/AiTextTools.h"
 #include "config/AppConfig.h"
+#include <utility>
 
-// ============================================================
-
-
+int maxChatHistory = 4;
 ChatTurn chatHistory[MAX_CHAT_HISTORY];
 int chatHistoryCount = 0;
 static uint32_t lastChatTime = 0;
@@ -32,20 +31,18 @@ void checkChatHistoryTimeout() {
 void addChatHistory(const String &q, const String &a) {
   if (q.length() == 0 || a.length() == 0)
     return;
-  if (chatHistoryCount >= MAX_CHAT_HISTORY) {
-    for (int i = 0; i < MAX_CHAT_HISTORY - 1; i++) {
-      chatHistory[i] = chatHistory[i + 1];
+  int limit = (maxChatHistory >= 1 && maxChatHistory <= MAX_CHAT_HISTORY) ? maxChatHistory : 4;
+  if (chatHistoryCount >= limit) {
+    for (int i = 0; i < chatHistoryCount - 1; i++) {
+      chatHistory[i] = std::move(chatHistory[i + 1]);
     }
-    chatHistoryCount = MAX_CHAT_HISTORY - 1;
+    chatHistoryCount = limit - 1;
   }
   chatHistory[chatHistoryCount].question = utf8Truncate(q, 160);
   chatHistory[chatHistoryCount].answer = utf8Truncate(a, 220);
   chatHistoryCount++;
   lastChatTime = millis();
   Serial.printf("[CONVO] Stored turn %d/%d in memory (Free heap: %u)\n",
-                chatHistoryCount, MAX_CHAT_HISTORY,
+                chatHistoryCount, limit,
                 (unsigned)ESP.getFreeHeap());
 }
-
-// ============================================================
-// LARGE LANGUAGE MODELS (LLM)

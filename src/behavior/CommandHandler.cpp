@@ -1,5 +1,6 @@
 #include "behavior/CommandHandler.h"
 #include "config/AppConfig.h"
+#include "core/Timing.h"
 #include "config/ConfigManager.h"
 #include "face/FaceEngine.h"
 #include "hardware/AudioEngine.h"
@@ -69,8 +70,8 @@ bool handleTimeCommand(const String &qIn) {
       break;
     pumpWeb();
     maintainWiFi();
-    pumpUI();
-    delay(10);
+    serviceUi();
+    yield();
   }
   showClockScreen = false;
   setEmotion(EMOTION_HAPPY);
@@ -114,8 +115,8 @@ bool handleWeatherCommand(const String &qIn) {
       break;
     pumpWeb();
     maintainWiFi();
-    pumpUI();
-    delay(10);
+    serviceUi();
+    yield();
   }
   showWeatherScreen = false;
   setEmotion(EMOTION_HAPPY);
@@ -274,6 +275,12 @@ bool handleSkinCommand(const String &qIn) {
     targetSkin = SKIN_ROUND; name = "Round";
   } else if (hasAny(q, {"default", "normal", "clean", "reset skin", "डिफ़ॉल्ट", "डिफॉल्ट"})) {
     targetSkin = SKIN_DEFAULT; name = "Default";
+  } else if (hasAny(q, {"squircle outline", "outline squircle"})) {
+    targetSkin = SKIN_SQUIRCLE_OUTLINE; name = "Squircle Outline";
+  } else if (hasAny(q, {"squircle glint", "glint squircle"})) {
+    targetSkin = SKIN_SQUIRCLE_GLINT; name = "Squircle Glint";
+  } else if (hasAny(q, {"squircle", "squircle solid", "स्क्वार्कल"})) {
+    targetSkin = SKIN_SQUIRCLE_SOLID; name = "Squircle Solid";
   }
 
   if (name.length() == 0)

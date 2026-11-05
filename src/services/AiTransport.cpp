@@ -1,5 +1,6 @@
 #include "services/AiTransport.h"
 #include "config/AppConfig.h"
+#include "core/Timing.h"
 #include "behavior/InteractionManager.h"
 
 // ============================================================
@@ -21,7 +22,8 @@ bool httpReadLine(WiFiClient &c, String &line, uint32_t timeoutMs) {
         return false;
       if ((uint32_t)(millis() - idleT0) > timeoutMs)
         return false; // Idle gap limit aligned with caller timeout (prevents premature TTS stream cutoff)
-      delay(1);
+      serviceUi();
+      yield();
     }
   }
   return false;
@@ -79,10 +81,7 @@ bool ensureDns(const String &host) {
   Serial.println("[DNS] Failed, trying 8.8.8.8 / 1.1.1.1");
   WiFi.config(WiFi.localIP(), WiFi.gatewayIP(), WiFi.subnetMask(),
               IPAddress(8, 8, 8, 8), IPAddress(1, 1, 1, 1));
-  pumpUI();
-  delay(150);
-  pumpUI();
-  delay(150);
+  waitMs(300);
   if (WiFi.hostByName(host.c_str(), ip) == 1) {
     Serial.printf("[DNS] %s -> %s (fallback)\n", host.c_str(),
                   ip.toString().c_str());
@@ -95,13 +94,13 @@ bool ensureDns(const String &host) {
 bool tlsConnect(WiFiClientSecure &c, const String &host, const char *tag) {
   for (int attempt = 1; attempt <= 2; attempt++) {
     c.stop();
-    pumpUI();  // Keep face animating during TLS setup
+    serviceUi();  // Keep face animating during TLS setup
     Serial.printf("[%s] TLS connect %s try %d heap=%u maxblk=%u\n", tag,
                   host.c_str(), attempt, (unsigned)ESP.getFreeHeap(),
                   (unsigned)ESP.getMaxAllocHeap());
     uint32_t t0 = millis();
     bool ok = c.connect(host.c_str(), 443, 6000);
-    pumpUI();  // Refresh face right after blocking connect returns
+    serviceUi();  // Refresh face right after blocking connect returns
     Serial.printf("[%s] connect()=%d after %lu ms\n", tag, ok ? 1 : 0,
                   (unsigned long)(millis() - t0));
     if (ok)
@@ -112,10 +111,7 @@ bool tlsConnect(WiFiClientSecure &c, const String &host, const char *tag) {
     Serial.printf("[%s] TLS error %d: %s\n", tag, code, err);
     if (cancelRequest)
       return false;
-    pumpUI();
-    delay(200);
-    pumpUI();
-    delay(200);
+    waitMs(400);
   }
   return false;
 }
@@ -128,7 +124,8 @@ bool clientWriteAll(WiFiClient &c, const uint8_t *p, size_t n) {
     if (w <= 0) {
       if (millis() - t0 > 8000)
         return false;
-      delay(2);
+      serviceUi();
+      yield();
       continue;
     }
     off += w;

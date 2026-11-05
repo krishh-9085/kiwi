@@ -10,3 +10,4 @@ String normalizeSttProvider(const String &v);
 String normalizeTtsProvider(const String &v);
 String sanitizeUrl(const String &val, const char *defaultUrl);
 String sanitizeField(const String &val, const char *defaultVal = "");
+String sanitizeHostname(const String &raw);

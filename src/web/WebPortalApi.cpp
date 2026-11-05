@@ -27,6 +27,10 @@ static String escJson(String s) {
 }
 
 void handleDoAction() {
+  if (!isAuthorized()) {
+    server.send(401, "application/json", "{\"ok\":false,\"error\":\"Unauthorized\"}");
+    return;
+  }
   lastUserInteractionAt = millis();
 
   // Web Mic Audio Record Trigger
@@ -204,6 +208,9 @@ void handleDoAction() {
     else if (s == "ninja" || s == "shinobi" || s == "naruto") currentEyeSkin = SKIN_NINJA;
     else if (s == "round" || s == "circle" || s == "ocular") currentEyeSkin = SKIN_ROUND;
     else if (s == "kiwi" || s == "deskbuddy" || s == "buddy" || s == "cute" || s == "relaxed" || s == "bored") currentEyeSkin = SKIN_KIWI;
+    else if (s == "squircle_solid" || s == "squircle") currentEyeSkin = SKIN_SQUIRCLE_SOLID;
+    else if (s == "squircle_outline") currentEyeSkin = SKIN_SQUIRCLE_OUTLINE;
+    else if (s == "squircle_glint") currentEyeSkin = SKIN_SQUIRCLE_GLINT;
     else currentEyeSkin = SKIN_DEFAULT;
 
     Preferences p;
@@ -455,7 +462,9 @@ void handleStatus() {
   int idx = (int)currentEmotion;
   if (idx < 0 || idx > 33)
     idx = 0;
-  String j = "{\"emotion\":\"" + String(names[idx]) + "\",\"busy\":";
+  String j;
+  j.reserve(2048);
+  j = "{\"host\":\"" + escJson(mdnsHostname + ".local") + "\",\"emotion\":\"" + String(names[idx]) + "\",\"busy\":";
   j += busyProcessing ? "true," : "false,";
   j += "\"sleeping\":";
   j += (inCircadianSleep || manualSleep) ? "true," : "false,";
@@ -463,7 +472,7 @@ void handleStatus() {
   const char *skinNames[] = {
     "default", "cyberpunk", "cat", "retro", "anime", "hearts", "steampunk", "demon",
     "matrix", "cyborg", "mecha", "sunglasses", "puppy", "hypno", "alien", "ninja", "round",
-    "kiwi"
+    "kiwi", "squircle_solid", "squircle_outline", "squircle_glint"
   };
   int skIdx = (int)currentEyeSkin;
   if (skIdx < 0 || skIdx >= SKIN_COUNT) skIdx = 0;
@@ -493,24 +502,27 @@ void handleStatus() {
 }
 
 void handleConfigApi() {
-  String j = "{";
-  j += "\"wifi\":{\"ssid\":\"" + escJson(wifiSSID) + "\",\"password\":\"" + escJson(wifiPassword) + "\"},";
+  String j;
+  j.reserve(2048);
+  j = "{";
+  j += "\"wifi\":{\"ssid\":\"" + escJson(wifiSSID) + "\",\"password\":\"" + escJson(maskSecret(wifiPassword)) + "\"},";
   j += "\"stt\":{\"provider\":\"" + escJson(sttProvider) + "\",\"lang\":\"" + escJson(sttLang) + "\",";
-  j += "\"url\":\"" + escJson(sttEndpoint) + "\",\"key\":\"" + escJson(sttKey) + "\",\"model\":\"" + escJson(sttModel) + "\",";
-  j += "\"groqUrl\":\"" + escJson(groqSttEndpoint) + "\",\"groqKey\":\"" + escJson(groqSttKey) + "\",\"groqModel\":\"" + escJson(groqSttModel) + "\",";
-  j += "\"openaiUrl\":\"" + escJson(openaiSttEndpoint) + "\",\"openaiKey\":\"" + escJson(openaiSttKey) + "\",\"openaiModel\":\"" + escJson(openaiSttModel) + "\"},";
-  j += "\"llm\":{\"provider\":\"" + escJson(llmProvider) + "\",\"url\":\"" + escJson(llmEndpoint) + "\",\"key\":\"" + escJson(llmKey) + "\",\"model\":\"" + escJson(llmModel) + "\",";
-  j += "\"groqUrl\":\"" + escJson(groqEndpoint) + "\",\"groqKey\":\"" + escJson(groqKey) + "\",\"groqModel\":\"" + escJson(groqModel) + "\"},";
-  j += "\"tts\":{\"provider\":\"" + escJson(ttsProvider) + "\",\"url\":\"" + escJson(ttsEndpoint) + "\",\"key\":\"" + escJson(ttsKey) + "\",\"model\":\"" + escJson(ttsModel) + "\",\"voice\":\"" + escJson(ttsVoice) + "\",";
-  j += "\"openaiUrl\":\"" + escJson(openaiTtsEndpoint) + "\",\"openaiKey\":\"" + escJson(openaiTtsKey) + "\",\"openaiModel\":\"" + escJson(openaiTtsModel) + "\",\"openaiVoice\":\"" + escJson(openaiTtsVoice) + "\",";
-  j += "\"elevenUrl\":\"" + escJson(elevenEndpoint) + "\",\"elevenKey\":\"" + escJson(elevenKey) + "\",\"elevenModel\":\"" + escJson(elevenModel) + "\",\"elevenVoice\":\"" + escJson(elevenVoice) + "\",";
-  j += "\"fishUrl\":\"" + escJson(fishEndpoint) + "\",\"fishKey\":\"" + escJson(fishKey) + "\",\"fishModel\":\"" + escJson(fishModel) + "\",\"fishVoice\":\"" + escJson(fishVoice) + "\"},";
+  j += "\"url\":\"" + escJson(sttEndpoint) + "\",\"key\":\"" + escJson(maskSecret(sttKey)) + "\",\"model\":\"" + escJson(sttModel) + "\",";
+  j += "\"groqUrl\":\"" + escJson(groqSttEndpoint) + "\",\"groqKey\":\"" + escJson(maskSecret(groqSttKey)) + "\",\"groqModel\":\"" + escJson(groqSttModel) + "\",";
+  j += "\"openaiUrl\":\"" + escJson(openaiSttEndpoint) + "\",\"openaiKey\":\"" + escJson(maskSecret(openaiSttKey)) + "\",\"openaiModel\":\"" + escJson(openaiSttModel) + "\"},";
+  j += "\"llm\":{\"provider\":\"" + escJson(llmProvider) + "\",\"url\":\"" + escJson(llmEndpoint) + "\",\"key\":\"" + escJson(maskSecret(llmKey)) + "\",\"model\":\"" + escJson(llmModel) + "\",";
+  j += "\"groqUrl\":\"" + escJson(groqEndpoint) + "\",\"groqKey\":\"" + escJson(maskSecret(groqKey)) + "\",\"groqModel\":\"" + escJson(groqModel) + "\"},";
+  j += "\"tts\":{\"provider\":\"" + escJson(ttsProvider) + "\",\"url\":\"" + escJson(ttsEndpoint) + "\",\"key\":\"" + escJson(maskSecret(ttsKey)) + "\",\"model\":\"" + escJson(ttsModel) + "\",\"voice\":\"" + escJson(ttsVoice) + "\",";
+  j += "\"openaiUrl\":\"" + escJson(openaiTtsEndpoint) + "\",\"openaiKey\":\"" + escJson(maskSecret(openaiTtsKey)) + "\",\"openaiModel\":\"" + escJson(openaiTtsModel) + "\",\"openaiVoice\":\"" + escJson(openaiTtsVoice) + "\",";
+  j += "\"elevenUrl\":\"" + escJson(elevenEndpoint) + "\",\"elevenKey\":\"" + escJson(maskSecret(elevenKey)) + "\",\"elevenModel\":\"" + escJson(elevenModel) + "\",\"elevenVoice\":\"" + escJson(elevenVoice) + "\",";
+  j += "\"fishUrl\":\"" + escJson(fishEndpoint) + "\",\"fishKey\":\"" + escJson(maskSecret(fishKey)) + "\",\"fishModel\":\"" + escJson(fishModel) + "\",\"fishVoice\":\"" + escJson(fishVoice) + "\"},";
   j += "\"volume\":" + String(speakerVolume) + ",\"replyLang\":\"" + escJson(replyLang) + "\",\"prompt\":\"" + escJson(systemPrompt) + "\",";
   j += "\"brightness\":" + String(displayBrightness) + ",\"nightMode\":" + String(nightMode) + ",\"nightBrightness\":" + String(nightBrightness) + ",";
   j += "\"circadian\":{\"enabled\":" + String(circadianSleepEnabled ? "true" : "false") + ",\"start\":" + String(circadianSleepStart) + ",\"end\":" + String(circadianSleepEnd) + "},";
   j += "\"boredom\":{\"enabled\":" + String(boredomEnabled ? "true" : "false") + ",\"minutes\":" + String(boredomMinutes) + "},";
   j += "\"weather\":{\"city\":\"" + escJson(weatherCity) + "\",\"lat\":\"" + escJson(weatherLat) + "\",\"lon\":\"" + escJson(weatherLon) + "\"},";
-  const char *skinNames[] = {"default", "cyberpunk", "cat", "retro", "anime", "hearts", "steampunk", "demon", "matrix", "cyborg", "mecha", "sunglasses", "puppy", "hypno", "alien", "ninja", "round", "kiwi"};
+  j += "\"hostname\":\"" + escJson(mdnsHostname) + "\",\"host\":\"" + escJson(mdnsHostname + ".local") + "\",\"faceTweenMs\":" + String(faceTweenMs) + ",\"maxChatHistory\":" + String(maxChatHistory) + ",";
+  const char *skinNames[] = {"default", "cyberpunk", "cat", "retro", "anime", "hearts", "steampunk", "demon", "matrix", "cyborg", "mecha", "sunglasses", "puppy", "hypno", "alien", "ninja", "round", "kiwi", "squircle_solid", "squircle_outline", "squircle_glint"};
   int skinIndex = (int)currentEyeSkin;
   if (skinIndex < 0 || skinIndex >= SKIN_COUNT) skinIndex = 0;
   j += "\"skin\":\"" + String(skinNames[skinIndex]) + "\",\"showMouth\":" + String(showMouth ? "true" : "false") + ",\"memory\":{\"name\":\"" + escJson(getOwnerName()) + "\",\"friends\":\"" + escJson(getFriendsFamily()) + "\",\"facts\":[";
@@ -528,23 +540,24 @@ void handleConfigApi() {
 }
 
 void handleSave() {
+  if (!isAuthorized()) {
+    server.send(401, "application/json", "{\"ok\":false,\"error\":\"Unauthorized\"}");
+    return;
+  }
   if (!server.hasArg("ssid")) {
     server.send(400, "text/plain", "SSID required");
     return;
   }
-  bool wifiChanged = false;
   String incomingSsid = server.arg("ssid");
   incomingSsid.trim();
   if (incomingSsid.length() > 0 && incomingSsid != "%SSID%" && incomingSsid != wifiSSID) {
     wifiSSID = incomingSsid;
-    wifiChanged = true;
   }
   if (server.hasArg("pass")) {
     String incomingPass = server.arg("pass");
     incomingPass.trim();
-    if (incomingPass.length() > 0 && incomingPass != "%PASS%" && incomingPass != wifiPassword) {
+    if (incomingPass.length() > 0 && incomingPass != "%PASS%" && !isMaskedSecret(incomingPass) && incomingPass != wifiPassword) {
       wifiPassword = incomingPass;
-      wifiChanged = true;
     }
   }
 
@@ -554,26 +567,26 @@ void handleSave() {
     sttLang = normalizeSttLang(server.arg("sttlang"));
 
   sttEndpoint = sanitizeUrl(server.arg("stturl"), DEFAULT_STT_URL);
-  if (server.hasArg("ttskey") && server.arg("ttskey").length() > 0) {
+  if (server.hasArg("ttskey") && server.arg("ttskey").length() > 0 && !isMaskedSecret(server.arg("ttskey"))) {
     sttKey = sanitizeField(server.arg("ttskey"));
-  } else if (server.hasArg("sttkey")) {
+  } else if (server.hasArg("sttkey") && server.arg("sttkey").length() > 0 && !isMaskedSecret(server.arg("sttkey"))) {
     sttKey = sanitizeField(server.arg("sttkey"));
   }
   sttModel = sanitizeField(server.arg("sttmodel"), DEFAULT_STT_MODEL);
 
   groqSttEndpoint = sanitizeUrl(server.arg("groqstturl"), DEFAULT_GROQ_STT_URL);
-  if (server.hasArg("groqkey") && server.arg("groqkey").length() > 0) {
+  if (server.hasArg("groqkey") && server.arg("groqkey").length() > 0 && !isMaskedSecret(server.arg("groqkey"))) {
     groqSttKey = sanitizeField(server.arg("groqkey"));
-  } else if (server.hasArg("groqsttkey")) {
+  } else if (server.hasArg("groqsttkey") && server.arg("groqsttkey").length() > 0 && !isMaskedSecret(server.arg("groqsttkey"))) {
     groqSttKey = sanitizeField(server.arg("groqsttkey"));
   }
   groqSttModel = sanitizeField(server.arg("groqsttmodel"), DEFAULT_GROQ_STT_MODEL);
 
   openaiSttEndpoint = sanitizeUrl(server.arg("opaistturl"), DEFAULT_OPENAI_STT_URL);
-  if (server.hasArg("openaikey") && server.arg("openaikey").length() > 0) {
+  if (server.hasArg("openaikey") && server.arg("openaikey").length() > 0 && !isMaskedSecret(server.arg("openaikey"))) {
     openaiSttKey = sanitizeField(server.arg("openaikey"));
     openaiTtsKey = openaiSttKey;
-  } else if (server.hasArg("opaisttkey")) {
+  } else if (server.hasArg("opaisttkey") && server.arg("opaisttkey").length() > 0 && !isMaskedSecret(server.arg("opaisttkey"))) {
     openaiSttKey = sanitizeField(server.arg("opaisttkey"));
   }
   openaiSttModel = sanitizeField(server.arg("opaisttmodel"), DEFAULT_OPENAI_STT_MODEL);
@@ -591,35 +604,92 @@ void handleSave() {
   }
   if (llmProvider == "openai") {
     llmEndpoint = sanitizeUrl(server.arg("openaiurl"), DEFAULT_OPENAI_LLM_URL);
-    llmKey = sanitizeField(server.arg("openaikey"));
+    if (server.hasArg("openaikey") && server.arg("openaikey").length() > 0 && !isMaskedSecret(server.arg("openaikey"))) {
+      llmKey = sanitizeField(server.arg("openaikey"));
+    }
     llmModel = sanitizeField(server.arg("openaimodel"), "gpt-4o-mini");
   } else {
     llmEndpoint = sanitizeUrl(server.arg("llmurl"), DEFAULT_LLM_URL);
-    llmKey = sanitizeField(server.arg("llmkey"));
+    if (server.hasArg("llmkey") && server.arg("llmkey").length() > 0 && !isMaskedSecret(server.arg("llmkey"))) {
+      llmKey = sanitizeField(server.arg("llmkey"));
+    }
     llmModel = sanitizeField(server.arg("llmmodel"), DEFAULT_LLM_MODEL);
   }
   groqEndpoint = sanitizeUrl(server.arg("groqurl"), DEFAULT_GROQ_URL);
-  groqKey = sanitizeField(server.arg("groqkey"));
+  if (server.hasArg("groqkey") && server.arg("groqkey").length() > 0 && !isMaskedSecret(server.arg("groqkey"))) {
+    groqKey = sanitizeField(server.arg("groqkey"));
+  }
   groqModel = sanitizeField(server.arg("groqmodel"), DEFAULT_GROQ_MODEL);
 
   if (server.hasArg("ttsprovider"))
     ttsProvider = normalizeTtsProvider(server.arg("ttsprovider"));
   ttsEndpoint = sanitizeUrl(server.arg("ttsurl"), DEFAULT_TTS_URL);
-  ttsKey = sanitizeField(server.arg("ttskey"));
+  if (server.hasArg("ttskey") && server.arg("ttskey").length() > 0 && !isMaskedSecret(server.arg("ttskey"))) {
+    ttsKey = sanitizeField(server.arg("ttskey"));
+  }
   ttsModel = sanitizeField(server.arg("ttsmodel"), DEFAULT_TTS_MODEL);
   ttsVoice = sanitizeField(server.arg("ttsvoice"), DEFAULT_TTS_VOICE);
   openaiTtsEndpoint = sanitizeUrl(server.arg("openaittsurl"), DEFAULT_OPENAI_TTS_URL);
-  openaiTtsKey = sanitizeField(server.arg("openaittskey"));
+  if (server.hasArg("openaittskey") && server.arg("openaittskey").length() > 0 && !isMaskedSecret(server.arg("openaittskey"))) {
+    openaiTtsKey = sanitizeField(server.arg("openaittskey"));
+  }
   openaiTtsModel = sanitizeField(server.arg("openaittsmodel"), DEFAULT_OPENAI_TTS_MODEL);
   openaiTtsVoice = sanitizeField(server.arg("openaittsvoice"), DEFAULT_OPENAI_TTS_VOICE);
   elevenEndpoint = sanitizeUrl(server.arg("elevurl"), DEFAULT_ELEVEN_URL);
-  elevenKey = sanitizeField(server.arg("elevkey"));
+  if (server.hasArg("elevkey") && server.arg("elevkey").length() > 0 && !isMaskedSecret(server.arg("elevkey"))) {
+    elevenKey = sanitizeField(server.arg("elevkey"));
+  }
   elevenModel = sanitizeField(server.arg("elevmodel"), DEFAULT_ELEVEN_MODEL);
   elevenVoice = sanitizeField(server.arg("elevvoice"), DEFAULT_ELEVEN_VOICE);
   fishEndpoint = sanitizeUrl(server.arg("fishurl"), DEFAULT_FISH_TTS_URL);
-  fishKey = sanitizeField(server.arg("fishkey"));
+  if (server.hasArg("fishkey") && server.arg("fishkey").length() > 0 && !isMaskedSecret(server.arg("fishkey"))) {
+    fishKey = sanitizeField(server.arg("fishkey"));
+  }
   fishModel = sanitizeField(server.arg("fishmodel"), DEFAULT_FISH_TTS_MODEL);
   fishVoice = sanitizeField(server.arg("fishvoice"));
+
+  // Portal Token change
+  if (server.hasArg("new_token") && server.arg("new_token").length() > 0) {
+    String currentTok = server.arg("current_token");
+    currentTok.trim();
+    if (constantTimeStringEquals(currentTok, portalToken)) {
+      String newTok = sanitizeField(server.arg("new_token"));
+      if (newTok.length() >= 8) {
+        portalToken = newTok;
+        Preferences p;
+        p.begin("myrobot", false);
+        p.putString("portal_tok", portalToken);
+        p.end();
+        server.sendHeader("Set-Cookie", "kiwi_auth=" + portalToken + "; Path=/; HttpOnly; SameSite=Strict");
+        Serial.println("[AUTH] Portal token changed by authorized user");
+      }
+    }
+  }
+
+  // mDNS Hostname
+  if (server.hasArg("hostname")) {
+    String newHost = sanitizeHostname(server.arg("hostname"));
+    if (newHost.length() > 0 && newHost != mdnsHostname) {
+      mdnsHostname = newHost;
+      initMdns(WiFi.status() == WL_CONNECTED ? "STA" : "AP");
+    }
+  }
+
+  // Chat History Turns Limit
+  if (server.hasArg("chat_hist")) {
+    int ch = server.arg("chat_hist").toInt();
+    if (ch >= 1 && ch <= 8) {
+      maxChatHistory = ch;
+    }
+  }
+
+  // Face Tween Duration Ms
+  if (server.hasArg("face_tween")) {
+    int ft = server.arg("face_tween").toInt();
+    if (ft >= 0 && ft <= 1000) {
+      faceTweenMs = ft;
+    }
+  }
 
   if (server.hasArg("vol")) {
     speakerVolume = server.arg("vol").toInt();
@@ -678,7 +748,8 @@ void handleSave() {
   }
 
   if (server.hasArg("act_top_tap")) touchActTopTap = parseTouchAction(server.arg("act_top_tap"), TOUCH_ACT_LISTEN);
-  if (server.hasArg("act_top_dbl")) touchActTopDbl = parseTouchAction(server.arg("act_top_dbl"), TOUCH_ACT_CYCLE_SKIN);
+  if (server.hasArg("act_top_dbl")) touchActTopDbl = parseTouchAction(server.arg("act_top_dbl"), TOUCH_ACT_NONE);
+  if (server.hasArg("act_top_hld")) touchActTopHold = parseTouchAction(server.arg("act_top_hld"), TOUCH_ACT_CYCLE_SKIN);
   if (server.hasArg("act_lt_tap"))  touchActLeftTap = parseTouchAction(server.arg("act_lt_tap"), TOUCH_ACT_DISMISS);
   if (server.hasArg("act_lt_dbl"))  touchActLeftDbl = parseTouchAction(server.arg("act_lt_dbl"), TOUCH_ACT_CLOCK);
   if (server.hasArg("act_rt_tap"))  touchActRightTap = parseTouchAction(server.arg("act_rt_tap"), TOUCH_ACT_DISMISS);
@@ -706,6 +777,9 @@ void handleSave() {
     else if (s == "ninja" || s == "shinobi" || s == "naruto") currentEyeSkin = SKIN_NINJA;
     else if (s == "round" || s == "circle" || s == "ocular") currentEyeSkin = SKIN_ROUND;
     else if (s == "kiwi" || s == "deskbuddy" || s == "buddy" || s == "cute" || s == "relaxed" || s == "bored") currentEyeSkin = SKIN_KIWI;
+    else if (s == "squircle_solid" || s == "squircle") currentEyeSkin = SKIN_SQUIRCLE_SOLID;
+    else if (s == "squircle_outline") currentEyeSkin = SKIN_SQUIRCLE_OUTLINE;
+    else if (s == "squircle_glint") currentEyeSkin = SKIN_SQUIRCLE_GLINT;
     else currentEyeSkin = SKIN_DEFAULT;
   }
 

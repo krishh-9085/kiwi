@@ -4,6 +4,8 @@
 
 #include "services/AiChatHistory.h"
 
+#include "core/Timing.h"
+
 #include "services/AiTextTools.h"
 
 #include "services/MemoryService.h"
@@ -421,19 +423,13 @@ static String processSseStream(HTTPClient &http, WiFiClient *stream, SentenceCal
         line = "";
 
       } else if (ch != '\r') {
-
         if (line.length() < 512)
-
           line += ch;
-
       }
-
+      lastProgressAt = millis();
     } else {
-
-      pumpUI();
-
-      delay(2);
-
+      serviceUi();
+      yield();
     }
 
   }
@@ -570,15 +566,10 @@ String askGemini(const String &question, SentenceCallback onSentence) {
     WiFiClientSecure client;
 
     client.setInsecure();
-
-    client.setTimeout(15);
-
+    client.setTimeout(8000);
     HTTPClient http;
-
     http.setReuse(false);
-
-    http.setTimeout(20000);
-
+    http.setTimeout(8000);
     http.setConnectTimeout(8000);
 
     // DNS pre-check before TLS (fixes HTTP -1 on first boot / after AP mode)
@@ -792,14 +783,10 @@ String askGroq(const String &question, SentenceCallback onSentence) {
 
     client.setInsecure();
 
-    client.setTimeout(15);
-
+    client.setTimeout(8000);
     HTTPClient http;
-
     http.setReuse(false);
-
-    http.setTimeout(15000);
-
+    http.setTimeout(8000);
     http.setConnectTimeout(8000);
 
     uint32_t t0 = millis();
@@ -937,15 +924,11 @@ String askOpenAI(const String &question, SentenceCallback onSentence) {
 
   client.setInsecure();
 
-  client.setTimeout(15);
-
+  client.setTimeout(8000);
   HTTPClient http;
-
   http.setReuse(false);
-
-  http.setTimeout(18000);
-
-  http.setConnectTimeout(6000);
+  http.setTimeout(8000);
+  http.setConnectTimeout(8000);
 
   String endpoint = llmEndpoint;
 

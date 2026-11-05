@@ -2,6 +2,7 @@
 #include "services/AiTransport.h"
 #include "services/AiTextTools.h"
 #include "config/AppConfig.h"
+#include "core/Timing.h"
 #include "hardware/AudioEngine.h"
 #include "face/FaceEngine.h"
 #include "web/WebPortal.h"
@@ -61,25 +62,22 @@ String recordAndTranscribe(uint32_t recordSeconds) {
                 (unsigned)ESP.getFreeHeap(), (unsigned)ESP.getMaxAllocHeap());
   setEmotion(EMOTION_LISTENING);
   // Smoothly ease face into listening pose before blocking network work
-  uint32_t easeStart = millis();
-  while (millis() - easeStart < 120) {
-    pumpUI();
-    delay(12);
-  }
+  waitMs(120);
 
   // Finish any active prompt tone before blocking network/TLS calls
   uint32_t toneWaitStart = millis();
   while (isTonePlaying() && (millis() - toneWaitStart < 250)) {
     updateTonePlayer();
-    delay(4);
+    serviceUi();
+    yield();
   }
 
   bool apWasUp = suspendLocalNet();
-  pumpUI();  // Keep face alive after network suspend
+  serviceUi();  // Keep face alive after network suspend
   WiFiClientSecure client;
   client.setInsecure();
-  client.setTimeout(20);
-  client.setHandshakeTimeout(10);
+  client.setTimeout(8000);
+  client.setHandshakeTimeout(8);
 
   auto bail = [&](const char *why) -> String {
     Serial.printf("[STT] FAIL: %s\n", why);
@@ -89,18 +87,18 @@ String recordAndTranscribe(uint32_t recordSeconds) {
     return String("");
   };
 
-  if (ESP.getFreeHeap() < 35000)
+  if (ESP.getMaxAllocHeap() < 30000)
     return bail("low memory");
   if (WiFi.status() != WL_CONNECTED) {
     uint32_t tw = millis();
     while (WiFi.status() != WL_CONNECTED && millis() - tw < 4000) {
-      pumpUI();
-      delay(50);
+      serviceUi();
+      yield();
     }
     if (WiFi.status() != WL_CONNECTED)
       return bail("Wi-Fi dropped");
   }
-  pumpUI();
+  serviceUi();
   if (!ensureDns(host))
     return bail("DNS failed");
   pumpUI();
@@ -195,8 +193,8 @@ String recordAndTranscribe(uint32_t recordSeconds) {
   uint32_t chimeWait = millis();
   while (isTonePlaying() && (millis() - chimeWait < 180)) {
     updateTonePlayer();
-    pumpUI();
-    delay(2);
+    serviceUi();
+    yield();
   }
   drainMic(); // Flush prompt chime audio from mic buffer before recording user speech
   Serial.printf("[STT] Recording %lu s (mic slot %d%s, gain %.1f)...\n",
@@ -315,12 +313,14 @@ String recordAndTranscribe(uint32_t recordSeconds) {
     }
     if (sent - lastProgress >= SAMPLE_RATE) {
       lastProgress = sent;
-      Serial.printf("[STT] %.0f sec, avg %.0f peak %lu loudest-block %.0f\n",
-                    (float)sent / SAMPLE_RATE, sumAbs / sent,
-                    (unsigned long)vuMax, maxBlkAvg);
+      if (currentLogLevel >= LOG_LEVEL_DEBUG) {
+        Serial.printf("[STT] %.0f sec, avg %.0f peak %lu loudest-block %.0f\n",
+                      (float)sent / SAMPLE_RATE, sumAbs / sent,
+                      (unsigned long)vuMax, maxBlkAvg);
+      }
       vuMax = 0;
     }
-    pumpUI();
+    serviceUi();
   }
 
   uint32_t capturedSamples = sent;
@@ -362,8 +362,8 @@ String recordAndTranscribe(uint32_t recordSeconds) {
          millis() - waitStart < 12000) {
     if (cancelRequest)
       return bail("cancelled");
-    pumpUI();
-    delay(10);
+    serviceUi();
+    vTaskDelay(pdMS_TO_TICKS(1));
   }
 
   Serial.printf("[STT] Response received after %lu ms (connected=%d, avail=%d)\n",
@@ -377,7 +377,8 @@ String recordAndTranscribe(uint32_t recordSeconds) {
       break;
     while (client.available() && response.length() < 6000)
       response += (char)client.read();
-    delay(1);
+    serviceUi();
+    yield();
   }
   client.stop();
   if (cancelRequest) {

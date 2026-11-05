@@ -1,6 +1,7 @@
 #include "face/FaceExpressions.h"
 #include "behavior/InteractionManager.h"
 #include "config/AppConfig.h"
+#include "core/Timing.h"
 #include "face/FaceDisplay.h"
 #include "face/FaceIdle.h"
 #include "face/FaceScreens.h"
@@ -48,9 +49,9 @@ void setEmotion(Emotion e) {
   emotionStartedAt = now;
   faceTargetsForEmotion(e, petMood);
   // A quick blink hides the face morph, exactly like a person changing
-  // expression.
+  // expression (only when tweening is disabled).
   if (e != prev && prev != EMOTION_SLEEPING &&
-      !emotionSkipsTransitionBlink(e) && !eyeBlinking)
+      !emotionSkipsTransitionBlink(e) && !eyeBlinking && faceTweenMs == 0)
     triggerTouchBlink(now);
   if (e == EMOTION_IDLE) {
     emotionAutoReturnAt = 0;
@@ -433,8 +434,8 @@ void holdFace(uint32_t ms) {
   while (millis() - t0 < ms) {
     if (cancelRequest)
       break;
-    pumpUI();
-    delay(2);
+    serviceUi();
+    yield();
   }
 }
 

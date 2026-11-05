@@ -11,9 +11,21 @@ struct SttCfg {
   bool sarvam;
 };
 
+enum ToneShape : uint8_t {
+  SHAPE_SINE = 0,         // Pure sine wave (clean tone)
+  SHAPE_WARM_VOCAL = 1,   // Warm organic harmonics (voice / vowel formant style)
+  SHAPE_PURR = 2,         // Low purring motor with warm tremolo & flutter
+  SHAPE_CHIRP = 3,        // Bright expressive robot chirp (harmonic overtones)
+  SHAPE_WARBLE = 4        // Wall-E / R2-D2 expressive FM warble & robotic vocal
+};
+
 struct Tone {
-  float freq;
-  int ms;
+  float freq = 0.0f;       // Start frequency in Hz (0 = rest/pause)
+  int ms = 0;              // Duration in milliseconds
+  float endFreq = 0.0f;    // Target frequency (0 = keep constant; > 0 = smooth pitch glide)
+  uint8_t shape = 0;       // ToneShape timbre (SHAPE_SINE, SHAPE_WARM_VOCAL, etc.)
+  float vibDepth = 0.0f;   // Vibrato / FM modulation depth in Hz
+  float vibRate = 0.0f;    // Vibrato / FM modulation rate in Hz (e.g. 15.0f - 35.0f)
 };
 
 struct FaceState {

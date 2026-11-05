@@ -4,6 +4,7 @@
 #include "hardware/AudioEngine.h"
 #include "services/AiService.h"
 #include "services/MemoryService.h"
+#include "behavior/ActionExecutor.h"
 #include <WiFi.h>
 
 // ============================================================
@@ -150,6 +151,8 @@ void checkAutonomousBoredom() {
   if (!boredomEnabled)
     return;
   if (inCircadianSleep || manualSleep || busyProcessing || startRecording)
+    return;
+  if (isRobotTimerActive() || isRobotTimerRinging())
     return;
   if (showClockScreen || showWeatherScreen || bannerActive)
     return;

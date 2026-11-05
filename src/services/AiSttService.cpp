@@ -60,7 +60,12 @@ String recordAndTranscribe(uint32_t recordSeconds) {
   Serial.printf("[STT] Free heap: %u  max block: %u\n",
                 (unsigned)ESP.getFreeHeap(), (unsigned)ESP.getMaxAllocHeap());
   setEmotion(EMOTION_LISTENING);
-  pumpUI();  // Render listening face immediately before blocking work
+  // Smoothly ease face into listening pose before blocking network work
+  uint32_t easeStart = millis();
+  while (millis() - easeStart < 120) {
+    pumpUI();
+    delay(12);
+  }
 
   // Finish any active prompt tone before blocking network/TLS calls
   uint32_t toneWaitStart = millis();
@@ -184,6 +189,16 @@ String recordAndTranscribe(uint32_t recordSeconds) {
     detectMicSlot();
     pumpUI();
   }
+
+  // Play Wall-E inquisitive ready chime NOW that TLS is connected and streaming is live!
+  soundListening();
+  uint32_t chimeWait = millis();
+  while (isTonePlaying() && (millis() - chimeWait < 180)) {
+    updateTonePlayer();
+    pumpUI();
+    delay(2);
+  }
+  drainMic(); // Flush prompt chime audio from mic buffer before recording user speech
   Serial.printf("[STT] Recording %lu s (mic slot %d%s, gain %.1f)...\n",
                 (unsigned long)recordSeconds, micSlot, micSlotLocked ? " [cached]" : "",
                 (double)MIC_GAIN);
@@ -202,9 +217,9 @@ String recordAndTranscribe(uint32_t recordSeconds) {
   bool captureStopped = false;
   uint32_t silenceSamples = 0;
   const uint32_t MIN_SPEECH_SAMPLES = SAMPLE_RATE / 2;
-  const uint32_t TRAILING_SILENCE_SAMPLES = (SAMPLE_RATE * 50) / 100; // 500ms pause after speaking
+  const uint32_t TRAILING_SILENCE_SAMPLES = (SAMPLE_RATE * 80) / 100; // 800ms natural trailing pause
   float silenceGate = NOISE_GATE_THRESHOLD * 1.2f;
-  const uint32_t INITIAL_SILENCE_TIMEOUT_SAMPLES = (SAMPLE_RATE * 15) / 10; // 1.5s start timeout
+  const uint32_t INITIAL_SILENCE_TIMEOUT_SAMPLES = (SAMPLE_RATE * 40) / 10; // 4.0s generous start timeout (no more accidental quiet cutoff!)
   float noiseSum = 0;
   uint32_t noiseSamples = 0;
   float calibSumL = 0, calibSumR = 0;
@@ -284,7 +299,7 @@ String recordAndTranscribe(uint32_t recordSeconds) {
           }
         } else if (!speechStarted && sent >= INITIAL_SILENCE_TIMEOUT_SAMPLES) {
           captureStopped = true;
-          Serial.println("[STT] No speech detected in first 1.5s; stopping early");
+          Serial.println("[STT] No speech detected in first 4.0s; stopping early");
         }
         blkSum = 0;
         blkN = 0;

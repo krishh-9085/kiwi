@@ -16,12 +16,25 @@
 // COUNTDOWN TIMER STATE
 // ============================================================
 static bool     robotTimerActive = false;
+static bool     robotTimerRinging = false;
 static uint32_t robotTimerEndMs = 0;
 static uint32_t robotTimerTotalSec = 0;
 static String   robotTimerLabel = "Timer";
+static uint32_t robotTimerRingingStartMs = 0;
+static uint32_t robotTimerLastAlertMs = 0;
+static uint16_t robotTimerAlertCount = 0;
 
 bool isRobotTimerActive() {
   return robotTimerActive;
+}
+
+bool isRobotTimerRinging() {
+  return robotTimerRinging;
+}
+
+uint32_t getRobotTimerRingingDurationMs() {
+  if (!robotTimerRinging) return 0;
+  return millis() - robotTimerRingingStartMs;
 }
 
 uint32_t getRobotTimerRemainingSec() {
@@ -31,17 +44,40 @@ uint32_t getRobotTimerRemainingSec() {
   return (robotTimerEndMs - now) / 1000;
 }
 
+void stopRobotTimerAlarm() {
+  if (robotTimerRinging) {
+    robotTimerRinging = false;
+    cancelRequest = true;
+    spkEndSpeech();
+    Serial.println("[TIMER] Alarm stopped by touch / command");
+    addTerminalLog("[TIMER] Alarm stopped");
+    soundPetSparkle();
+    setEmotion(EMOTION_HAPPY);
+    returnIdleAt = millis() + 2000;
+  }
+}
+
 void cancelRobotTimer() {
-  if (robotTimerActive) {
+  if (robotTimerActive || robotTimerRinging) {
     robotTimerActive = false;
+    robotTimerRinging = false;
+    cancelRequest = true;
+    spkEndSpeech();
     Serial.println("[TIMER] Cancelled");
     addTerminalLog("[TIMER] Timer cancelled");
+    soundPetSparkle();
+    setEmotion(EMOTION_HAPPY);
+    returnIdleAt = millis() + 1500;
   }
 }
 
 void startRobotTimer(uint32_t seconds, const String &label) {
   if (seconds == 0) return;
+  if (robotTimerRinging) {
+    stopRobotTimerAlarm();
+  }
   robotTimerActive = true;
+  robotTimerRinging = false;
   robotTimerEndMs = millis() + (seconds * 1000UL);
   robotTimerTotalSec = seconds;
   robotTimerLabel = (label.length() > 0) ? label : "Timer";
@@ -49,35 +85,97 @@ void startRobotTimer(uint32_t seconds, const String &label) {
   Serial.printf("[TIMER] Started: %u seconds (%s)\n", (unsigned)seconds, robotTimerLabel.c_str());
   soundPetSparkle();
 
-  String desc;
-  if (seconds >= 60) {
-    desc = String(seconds / 60) + "m " + String(seconds % 60) + "s";
-  } else {
-    desc = String(seconds) + " seconds";
-  }
-  showStatus("TIMER STARTED!", desc.c_str(), 1800);
+  // Natural response without interrupting OLED face or error-beeping
+  setEmotion(EMOTION_HAPPY);
+  returnIdleAt = millis() + 2000;
 }
 
 void checkRobotTimer() {
-  if (!robotTimerActive)
+  if (!robotTimerActive && !robotTimerRinging)
     return;
 
-  if (millis() >= robotTimerEndMs) {
+  uint32_t now = millis();
+
+  // 1. Transition from countdown to ringing alarm
+  if (robotTimerActive && now >= robotTimerEndMs) {
     robotTimerActive = false;
-    Serial.printf("[TIMER] Done! Label='%s'\n", robotTimerLabel.c_str());
-    addTerminalLog("[TIMER] Done: " + robotTimerLabel);
+    robotTimerRinging = true;
+    robotTimerRingingStartMs = now;
+    robotTimerLastAlertMs = 0; // Trigger first ring immediately
+    robotTimerAlertCount = 0;
+    Serial.printf("[TIMER] Expired! Ringing alarm on loop for '%s'...\n", robotTimerLabel.c_str());
+    addTerminalLog("[TIMER] Alarm ringing: " + robotTimerLabel);
+  }
 
-    setEmotion(EMOTION_PARTY);
-    soundPetPlayful();
-    showStatus("TIME IS UP!", robotTimerLabel.c_str(), 3500);
-
-    if (WiFi.status() == WL_CONNECTED) {
-      speakText("Time is up! Your timer for " + robotTimerLabel + " is done!");
-    } else {
-      soundPetPlayful();
+  // 2. Active alarm ringing loop (repeats until user touches ANY sensor)
+  if (robotTimerRinging) {
+    // Safety auto-dismiss after 5 minutes (300,000 ms) of unhandled ringing
+    if (now - robotTimerRingingStartMs > 300000UL) {
+      Serial.println("[TIMER] Alarm auto-dismissed after 5 min timeout.");
+      stopRobotTimerAlarm();
+      return;
     }
-    setEmotion(EMOTION_HAPPY);
-    returnIdleAt = millis() + 2500;
+
+    // Cooldown interval between alert iterations (2500ms after previous speech/chime)
+    if (now - robotTimerLastAlertMs >= 2500UL) {
+      robotTimerAlertCount++;
+
+      // Visually alert on OLED (alternate party and surprised faces)
+      if (robotTimerAlertCount % 2 == 1) {
+        setEmotion(EMOTION_PARTY);
+      } else {
+        setEmotion(EMOTION_SURPRISED);
+      }
+
+      // Play fanfare / alert chime
+      soundFanfare();
+
+      // Wait briefly for chime while pumping UI so touch can interrupt instantly
+      uint32_t chimeStart = millis();
+      while (isTonePlaying() && (millis() - chimeStart < 700)) {
+        pumpUI();
+        if (!robotTimerRinging) return;
+        delay(5);
+      }
+
+      if (!robotTimerRinging) return;
+
+      // Build natural alert speech based on language
+      String alertMsg;
+      bool isCustom = (robotTimerLabel != "Timer" && robotTimerLabel != "Focus Timer" && robotTimerLabel.length() > 0);
+
+      if (sttLang == "hi") {
+        if (robotTimerAlertCount % 2 == 1) {
+          alertMsg = isCustom
+            ? "Samay samapt! " + robotTimerLabel + " poora ho gaya! Band karne ke liye mujhe touch karo!"
+            : "Samay samapt ho gaya! Band karne ke liye mujhe touch karo!";
+        } else {
+          alertMsg = isCustom
+            ? "Time up! " + robotTimerLabel + " khatam! Band karne ke liye sensor touch karo!"
+            : "Time up ho gaya! Band karne ke liye mujhe touch karo!";
+        }
+      } else {
+        if (robotTimerAlertCount % 2 == 1) {
+          alertMsg = isCustom
+            ? "Time is up! Your timer for " + robotTimerLabel + " is done! Tap me to stop!"
+            : "Time is up! Your timer is done! Tap me to stop!";
+        } else {
+          alertMsg = isCustom
+            ? "Time is up for " + robotTimerLabel + "! Tap any sensor to dismiss!"
+            : "Time is up! Tap any sensor to dismiss the alarm!";
+        }
+      }
+
+      if (WiFi.status() == WL_CONNECTED) {
+        cancelRequest = false;
+        speakText(alertMsg);
+        cancelRequest = false;
+      } else {
+        soundPetPlayful();
+      }
+
+      robotTimerLastAlertMs = millis();
+    }
   }
 }
 
@@ -211,7 +309,12 @@ bool executeRobotAction(const String &actionCmd) {
   }
 
   // 4. COUNTDOWN TIMER
-  if (actionType == "timer" || actionType == "countdown") {
+  if (actionType == "timer" || actionType == "countdown" || actionType == "alarm") {
+    if (param == "cancel" || param == "stop" || param == "off" || param == "dismiss") {
+      cancelRobotTimer();
+      stopRobotTimerAlarm();
+      return true;
+    }
     int pSpace = param.indexOf(' ');
     uint32_t sec = 0;
     String lbl = "Timer";

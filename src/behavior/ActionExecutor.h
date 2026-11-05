@@ -25,5 +25,8 @@ void triggerSoundByName(const String &nameIn);
 void checkRobotTimer();
 void startRobotTimer(uint32_t seconds, const String &label = "Timer");
 void cancelRobotTimer();
+void stopRobotTimerAlarm();
 bool isRobotTimerActive();
+bool isRobotTimerRinging();
+uint32_t getRobotTimerRingingDurationMs();
 uint32_t getRobotTimerRemainingSec();

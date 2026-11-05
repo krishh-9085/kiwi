@@ -62,14 +62,16 @@ static inline float volumeGain() {
 }
 
 // ============================================================
-// TONE SYNTHESIZER STATE
+// CUTE ROBOT VOCAL & TONE SYNTHESIZER (Wall-E / EMO Engine)
 // ============================================================
-static Tone toneQueue[8];
+static Tone toneQueue[32];
 static int toneCount = 0;
 static int toneIndex = 0;
 static uint32_t toneStartTime = 0;
 static bool tonePlaying = false;
 static float tonePhase = 0.0f;
+static float vibPhase = 0.0f;
+static float tremPhase = 0.0f;
 
 void playToneQueue(Tone *tones, int count) {
   if (spkOwner == SPK_SPEECH) {
@@ -82,14 +84,16 @@ void playToneQueue(Tone *tones, int count) {
   }
   if (count <= 0 || !tones)
     return;
-  if (count > 8)
-    count = 8;
+  if (count > 32)
+    count = 32;
   for (int i = 0; i < count; i++)
     toneQueue[i] = tones[i];
   toneCount = count;
   toneIndex = 0;
   toneStartTime = millis();
   tonePhase = 0.0f;
+  vibPhase = 0.0f;
+  tremPhase = 0.0f;
   tonePlaying = true;
   spkOwner = SPK_TONE;
 }
@@ -122,12 +126,18 @@ void updateTonePlayer() {
   const float release = fminf(0.025f, duration * 0.35f);
   const float elapsed = (float)(now - toneStartTime) / 1000.0f;
   const float amp = 32767.0f * TONE_PEAK_FRACTION * volumeGain();
-  const float phaseStep = 2.0f * (float)M_PI * cur.freq / (float)SAMPLE_RATE;
 
   static int32_t buf[TONE_BLOCK_FRAMES * 2];
 
   for (int i = 0; i < TONE_BLOCK_FRAMES; i++) {
-    // Per-sample time keeps the envelope smooth within the block.
+    // Silence / rest pause if freq <= 1.0f
+    if (cur.freq <= 1.0f) {
+      buf[i * 2] = 0;
+      buf[i * 2 + 1] = 0;
+      continue;
+    }
+
+    // Per-sample time keeps the envelope and pitch smooth within the block.
     float t = elapsed + (float)i / (float)SAMPLE_RATE;
 
     float env = 1.0f;
@@ -140,11 +150,68 @@ void updateTonePlayer() {
     else if (env > 1.0f)
       env = 1.0f;
 
-    float s = sinf(tonePhase) * amp * env;
+    // Smooth pitch interpolation (glissando / slide)
+    float progress = (duration > 0.0001f) ? (t / duration) : 1.0f;
+    if (progress < 0.0f)
+      progress = 0.0f;
+    else if (progress > 1.0f)
+      progress = 1.0f;
+
+    float instFreq = cur.freq;
+    if (cur.endFreq > 1.0f) {
+      instFreq = cur.freq + (cur.endFreq - cur.freq) * progress;
+    }
+
+    // Vibrato / FM modulation
+    if (cur.vibDepth > 0.1f && cur.vibRate > 0.1f) {
+      instFreq += sinf(vibPhase) * cur.vibDepth;
+      vibPhase += 2.0f * (float)M_PI * cur.vibRate / (float)SAMPLE_RATE;
+      if (vibPhase >= 2.0f * (float)M_PI)
+        vibPhase -= 2.0f * (float)M_PI;
+    }
+
+    // Phase step accumulator
+    float phaseStep = 2.0f * (float)M_PI * instFreq / (float)SAMPLE_RATE;
     tonePhase += phaseStep;
     if (tonePhase >= 2.0f * (float)M_PI)
       tonePhase -= 2.0f * (float)M_PI;
 
+    // Harmonic & timbre shaping
+    float raw = 0.0f;
+    switch (cur.shape) {
+      case SHAPE_WARM_VOCAL: {
+        // Organic vocal formant overtones (Wall-E warm coo / vowel timbre)
+        raw = sinf(tonePhase) * 0.70f +
+              sinf(2.0f * tonePhase) * 0.22f +
+              sinf(3.0f * tonePhase) * 0.08f;
+        break;
+      }
+      case SHAPE_PURR: {
+        // Soft kitten robot motor: low rumble with amplitude tremolo
+        tremPhase += 2.0f * (float)M_PI * 25.0f / (float)SAMPLE_RATE;
+        if (tremPhase >= 2.0f * (float)M_PI)
+          tremPhase -= 2.0f * (float)M_PI;
+        float tremolo = 0.55f + 0.45f * sinf(tremPhase);
+        raw = (sinf(tonePhase) * 0.75f + sinf(2.0f * tonePhase) * 0.25f) * tremolo;
+        break;
+      }
+      case SHAPE_CHIRP: {
+        // Bright expressive robot chirp (bright 2nd harmonic)
+        raw = sinf(tonePhase) * 0.82f + sinf(2.0f * tonePhase) * 0.18f;
+        break;
+      }
+      case SHAPE_WARBLE: {
+        // Dynamic FM robotic warble (R2-D2 / Wall-E chatter)
+        float fmMod = sinf(tonePhase * 1.5f) * 1.6f;
+        raw = sinf(tonePhase + fmMod) * 0.85f;
+        break;
+      }
+      default: // SHAPE_SINE
+        raw = sinf(tonePhase);
+        break;
+    }
+
+    float s = raw * amp * env;
     int32_t v = toFrame32(s);
     buf[i * 2] = v;
     buf[i * 2 + 1] = v;
@@ -154,74 +221,171 @@ void updateTonePlayer() {
 }
 
 // ============================================================
-// ROBOT SOUND PRESETS
+// WALL-E / EMO ROBOT VOCAL PRESETS
 // ============================================================
+
+// Affectionate Wall-E Coo ("Awww <3")
 void soundPetLove() {
-  Tone t[] = {{1046, 90}, {1318, 90}, {1568, 150}};
+  Tone t[] = {
+    {420, 130, 680, SHAPE_WARM_VOCAL, 0, 0},
+    {0, 25, 0, SHAPE_SINE, 0, 0},
+    {840, 240, 520, SHAPE_WARM_VOCAL, 35, 18}
+  };
   playToneQueue(t, 3);
 }
+
+// Cute Robot Tickle & Giggle (rapid chatter laugh)
 void soundPetGiggle() {
-  Tone t[] = {{1318, 50}, {1568, 50}, {1318, 50}, {1568, 50}, {2093, 120}};
-  playToneQueue(t, 5);
+  Tone t[] = {
+    {1100, 38, 1450, SHAPE_CHIRP, 0, 0},
+    {0, 12, 0, SHAPE_SINE, 0, 0},
+    {1250, 38, 1650, SHAPE_CHIRP, 0, 0},
+    {0, 12, 0, SHAPE_SINE, 0, 0},
+    {1450, 42, 1950, SHAPE_CHIRP, 0, 0},
+    {0, 12, 0, SHAPE_SINE, 0, 0},
+    {1700, 45, 2300, SHAPE_CHIRP, 0, 0},
+    {0, 15, 0, SHAPE_SINE, 0, 0},
+    {1900, 75, 2700, SHAPE_WARBLE, 60, 28}
+  };
+  playToneQueue(t, 9);
 }
+
+// Tiny Bashful Squeak / Murmur
 void soundPetShy() {
-  Tone t[] = {{1568, 80}, {1318, 100}, {1046, 150}};
-  playToneQueue(t, 3);
+  Tone t[] = {
+    {480, 95, 740, SHAPE_WARM_VOCAL, 0, 0},
+    {740, 160, 440, SHAPE_WARM_VOCAL, 25, 16}
+  };
+  playToneQueue(t, 2);
 }
+
+// R2-D2 Starburst Excited Trill
 void soundPetSparkle() {
-  Tone t[] = {{2093, 40}, {2349, 40}, {2637, 40}, {3136, 40}, {4186, 120}};
+  Tone t[] = {
+    {1800, 35, 2400, SHAPE_WARBLE, 0, 0},
+    {2300, 35, 3100, SHAPE_WARBLE, 0, 0},
+    {2900, 40, 3800, SHAPE_WARBLE, 0, 0},
+    {3600, 45, 4500, SHAPE_WARBLE, 0, 0},
+    {4200, 130, 4200, SHAPE_CHIRP, 120, 32}
+  };
   playToneQueue(t, 5);
 }
+
+// Cute "Mwah / Squeak-Pop"
 void soundPetKiss() {
-  Tone t[] = {{1318, 60}, {2093, 100}};
+  Tone t[] = {
+    {550, 50, 2400, SHAPE_CHIRP, 0, 0},
+    {1900, 40, 750, SHAPE_CHIRP, 0, 0}
+  };
   playToneQueue(t, 2);
 }
+
+// Warm Purring Robot Kitten (low motor rumble + coo)
 void soundPetCuddle() {
-  Tone t[] = {{659, 100}, {784, 100}, {880, 150}};
+  Tone t[] = {
+    {105, 140, 115, SHAPE_PURR, 0, 0},
+    {115, 160, 125, SHAPE_PURR, 0, 0},
+    {580, 90, 1150, SHAPE_WARM_VOCAL, 0, 0}
+  };
   playToneQueue(t, 3);
 }
+
+// Wall-E / BB-8 Excited Warble ("Ta-da!")
 void soundPetPlayful() {
-  Tone t[] = {{1046, 60}, {1568, 60}, {1046, 60}, {1568, 60}, {2093, 100}};
-  playToneQueue(t, 5);
+  Tone t[] = {
+    {650, 65, 1100, SHAPE_CHIRP, 0, 0},
+    {1150, 95, 1150, SHAPE_WARBLE, 180, 30},
+    {1350, 120, 2300, SHAPE_CHIRP, 50, 20}
+  };
+  playToneQueue(t, 3);
 }
+
+// Cute Robot Yawn & Sigh
 void soundPetSleepy() {
-  Tone t[] = {{1318, 120}, {1175, 120}, {1046, 120}, {880, 200}};
-  playToneQueue(t, 4);
+  Tone t[] = {
+    {340, 220, 720, SHAPE_WARM_VOCAL, 0, 0},
+    {720, 380, 210, SHAPE_WARM_VOCAL, 20, 12}
+  };
+  playToneQueue(t, 2);
 }
+
+// Chest-Puffed Robot Fanfare
 void soundPetProud() {
-  Tone t[] = {{1046, 80}, {1318, 80}, {1568, 100}, {2093, 180}};
+  Tone t[] = {
+    {520, 70, 660, SHAPE_WARM_VOCAL, 0, 0},
+    {660, 70, 840, SHAPE_WARM_VOCAL, 0, 0},
+    {840, 90, 1050, SHAPE_WARM_VOCAL, 0, 0},
+    {1050, 210, 1650, SHAPE_WARM_VOCAL, 40, 20}
+  };
   playToneQueue(t, 4);
 }
+
+// Wall-E Iconic "Whoooa?!"
 void soundPetSurprised() {
-  Tone t[] = {{1046, 60}, {2093, 60}, {1760, 100}};
-  playToneQueue(t, 3);
+  Tone t[] = {
+    {320, 120, 1950, SHAPE_WARBLE, 0, 0},
+    {1950, 90, 1900, SHAPE_WARM_VOCAL, 90, 24}
+  };
+  playToneQueue(t, 2);
 }
+
+// Futuristic Cyber Startup Chime
 void playBootChime() {
-  Tone t[] = {{660, 100}, {990, 100}, {1320, 150}};
+  Tone t[] = {
+    {440, 80, 660, SHAPE_WARM_VOCAL, 0, 0},
+    {660, 80, 990, SHAPE_WARM_VOCAL, 0, 0},
+    {990, 160, 1480, SHAPE_WARM_VOCAL, 30, 18}
+  };
   playToneQueue(t, 3);
 }
+
+// Wall-E Disappointed "Uh-Oh / Sad Wah"
 void soundError() {
-  Tone t[] = {{660, 100}, {523, 150}};
-  playToneQueue(t, 2);
-}
-void soundClock() {
-  Tone t[] = {{880, 80}, {1175, 80}, {1568, 120}};
+  Tone t[] = {
+    {720, 110, 420, SHAPE_WARM_VOCAL, 0, 0},
+    {0, 25, 0, SHAPE_SINE, 0, 0},
+    {500, 180, 260, SHAPE_WARM_VOCAL, 35, 14}
+  };
   playToneQueue(t, 3);
 }
+
+void soundClock() {
+  Tone t[] = {
+    {880, 70, 1175, SHAPE_CHIRP, 0, 0},
+    {1175, 70, 1568, SHAPE_CHIRP, 0, 0}
+  };
+  playToneQueue(t, 2);
+}
+
+// Inquisitive Wall-E "Hm?"
 void soundListening() {
-  Tone t[] = {{1046, 60}, {1568, 90}};
-  playToneQueue(t, 2);
+  Tone t[] = {
+    {560, 90, 1180, SHAPE_WARM_VOCAL, 0, 0}
+  };
+  playToneQueue(t, 1);
 }
+
+// Delicate Water-Drop Chirp on Touch
 void soundTouchBlip() {
-  Tone t[] = {{1318, 45}, {1760, 55}};
-  playToneQueue(t, 2);
+  Tone t[] = {
+    {1900, 32, 950, SHAPE_CHIRP, 0, 0}
+  };
+  playToneQueue(t, 1);
 }
+
 void soundVolUp() {
-  Tone t[] = {{1200, 30}, {1800, 40}};
+  Tone t[] = {
+    {1100, 30, 1500, SHAPE_CHIRP, 0, 0},
+    {1500, 40, 2000, SHAPE_CHIRP, 0, 0}
+  };
   playToneQueue(t, 2);
 }
+
 void soundVolDown() {
-  Tone t[] = {{1800, 30}, {1200, 40}};
+  Tone t[] = {
+    {2000, 30, 1500, SHAPE_CHIRP, 0, 0},
+    {1500, 40, 1100, SHAPE_CHIRP, 0, 0}
+  };
   playToneQueue(t, 2);
 }
 
@@ -229,28 +393,49 @@ void soundVolDown() {
 // INTERACTIVE SOUNDBOARD PRESETS
 // ============================================================
 void soundFart() {
-  Tone t[] = {{135, 60}, {95, 70}, {150, 40}, {85, 90}, {110, 80}, {65, 140}};
+  Tone t[] = {
+    {135, 60, 95, SHAPE_PURR, 30, 15},
+    {95, 70, 75, SHAPE_PURR, 25, 12},
+    {150, 40, 85, SHAPE_PURR, 20, 10},
+    {85, 90, 65, SHAPE_PURR, 35, 14},
+    {110, 80, 55, SHAPE_PURR, 25, 10},
+    {65, 140, 45, SHAPE_PURR, 15, 8}
+  };
   playToneQueue(t, 6);
 }
 
 void soundLaser() {
-  Tone t[] = {{2800, 25}, {2200, 25}, {1700, 25},
-              {1200, 25}, {750, 30},  {400, 35}};
-  playToneQueue(t, 6);
+  Tone t[] = {
+    {3400, 75, 220, SHAPE_CHIRP, 0, 0}
+  };
+  playToneQueue(t, 1);
 }
 
 void soundFanfare() {
-  Tone t[] = {{523, 100}, {659, 100}, {784, 120}, {1046, 300}};
+  Tone t[] = {
+    {523, 100, 523, SHAPE_WARM_VOCAL, 0, 0},
+    {659, 100, 659, SHAPE_WARM_VOCAL, 0, 0},
+    {784, 120, 784, SHAPE_WARM_VOCAL, 0, 0},
+    {1046, 320, 1046, SHAPE_WARM_VOCAL, 40, 20}
+  };
   playToneQueue(t, 4);
 }
 
 void soundCoin() {
-  Tone t[] = {{988, 80}, {1319, 280}};
+  Tone t[] = {
+    {988, 70, 988, SHAPE_CHIRP, 0, 0},
+    {1319, 280, 1319, SHAPE_CHIRP, 40, 22}
+  };
   playToneQueue(t, 2);
 }
 
 void soundSadViolin() {
-  Tone t[] = {{784, 250}, {740, 250}, {659, 320}, {587, 450}};
+  Tone t[] = {
+    {784, 250, 740, SHAPE_WARM_VOCAL, 20, 8},
+    {740, 250, 659, SHAPE_WARM_VOCAL, 20, 8},
+    {659, 320, 587, SHAPE_WARM_VOCAL, 25, 8},
+    {587, 450, 520, SHAPE_WARM_VOCAL, 30, 6}
+  };
   playToneQueue(t, 4);
 }
 

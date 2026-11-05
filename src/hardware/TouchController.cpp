@@ -7,6 +7,7 @@
 #include "services/AiService.h"
 #include "services/WeatherService.h"
 #include "face/FaceDisplay.h"
+#include "behavior/ActionExecutor.h"
 #include <WiFi.h>
 #include <esp_sleep.h>
 
@@ -84,7 +85,7 @@ void resyncTouch() {
 }
 
 // ---------- Touch Gesture Action Dispatcher ----------
-constexpr uint32_t DOUBLE_TAP_WINDOW_MS = 320;
+constexpr uint32_t DOUBLE_TAP_WINDOW_MS = 240;
 
 TouchAction getSingleTapAction(uint8_t pin) {
   if (pin == PIN_TOUCH_TOP) return touchActTopTap;
@@ -103,6 +104,12 @@ TouchAction getDoubleTapAction(uint8_t pin) {
 void executeTouchAction(TouchAction act, uint8_t pin) {
   uint32_t now = millis();
   lastUserInteractionAt = now;
+
+  if (isRobotTimerRinging()) {
+    Serial.println("[TOUCH] Action -> Dismissing Timer Alarm");
+    stopRobotTimerAlarm();
+    return;
+  }
 
   if (inCircadianSleep || manualSleep) {
     manualSleep = false;
@@ -153,7 +160,6 @@ void executeTouchAction(TouchAction act, uint8_t pin) {
       } else {
         Serial.println("[TOUCH] Action LISTEN -> Enter Listening Mode!");
         setEmotion(EMOTION_LISTENING);
-        soundListening();
         startRecording = true;
       }
       break;
@@ -265,6 +271,15 @@ static void updateOneTouch(TouchSensor &ts, uint32_t now) {
         bootInfoUntil = 0;
       }
       Serial.printf("[TOUCH] Pin %d PRESSED (feedback=%d, busy=%d)\n", ts.pin, touchFeedbackSound, busyProcessing);
+
+      // Instant dismissal of repeating timer alarm on ANY sensor touch
+      if (isRobotTimerRinging() && getRobotTimerRingingDurationMs() >= 200) {
+        Serial.printf("[TOUCH] Pin %d touched -> Timer Alarm Dismissed!\n", ts.pin);
+        stopRobotTimerAlarm();
+        ts.holdHandled = true;
+        ts.pendingSingleTap = false;
+        return;
+      }
 
       // Instant Audio & Visual Touch Response
       static uint32_t lastTouchBlipAt = 0;

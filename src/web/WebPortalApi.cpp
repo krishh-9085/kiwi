@@ -7,6 +7,7 @@
 #include "services/AiService.h"
 #include "services/MemoryService.h"
 #include "animation/AnimationEngine.h"
+#include "behavior/ActionExecutor.h"
 #include <WiFi.h>
 #include <WebServer.h>
 #include <DNSServer.h>
@@ -69,6 +70,26 @@ void handleDoAction() {
     clearTerminalLog();
     server.send(200, "application/json", "{\"ok\":true,\"cleared\":true}");
     return;
+  }
+
+  // Timer Control (cancel or start)
+  if (server.hasArg("timer")) {
+    String tCmd = server.arg("timer");
+    if (tCmd == "cancel" || tCmd == "stop") {
+      if (isRobotTimerRinging()) {
+        stopRobotTimerAlarm();
+      } else {
+        cancelRobotTimer();
+      }
+      server.send(200, "application/json", "{\"ok\":true,\"timer\":false}");
+      return;
+    }
+    int sec = tCmd.toInt();
+    if (sec > 0) {
+      startRobotTimer(sec, "Portal Timer");
+      server.send(200, "application/json", "{\"ok\":true,\"timer\":true,\"sec\":" + String(sec) + "}");
+      return;
+    }
   }
 
   // Soundboard FX
@@ -450,6 +471,9 @@ void handleStatus() {
   j += ",\"boredom_mins\":" + String(boredomMinutes);
   j += ",\"skin\":\"" + String(skinNames[skIdx]) + "\"";
   j += ",\"mouth\":" + String(showMouth ? "true" : "false");
+  j += ",\"timer_active\":" + String(isRobotTimerActive() ? "true" : "false");
+  j += ",\"timer_ringing\":" + String(isRobotTimerRinging() ? "true" : "false");
+  j += ",\"timer_remaining\":" + String(getRobotTimerRemainingSec());
   j += ",\"state\":\"" + escJson(robotStateDesc) + "\"";
   j += ",\"question\":\"" + escJson(lastTranscribedQuestion) + "\"";
   j += ",\"answer\":\"" + escJson(lastLlmAnswer) + "\"";

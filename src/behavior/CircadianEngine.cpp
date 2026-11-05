@@ -3,6 +3,7 @@
 #include "face/FaceEngine.h"
 #include "face/FaceDisplay.h"
 #include "hardware/AudioEngine.h"
+#include "behavior/ActionExecutor.h"
 
 void checkCircadianSleep() {
   if (manualSleep) {
@@ -15,7 +16,7 @@ void checkCircadianSleep() {
   }
   if (!circadianSleepEnabled || !timeSynced)
     return;
-  if (busyProcessing)
+  if (busyProcessing || isRobotTimerActive() || isRobotTimerRinging())
     return;
 
   struct tm timeinfo;

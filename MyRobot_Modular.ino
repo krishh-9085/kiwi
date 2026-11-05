@@ -127,11 +127,66 @@ void setup() {
 }
 
 // ============================================================
+// BOOT GREETING FOR KRISHNA
+// ============================================================
+static void checkBootGreeting() {
+  static bool greetingTriggered = false;
+  if (greetingTriggered)
+    return;
+  if (busyProcessing || inCircadianSleep || manualSleep)
+    return;
+
+  // Let the boot chime finish playing first
+  if (isTonePlaying())
+    return;
+
+  // Give up to 4 seconds for WiFi NTP time sync so the greeting matches the exact time of day
+  if (!timeSynced && millis() < 4000)
+    return;
+
+  greetingTriggered = true;
+
+  int hour = -1;
+  if (timeSynced) {
+    struct tm timeinfo;
+    if (getLocalTime(&timeinfo, 50)) {
+      hour = timeinfo.tm_hour;
+    }
+  }
+
+  String timeGreeting = "good morning";
+  if (hour >= 5 && hour < 12) {
+    timeGreeting = "good morning";
+  } else if (hour >= 12 && hour < 17) {
+    timeGreeting = "good afternoon";
+  } else if (hour >= 17 && hour < 21) {
+    timeGreeting = "good evening";
+  } else if (hour >= 21 || (hour >= 0 && hour < 5)) {
+    timeGreeting = "good night";
+  } else {
+    timeGreeting = "good day";
+  }
+
+  String speech = "Hi Krishna, " + timeGreeting + "! What's up?";
+
+  Serial.printf("[BOOT] Greeting Krishna: %s (hour=%d)\n", speech.c_str(), hour);
+  setEmotion(EMOTION_HAPPY);
+  flourish = FL_STAR;
+  flourishT0 = millis();
+
+  if (WiFi.status() == WL_CONNECTED && (ttsKey.length() || sttKey.length() || llmKey.length())) {
+    speakText(speech);
+  }
+  setEmotion(EMOTION_IDLE);
+}
+
+// ============================================================
 // MAIN EVENT LOOP
 // ============================================================
 void loop() {
   pumpWeb();
   maintainWiFi();
+  checkBootGreeting();
 
   checkCircadianSleep();
   updateTouch();
@@ -175,14 +230,11 @@ void loop() {
                    " seconds; stops after speech ends...");
 
     setEmotion(EMOTION_LISTENING);
-    pumpUI(); // Immediately render listening face before blocking STT setup
-
-    // Drain and let the listening chime finish playing before blocking on
-    // network TLS!
-    uint32_t toneDrainStart = millis();
-    while (isTonePlaying() && (millis() - toneDrainStart < 250)) {
-      updateTonePlayer();
-      delay(4);
+    // Smoothly ease face into listening pose before blocking network STT setup
+    uint32_t easeStart = millis();
+    while (millis() - easeStart < 120) {
+      pumpUI();
+      delay(12);
     }
 
     if (WiFi.status() != WL_CONNECTED) {
@@ -217,16 +269,15 @@ void loop() {
       Serial.printf("[ROBOT] STT failed: %s\n", sttFail.c_str());
       setEmotion(EMOTION_CONFUSED);
       if (sttFail == "quiet" || sttFail == "empty" || sttFail == "") {
-        showStatus("Didn't hear you", "try again", 1400);
         static const char *const quietReplies[] = {
             "Kuch bola kya? Mujhe theek se sunai nahi diya!",
             "Did you say something? Sunai nahi diya mujhe!",
             "Arey kuch kaha kya? Ek baar firse bolo!"};
         speakText(quietReplies[random(0, 3)]);
       } else {
-        showStatus("STT error", sttFail.c_str(), 1800);
         speakText("Awaaz theek se nahi aayi, ek baar firse try karo!");
       }
+      returnIdleAt = millis() + 2000;
     }
     bool wasCancelled = cancelRequest;
     cancelRequest = false;

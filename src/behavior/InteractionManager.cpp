@@ -184,6 +184,8 @@ void handleQuestion(const String &q) {
   Serial.println(q);
   if (cancelRequest)
     return;
+  if (handleTimerCommand(q))
+    return;
   if (handleTimeCommand(q))
     return;
   if (handleWeatherCommand(q))
@@ -193,8 +195,6 @@ void handleQuestion(const String &q) {
   if (handleEmotionCommand(q))
     return;
   if (handleVolumeCommand(q))
-    return;
-  if (handleTimerCommand(q))
     return;
   if (handleLightCommand(q))
     return;
@@ -236,9 +236,8 @@ void handleQuestion(const String &q) {
     lastLlmAnswer =
         "Error: No response from AI. Please check Wi-Fi, model, or API key.";
     setEmotion(EMOTION_CONFUSED);
-    showStatus("AI No Response", "Check key/model", 1800);
     speakText("Sorry, abhi answer nahi de pa raha hoon. Ek baar firse poocho!");
-    returnIdleAt = millis() + 500;
+    returnIdleAt = millis() + 2000;
     return;
   }
 
@@ -268,8 +267,8 @@ void handleQuestion(const String &q) {
       robotStateDesc = "TTS Failed";
       addTerminalLog("[TTS] Playback error or offline");
       Serial.println("[ROBOT] TTS failed");
-      showStatus("TTS error", "see Serial log", 2000);
-      returnIdleAt = millis() + 500;
+      setEmotion(EMOTION_CONFUSED);
+      returnIdleAt = millis() + 1500;
       return;
     }
 

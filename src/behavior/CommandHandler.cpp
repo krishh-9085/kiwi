@@ -26,6 +26,11 @@ bool hasAny(const String &s, std::initializer_list<const char *> words) {
 bool handleTimeCommand(const String &qIn) {
   String q = qIn;
   q.toLowerCase();
+
+  // If query is about a timer or alarm, do NOT intercept as clock!
+  if (hasAny(q, {"timer", "countdown", "alarm", "alaram", "टाइमर", "अलार्म", "काउन्टडाउन", "काउंटडाउन"}))
+    return false;
+
   bool isTime = hasAny(
       q, {"time", "samay", "samey", "taim", "clock", "watch", "what time",
           "show time", "tell me time", "time kya", "kya time", "kitna baja",
@@ -341,9 +346,27 @@ bool handleVolumeCommand(const String &qIn) {
 bool handleTimerCommand(const String &qIn) {
   String q = qIn;
   q.toLowerCase();
-  if (!hasAny(q, {"timer", "countdown", "alaram"}))
+  if (!hasAny(q, {"timer", "countdown", "alarm", "alaram", "टाइमर", "अलार्म", "काउन्टडाउन", "काउंटडाउन"}))
     return false;
 
+  // 1. Cancel / Stop Timer or Alarm
+  if (hasAny(q, {"stop", "cancel", "band", "off", "hatao", "rok", "dismiss",
+                 "बंद", "रोको", "हटाओ", "कैंसिल", "स्टॉप"})) {
+    if (isRobotTimerRinging()) {
+      stopRobotTimerAlarm();
+      speakText((sttLang == "hi") ? "Alarm band kar diya!" : "Alarm stopped!");
+      return true;
+    }
+    if (isRobotTimerActive()) {
+      cancelRobotTimer();
+      speakText((sttLang == "hi") ? "Timer cancel kar diya!" : "Timer cancelled!");
+      return true;
+    }
+    speakText((sttLang == "hi") ? "Koi timer ya alarm chal nahi raha hai." : "No timer or alarm is active.");
+    return true;
+  }
+
+  // 2. Parse duration
   uint32_t totalSec = 0;
   for (int i = 0; i < (int)q.length(); i++) {
     if (isdigit(q[i])) {
@@ -353,28 +376,78 @@ bool handleTimerCommand(const String &qIn) {
         i++;
       }
       if (val > 0) {
-        if (hasAny(q, {"minute", "min", "minto", "minut"})) {
+        if (hasAny(q, {"hour", "hours", "ghanta", "ghante", "hr", "hrs", "घंटा", "घंटे"})) {
+          totalSec = (uint32_t)val * 3600;
+        } else if (hasAny(q, {"minute", "minutes", "min", "mins", "minto", "minut", "minuite", "मिनट", "मिन्ट"})) {
           totalSec = (uint32_t)val * 60;
-        } else {
+        } else if (hasAny(q, {"second", "seconds", "sec", "secs", "सेकंड", "सेकेंड"})) {
           totalSec = (uint32_t)val;
+        } else {
+          // If no unit specified: <= 10 assume minutes, > 10 assume seconds
+          totalSec = (val <= 10) ? ((uint32_t)val * 60) : (uint32_t)val;
         }
         break;
       }
     }
   }
 
-  if (totalSec == 0 && hasAny(q, {"ek minute", "one minute"})) totalSec = 60;
-  if (totalSec == 0 && hasAny(q, {"do minute", "two minutes"})) totalSec = 120;
-  if (totalSec == 0 && hasAny(q, {"paanch minute", "five minutes"})) totalSec = 300;
+  // Word-based numbers (Hindi & English, including Devanagari script)
+  if (totalSec == 0) {
+    if (hasAny(q, {"aadha ghanta", "half an hour", "half hour", "आधा घंटा"})) totalSec = 1800;
+    else if (hasAny(q, {"ek minute", "one minute", "a minute", "1 minute", "एक मिनट", "1 मिनट"})) totalSec = 60;
+    else if (hasAny(q, {"do minute", "two minute", "two minutes", "2 minute", "दो मिनट", "2 मिनट"})) totalSec = 120;
+    else if (hasAny(q, {"teen minute", "three minute", "three minutes", "3 minute", "तीन मिनट", "3 मिनट"})) totalSec = 180;
+    else if (hasAny(q, {"chaar minute", "char minute", "four minute", "four minutes", "4 minute", "चार मिनट", "4 मिनट"})) totalSec = 240;
+    else if (hasAny(q, {"paanch minute", "panch minute", "five minute", "five minutes", "5 minute", "पांच मिनट", "पाँच मिनट", "5 मिनट"})) totalSec = 300;
+    else if (hasAny(q, {"das minute", "ten minute", "ten minutes", "10 minute", "दस मिनट", "10 मिनट"})) totalSec = 600;
+    else if (hasAny(q, {"pandrah minute", "fifteen minute", "fifteen minutes", "15 minute", "पंद्रह मिनट", "15 मिनट"})) totalSec = 900;
+    else if (hasAny(q, {"bees minute", "twenty minute", "20 minute", "बीस मिनट", "20 मिनट"})) totalSec = 1200;
+    else if (hasAny(q, {"tees minute", "thirty minute", "thirty minutes", "30 minute", "तीस मिनट", "30 मिनट"})) totalSec = 1800;
+    else if (hasAny(q, {"ek ghanta", "one hour", "1 hour", "एक घंटा", "1 घंटा"})) totalSec = 3600;
+    else if (hasAny(q, {"tees second", "thirty second", "thirty seconds", "30 second", "तीस सेकंड", "30 सेकंड"})) totalSec = 30;
+    else if (hasAny(q, {"pandrah second", "fifteen second", "fifteen seconds", "15 second", "पंद्रह सेकंड", "15 सेकंड"})) totalSec = 15;
+    else if (hasAny(q, {"das second", "ten second", "ten seconds", "10 second", "दस सेकंड", "10 सेकंड"})) totalSec = 10;
+  }
 
   if (totalSec > 0) {
-    startRobotTimer(totalSec, "Focus Timer");
+    // Determine label if user specified e.g. "for tea" or "study ke liye"
+    String label = "Timer";
+    int forIdx = q.indexOf("for ");
+    if (forIdx >= 0) {
+      label = q.substring(forIdx + 4);
+      int endP = label.indexOf(" timer");
+      if (endP >= 0) label = label.substring(0, endP);
+      label.trim();
+    }
+    if (label == "Timer" || label.length() == 0) {
+      int keLiyeIdx = q.indexOf(" ke liye");
+      if (keLiyeIdx > 0) {
+        label = q.substring(0, keLiyeIdx);
+        int sp = label.lastIndexOf(' ');
+        if (sp >= 0) label = label.substring(sp + 1);
+        label.trim();
+      }
+    }
+    if (label.length() == 0 || label.length() > 20) label = "Timer";
+
+    startRobotTimer(totalSec, label);
+
+    String durationDesc;
+    if (totalSec >= 60) {
+      uint32_t m = totalSec / 60;
+      uint32_t s = totalSec % 60;
+      if (s > 0) {
+        durationDesc = String(m) + (sttLang == "hi" ? " minute " : " minute ") + String(s) + (sttLang == "hi" ? " second" : " seconds");
+      } else {
+        durationDesc = String(m) + (sttLang == "hi" ? " minute" : (m == 1 ? " minute" : " minutes"));
+      }
+    } else {
+      durationDesc = String(totalSec) + (sttLang == "hi" ? " second" : (totalSec == 1 ? " second" : " seconds"));
+    }
+
     String reply = (sttLang == "hi")
-                       ? String(totalSec >= 60 ? totalSec / 60 : totalSec) +
-                             (totalSec >= 60 ? " minute" : " second") + " ka timer shuru!"
-                       : "Timer started for " +
-                             String(totalSec >= 60 ? totalSec / 60 : totalSec) +
-                             (totalSec >= 60 ? " minutes!" : " seconds!");
+                       ? durationDesc + " ka timer shuru kar diya hai!"
+                       : "Timer started for " + durationDesc + "!";
     speakText(reply);
     return true;
   }

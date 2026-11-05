@@ -4,6 +4,7 @@
 #include "animation/AnimationEngine.h"
 #include "hardware/AudioEngine.h"
 #include "face/FaceEngine.h"
+#include "face/BootWakeAnim.h"
 #include "services/AiService.h"
 #include "services/WeatherService.h"
 #include "face/FaceDisplay.h"
@@ -102,6 +103,9 @@ TouchAction getDoubleTapAction(uint8_t pin) {
 }
 
 void executeTouchAction(TouchAction act, uint8_t pin) {
+  if (!bootWakeDone()) {
+    return;
+  }
   uint32_t now = millis();
   lastUserInteractionAt = now;
 

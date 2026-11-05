@@ -1,11 +1,15 @@
 #include "face/FaceEngine.h"
 #include "animation/AnimationEngine.h"
 #include "config/AppConfig.h"
+#include "face/BootWakeAnim.h"
 
 
 void tickFace() {
   if (!oledOK)
     return;
+  if (!bootWakeDone() && bootWakeTick()) {
+    return;
+  }
   uint32_t now = millis();
   if (bootInfoUntil) {
     if (now < bootInfoUntil)

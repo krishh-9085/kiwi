@@ -37,6 +37,7 @@
 #include "config/ConfigManager.h"
 #include "core/CoreTypes.h"
 #include "core/Timing.h"
+#include "face/BootWakeAnim.h"
 #include "face/FaceEngine.h"
 #include "hardware/AudioEngine.h"
 #include "hardware/TouchController.h"
@@ -50,9 +51,19 @@
 #include <WiFi.h>
 
 // ============================================================
+// BOOT WAKE & CONNECTION FLOW STATE
+// ============================================================
+static bool bootCompleted = false;
+static uint32_t bootStartAt = 0;
+static uint32_t lastBootDrawAt = 0;
+static int bootConnectingAnimStep = 0;
+static bool bootWifiFinalizedEarly = false;
+
+// ============================================================
 // MAIN SETUP
 // ============================================================
 void setup() {
+  bootStartAt = millis();
   Serial.begin(115200);
 #if ARDUINO_USB_CDC_ON_BOOT
   uint32_t t0 = millis();
@@ -69,16 +80,18 @@ void setup() {
 
   randomSeed(esp_random());
   initBase64Lookup();
+  loadConfig();
 
   if (!initDisplay()) {
     Serial.println("[OLED] FAILED to initialize");
+    bootCompleted = true;
   } else {
     Serial.println("[OLED] Display ready");
+    bootWakeStart();
   }
   initAnimations();
 
   initTouch();
-  loadConfig();
   resetBoredomInterval();
   initMemory();
 
@@ -90,24 +103,16 @@ void setup() {
 
   eyesInit(millis());
   setEmotion(EMOTION_IDLE);
-  drawConnectingFrame(wifiSSID.c_str(), 0);
 
-  bool connected = false;
-  if (wifiSSID.length())
-    connected = connectHome();
-  if (connected) {
-    startAPParallel();
-    startNtpAsync();
-    lastNtpTryAt = millis();
-    lastWeatherFetchAt =
-        0; // Handled asynchronously in maintainWiFi() during main loop
+  if (wifiSSID.length()) {
+    startConnectHomeAsync();
   } else {
     startAP();
+    initOfflineBrain();
   }
 
   discoverWled();
 
-  initOfflineBrain();
   startWeb();
   Serial.printf("[NET] Heap: %u\n", (unsigned)ESP.getFreeHeap());
 
@@ -124,11 +129,78 @@ void setup() {
 }
 
 // ============================================================
+// BOOT FLOW TICK (NON-BLOCKING WAKE ANIMATION + WIFI GUARD)
+// ============================================================
+static void updateBootFlow() {
+  if (bootCompleted)
+    return;
+
+  uint32_t now = millis();
+  uint32_t elapsed = now - bootStartAt;
+
+  // B4 Watchdog guard: reach normal face within 8000 ms of boot
+  if (elapsed >= 8000UL) {
+    Serial.println("[BOOT] 8000ms watchdog reached -> forcing normal face");
+    if (WiFi.status() == WL_CONNECTED) {
+      if (!bootWifiFinalizedEarly) {
+        bootWifiFinalizedEarly = true;
+        finalizeWifiConnected();
+      }
+    } else {
+      finalizeWifiOffline();
+    }
+    bootCompleted = true;
+    setEmotion(EMOTION_IDLE);
+    markDisplayDirty();
+    return;
+  }
+
+  // Stage 1: Wake animation is ticking (0 to 6000 ms)
+  if (bootWakeTick()) {
+    if (WiFi.status() == WL_CONNECTED && !bootWifiFinalizedEarly) {
+      bootWifiFinalizedEarly = true;
+      finalizeWifiConnected();
+    }
+    if (now - lastBootDrawAt >= 25) {
+      lastBootDrawAt = now;
+      bootWakeDraw(display);
+      presentDisplay(true);
+    }
+    return;
+  }
+
+  // Stage 2: Animation finished (bootWakeDone() == true, t >= 6000 ms)
+  if (WiFi.status() == WL_CONNECTED) {
+    if (!bootWifiFinalizedEarly) {
+      bootWifiFinalizedEarly = true;
+      finalizeWifiConnected();
+    }
+    bootCompleted = true;
+    setEmotion(EMOTION_IDLE);
+    markDisplayDirty();
+  } else if (isWifiConnecting()) {
+    // Wi-Fi is still connecting: show live connecting page without blocking
+    if (now - lastBootDrawAt >= 150) {
+      lastBootDrawAt = now;
+      drawConnectingFrame(wifiSSID.c_str(), bootConnectingAnimStep++);
+    }
+  } else {
+    // Wi-Fi timed out or offline
+    finalizeWifiOffline();
+    bootCompleted = true;
+    setEmotion(EMOTION_IDLE);
+    markDisplayDirty();
+  }
+}
+
+// ============================================================
 // BOOT GREETING FOR KRISHNA
 // ============================================================
 static void checkBootGreeting() {
   static bool greetingTriggered = false;
   if (greetingTriggered)
+    return;
+  if (!bootCompleted)
     return;
   if (busyProcessing || inCircadianSleep || manualSleep)
     return;
@@ -139,7 +211,7 @@ static void checkBootGreeting() {
 
   // Give up to 4 seconds for WiFi NTP time sync so the greeting matches the
   // exact time of day
-  if (!timeSynced && millis() < 4000)
+  if (!timeSynced && (millis() - bootStartAt) < 10000UL)
     return;
 
   greetingTriggered = true;
@@ -186,6 +258,14 @@ static void checkBootGreeting() {
 void loop() {
   pumpWeb();
   maintainWiFi();
+
+  if (!bootCompleted) {
+    updateBootFlow();
+    updateTonePlayer();
+    yield();
+    return;
+  }
+
   checkBootGreeting();
 
   checkCircadianSleep();

@@ -17,11 +17,13 @@ struct EyeTween {
 };
 
 static inline float easeInOutCubic(float t) {
-  return (t < 0.5f) ? (4.0f * t * t * t) : (1.0f - powf(-2.0f * t + 2.0f, 3.0f) / 2.0f);
+  return (t < 0.5f) ? (4.0f * t * t * t)
+                    : (1.0f - powf(-2.0f * t + 2.0f, 3.0f) / 2.0f);
 }
 
-static inline float lerpf(float a, float b, float k) {
-  return a + (b - a) * k;
-}
+static inline float lerpf(float a, float b, float k) { return a + (b - a) * k; }
+
+void drawSkinAccents(uint32_t now, int cxL, int cxR, int cy, int w, int h,
+                     int lidIn = 0, int lidOut = 0);
 
 void drawFace();

@@ -1,5 +1,6 @@
 #include "web/WebPortal.h"
 #include "animation/AnimationEngine.h"
+#include "behavior/OfflineBrain.h"
 #include "config/AppConfig.h"
 #include "config/ConfigManager.h"
 #include "face/FaceEngine.h"
@@ -233,33 +234,61 @@ void startAPParallel() {
   }
 }
 
-bool connectHome() {
-  if (!wifiSSID.length())
-    return false;
-  Serial.printf("[WIFI] Connecting to %s", wifiSSID.c_str());
+static bool wifiConnecting = false;
+static uint32_t wifiConnectStartAt = 0;
+
+void startConnectHomeAsync() {
+  if (!wifiSSID.length()) {
+    wifiConnecting = false;
+    return;
+  }
+  Serial.printf("[WIFI] Connecting to %s (non-blocking)\n", wifiSSID.c_str());
   WiFi.persistent(false);
   WiFi.disconnect(true, false);
-  delay(100);
   WiFi.mode(WIFI_STA);
   WiFi.setAutoReconnect(true);
   WiFi.begin(wifiSSID.c_str(), wifiPassword.c_str());
   WiFi.setTxPower(WIFI_TX);
-  uint32_t t = millis();
-  int animStep = 0;
-  while (WiFi.status() != WL_CONNECTED && millis() - t < 15000) {
-    drawConnectingFrame(wifiSSID.c_str(), animStep++);
-    delay(160);
-    Serial.print(".");
-  }
-  Serial.println();
+  wifiConnecting = true;
+  wifiConnectStartAt = millis();
+}
+
+bool isWifiConnecting() {
+  if (!wifiConnecting)
+    return false;
   if (WiFi.status() == WL_CONNECTED) {
-    apMode = false;
-    WiFi.setSleep(false);
-    initMdns("STA");
-    drawConnectedNotice(wifiSSID.c_str(), 800);
-    return true;
+    return false;
   }
-  return false;
+  if (millis() - wifiConnectStartAt >= 15000UL) {
+    return false;
+  }
+  return true;
+}
+
+void finalizeWifiConnected() {
+  wifiConnecting = false;
+  apMode = false;
+  WiFi.setSleep(false);
+  initMdns("STA");
+  startAPParallel();
+  startNtpAsync();
+  lastNtpTryAt = millis();
+  lastWeatherFetchAt = 0;
+  Serial.printf("[WIFI] Connected! IP: %s\n", WiFi.localIP().toString().c_str());
+}
+
+void finalizeWifiOffline() {
+  wifiConnecting = false;
+  if (WiFi.status() != WL_CONNECTED) {
+    Serial.println("[WIFI] Connect timed out or unavailable. Starting AP mode.");
+    startAP();
+    initOfflineBrain();
+  }
+}
+
+bool connectHome() {
+  startConnectHomeAsync();
+  return (WiFi.status() == WL_CONNECTED);
 }
 
 void maintainWiFi() {

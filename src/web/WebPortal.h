@@ -41,4 +41,6 @@ void handleStatus();
 void handleConfigApi();
 void handleScanNetworks();
 void handleOtaPage();
+void handleOtaStatus();
+void handleOtaInstall();
 void processPendingSound();

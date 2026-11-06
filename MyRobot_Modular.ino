@@ -147,7 +147,7 @@ static void updateBootFlow() {
     if (WiFi.status() == WL_CONNECTED && !bootWifiFinalizedEarly) {
       bootWifiFinalizedEarly = true;
       finalizeWifiConnected();
-    } else if (WiFi.status() != WL_CONNECTED && !wifiConnecting) {
+    } else if (WiFi.status() != WL_CONNECTED && !isWifiConnecting()) {
       finalizeWifiOffline();
     }
     bootCompleted = true;
@@ -175,7 +175,7 @@ static void updateBootFlow() {
   if (WiFi.status() == WL_CONNECTED && !bootWifiFinalizedEarly) {
     bootWifiFinalizedEarly = true;
     finalizeWifiConnected();
-  } else if (WiFi.status() != WL_CONNECTED && !wifiConnecting) {
+  } else if (WiFi.status() != WL_CONNECTED && !isWifiConnecting()) {
     finalizeWifiOffline();
   }
 

@@ -1059,6 +1059,38 @@
         transition: none !important;
       }
     }
+
+    .dash-ota-pill {
+      background: rgba(242, 180, 92, .12);
+      border: 1px solid rgba(242, 180, 92, .4);
+      color: var(--amber);
+      border-radius: 999px;
+      font: 600 11px/1 var(--mono);
+      padding: 3px 9px;
+      cursor: pointer;
+      transition: all .15s ease;
+      vertical-align: middle;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .dash-ota-pill:hover {
+      background: var(--amber);
+      color: #14100a;
+      box-shadow: 0 0 10px var(--amber-glow);
+    }
+    .dash-ota-pill.has-update {
+      background: var(--amber);
+      color: #14100a;
+      border-color: var(--amber);
+      box-shadow: 0 0 12px var(--amber-glow);
+      animation: pulse-update 2s infinite;
+    }
+    @keyframes pulse-update {
+      0%, 100% { box-shadow: 0 0 6px var(--amber-glow); }
+      50% { box-shadow: 0 0 16px var(--amber); }
+    }
   </style>
 </head>
 
@@ -1078,7 +1110,7 @@
       <div class="id">
         <div class="bezel" aria-hidden="true"><i></i><i></i></div>
         <div>
-          <div class="unit">Kiwi Unit · <span id="fwVer">v1.0</span> · <span id="clock">--:--</span></div>
+          <div class="unit">Kiwi Unit · <span id="fwVer">v1.0</span> · <button type="button" id="dashCheckUpdateBtn" class="dash-ota-pill" title="Check GitHub for newer firmware releases">Update available?</button> · <span id="clock">--:--</span></div>
           <h1>Kiwi</h1>
           <div class="mood" id="moodLine">System Console</div>
         </div>
@@ -2667,6 +2699,41 @@
       if (typeof window.toggleModels === 'function') window.toggleModels();
       if (typeof window.toggleTts === 'function') window.toggleTts();
       pollConsole();
+
+      // Firmware OTA Update Check on Dashboard
+      var dashBtn = document.getElementById('dashCheckUpdateBtn');
+      if (dashBtn) {
+        dashBtn.addEventListener('click', function () {
+          window.location.href = '/update?check=1';
+        });
+
+        // Background check for update notification
+        setTimeout(function () {
+          var repo = localStorage.getItem('kiwi_ota_repo') || 'krishh-9085/kiwi';
+          var curV = (document.getElementById('fwVer') ? document.getElementById('fwVer').textContent : 'v1.0').replace(/^v/i, '');
+          fetch('https://api.github.com/repos/' + repo + '/releases/latest')
+            .then(function (r) { return r.ok ? r.json() : null; })
+            .then(function (rel) {
+              if (rel && rel.tag_name) {
+                var lTag = rel.tag_name.replace(/^v/i, '');
+                var lp = lTag.split(/[-.+]/).map(Number);
+                var cp = curV.split(/[-.+]/).map(Number);
+                var newer = false;
+                for (var i = 0; i < Math.max(lp.length, cp.length); i++) {
+                  var l = lp[i] || 0, c = cp[i] || 0;
+                  if (l > c) { newer = true; break; }
+                  if (l < c) { break; }
+                }
+                if (newer) {
+                  dashBtn.classList.add('has-update');
+                  dashBtn.textContent = '⚡ ' + rel.tag_name + ' Available!';
+                  dashBtn.title = 'New version ' + rel.tag_name + ' available! Click to update wirelessly';
+                }
+              }
+            })
+            .catch(function () {});
+        }, 1500);
+      }
     })();
   </script>
 </body>

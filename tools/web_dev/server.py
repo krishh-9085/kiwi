@@ -483,6 +483,22 @@ class DevPortalHandler(BaseHTTPRequestHandler):
             self.wfile.write(json.dumps(data).encode("utf-8"))
             return
 
+        # Mock API: /ota/status
+        if path == "/ota/status":
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+            self.wfile.write(json.dumps({
+                "state": "idle",
+                "progress": 0,
+                "bytes_read": 0,
+                "bytes_total": 0,
+                "running": False,
+                "error": ""
+            }).encode("utf-8"))
+            return
+
         # Mock API: /config
         if path == "/config":
             cfg = load_config()
@@ -615,7 +631,7 @@ class DevPortalHandler(BaseHTTPRequestHandler):
             return
 
         # Forward POST to robot if in proxy mode
-        if proxy_robot_ip and path in ["/save", "/update", "/animation-upload"]:
+        if proxy_robot_ip and path in ["/save", "/update", "/animation-upload", "/ota/install"]:
             res = self.proxy_to_robot(self.path, method="POST", body=body, headers=dict(self.headers))
             if res:
                 status, ctype, data = res
@@ -624,6 +640,15 @@ class DevPortalHandler(BaseHTTPRequestHandler):
                 self.end_headers()
                 self.wfile.write(data)
                 return
+
+        # Mock /ota/install handler
+        if path == "/ota/install":
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+            self.wfile.write(json.dumps({"ok": True, "message": "OTA update initiated (mock mode)"}).encode("utf-8"))
+            return
 
         # Mock /save form handler
         if path == "/save":

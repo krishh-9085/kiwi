@@ -350,6 +350,8 @@ void startWeb() {
     server.on("/scan", HTTP_GET, handleScanNetworks);
 
     server.on("/update", HTTP_GET, handleOtaPage);
+    server.on("/ota/status", HTTP_GET, handleOtaStatus);
+    server.on("/ota/install", HTTP_POST, handleOtaInstall);
 
     server.on(
         "/update", HTTP_POST,

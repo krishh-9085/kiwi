@@ -315,6 +315,7 @@ void startWeb() {
     server.on("/wiring", HTTP_GET, handleWiring);
 
     server.on("/do", HTTP_GET, handleDoAction);
+    server.on("/do", HTTP_POST, handleDoAction);
 
     server.on("/animations", HTTP_GET, []() {
       server.send(200, "application/json", animationListJson());

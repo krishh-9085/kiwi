@@ -2,6 +2,7 @@
 #include "animation/AnimationEngine.h"
 #include "config/AppConfig.h"
 #include "face/BootWakeAnim.h"
+#include "hardware/SoundLevel.h"
 
 
 void tickFace() {
@@ -48,6 +49,7 @@ void tickFace() {
   if (now - lastFaceDrawAt < gFaceFrameMs)
     return;
   lastFaceDrawAt = now;
+  float sndLevel = soundLevelGet();
   eyesUpdateAnim(now);
-  drawFace();
+  drawFace(sndLevel);
 }

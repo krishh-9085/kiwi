@@ -52,6 +52,8 @@ extern const char *NTP_SERVER_2;
 #define LLM_MAX_TOKENS 300
 #define TTS_MAX_CHARS 600
 #define NOISE_GATE_THRESHOLD 60
+#define SOUND_REACT_GAIN 1.0f
+#define SOUND_REACT_MAX_OPEN 3
 
 // ============================================================
 // TOUCH TIMING CONSTANTS
@@ -178,6 +180,7 @@ extern int nightMode;       // 0: Same as day, 1: Dim, 2: Screen off (default 1)
 extern int nightBrightness; // Night display brightness (0-100%, default 10)
 extern bool circadianSleepEnabled;
 extern bool greetingsEnabled;
+extern bool soundReactiveEnabled; // NVS: snd_react
 extern bool bootCompleted;
 extern int circadianSleepStart;
 extern int circadianSleepEnd;

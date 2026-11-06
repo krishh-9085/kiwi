@@ -247,6 +247,8 @@ def render_dashboard():
         "%CIRC_EN_VAL%": "1" if cfg.get("circadianSleepEnabled", True) else "0",
         "%GREET_EN_CHECKED%": "checked" if cfg.get("greetingsEnabled", False) else "",
         "%GREET_EN_VAL%": "1" if cfg.get("greetingsEnabled", False) else "0",
+        "%SND_REACT_CHECKED%": "checked" if cfg.get("soundReactiveEnabled", False) else "",
+        "%SND_REACT_VAL%": "1" if cfg.get("soundReactiveEnabled", False) else "0",
         "%CIRC_START%": str(cfg.get("circadianSleepStart", 23)),
         "%CIRC_END%": str(cfg.get("circadianSleepEnd", 7)),
         "%BOREDOM_CHECKED%": "checked" if cfg.get("boredomEnabled") else "",
@@ -470,6 +472,9 @@ class DevPortalHandler(BaseHTTPRequestHandler):
                 "greetings": {
                     "enabled": cfg_curr.get("greetingsEnabled", False)
                 },
+                "soundReactive": {
+                    "enabled": cfg_curr.get("soundReactiveEnabled", False)
+                },
                 "state": ("Sleeping" if cfg_curr.get("sleeping", False) else "Idle & Happy"),
                 "question": "What's up Kiwi?",
                 "answer": "Surviving on 3.3V and pure attitude! What are we building today?",
@@ -550,6 +555,8 @@ class DevPortalHandler(BaseHTTPRequestHandler):
                     cfg["circadianSleepEnabled"] = (val == "1" or val == "true"); cfg_changed = True
                 elif k == "greet_en":
                     cfg["greetingsEnabled"] = (val == "1" or val == "true" or val == "on"); cfg_changed = True
+                elif k == "snd_react":
+                    cfg["soundReactiveEnabled"] = (val == "1" or val == "true" or val == "on"); cfg_changed = True
                 elif k == "circ_start":
                     cfg["circadianSleepStart"] = int(val); cfg_changed = True
                 elif k == "circ_end":
@@ -631,7 +638,7 @@ class DevPortalHandler(BaseHTTPRequestHandler):
             return
 
         # Forward POST to robot if in proxy mode
-        if proxy_robot_ip and path in ["/save", "/update", "/animation-upload", "/ota/install"]:
+        if proxy_robot_ip and path in ["/save", "/update", "/animation-upload", "/ota/install", "/do"]:
             res = self.proxy_to_robot(self.path, method="POST", body=body, headers=dict(self.headers))
             if res:
                 status, ctype, data = res
@@ -640,6 +647,10 @@ class DevPortalHandler(BaseHTTPRequestHandler):
                 self.end_headers()
                 self.wfile.write(data)
                 return
+
+        # Mock /do POST handler (delegates to mock GET)
+        if path == "/do":
+            return self.do_GET()
 
         # Mock /ota/install handler
         if path == "/ota/install":
@@ -685,6 +696,9 @@ class DevPortalHandler(BaseHTTPRequestHandler):
                         cfg["openaiTtsKey"] = val
                     elif k == "elevkey": cfg["elevenKey"] = val
                     elif k == "fishkey": cfg["fishKey"] = val
+                    elif k == "snd_react": cfg["soundReactiveEnabled"] = (val == "1" or val == "true" or val == "on")
+                    elif k == "greet_en": cfg["greetingsEnabled"] = (val == "1" or val == "true" or val == "on")
+                    elif k == "circ_en": cfg["circadianSleepEnabled"] = (val == "1" or val == "true" or val == "on")
                 save_config(cfg)
             except Exception as e:
                 print(f"[SAVE] Error parsing form: {e}")

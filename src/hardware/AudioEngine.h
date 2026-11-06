@@ -23,6 +23,7 @@ void makeWavHeader(uint8_t *h, uint32_t dataSize);
 void playToneQueue(Tone *tones, int count);
 void updateTonePlayer();
 bool isTonePlaying();
+bool kiwiIsOutputting();
 
 // ---------- Robotic Sound Effects ----------
 void soundPetLove();

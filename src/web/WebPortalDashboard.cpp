@@ -24,13 +24,7 @@ static String esc(String s) {
   return s;
 }
 
-static String escJson(String s) {
-  s.replace("\\", "\\\\");
-  s.replace("\"", "\\\"");
-  s.replace("\r", "");
-  s.replace("\n", "\\n");
-  return s;
-}
+
 
 // --- Chunked PROGMEM Dashboard Segments (Zero-Heap Streamed) ---
 static const char DASHBOARD_CSS[] PROGMEM = R"rawcss(
@@ -1340,6 +1334,7 @@ static const char DASHBOARD_LIVE_CONSOLE[] PROGMEM = R"rawconsole(<section id="l
               <div style="display:flex;gap:4px">
                 <span class="live-saved-tick" id="tickCircadian"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg> Live</span>
                 <span class="live-saved-tick" id="tickGreetings"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg> Live</span>
+                <span class="live-saved-tick" id="tickSndReact"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg> Live</span>
               </div>
             </div>
 
@@ -1394,6 +1389,15 @@ static const char DASHBOARD_LIVE_CONSOLE[] PROGMEM = R"rawconsole(<section id="l
               </label>
               <div style="font-size:11px;color:var(--muted)">Kiwi bolega Good morning / afternoon / night, din mein ek baar.</div>
             </div>
+
+            <div class="panel" style="margin-top:8px">
+              <label class="toggle" style="margin:0 0 6px 0">
+                <input type="checkbox" id="liveSndReactToggle" %SND_REACT_CHECKED% onchange="onSoundReactToggle(this.checked)">
+                <span class="switch"></span>
+                <span style="font-weight:600;font-size:13px">Sound-reactive face</span>
+              </label>
+              <div style="font-size:11px;color:var(--muted)">Kiwi ki aankhein awaaz ke saath halke se react karengi. Kiwi khud bolte waqt ye band rehta hai.</div>
+            </div>
           </div>
 
           <p class="kiwi-footnote rocky-footnote" style="margin-top:12px">
@@ -1417,6 +1421,7 @@ static const char DASHBOARD_BODY_PART1[] PROGMEM = R"rawb1(<form method="POST" a
         <input type="hidden" name="circ_end" id="hiddenFormCircEnd" value="%CIRC_END%">
         <input type="hidden" name="circ_en" id="hiddenFormCircEn" value="%CIRC_EN_VAL%">
         <input type="hidden" name="greet_en" id="hiddenFormGreetEn" value="%GREET_EN_VAL%">
+        <input type="hidden" name="snd_react" id="hiddenFormSndReact" value="%SND_REACT_VAL%">
         <input type="hidden" name="boredom" id="hiddenFormBoredom" value="%BOREDOM_VAL%">
         <input type="hidden" name="boredom_mins" id="hiddenFormBoredomMins" value="%BOREDOM_MINS%">
 
@@ -1842,6 +1847,7 @@ static String getDashboardLiveConsole() {
   h.replace("%NIGHT_SLIDER_STYLE%", nightMode == 2 ? "opacity:0.25;pointer-events:none" : "");
   h.replace("%CIRC_EN_CHECKED%", circadianSleepEnabled ? "checked" : "");
   h.replace("%GREET_EN_CHECKED%", greetingsEnabled ? "checked" : "");
+  h.replace("%SND_REACT_CHECKED%", soundReactiveEnabled ? "checked" : "");
   h.replace("%CIRC_START_OPTIONS%", makeHourOptions(circadianSleepStart));
   h.replace("%CIRC_END_OPTIONS%", makeHourOptions(circadianSleepEnd));
 
@@ -1892,6 +1898,8 @@ static String getDashboardBodyPart1() {
   h.replace("%CIRC_EN_VAL%", circadianSleepEnabled ? "1" : "0");
   h.replace("%GREET_EN_CHECKED%", greetingsEnabled ? "checked" : "");
   h.replace("%GREET_EN_VAL%", greetingsEnabled ? "1" : "0");
+  h.replace("%SND_REACT_CHECKED%", soundReactiveEnabled ? "checked" : "");
+  h.replace("%SND_REACT_VAL%", soundReactiveEnabled ? "1" : "0");
   h.replace("%BOREDOM_CHECKED%", boredomEnabled ? "checked" : "");
   h.replace("%BOREDOM_VAL%", boredomEnabled ? "1" : "0");
   h.replace("%BOREDOM_MINS%", String(boredomMinutes));
@@ -2046,6 +2054,7 @@ static String getDashboardBodyPart2() {
   h.replace("%NIGHT_SLIDER_STYLE%", nightMode == 2 ? "opacity:0.25;pointer-events:none" : "");
   h.replace("%CIRC_EN_CHECKED%", circadianSleepEnabled ? "checked" : "");
   h.replace("%GREET_EN_CHECKED%", greetingsEnabled ? "checked" : "");
+  h.replace("%SND_REACT_CHECKED%", soundReactiveEnabled ? "checked" : "");
   h.replace("%CIRC_START_OPTIONS%", makeHourOptions(circadianSleepStart));
   h.replace("%CIRC_END_OPTIONS%", makeHourOptions(circadianSleepEnd));
 
@@ -2059,6 +2068,8 @@ static String getDashboardBodyPart2() {
   h.replace("%CIRC_EN_VAL%", circadianSleepEnabled ? "1" : "0");
   h.replace("%GREET_EN_CHECKED%", greetingsEnabled ? "checked" : "");
   h.replace("%GREET_EN_VAL%", greetingsEnabled ? "1" : "0");
+  h.replace("%SND_REACT_CHECKED%", soundReactiveEnabled ? "checked" : "");
+  h.replace("%SND_REACT_VAL%", soundReactiveEnabled ? "1" : "0");
   h.replace("%BOREDOM_CHECKED%", boredomEnabled ? "checked" : "");
   h.replace("%BM_1_SEL%", boredomMinutes == 1 ? "selected" : "");
   h.replace("%BM_2_SEL%", boredomMinutes == 2 ? "selected" : "");
@@ -2372,6 +2383,14 @@ static const char DASHBOARD_FOOT[] PROGMEM = R"rawfoot(<script>
         api('/do?greet_en=' + (en ? '1' : '0'))
           .then(function () { showLiveTick('tickGreetings'); })
           .catch(function () { toast('Failed to update greetings'); });
+      };
+
+      window.onSoundReactToggle = function (en) {
+        var hs = document.getElementById('hiddenFormSndReact');
+        if (hs) hs.value = en ? '1' : '0';
+        api('/do?snd_react=' + (en ? '1' : '0'))
+          .then(function () { showLiveTick('tickSndReact'); })
+          .catch(function () { toast('Failed to update sound reactive face'); });
       };
 
       window.onScheduleChange = function () {
@@ -2878,6 +2897,15 @@ static const char DASHBOARD_FOOT[] PROGMEM = R"rawfoot(<script>
               }
               var hg = document.getElementById('hiddenFormGreetEn');
               if (hg) hg.value = j.greetings.enabled ? '1' : '0';
+            }
+
+            if (j.soundReactive && typeof j.soundReactive.enabled !== 'undefined') {
+              var st = document.getElementById('liveSndReactToggle');
+              if (st && document.activeElement !== st) {
+                st.checked = Boolean(j.soundReactive.enabled);
+              }
+              var hs = document.getElementById('hiddenFormSndReact');
+              if (hs) hs.value = j.soundReactive.enabled ? '1' : '0';
             }
 
             if (j.circadian && typeof j.circadian.enabled !== 'undefined') {

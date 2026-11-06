@@ -1,5 +1,6 @@
 #include "face/FaceRenderer.h"
 #include "config/AppConfig.h"
+#include "face/BootWakeAnim.h"
 #include "face/FaceDisplay.h"
 #include "face/FaceExpressions.h"
 #include "face/FaceIdle.h"
@@ -400,12 +401,21 @@ static EyeSkin lastEyeSkin = (EyeSkin)-1;
 static FaceParams lastTgt = {0, 0, 0, 0, 0, 0, 0, 0};
 static bool eyeTweenInit = false;
 
-void drawFace() {
+void drawFace(float soundLevel) {
   if (!oledOK)
     return;
   if (bootInfoUntil && millis() < bootInfoUntil)
     return;
   uint32_t now = millis();
+
+  float eyeOffset = 0.0f;
+  float mouthPulse = 0.0f;
+  if (soundReactiveEnabled && bootWakeDone() && soundLevel > 0.05f) {
+    float norm = (soundLevel - 0.05f) / 0.95f;
+    if (norm > 1.0f) norm = 1.0f;
+    eyeOffset = norm * (float)SOUND_REACT_MAX_OPEN;
+    mouthPulse = norm * 2.0f;
+  }
 
   bool skinChanged = false;
   if (lastEyeSkin != currentEyeSkin) {
@@ -663,14 +673,17 @@ void drawFace() {
   // Eyes bulge a hair wider as the lids close (squash & stretch)
   int w = iround(faceNow.w * sc * (1.0f + 0.05f * (1.0f - open)));
   float hBase = faceNow.h * sc;
+  float hBaseReact = hBase - eyeOffset;
+  if (hBaseReact < 4.0f)
+    hBaseReact = 4.0f;
   int r = iround(faceNow.r);
   int gap = iround(faceNow.gap);
   int cy = iround(faceNow.y + gazeY + offY);
   int cxL = 64 - gap + iround(gazeX + offX);
   int cxR = 64 + gap + iround(gazeX + offX);
 
-  float hLf = hBase * open;
-  float hRf = hBase * faceNow.hR * open;
+  float hLf = hBaseReact * open;
+  float hRf = hBaseReact * faceNow.hR * open;
   float cheekL = faceNow.cheek * open;
   float cheekR = faceNow.cheekR * open;
   if (eyeBlinking) {
@@ -736,7 +749,7 @@ void drawFace() {
                           mh > 3 ? minI(mw, mh) / 2 : 1, SSD1306_WHITE);
   } else if (showMouth && faceNow.mouthW > 3) {
     drawMouthShape(mx, myBase + iround(faceNow.mouthY), iround(faceNow.mouthW),
-                   iround(faceNow.mouthH), faceNow.mouthCurve);
+                   iround(faceNow.mouthH + mouthPulse), faceNow.mouthCurve);
   }
 
   if (currentEmotion == EMOTION_LISTENING) {

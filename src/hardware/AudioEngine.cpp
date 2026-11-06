@@ -102,6 +102,16 @@ bool isTonePlaying() {
   return tonePlaying;
 }
 
+bool kiwiIsOutputting() {
+  if (spkOwner == SPK_SPEECH)
+    return true;
+  if (tonePlaying || isTonePlaying())
+    return true;
+  if (startRecording || (busyProcessing && !cancelRequest))
+    return true;
+  return false;
+}
+
 void updateTonePlayer() {
   if (!tonePlaying || !txHandle || spkOwner != SPK_TONE)
     return;

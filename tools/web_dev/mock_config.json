@@ -46,6 +46,7 @@
   "nightBrightness": 15,
   "circadianSleepEnabled": true,
   "greetingsEnabled": false,
+  "soundReactiveEnabled": false,
   "circadianSleepStart": 23,
   "circadianSleepEnd": 7,
   "boredomEnabled": false,

@@ -26,4 +26,4 @@ static inline float lerpf(float a, float b, float k) { return a + (b - a) * k; }
 void drawSkinAccents(uint32_t now, int cxL, int cxR, int cy, int w, int h,
                      int lidIn = 0, int lidOut = 0);
 
-void drawFace();
+void drawFace(float soundLevel = 0.0f);

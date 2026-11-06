@@ -289,6 +289,19 @@ void handleDoAction() {
     return;
   }
 
+  // Live Sound-Reactive Face Toggle
+  if (server.hasArg("snd_react")) {
+    String sr = server.arg("snd_react");
+    soundReactiveEnabled = (sr == "1" || sr == "true" || sr == "on");
+    Preferences p;
+    p.begin("myrobot", false);
+    p.putBool("snd_react", soundReactiveEnabled);
+    p.end();
+    Serial.printf("[PORTAL] Sound reactive face live set to: %d\n", soundReactiveEnabled);
+    server.send(200, "application/json", "{\"ok\":true,\"snd_react\":" + String(soundReactiveEnabled ? "true" : "false") + "}");
+    return;
+  }
+
   // Live Toggle Mouth & Lips
   if (server.hasArg("mouth")) {
     String m = server.arg("mouth");
@@ -489,6 +502,8 @@ void handleStatus() {
   j += ",\"boredom_mins\":" + String(boredomMinutes);
   j += ",\"skin\":\"" + String(skinNames[skIdx]) + "\"";
   j += ",\"mouth\":" + String(showMouth ? "true" : "false");
+  // Status JSON: soundReactive (snd_react)
+  j += ",\"soundReactive\":{\"enabled\":" + String(soundReactiveEnabled ? "true" : "false") + "}";
   j += ",\"timer_active\":" + String(isRobotTimerActive() ? "true" : "false");
   j += ",\"timer_ringing\":" + String(isRobotTimerRinging() ? "true" : "false");
   j += ",\"timer_remaining\":" + String(getRobotTimerRemainingSec());
@@ -529,6 +544,7 @@ void handleConfigApi() {
   j += "\"brightness\":" + String(displayBrightness) + ",\"nightMode\":" + String(nightMode) + ",\"nightBrightness\":" + String(nightBrightness) + ",";
   j += "\"circadian\":{\"enabled\":" + String(circadianSleepEnabled ? "true" : "false") + ",\"start\":" + String(circadianSleepStart) + ",\"end\":" + String(circadianSleepEnd) + "},";
   j += "\"greetings\":{\"enabled\":" + String(greetingsEnabled ? "true" : "false") + "},";
+  j += "\"soundReactive\":{\"enabled\":" + String(soundReactiveEnabled ? "true" : "false") + "},";
   j += "\"boredom\":{\"enabled\":" + String(boredomEnabled ? "true" : "false") + ",\"minutes\":" + String(boredomMinutes) + "},";
   j += "\"weather\":{\"city\":\"" + escJson(weatherCity) + "\",\"lat\":\"" + escJson(weatherLat) + "\",\"lon\":\"" + escJson(weatherLon) + "\"},";
   j += "\"hostname\":\"" + escJson(mdnsHostname) + "\",\"host\":\"" + escJson(mdnsHostname + ".local") + "\",\"faceTweenMs\":" + String(faceTweenMs) + ",\"maxChatHistory\":" + String(maxChatHistory) + ",";
@@ -710,6 +726,10 @@ void handleSave() {
   if (server.hasArg("greet_en")) {
     String ge = server.arg("greet_en");
     greetingsEnabled = (ge == "1" || ge == "true" || ge == "on");
+  }
+  if (server.hasArg("snd_react")) {
+    String sr = server.arg("snd_react");
+    soundReactiveEnabled = (sr == "1" || sr == "true" || sr == "on");
   }
   if (server.hasArg("circ_start"))
     circadianSleepStart = server.arg("circ_start").toInt();

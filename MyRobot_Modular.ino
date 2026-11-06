@@ -41,6 +41,7 @@
 #include "face/BootWakeAnim.h"
 #include "face/FaceEngine.h"
 #include "hardware/AudioEngine.h"
+#include "hardware/SoundLevel.h"
 #include "hardware/TouchController.h"
 #include "services/AiService.h"
 #include "services/MemoryService.h"
@@ -271,6 +272,7 @@ void loop() {
   updateOfflineBrain();
   checkAutonomousBoredom();
   updateIdleVariety();
+  soundLevelTick();
   tickFace();
   maybeChangeEmotion();
   updateTonePlayer();

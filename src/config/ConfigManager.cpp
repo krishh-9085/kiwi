@@ -282,6 +282,7 @@ void loadConfig() {
 
   circadianSleepEnabled = prefs.getBool("circ_en", true);
   greetingsEnabled = prefs.getBool("greet_en", false);
+  soundReactiveEnabled = prefs.getBool("snd_react", false);
 
   circadianSleepStart = prefs.getInt("circ_start", 23);
 
@@ -476,6 +477,7 @@ void saveConfig() {
 
   prefs.putBool("circ_en", circadianSleepEnabled);
   prefs.putBool("greet_en", greetingsEnabled);
+  prefs.putBool("snd_react", soundReactiveEnabled);
 
   prefs.putInt("circ_start", circadianSleepStart);
 

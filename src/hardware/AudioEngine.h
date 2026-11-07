@@ -17,6 +17,8 @@ void spkFlush();
 void spkPushSample(int16_t s);
 void spkBeginSpeech();
 void spkEndSpeech();
+void audioSleepPrepare();
+void audioSleepWake();
 void makeWavHeader(uint8_t *h, uint32_t dataSize);
 
 // ---------- Tone Synthesis Engine ----------

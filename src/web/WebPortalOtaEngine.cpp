@@ -28,6 +28,7 @@ static volatile bool s_otaTaskActive = false;
 static TaskHandle_t s_otaTaskHandle = NULL;
 
 static void otaDownloadTask(void *param) {
+  otaInProgress = true;
   s_otaTaskActive = true;
   s_otaState = OTA_STARTING;
   s_otaProgress = 0;
@@ -58,6 +59,7 @@ static void otaDownloadTask(void *param) {
     presentDisplay(true);
     busyProcessing = false;
     s_otaTaskActive = false;
+    otaInProgress = false;
     vTaskDelete(NULL);
     return;
   }
@@ -74,6 +76,7 @@ static void otaDownloadTask(void *param) {
     http.end();
     busyProcessing = false;
     s_otaTaskActive = false;
+    otaInProgress = false;
     vTaskDelete(NULL);
     return;
   }
@@ -91,6 +94,7 @@ static void otaDownloadTask(void *param) {
     http.end();
     busyProcessing = false;
     s_otaTaskActive = false;
+    otaInProgress = false;
     vTaskDelete(NULL);
     return;
   }
@@ -105,6 +109,7 @@ static void otaDownloadTask(void *param) {
     http.end();
     busyProcessing = false;
     s_otaTaskActive = false;
+    otaInProgress = false;
     vTaskDelete(NULL);
     return;
   }
@@ -120,6 +125,7 @@ static void otaDownloadTask(void *param) {
     http.end();
     busyProcessing = false;
     s_otaTaskActive = false;
+    otaInProgress = false;
     vTaskDelete(NULL);
     return;
   }
@@ -198,6 +204,7 @@ static void otaDownloadTask(void *param) {
 }
 
 void handleOtaStatus() {
+  notifyWebRequest();
   server.sendHeader("Access-Control-Allow-Origin", "*");
   server.sendHeader("Cache-Control", "no-cache, no-store, must-revalidate");
 
@@ -229,6 +236,7 @@ void handleOtaStatus() {
 }
 
 void handleOtaInstall() {
+  notifyWebRequest();
   server.sendHeader("Access-Control-Allow-Origin", "*");
 
   if (busyProcessing || s_otaTaskActive) {

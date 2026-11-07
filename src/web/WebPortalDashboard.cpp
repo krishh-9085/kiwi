@@ -1,18 +1,19 @@
-#include "web/WebPortal.h"
+#include "animation/AnimationEngine.h"
 #include "config/AppConfig.h"
 #include "config/ConfigManager.h"
-#include "hardware/AudioEngine.h"
 #include "face/FaceEngine.h"
+#include "hardware/AudioEngine.h"
 #include "services/AiService.h"
 #include "services/MemoryService.h"
-#include "animation/AnimationEngine.h"
-#include <WiFi.h>
-#include <WebServer.h>
-#include <DNSServer.h>
-#include <Update.h>
-#include <time.h>
-#include <Preferences.h>
 #include "services/WeatherService.h"
+#include "web/WebPortal.h"
+#include <DNSServer.h>
+#include <Preferences.h>
+#include <Update.h>
+#include <WebServer.h>
+#include <WiFi.h>
+#include <time.h>
+
 
 // HTML ESCAPE & TEMPLATES
 // ============================================================
@@ -23,8 +24,6 @@ static String esc(String s) {
   s.replace("\"", "&quot;");
   return s;
 }
-
-
 
 // --- Chunked PROGMEM Dashboard Segments (Zero-Heap Streamed) ---
 static const char DASHBOARD_CSS[] PROGMEM = R"rawcss(
@@ -1140,7 +1139,7 @@ static const char DASHBOARD_CSS[] PROGMEM = R"rawcss(
       <div class="id">
         <div class="bezel" aria-hidden="true"><i></i><i></i></div>
         <div>
-          <div class="unit">Kiwi Unit · <span id="fwVer">v1.0</span> · <button type="button" id="dashCheckUpdateBtn" class="dash-ota-pill" title="Check GitHub for newer firmware releases">Update available?</button> · <span id="clock">--:--</span></div>
+          <div class="unit">Kiwi Unit · <span id="fwVer">v1.1</span> · <button type="button" id="dashCheckUpdateBtn" class="dash-ota-pill" title="Check GitHub for newer firmware releases">Update available?</button> · <span id="clock">--:--</span></div>
           <h1>Kiwi</h1>
           <div class="mood" id="moodLine">System Console</div>
         </div>
@@ -1159,7 +1158,8 @@ static const char DASHBOARD_CSS[] PROGMEM = R"rawcss(
 
     )rawcss";
 
-static const char DASHBOARD_STATUS_TEMPLATE[] PROGMEM = R"rawstat(<section class="strip" id="statusStrip" aria-label="System status">
+static const char DASHBOARD_STATUS_TEMPLATE[] PROGMEM =
+    R"rawstat(<section class="strip" id="statusStrip" aria-label="System status">
       <div class="cell">
         <div class="k">Hotspot SSID</div>
         <div class="v">%AP%</div>
@@ -1186,7 +1186,8 @@ static const char DASHBOARD_STATUS_TEMPLATE[] PROGMEM = R"rawstat(<section class
     <div id="liveSection" role="tabpanel" aria-labelledby="pillLive">
       <!-- Live voice interaction & serial monitor -->)rawstat";
 
-static const char DASHBOARD_LIVE_CONSOLE[] PROGMEM = R"rawconsole(<section id="live" class="card live-card" aria-labelledby="liveTitle">
+static const char DASHBOARD_LIVE_CONSOLE[] PROGMEM =
+    R"rawconsole(<section id="live" class="card live-card" aria-labelledby="liveTitle">
         <div class="card-title">
           <span id="liveTitle">Live Voice Interaction &amp; Serial Monitor</span>
           <span class="live-saved-tick show" id="liveStateBadge">
@@ -1411,7 +1412,8 @@ static const char DASHBOARD_LIVE_CONSOLE[] PROGMEM = R"rawconsole(<section id="l
     <div id="settingsSection" style="display:none" role="tabpanel" aria-labelledby="pillSettings">
 )rawconsole";
 
-static const char DASHBOARD_BODY_PART1[] PROGMEM = R"rawb1(<form method="POST" action="/save" class="form-grid" id="cfgForm">
+static const char DASHBOARD_BODY_PART1[] PROGMEM =
+    R"rawb1(<form method="POST" action="/save" class="form-grid" id="cfgForm">
         <!-- Hidden inputs preserving live parameters across form saves -->
         <input type="hidden" name="vol" id="hiddenFormVol" value="%VOL%">
         <input type="hidden" name="disp_bright" id="hiddenFormBright" value="%BRIGHT%">
@@ -1634,7 +1636,8 @@ static const char DASHBOARD_BODY_PART1[] PROGMEM = R"rawb1(<form method="POST" a
         </div>
 )rawb1";
 
-static const char DASHBOARD_BODY_PART2[] PROGMEM = R"rawb2(<!-- Text-to-Speech -->
+static const char DASHBOARD_BODY_PART2[] PROGMEM =
+    R"rawb2(<!-- Text-to-Speech -->
         <div class="card">
           <div class="card-title">3. TEXT-TO-SPEECH (TTS)</div>
           <label for="ttsProvSel">TTS PROVIDER</label>
@@ -1816,14 +1819,16 @@ static String makeHourOptions(int selectedHour) {
   String out = "";
   for (int h = 0; h < 24; h++) {
     int h12 = h % 12;
-    if (h12 == 0) h12 = 12;
+    if (h12 == 0)
+      h12 = 12;
     const char *ampm = (h >= 12) ? "PM" : "AM";
     char buf[32];
     snprintf(buf, sizeof(buf), "%02d:00 %s", h12, ampm);
     out += "<option value=\"";
     out += String(h);
     out += "\"";
-    if (h == selectedHour) out += " selected";
+    if (h == selectedHour)
+      out += " selected";
     out += ">";
     out += buf;
     out += "</option>\n";
@@ -1844,7 +1849,8 @@ static String getDashboardLiveConsole() {
   h.replace("%NIGHT_CHECK_0%", nightMode == 0 ? "checked" : "");
   h.replace("%NIGHT_CHECK_1%", nightMode == 1 ? "checked" : "");
   h.replace("%NIGHT_CHECK_2%", nightMode == 2 ? "checked" : "");
-  h.replace("%NIGHT_SLIDER_STYLE%", nightMode == 2 ? "opacity:0.25;pointer-events:none" : "");
+  h.replace("%NIGHT_SLIDER_STYLE%",
+            nightMode == 2 ? "opacity:0.25;pointer-events:none" : "");
   h.replace("%CIRC_EN_CHECKED%", circadianSleepEnabled ? "checked" : "");
   h.replace("%GREET_EN_CHECKED%", greetingsEnabled ? "checked" : "");
   h.replace("%SND_REACT_CHECKED%", soundReactiveEnabled ? "checked" : "");
@@ -1869,7 +1875,9 @@ static String getDashboardStatusHtml() {
   h.reserve(1200);
   h = FPSTR(DASHBOARD_STATUS_TEMPLATE);
 
-  String langName = (sttLang == "hi") ? "Hindi (हिन्दी)" : (sttLang == "en") ? "English" : "Auto (HI+EN)";
+  String langName = (sttLang == "hi")   ? "Hindi (हिन्दी)"
+                    : (sttLang == "en") ? "English"
+                                        : "Auto (HI+EN)";
   h.replace("%AP%", esc(apSSID));
   h.replace("%LLMPROV%", esc(llmProvider));
   h.replace("%ACTIVEMODEL%", esc(llmProvider == "groq" ? groqModel : llmModel));
@@ -1917,25 +1925,39 @@ static String getDashboardBodyPart1() {
   h.replace("%STT_SAARIKA_SEL%", sttModel == "saarika:v2" ? "selected" : "");
   h.replace("%GROQSTTURL%", esc(groqSttEndpoint));
   h.replace("%GROQSTTKEY%", esc(maskSecret(groqSttKey)));
-  h.replace("%GW3T_SEL%", groqSttModel == "whisper-large-v3-turbo" ? "selected" : "");
+  h.replace("%GW3T_SEL%",
+            groqSttModel == "whisper-large-v3-turbo" ? "selected" : "");
   h.replace("%GW3_SEL%", groqSttModel == "whisper-large-v3" ? "selected" : "");
-  h.replace("%GDW_SEL%", groqSttModel == "distil-whisper-large-v3-en" ? "selected" : "");
+  h.replace("%GDW_SEL%",
+            groqSttModel == "distil-whisper-large-v3-en" ? "selected" : "");
   h.replace("%OPENAIURL%", esc(openaiSttEndpoint));
   h.replace("%OPENAIKEY%", esc(maskSecret(openaiSttKey)));
   h.replace("%OW1_SEL%", openaiSttModel == "whisper-1" ? "selected" : "");
-  h.replace("%OG4M_SEL%", openaiSttModel == "gpt-4o-mini-transcribe" ? "selected" : "");
-  h.replace("%OG4_SEL%", openaiSttModel == "gpt-4o-transcribe" ? "selected" : "");
+  h.replace("%OG4M_SEL%",
+            openaiSttModel == "gpt-4o-mini-transcribe" ? "selected" : "");
+  h.replace("%OG4_SEL%",
+            openaiSttModel == "gpt-4o-transcribe" ? "selected" : "");
 
   h.replace("%GROQ_SEL%", llmProvider == "groq" ? "selected" : "");
   h.replace("%GEMINI_SEL%", llmProvider == "gemini" ? "selected" : "");
   h.replace("%OPENAI_SEL%", llmProvider == "openai" ? "selected" : "");
   h.replace("%G20B_SEL%", groqModel == "openai/gpt-oss-20b" ? "selected" : "");
-  h.replace("%G120B_SEL%", groqModel == "openai/gpt-oss-120b" ? "selected" : "");
+  h.replace("%G120B_SEL%",
+            groqModel == "openai/gpt-oss-120b" ? "selected" : "");
   h.replace("%GQ32B_SEL%", groqModel == "qwen/qwen3-32b" ? "selected" : "");
-  h.replace("%GL33_SEL%", groqModel == "llama-3.3-70b-versatile" ? "selected" : "");
-  h.replace("%GE25_SEL%", (llmModel == "gemini-2.5-flash" || (llmModel.startsWith("gemini-") && llmModel != "gemini-3.5-flash-lite" && llmModel != "gemini-3.1-flash-lite" && llmModel != "gemini-3.8-flash")) ? "selected" : "");
-  h.replace("%GE35L_SEL%", llmModel == "gemini-3.5-flash-lite" ? "selected" : "");
-  h.replace("%GE31L_SEL%", llmModel == "gemini-3.1-flash-lite" ? "selected" : "");
+  h.replace("%GL33_SEL%",
+            groqModel == "llama-3.3-70b-versatile" ? "selected" : "");
+  h.replace(
+      "%GE25_SEL%",
+      (llmModel == "gemini-2.5-flash" ||
+       (llmModel.startsWith("gemini-") && llmModel != "gemini-3.5-flash-lite" &&
+        llmModel != "gemini-3.1-flash-lite" && llmModel != "gemini-3.8-flash"))
+          ? "selected"
+          : "");
+  h.replace("%GE35L_SEL%",
+            llmModel == "gemini-3.5-flash-lite" ? "selected" : "");
+  h.replace("%GE31L_SEL%",
+            llmModel == "gemini-3.1-flash-lite" ? "selected" : "");
   h.replace("%GE38_SEL%", llmModel == "gemini-3.8-flash" ? "selected" : "");
   h.replace("%GPT4OM_SEL%", llmModel == "gpt-4o-mini" ? "selected" : "");
   h.replace("%GPT41M_SEL%", llmModel == "gpt-4.1-mini" ? "selected" : "");
@@ -1945,7 +1967,13 @@ static String getDashboardBodyPart1() {
   h.replace("%LLMKEY%", esc(maskSecret(llmKey)));
   h.replace("%OPENAI_LLM_URL%", esc(llmEndpoint));
   h.replace("%OPENAI_LLM_KEY%", esc(maskSecret(llmKey)));
-  h.replace("%OPENAIKEY%", esc(maskSecret(openaiSttKey.length() ? openaiSttKey : (openaiTtsKey.length() ? openaiTtsKey : (llmProvider == "openai" ? llmKey : "")))));
+  h.replace(
+      "%OPENAIKEY%",
+      esc(maskSecret(openaiSttKey.length()
+                         ? openaiSttKey
+                         : (openaiTtsKey.length()
+                                ? openaiTtsKey
+                                : (llmProvider == "openai" ? llmKey : "")))));
   h.replace("%GROQURL%", esc(groqEndpoint));
   h.replace("%GROQKEY%", esc(maskSecret(groqKey)));
   h.replace("%TTSKEY%", esc(maskSecret(ttsKey.length() ? ttsKey : sttKey)));
@@ -1963,55 +1991,63 @@ static String getDashboardBodyPart2() {
   h.replace("%TTS_SARVAM_SEL%", ttsProvider == "sarvam" ? "selected" : "");
   h.replace("%TTS_OPENAI_SEL%", ttsProvider == "openai" ? "selected" : "");
   h.replace("%TTS_ELEVEN_SEL%", ttsProvider == "elevenlabs" ? "selected" : "");
-  h.replace("%TTS_FISH_SEL%", (ttsProvider == "fish" || ttsProvider == "fishaudio") ? "selected" : "");
+  h.replace("%TTS_FISH_SEL%",
+            (ttsProvider == "fish" || ttsProvider == "fishaudio") ? "selected"
+                                                                  : "");
   h.replace("%TTSURL%", esc(ttsEndpoint));
   h.replace("%TTSKEY%", esc(maskSecret(ttsKey)));
-  h.replace("%SARVAM_V4F_SEL%", (ttsModel == "bulbul:v4-flash" || ttsModel == "bulbul:v4") ? "selected" : "");
-  h.replace("%SARVAM_V3_SEL%", (ttsModel == "bulbul:v3" || ttsModel == "" || ttsModel == "DEFAULT") ? "selected" : "");
+  h.replace("%SARVAM_V4F_SEL%",
+            (ttsModel == "bulbul:v4-flash" || ttsModel == "bulbul:v4")
+                ? "selected"
+                : "");
+  h.replace("%SARVAM_V3_SEL%",
+            (ttsModel == "bulbul:v3" || ttsModel == "" || ttsModel == "DEFAULT")
+                ? "selected"
+                : "");
   h.replace("%SARVAM_V2_SEL%", ttsModel == "bulbul:v2" ? "selected" : "");
 
   static const struct {
     const char *id;
     const char *label;
-  } sarvamVoices[] = {
-    {"amit", "Amit (Male · Clear & Expressive)"},
-    {"priya", "Priya (Female · Default)"},
-    {"aditya", "Aditya (Male · Dynamic)"},
-    {"ritu", "Ritu (Female · Natural)"},
-    {"ashutosh", "Ashutosh (Male · Deep Voice)"},
-    {"neha", "Neha (Female · Warm)"},
-    {"rahul", "Rahul (Male · Casual)"},
-    {"pooja", "Pooja (Female · Friendly)"},
-    {"rohan", "Rohan (Male · Young)"},
-    {"simran", "Simran (Female · Cheerful)"},
-    {"kabir", "Kabir (Male · Authoritative)"},
-    {"shreya", "Shreya (Female · Sweet)"},
-    {"varun", "Varun (Male · Energetic)"},
-    {"ishita", "Ishita (Female · Professional)"},
-    {"kavya", "Kavya (Female · Soft)"},
-    {"dev", "Dev (Male · Modern)"},
-    {"ratan", "Ratan (Male · Classic)"},
-    {"manan", "Manan (Male)"},
-    {"sumit", "Sumit (Male)"},
-    {"roopa", "Roopa (Female)"},
-    {"aayan", "Aayan (Male)"},
-    {"shubh", "Shubh (Male)"},
-    {"advait", "Advait (Male)"},
-    {"anand", "Anand (Male)"},
-    {"tanya", "Tanya (Female)"},
-    {"tarun", "Tarun (Male)"},
-    {"sunny", "Sunny (Male)"},
-    {"mani", "Mani (Male)"},
-    {"gokul", "Gokul (Male)"}
-  };
+  } sarvamVoices[] = {{"amit", "Amit (Male · Clear & Expressive)"},
+                      {"priya", "Priya (Female · Default)"},
+                      {"aditya", "Aditya (Male · Dynamic)"},
+                      {"ritu", "Ritu (Female · Natural)"},
+                      {"ashutosh", "Ashutosh (Male · Deep Voice)"},
+                      {"neha", "Neha (Female · Warm)"},
+                      {"rahul", "Rahul (Male · Casual)"},
+                      {"pooja", "Pooja (Female · Friendly)"},
+                      {"rohan", "Rohan (Male · Young)"},
+                      {"simran", "Simran (Female · Cheerful)"},
+                      {"kabir", "Kabir (Male · Authoritative)"},
+                      {"shreya", "Shreya (Female · Sweet)"},
+                      {"varun", "Varun (Male · Energetic)"},
+                      {"ishita", "Ishita (Female · Professional)"},
+                      {"kavya", "Kavya (Female · Soft)"},
+                      {"dev", "Dev (Male · Modern)"},
+                      {"ratan", "Ratan (Male · Classic)"},
+                      {"manan", "Manan (Male)"},
+                      {"sumit", "Sumit (Male)"},
+                      {"roopa", "Roopa (Female)"},
+                      {"aayan", "Aayan (Male)"},
+                      {"shubh", "Shubh (Male)"},
+                      {"advait", "Advait (Male)"},
+                      {"anand", "Anand (Male)"},
+                      {"tanya", "Tanya (Female)"},
+                      {"tarun", "Tarun (Male)"},
+                      {"sunny", "Sunny (Male)"},
+                      {"mani", "Mani (Male)"},
+                      {"gokul", "Gokul (Male)"}};
   String voiceOpts;
   voiceOpts.reserve(2200);
   for (const auto &v : sarvamVoices) {
-    bool sel = (ttsVoice.equalsIgnoreCase(v.id)) || (ttsVoice == "" && strcmp(v.id, "priya") == 0);
+    bool sel = (ttsVoice.equalsIgnoreCase(v.id)) ||
+               (ttsVoice == "" && strcmp(v.id, "priya") == 0);
     voiceOpts += "          <option value=\"";
     voiceOpts += v.id;
     voiceOpts += "\"";
-    if (sel) voiceOpts += " selected";
+    if (sel)
+      voiceOpts += " selected";
     voiceOpts += ">";
     voiceOpts += v.label;
     voiceOpts += "</option>\n";
@@ -2022,7 +2058,9 @@ static String getDashboardBodyPart2() {
   h.replace("%OPENAITTSKEY%", esc(maskSecret(openaiTtsKey)));
   h.replace("%OPENAITTSMODEL%", esc(openaiTtsModel));
   h.replace("%OPENAITTSVOICE%", esc(openaiTtsVoice));
-  h.replace("%OA_ALLOY_SEL%", (openaiTtsVoice == "alloy" || openaiTtsVoice == "") ? "selected" : "");
+  h.replace("%OA_ALLOY_SEL%",
+            (openaiTtsVoice == "alloy" || openaiTtsVoice == "") ? "selected"
+                                                                : "");
   h.replace("%OA_ECHO_SEL%", openaiTtsVoice == "echo" ? "selected" : "");
   h.replace("%OA_FABLE_SEL%", openaiTtsVoice == "fable" ? "selected" : "");
   h.replace("%OA_ONYX_SEL%", openaiTtsVoice == "onyx" ? "selected" : "");
@@ -2051,7 +2089,8 @@ static String getDashboardBodyPart2() {
   h.replace("%NIGHT_CHECK_0%", nightMode == 0 ? "checked" : "");
   h.replace("%NIGHT_CHECK_1%", nightMode == 1 ? "checked" : "");
   h.replace("%NIGHT_CHECK_2%", nightMode == 2 ? "checked" : "");
-  h.replace("%NIGHT_SLIDER_STYLE%", nightMode == 2 ? "opacity:0.25;pointer-events:none" : "");
+  h.replace("%NIGHT_SLIDER_STYLE%",
+            nightMode == 2 ? "opacity:0.25;pointer-events:none" : "");
   h.replace("%CIRC_EN_CHECKED%", circadianSleepEnabled ? "checked" : "");
   h.replace("%GREET_EN_CHECKED%", greetingsEnabled ? "checked" : "");
   h.replace("%SND_REACT_CHECKED%", soundReactiveEnabled ? "checked" : "");
@@ -2095,27 +2134,38 @@ static String getDashboardBodyPart2() {
   h.replace("%WTHR_LAT%", esc(weatherLat));
   h.replace("%WTHR_LON%", esc(weatherLon));
 
-  h.replace("%SKIN_DEFAULT_SEL%", currentEyeSkin == SKIN_DEFAULT ? "selected" : "");
-  h.replace("%SKIN_CYBER_SEL%", currentEyeSkin == SKIN_CYBERPUNK ? "selected" : "");
+  h.replace("%SKIN_DEFAULT_SEL%",
+            currentEyeSkin == SKIN_DEFAULT ? "selected" : "");
+  h.replace("%SKIN_CYBER_SEL%",
+            currentEyeSkin == SKIN_CYBERPUNK ? "selected" : "");
   h.replace("%SKIN_CAT_SEL%", currentEyeSkin == SKIN_CAT ? "selected" : "");
-  h.replace("%SKIN_RETRO_SEL%", currentEyeSkin == SKIN_RETRO8BIT ? "selected" : "");
+  h.replace("%SKIN_RETRO_SEL%",
+            currentEyeSkin == SKIN_RETRO8BIT ? "selected" : "");
   h.replace("%SKIN_ANIME_SEL%", currentEyeSkin == SKIN_ANIME ? "selected" : "");
-  h.replace("%SKIN_HEARTS_SEL%", currentEyeSkin == SKIN_HEARTS ? "selected" : "");
-  h.replace("%SKIN_STEAM_SEL%", currentEyeSkin == SKIN_STEAMPUNK ? "selected" : "");
+  h.replace("%SKIN_HEARTS_SEL%",
+            currentEyeSkin == SKIN_HEARTS ? "selected" : "");
+  h.replace("%SKIN_STEAM_SEL%",
+            currentEyeSkin == SKIN_STEAMPUNK ? "selected" : "");
   h.replace("%SKIN_DEMON_SEL%", currentEyeSkin == SKIN_DEMON ? "selected" : "");
-  h.replace("%SKIN_MATRIX_SEL%", currentEyeSkin == SKIN_MATRIX ? "selected" : "");
-  h.replace("%SKIN_CYBORG_SEL%", currentEyeSkin == SKIN_CYBORG ? "selected" : "");
+  h.replace("%SKIN_MATRIX_SEL%",
+            currentEyeSkin == SKIN_MATRIX ? "selected" : "");
+  h.replace("%SKIN_CYBORG_SEL%",
+            currentEyeSkin == SKIN_CYBORG ? "selected" : "");
   h.replace("%SKIN_MECHA_SEL%", currentEyeSkin == SKIN_MECHA ? "selected" : "");
-  h.replace("%SKIN_SHADES_SEL%", currentEyeSkin == SKIN_SUNGLASSES ? "selected" : "");
+  h.replace("%SKIN_SHADES_SEL%",
+            currentEyeSkin == SKIN_SUNGLASSES ? "selected" : "");
   h.replace("%SKIN_PUPPY_SEL%", currentEyeSkin == SKIN_PUPPY ? "selected" : "");
   h.replace("%SKIN_HYPNO_SEL%", currentEyeSkin == SKIN_HYPNO ? "selected" : "");
   h.replace("%SKIN_ALIEN_SEL%", currentEyeSkin == SKIN_ALIEN ? "selected" : "");
   h.replace("%SKIN_NINJA_SEL%", currentEyeSkin == SKIN_NINJA ? "selected" : "");
   h.replace("%SKIN_ROUND_SEL%", currentEyeSkin == SKIN_ROUND ? "selected" : "");
   h.replace("%SKIN_KIWI_SEL%", currentEyeSkin == SKIN_KIWI ? "selected" : "");
-  h.replace("%SKIN_SQ_SOLID_SEL%", currentEyeSkin == SKIN_SQUIRCLE_SOLID ? "selected" : "");
-  h.replace("%SKIN_SQ_OUTLINE_SEL%", currentEyeSkin == SKIN_SQUIRCLE_OUTLINE ? "selected" : "");
-  h.replace("%SKIN_SQ_GLINT_SEL%", currentEyeSkin == SKIN_SQUIRCLE_GLINT ? "selected" : "");
+  h.replace("%SKIN_SQ_SOLID_SEL%",
+            currentEyeSkin == SKIN_SQUIRCLE_SOLID ? "selected" : "");
+  h.replace("%SKIN_SQ_OUTLINE_SEL%",
+            currentEyeSkin == SKIN_SQUIRCLE_OUTLINE ? "selected" : "");
+  h.replace("%SKIN_SQ_GLINT_SEL%",
+            currentEyeSkin == SKIN_SQUIRCLE_GLINT ? "selected" : "");
 
   h.replace("%MEM_NAME%", esc(getOwnerName()));
   h.replace("%MEM_FRIENDS%", esc(getFriendsFamily()));
@@ -2123,9 +2173,14 @@ static String getDashboardBodyPart2() {
   String memListHtml;
   memListHtml.reserve(1000);
   if (kiwiMemory.memoryCount == 0) {
-    memListHtml = "<div style=\"font-size:12px;color:var(--tertiary);font-style:italic\">No facts learned yet. Tell Kiwi your name or chat!</div>";
+    memListHtml =
+        "<div "
+        "style=\"font-size:12px;color:var(--tertiary);font-style:italic\">No "
+        "facts learned yet. Tell Kiwi your name or chat!</div>";
   } else {
-    memListHtml = "<ul style=\"margin:0;padding-left:18px;font-size:12px;line-height:1.6;color:var(--text)\">";
+    memListHtml = "<ul "
+                  "style=\"margin:0;padding-left:18px;font-size:12px;line-"
+                  "height:1.6;color:var(--text)\">";
     for (int i = 0; i < kiwiMemory.memoryCount; i++) {
       memListHtml += "<li>" + esc(kiwiMemory.memories[i]) + "</li>";
     }
@@ -3096,7 +3151,7 @@ static const char DASHBOARD_FOOT[] PROGMEM = R"rawfoot(<script>
         // Background check for update notification
         setTimeout(function () {
           var repo = localStorage.getItem('kiwi_ota_repo') || 'krishh-9085/kiwi';
-          var curV = (document.getElementById('fwVer') ? document.getElementById('fwVer').textContent : 'v1.0').replace(/^v/i, '');
+          var curV = (document.getElementById('fwVer') ? document.getElementById('fwVer').textContent : 'v1.1').replace(/^v/i, '');
           fetch('https://api.github.com/repos/' + repo + '/releases/latest')
             .then(function (r) { return r.ok ? r.json() : null; })
             .then(function (rel) {
@@ -3129,6 +3184,7 @@ static const char DASHBOARD_FOOT[] PROGMEM = R"rawfoot(<script>
 )rawfoot";
 
 void handleRoot() {
+  notifyWebRequest();
   server.sendHeader("Access-Control-Allow-Origin", "*");
   server.sendHeader("Connection", "close");
   server.sendHeader("Cache-Control", "no-cache, no-store, must-revalidate");

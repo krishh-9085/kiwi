@@ -9,6 +9,7 @@
 #include "services/AiService.h"
 #include "services/MemoryService.h"
 #include "services/WeatherService.h"
+#include "power/PowerManager.h"
 #include "web/icon.h"
 #include <DNSServer.h>
 #include <ESPmDNS.h>
@@ -21,8 +22,15 @@
 WebServer server(80);
 DNSServer dnsServer;
 volatile int8_t pendingSound = -1;
+volatile bool otaInProgress = false;
+volatile uint32_t lastWebRequestAt = 0;
 static bool webRoutesSet = false;
 static bool customAnimationUploadResult = false;
+
+void notifyWebRequest() {
+  lastWebRequestAt = millis();
+  powerNotifyActivity();
+}
 
 void pumpWeb() {
   if (apMode)
@@ -297,6 +305,7 @@ void startWeb() {
     // Apple Touch Icon & Favicon (Direct PROGMEM binary delivery, no template
     // processor)
     auto handleAppleIcon = []() {
+      notifyWebRequest();
       server.sendHeader("Access-Control-Allow-Origin", "*");
       server.sendHeader("Connection", "close");
       server.sendHeader("Content-Type", "image/png");
@@ -319,6 +328,7 @@ void startWeb() {
     server.on("/do", HTTP_POST, handleDoAction);
 
     server.on("/animations", HTTP_GET, []() {
+      notifyWebRequest();
       server.send(200, "application/json", animationListJson());
     });
 
@@ -358,6 +368,8 @@ void startWeb() {
     server.on(
         "/update", HTTP_POST,
         []() {
+          notifyWebRequest();
+          otaInProgress = false;
           if (busyProcessing) {
             server.send(503, "text/plain",
                         "FAIL: Robot is busy processing audio/AI. Please wait "
@@ -375,45 +387,56 @@ void startWeb() {
           }
         },
         []() {
+          notifyWebRequest();
           if (busyProcessing) {
+            otaInProgress = false;
             Update.abort();
             return;
           }
           HTTPUpload &upload = server.upload();
           if (upload.status == UPLOAD_FILE_START) {
+            otaInProgress = true;
             Serial.printf("[OTA] Update: %s\n", upload.filename.c_str());
             if (server.hasHeader("Content-Length") && (size_t)server.header("Content-Length").toInt() > 0x1E0000UL) {
               Serial.println("[OTA] Update rejected: upload size exceeds app "
                              "partition (1.9MB)");
+              otaInProgress = false;
               Update.abort();
               return;
             }
             if (!Update.begin(0x1E0000UL)) {
+              otaInProgress = false;
               Update.printError(Serial);
             }
           } else if (upload.status == UPLOAD_FILE_WRITE) {
             if (upload.totalSize > 0x1E0000UL) {
               Serial.println(
                   "[OTA] Update rejected: written size exceeds app partition");
+              otaInProgress = false;
               Update.abort();
               return;
             }
             if (Update.write(upload.buf, upload.currentSize) !=
                 upload.currentSize) {
+              otaInProgress = false;
               Update.printError(Serial);
             }
           } else if (upload.status == UPLOAD_FILE_END) {
+            otaInProgress = false;
             if (Update.end(true)) {
               Serial.printf("[OTA] Success: %u bytes\n", upload.totalSize);
             } else {
               Update.printError(Serial);
             }
+          } else if (upload.status == UPLOAD_FILE_ABORTED) {
+            otaInProgress = false;
           }
         });
 
     // Captive Portal probes redirect to root (192.168.4.1) for Android, Apple,
     // Windows
     auto handleCaptiveRedirect = []() {
+      notifyWebRequest();
       server.sendHeader("Location", String("http://") + apIP.toString() + "/",
                         true);
       server.send(302, "text/plain", "");

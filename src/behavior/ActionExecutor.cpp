@@ -18,6 +18,7 @@
 // ============================================================
 // COUNTDOWN TIMER STATE
 // ============================================================
+bool            pendingSleepAction = false;
 static bool     robotTimerActive = false;
 static bool     robotTimerRinging = false;
 static uint32_t robotTimerEndMs = 0;
@@ -277,6 +278,21 @@ void triggerSoundByName(const String &nameIn) {
 // ============================================================
 // SINGLE ACTION EXECUTOR
 // ============================================================
+void triggerPendingSleepAction() {
+  pendingSleepAction = false;
+  manualSleep = true;
+  inCircadianSleep = false;
+  showClockScreen = false;
+  showWeatherScreen = false;
+  setEmotion(EMOTION_IDLE);
+  emotionAutoReturnAt = 0;
+  returnIdleAt = 0;
+  sleepyWakeCancel();
+  sleepyFallAsleepStart();
+  addTerminalLog("[ACTION] Falling asleep...");
+  Serial.println("[ACTION] Sleep mode activated (manualSleep=1, fall-asleep animation running)");
+}
+
 bool executeRobotAction(const String &actionCmd) {
   String cmd = actionCmd;
   cmd.trim();
@@ -361,13 +377,12 @@ bool executeRobotAction(const String &actionCmd) {
 
   // 6. SLEEP MODE
   if (actionType == "sleep" || actionType == "night") {
-    manualSleep = true;
-    inCircadianSleep = true;
-    showClockScreen = false;
-    showWeatherScreen = false;
-    sleepyWakeCancel();
-    sleepyFallAsleepStart();
-    addTerminalLog("[ACTION] Falling asleep...");
+    if (kiwiIsOutputting() || busyProcessing) {
+      pendingSleepAction = true;
+      Serial.println("[ACTION] Speech in progress -> Queuing sleep action until speech ends");
+      return true;
+    }
+    triggerPendingSleepAction();
     return true;
   }
 

@@ -5,14 +5,14 @@
 // ============================================================
 // FIRMWARE VERSION CONFIGURATION
 // ============================================================
-#define FIRMWARE_VERSION "v1.0"
+#define FIRMWARE_VERSION "v1.1"
 extern const char *FIRMWARE_VER;
 
 // ============================================================
 // BOOT TIMING & DIAGNOSTICS
 // ============================================================
 #ifndef BOOT_SERIAL_WAIT_MS
-#define BOOT_SERIAL_WAIT_MS 0   // set to 2000 when debugging over USB
+#define BOOT_SERIAL_WAIT_MS 0 // set to 2000 when debugging over USB
 #endif
 
 #ifndef BOOT_TIMING_LOG
@@ -91,6 +91,9 @@ constexpr uint32_t TICKLE_COOLDOWN_MS = 6000;
 constexpr uint32_t DUAL_CHEEK_HOLD_MS = 600;
 constexpr uint32_t CIRCADIAN_TEMP_WAKE_MS = 45000;
 constexpr uint32_t SLEEP_HOLD_MS = 7000;
+constexpr uint32_t MANUAL_LIGHT_SLEEP_MAX_MIN = 15;
+constexpr uint32_t FACE_FRAME_MS_ACTIVE = 33;
+constexpr uint32_t FACE_FRAME_MS_IDLE = 100;
 
 // ============================================================
 // DEFAULT AI SERVICE ENDPOINTS & MODELS
@@ -246,6 +249,7 @@ extern PetMood petMood;
 extern Flourish flourish;
 extern volatile uint32_t returnIdleAt;
 extern uint32_t emotionAutoReturnAt;
+extern uint32_t lastEmotionChangeAt;
 extern uint32_t errorFaceUntil;
 extern uint32_t bootInfoUntil;
 extern uint32_t gFaceFrameMs;

@@ -1455,6 +1455,7 @@ static const char FACE_PAGE_HTML[] PROGMEM = R"RAWFACE(<!doctype html>
 
 
 void handleFacesPage() {
+  notifyWebRequest();
   server.sendHeader("Access-Control-Allow-Origin", "*");
   server.sendHeader("Connection", "close");
   server.send_P(200, "text/html; charset=utf-8", FACE_PAGE_HTML);

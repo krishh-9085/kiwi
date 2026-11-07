@@ -14,8 +14,8 @@
 #include <WiFi.h>
 #include <time.h>
 
-
 void handleOtaPage() {
+  notifyWebRequest();
   static const char OTA_HTML[] PROGMEM = R"rawliteral(<!doctype html>
 <html lang="en">
 
@@ -870,7 +870,7 @@ void handleOtaPage() {
       <div class="id">
         <div class="bezel" aria-hidden="true"><i></i><i></i></div>
         <div>
-          <div class="unit">Kiwi Unit · <span id="fwVer">v1.0</span> · Firmware</div>
+          <div class="unit">Kiwi Unit · <span id="fwVer">v1.1</span> · Firmware</div>
           <h1 class="brand">Over-The-Air Update</h1>
         </div>
       </div>
@@ -885,7 +885,7 @@ void handleOtaPage() {
       <section class="hull" aria-labelledby="otaTitle">
         <div class="fw-meta-pill" id="fwPill">
           <span>Current Firmware:</span>
-          <strong id="fwVersion">v1.0</strong>
+          <strong id="fwVersion">v1.1</strong>
         </div>
 
         <div class="glyph" aria-hidden="true">
@@ -1024,7 +1024,7 @@ void handleOtaPage() {
       const onlineOtaBar = document.getElementById('onlineOtaBar');
       const onlineOtaSub = document.getElementById('onlineOtaSub');
 
-      let currentFirmwareVersion = 'v1.0';
+      let currentFirmwareVersion = 'v1.1';
       const DEFAULT_REPO = 'krishh-9085/kiwi';
       let activeRepo = localStorage.getItem('kiwi_ota_repo') || DEFAULT_REPO;
       repoNameDisplay.textContent = activeRepo;

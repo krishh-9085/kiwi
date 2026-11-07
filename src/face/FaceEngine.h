@@ -8,5 +8,5 @@
 #include "face/FaceSkins.h"
 #include <Arduino.h>
 
-
 void tickFace();
+void updateFaceFrameRate();

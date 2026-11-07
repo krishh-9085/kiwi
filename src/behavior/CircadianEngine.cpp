@@ -43,6 +43,9 @@ void checkCircadianSleep() {
 
   if (isSleepTime) {
     if (!inCircadianSleep) {
+      if (sleepyWakeIsActive()) {
+        return; // Do NOT cancel an active wake-up animation! Let Kiwi finish waking up!
+      }
       inCircadianSleep = true;
       sleepyWakeCancel();
       sleepyFallAsleepStart();

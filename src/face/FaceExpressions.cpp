@@ -45,11 +45,14 @@ static bool emotionSkipsTransitionBlink(Emotion e) {
 void setEmotion(Emotion e) {
   if (e == EMOTION_SLEEPING) {
     sleepyWakeCancel();
-  } else {
+  } else if (!sleepyFallAsleepIsActive()) {
     sleepyFallAsleepCancel();
   }
   Emotion prev = currentEmotion;
   uint32_t now = millis();
+  if (e != prev) {
+    lastEmotionChangeAt = now;
+  }
   currentEmotion = e;
   emotionStartedAt = now;
   faceTargetsForEmotion(e, petMood);
@@ -63,6 +66,8 @@ void setEmotion(Emotion e) {
     nextIdleLookAt = now + 300 + random(0, 500);
     idleExpression = 0;
     idleExpressionEnd = 0;
+  } else if (e == EMOTION_SURPRISED && returnIdleAt == 0 && emotionAutoReturnAt == 0) {
+    emotionAutoReturnAt = now + 3000;
   }
 }
 
@@ -363,11 +368,12 @@ void faceTargetsForEmotion(Emotion e, PetMood pm) {
       faceTgt.lockY = -2;
       break;
     case PET_SURPRISED:
-      setFace(38, 40, 32, 27, 8);
+      // Map to happy sparkle reaction instead of wide-eyed surprise
+      setFace(34, 30, 30, 28, 7, 0, 0, 14, 0.3f);
       faceTgt.glint = 1;
-      faceTgt.mouthW = 12;
-      faceTgt.mouthH = 7;
-      faceTgt.mouthCurve = 0.0f;
+      faceTgt.mouthW = 26;
+      faceTgt.mouthH = 3;
+      faceTgt.mouthCurve = 0.9f;
       break;
     default:
       break;
@@ -380,7 +386,7 @@ void faceTargetsForEmotion(Emotion e, PetMood pm) {
 }
 
 void maybeChangeEmotion() {
-  if (showClockScreen || showWeatherScreen || inCircadianSleep || bannerActive)
+  if (showClockScreen || showWeatherScreen || bannerActive)
     return;
   uint32_t now = millis();
   if (errorFaceUntil && now < errorFaceUntil)

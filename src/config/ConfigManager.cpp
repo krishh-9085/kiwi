@@ -262,7 +262,7 @@ void loadConfig() {
 
 
 
-  displayBrightness = prefs.getInt("disp_bright", 80);
+  displayBrightness = prefs.getInt("disp_bright", 40);
 
   if (displayBrightness < 0) displayBrightness = 0;
 

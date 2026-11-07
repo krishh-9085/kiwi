@@ -6,6 +6,8 @@
 // ============================================================
 
 extern int lastActionsExecuted;
+extern bool pendingSleepAction;
+void triggerPendingSleepAction();
 
 // Scans text for [ACTION: ...] tags, executes all requested robot actions,
 // and removes the tags so speech/TTS and chat logs remain clean and natural.

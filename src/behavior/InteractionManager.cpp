@@ -9,12 +9,14 @@
 #include "hardware/TouchController.h"
 #include "services/AiService.h"
 #include "web/WebPortal.h"
+#include "power/PowerManager.h"
 
 
 // ============================================================
 // UI PUMP (Display + Touch + Tone Update)
 // ============================================================
 void pumpUI() {
+  powerNotifyActivity();
   bootAnimPump();
   updateTouch();
   updateTonePlayer();
@@ -28,7 +30,7 @@ void pumpUI() {
 void triggerPetReaction() {
   if (busyProcessing)
     return;
-  petMood = (PetMood)random(0, PET_MOOD_COUNT);
+  petMood = (PetMood)random(0, PET_MOOD_COUNT - 1); // Exclude PET_SURPRISED
   setEmotion(EMOTION_PETTED);
   switch (petMood) {
   case PET_LOVE:
@@ -68,11 +70,12 @@ void triggerPetReaction() {
     soundPetProud();
     break;
   case PET_SURPRISED:
+  default:
     flourish = FL_SPARKLE;
-    soundPetSurprised();
+    soundPetSparkle();
     break;
   }
-  emotionAutoReturnAt = millis() + 60000;
+  emotionAutoReturnAt = millis() + 3500;
 }
 
 // ============================================================
@@ -457,6 +460,14 @@ void handleQuestion(const String &q) {
       return;
     }
 #endif
+
+    // If sleep action is pending, trigger fall-asleep animation immediately after speech ends!
+    if (pendingSleepAction) {
+      triggerPendingSleepAction();
+      returnIdleAt = 0;
+      emotionAutoReturnAt = 0;
+      return;
+    }
 
     // If an expressive emotion was shown (e.g. excited, happy, laughing),
     // hold that face for 2.5s after speaking, then auto-return to IDLE!

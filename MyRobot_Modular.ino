@@ -1,6 +1,6 @@
 /*
  ==============================================================================
-  MyRobot (Kiwi) - Modular v1.0
+  MyRobot (Kiwi) - Modular v1.1
   ESP32-C3 Super Mini / PlatformIO / Arduino Core 3.x
   Tools -> USB CDC On Boot = Enabled
 
@@ -40,9 +40,11 @@
 #include "core/Timing.h"
 #include "face/BootWakeAnim.h"
 #include "face/FaceEngine.h"
+#include "face/SleepyWakeAnim.h"
 #include "hardware/AudioEngine.h"
 #include "hardware/SoundLevel.h"
 #include "hardware/TouchController.h"
+#include "power/PowerManager.h"
 #include "services/AiService.h"
 #include "services/MemoryService.h"
 #include "services/WeatherService.h"
@@ -51,6 +53,7 @@
 #include <Arduino.h>
 #include <ESPmDNS.h>
 #include <WiFi.h>
+
 
 // ============================================================
 // BOOT WAKE & CONNECTION FLOW STATE
@@ -89,6 +92,7 @@ void setup() {
   randomSeed(esp_random());
   initBase64Lookup();
   loadConfig();
+  powerInit();
 
   if (!initDisplay()) {
     Serial.println("[OLED] FAILED to initialize");
@@ -101,7 +105,7 @@ void setup() {
                 (unsigned long)(millis() - bootSetupEnterAt));
 #endif
 
-  if (oledOK && !bootCompleted) {
+  if (oledOK && !bootCompleted && !skipBootWakeAnim) {
     bootStartAt = millis();
     bootWakeStart();
   }
@@ -259,19 +263,22 @@ static String buildBootGreeting(int hour, const String &ownerName) {
   String tpl;
   if (hour >= 5 && hour < 12) {
     tpl = pickGreetingTemplate(GREET_MORNING,
-            sizeof(GREET_MORNING) / sizeof(GREET_MORNING[0]), lastMorning);
+                               sizeof(GREET_MORNING) / sizeof(GREET_MORNING[0]),
+                               lastMorning);
   } else if (hour >= 12 && hour < 17) {
-    tpl = pickGreetingTemplate(GREET_AFTERNOON,
-            sizeof(GREET_AFTERNOON) / sizeof(GREET_AFTERNOON[0]), lastAfternoon);
+    tpl = pickGreetingTemplate(
+        GREET_AFTERNOON, sizeof(GREET_AFTERNOON) / sizeof(GREET_AFTERNOON[0]),
+        lastAfternoon);
   } else if (hour >= 17 && hour < 21) {
     tpl = pickGreetingTemplate(GREET_EVENING,
-            sizeof(GREET_EVENING) / sizeof(GREET_EVENING[0]), lastEvening);
+                               sizeof(GREET_EVENING) / sizeof(GREET_EVENING[0]),
+                               lastEvening);
   } else if (hour >= 21 || (hour >= 0 && hour < 5)) {
-    tpl = pickGreetingTemplate(GREET_NIGHT,
-            sizeof(GREET_NIGHT) / sizeof(GREET_NIGHT[0]), lastNight);
+    tpl = pickGreetingTemplate(
+        GREET_NIGHT, sizeof(GREET_NIGHT) / sizeof(GREET_NIGHT[0]), lastNight);
   } else {
-    tpl = pickGreetingTemplate(GREET_ANY,
-            sizeof(GREET_ANY) / sizeof(GREET_ANY[0]), lastAny);
+    tpl = pickGreetingTemplate(
+        GREET_ANY, sizeof(GREET_ANY) / sizeof(GREET_ANY[0]), lastAny);
   }
   // {n} becomes ", Name" if a name is known, otherwise nothing.
   String nameTok = ownerName.length() > 0 ? ", " + ownerName : String("");
@@ -284,6 +291,10 @@ static String buildBootGreeting(int hour, const String &ownerName) {
 // ============================================================
 static void checkBootGreeting() {
   static bool greetingTriggered = false;
+  if (suppressBootGreeting) {
+    greetingTriggered = true;
+    suppressBootGreeting = false;
+  }
   if (greetingTriggered)
     return;
   if (!bootCompleted)
@@ -318,8 +329,7 @@ static void checkBootGreeting() {
   owner.trim();
   String speech = buildBootGreeting(hour, owner);
 
-  Serial.printf("[BOOT] Greeting: %s (hour=%d)\n", speech.c_str(),
-                hour);
+  Serial.printf("[BOOT] Greeting: %s (hour=%d)\n", speech.c_str(), hour);
   setEmotion(EMOTION_HAPPY);
   flourish = FL_STAR;
   flourishT0 = millis();
@@ -335,6 +345,7 @@ static void checkBootGreeting() {
 // MAIN EVENT LOOP
 // ============================================================
 void loop() {
+  powerUpdate();
   pumpWeb();
   maintainWiFi();
 
@@ -360,7 +371,12 @@ void loop() {
   updateTonePlayer();
   processPendingSound();
 
+  if (pendingSleepAction && !busyProcessing && !kiwiIsOutputting()) {
+    triggerPendingSleepAction();
+  }
+
   if (webQueuedQuestion.length() > 0 && !busyProcessing) {
+    powerNotifyActivity();
     String q = webQueuedQuestion;
     webQueuedQuestion = "";
     busyProcessing = true;
@@ -373,11 +389,15 @@ void loop() {
     bool wasCancelled = cancelRequest;
     cancelRequest = false;
     if (wasCancelled) {
+      pendingSleepAction = false;
       returnIdleAt = 0;
       setEmotion(EMOTION_IDLE);
       robotStateDesc = "Ready";
       Serial.println("[ROBOT] Web request cancelled");
-    } else if (returnIdleAt == 0) {
+    } else if (pendingSleepAction) {
+      triggerPendingSleepAction();
+    } else if (returnIdleAt == 0 && !manualSleep && !inCircadianSleep &&
+               !sleepyFallAsleepIsActive()) {
       setEmotion(EMOTION_IDLE);
     }
     resyncTouch();
@@ -386,6 +406,7 @@ void loop() {
   }
 
   if (startRecording && !busyProcessing) {
+    powerNotifyActivity();
     startRecording = false;
     busyProcessing = true;
     lastProgressAt = millis();
@@ -452,11 +473,15 @@ void loop() {
     bool wasCancelled = cancelRequest;
     cancelRequest = false;
     if (wasCancelled) {
+      pendingSleepAction = false;
       returnIdleAt = 0;
       setEmotion(EMOTION_IDLE);
       robotStateDesc = "Ready";
       Serial.println("[ROBOT] Cancelled - returning to Ready");
-    } else if (returnIdleAt == 0) {
+    } else if (pendingSleepAction) {
+      triggerPendingSleepAction();
+    } else if (returnIdleAt == 0 && !manualSleep && !inCircadianSleep &&
+               !sleepyFallAsleepIsActive()) {
       setEmotion(EMOTION_IDLE);
     }
     resyncTouch();

@@ -178,7 +178,7 @@ String touchActionToString(TouchAction a) {
 }
 
 // ---------- Circadian Sleep & Display Brightness Mode ----------
-int displayBrightness = 80; // Daytime brightness (0-100%, Rocky default 80%)
+int displayBrightness = 40; // Daytime brightness (0-100%, default 40%)
 int nightMode = 1; // 0: Same as day, 1: Dim, 2: Screen off (Rocky default: Dim)
 int nightBrightness = 10; // Night brightness (0-100%, Rocky default 10%)
 bool circadianSleepEnabled = true;
@@ -225,6 +225,7 @@ PetMood petMood = PET_LOVE;
 Flourish flourish = FL_NONE;
 volatile uint32_t returnIdleAt = 0;
 uint32_t emotionAutoReturnAt = 0;
+uint32_t lastEmotionChangeAt = 0;
 uint32_t errorFaceUntil = 0;
 uint32_t bootInfoUntil = 0;
 uint32_t gFaceFrameMs = 33;

@@ -10,6 +10,7 @@
 #include "services/WeatherService.h"
 #include "face/FaceDisplay.h"
 #include "behavior/ActionExecutor.h"
+#include "power/PowerManager.h"
 #include <WiFi.h>
 #include <esp_sleep.h>
 
@@ -23,7 +24,7 @@ bool syncTimeFromNTP();
 // ---------- Tickle / Gudgudi Tracking ----------
 static uint32_t lastCheekTouchAt = 0;
 static uint8_t  cheekTapCount = 0;
-static uint32_t lastTickleTriggeredAt = 0;
+uint32_t lastTickleTriggeredAt = 0;
 
 void triggerTickleMode() {
   if (busyProcessing)
@@ -63,24 +64,24 @@ void initTouch() {
 void resyncTouch() {
   touchL.state = false;
   touchL.lastRaw = digitalRead(PIN_TOUCH_LEFT);
-  touchL.holdHandled = false;
-  touchL.sleepHandled = false;
+  touchL.holdHandled = touchL.lastRaw;
+  touchL.sleepHandled = touchL.lastRaw;
   touchL.startedAt = 0;
   touchL.lastReleaseAt = 0;
   touchL.pendingSingleTap = false;
 
   touchR.state = false;
   touchR.lastRaw = digitalRead(PIN_TOUCH_RIGHT);
-  touchR.holdHandled = false;
-  touchR.sleepHandled = false;
+  touchR.holdHandled = touchR.lastRaw;
+  touchR.sleepHandled = touchR.lastRaw;
   touchR.startedAt = 0;
   touchR.lastReleaseAt = 0;
   touchR.pendingSingleTap = false;
 
   touchT.state = false;
   touchT.lastRaw = digitalRead(PIN_TOUCH_TOP);
-  touchT.holdHandled = false;
-  touchT.sleepHandled = false;
+  touchT.holdHandled = touchT.lastRaw;
+  touchT.sleepHandled = touchT.lastRaw;
   touchT.startedAt = 0;
   touchT.lastReleaseAt = 0;
   touchT.pendingSingleTap = false;
@@ -104,6 +105,7 @@ TouchAction getDoubleTapAction(uint8_t pin) {
 }
 
 void executeTouchAction(TouchAction act, uint8_t pin) {
+  powerNotifyActivity();
   if (!bootWakeDone()) {
     return;
   }
@@ -118,6 +120,9 @@ void executeTouchAction(TouchAction act, uint8_t pin) {
 
   if (sleepyWakeIsActive()) {
     sleepyWakeCancel();
+    manualSleep = false;
+    inCircadianSleep = false;
+    circadianTempWakeUntil = now + 30000;
     setEmotion(EMOTION_HAPPY);
     soundPetSparkle();
     Serial.println("[TOUCH] Second tap during sleepy wake -> Full Wake-up (Happy)");
@@ -128,23 +133,30 @@ void executeTouchAction(TouchAction act, uint8_t pin) {
     sleepyFallAsleepCancel();
     manualSleep = false;
     inCircadianSleep = false;
-    circadianTempWakeUntil = now + CIRCADIAN_TEMP_WAKE_MS;
+    circadianTempWakeUntil = now + 30000;
+    setDisplayPower(true);
     setOledDim(false);
     updateDisplayBrightnessMode();
-    setEmotion(EMOTION_HAPPY);
-    soundPetSparkle();
-    Serial.println("[TOUCH] Tap during falling asleep -> Woke up (Happy)");
+    setEmotion(EMOTION_IDLE);
+    emotionAutoReturnAt = 0;
+    returnIdleAt = 0;
+    sleepyWakeStart();
+    Serial.println("[TOUCH] Tap during falling asleep -> Waking up with sleepy wake animation!");
     return;
   }
 
   if (inCircadianSleep || manualSleep) {
     manualSleep = false;
     inCircadianSleep = false;
-    circadianTempWakeUntil = now + CIRCADIAN_TEMP_WAKE_MS;
+    circadianTempWakeUntil = now + 30000;
+    setDisplayPower(true);
     setOledDim(false);
     updateDisplayBrightnessMode();
+    setEmotion(EMOTION_IDLE);
+    emotionAutoReturnAt = 0;
+    returnIdleAt = 0;
     sleepyWakeStart();
-    Serial.println("[TOUCH] Sleepy Wake-up from Sleep Mode");
+    Serial.println("[TOUCH] Tap during sleep -> Waking up with sleepy wake animation!");
     return;
   }
 
@@ -294,6 +306,7 @@ static void updateOneTouch(TouchSensor &ts, uint32_t now) {
   }
   uint32_t deb = (touchDebounceMs > 0) ? (uint32_t)touchDebounceMs : TOUCH_DEBOUNCE;
   if (now - ts.changedAt >= deb && raw != ts.state) {
+    powerNotifyActivity();
     ts.state = raw;
     if (ts.state) {
       ts.startedAt = now;
@@ -337,7 +350,7 @@ static void updateOneTouch(TouchSensor &ts, uint32_t now) {
       Serial.printf("[TOUCH] Pin %d RELEASED after %lu ms\n", ts.pin, (unsigned long)held);
       uint32_t tapMax = (ts.pin == PIN_TOUCH_TOP) ? TOUCH_CLOCK_MS : TOUCH_TAP_MAX_MS;
       if (!ts.holdHandled && !ts.sleepHandled && held < tapMax) {
-        if (inCircadianSleep || manualSleep) {
+        if (inCircadianSleep || manualSleep || sleepyFallAsleepIsActive()) {
           executeTouchAction(TOUCH_ACT_DISMISS, ts.pin);
           ts.pendingSingleTap = false;
           return;
@@ -384,30 +397,36 @@ static void updateOneTouch(TouchSensor &ts, uint32_t now) {
     }
 
     // Hold 3s on Top -> Change Face Skin (Cycle Face Skin)
-    if (ts.pin == PIN_TOUCH_TOP && held >= TOUCH_CLOCK_MS && !ts.holdHandled && !busyProcessing && !inCircadianSleep && !manualSleep) {
+    if (ts.pin == PIN_TOUCH_TOP && held >= TOUCH_CLOCK_MS && !ts.holdHandled && !ts.sleepHandled && !busyProcessing && !inCircadianSleep && !manualSleep && !sleepyFallAsleepIsActive()) {
       ts.holdHandled = true;
       Serial.println("[TOUCH] Top Held 3s -> Changing Face Skin");
       executeTouchAction(touchActTopHold, ts.pin);
     }
-    // Hold 7-10s on Top -> Sleep Mode Toggle!
-    if (ts.pin == PIN_TOUCH_TOP && held >= SLEEP_HOLD_MS && !ts.sleepHandled && !busyProcessing) {
+    // Hold 2s while asleep (or 7s while awake) on Top -> Sleep Mode Toggle!
+    uint32_t sleepHoldRequired = (inCircadianSleep || manualSleep || sleepyFallAsleepIsActive()) ? 2000 : SLEEP_HOLD_MS;
+    if (ts.pin == PIN_TOUCH_TOP && held >= sleepHoldRequired && !ts.sleepHandled && !busyProcessing) {
       ts.sleepHandled = true;
       sleepyWakeCancel();
       sleepyFallAsleepCancel();
       showClockScreen = false;
       showWeatherScreen = false;
-      if (!inCircadianSleep && !manualSleep) {
+      if (!inCircadianSleep && !manualSleep && !sleepyFallAsleepIsActive()) {
         manualSleep = true;
-        inCircadianSleep = true;
+        inCircadianSleep = false;
         sleepyFallAsleepStart();
-        Serial.println("[TOUCH] Held 7-10s -> Kiwi is falling asleep (Z Z)");
+        Serial.println("[TOUCH] Held to sleep -> Kiwi is falling asleep (Z Z)");
       } else {
         manualSleep = false;
         inCircadianSleep = false;
+        circadianTempWakeUntil = now + 30000;
+        setDisplayPower(true);
         setOledDim(false);
         updateDisplayBrightnessMode();
+        setEmotion(EMOTION_IDLE);
+        emotionAutoReturnAt = 0;
+        returnIdleAt = 0;
         sleepyWakeStart();
-        Serial.println("[TOUCH] Held 7-10s -> Kiwi Woke Up!");
+        Serial.println("[TOUCH] Held to wake -> Kiwi Woke Up!");
       }
     }
   }

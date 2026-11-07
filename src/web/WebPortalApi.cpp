@@ -28,6 +28,7 @@ static String escJson(String s) {
 }
 
 void handleDoAction() {
+  notifyWebRequest();
   lastUserInteractionAt = millis();
 
   // Web Mic Audio Record Trigger
@@ -461,6 +462,7 @@ void handleDoAction() {
 }
 
 void handleStatus() {
+  notifyWebRequest();
   static uint32_t lastStatusGen = 0;
   static String cachedStatusJson = "";
 
@@ -527,6 +529,7 @@ void handleStatus() {
 }
 
 void handleConfigApi() {
+  notifyWebRequest();
   String j;
   j.reserve(2048);
   j = "{";
@@ -567,6 +570,7 @@ void handleConfigApi() {
 }
 
 void handleSave() {
+  notifyWebRequest();
   if (!server.hasArg("ssid")) {
     server.send(400, "text/plain", "SSID required");
     return;
@@ -859,6 +863,7 @@ void handleSave() {
 
 
 void handleScanNetworks() {
+  notifyWebRequest();
   lastUserInteractionAt = millis();
   int n = WiFi.scanNetworks(false, false);
   String json = "[";

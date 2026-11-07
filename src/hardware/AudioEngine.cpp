@@ -1,5 +1,6 @@
 #include "hardware/AudioEngine.h"
 #include "config/AppConfig.h"
+#include "power/PowerManager.h"
 #include <Preferences.h>
 #include <math.h>
 #include <string.h>
@@ -74,6 +75,7 @@ static float vibPhase = 0.0f;
 static float tremPhase = 0.0f;
 
 void playToneQueue(Tone *tones, int count) {
+  powerNotifyActivity();
   if (spkOwner == SPK_SPEECH) {
     if (!busyProcessing) {
       // Auto-recover if speech finished but speaker lock was left held
@@ -607,6 +609,7 @@ void spkFlush() {
 
 // Call once before a speech stream starts. Speech takes priority over tones.
 void spkBeginSpeech() {
+  powerNotifyActivity();
   if (spkOwner != SPK_SPEECH) {
     tonePlaying = false;
     spkOwner = SPK_SPEECH;
@@ -618,6 +621,33 @@ void spkBeginSpeech() {
 void spkEndSpeech() {
   spkFlush();
   spkOwner = SPK_NONE;
+}
+
+// Prepares audio hardware for light or deep sleep: stops speech/tones,
+// clears queues and disables I2S TX and RX DMA channels.
+void audioSleepPrepare() {
+  spkEndSpeech();
+  tonePlaying = false;
+  toneCount = 0;
+  toneIndex = 0;
+  spkOwner = SPK_NONE;
+  cancelRequest = false;
+  if (txHandle) {
+    i2s_channel_disable(txHandle);
+  }
+  if (rxHandle) {
+    i2s_channel_disable(rxHandle);
+  }
+}
+
+// Re-enables I2S TX and RX channels after waking from light sleep.
+void audioSleepWake() {
+  if (txHandle) {
+    i2s_channel_enable(txHandle);
+  }
+  if (rxHandle) {
+    i2s_channel_enable(rxHandle);
+  }
 }
 
 void spkPushSample(int16_t s) {

@@ -7,7 +7,10 @@ class DNSServer;
 extern WebServer server;
 extern DNSServer dnsServer;
 extern volatile int8_t pendingSound;
+extern volatile bool otaInProgress;
+extern volatile uint32_t lastWebRequestAt;
 void pumpWeb();
+void notifyWebRequest();
 
 // ---------- Wi-Fi & NTP Management ----------
 void createAPName();

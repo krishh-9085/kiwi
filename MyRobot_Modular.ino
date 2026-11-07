@@ -187,7 +187,7 @@ static void updateBootFlow() {
 }
 
 // ============================================================
-// BOOT GREETING FOR KRISHNA
+// BOOT GREETING
 // ============================================================
 static void checkBootGreeting() {
   static bool greetingTriggered = false;
@@ -234,9 +234,17 @@ static void checkBootGreeting() {
     timeGreeting = "good day";
   }
 
-  String speech = "Hi Krishna, " + timeGreeting + "! What's up?";
+  String owner = getOwnerName();
+  owner.trim();
 
-  Serial.printf("[BOOT] Greeting Krishna: %s (hour=%d)\n", speech.c_str(),
+  String speech;
+  if (owner.length() > 0) {
+    speech = "Hi " + owner + ", " + timeGreeting + "! What's up?";
+  } else {
+    speech = "Hi, " + timeGreeting + "! What's up?";
+  }
+
+  Serial.printf("[BOOT] Greeting: %s (hour=%d)\n", speech.c_str(),
                 hour);
   setEmotion(EMOTION_HAPPY);
   flourish = FL_STAR;

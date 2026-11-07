@@ -23,10 +23,10 @@ python tools/web_dev/server.py
 ## 🎨 How to Develop UI Without Flashing
 
 1. Open the templates in `tools/web_dev/templates/`:
-   - [dashboard.html](file:///c:/Users/rohil/Downloads/MyRobot_fixed/MyRobot_Modular/tools/web_dev/templates/dashboard.html) — Main dashboard, status pills, live console & configuration deck
-   - [faces.html](file:///c:/Users/rohil/Downloads/MyRobot_fixed/MyRobot_Modular/tools/web_dev/templates/faces.html) — Face and eye emotion studio
-   - [wiring.html](file:///c:/Users/rohil/Downloads/MyRobot_fixed/MyRobot_Modular/tools/web_dev/templates/wiring.html) — Hardware pinout blueprint
-   - [update.html](file:///c:/Users/rohil/Downloads/MyRobot_fixed/MyRobot_Modular/tools/web_dev/templates/update.html) — Firmware OTA upload page
+   - [dashboard.html](templates/dashboard.html) — Main dashboard, status pills, live console & configuration deck
+   - [faces.html](templates/faces.html) — Face and eye emotion studio
+   - [wiring.html](templates/wiring.html) — Hardware pinout blueprint
+   - [update.html](templates/update.html) — Firmware OTA upload page
 
 2. Edit any HTML, CSS, or JS in your code editor.
 3. Refresh your browser at `http://localhost:8080/` — changes appear **instantly**!
@@ -58,7 +58,7 @@ python tools/web_dev/sync_to_cpp.py
 ```
 
 This will automatically format and update the C++ PROGMEM strings in:
-- [WebPortalDashboard.cpp](file:///c:/Users/rohil/Downloads/MyRobot_fixed/MyRobot_Modular/src/web/WebPortalDashboard.cpp)
-- [WebPortalFaces.cpp](file:///c:/Users/rohil/Downloads/MyRobot_fixed/MyRobot_Modular/src/web/WebPortalFaces.cpp)
-- [WebPortalWiring.cpp](file:///c:/Users/rohil/Downloads/MyRobot_fixed/MyRobot_Modular/src/web/WebPortalWiring.cpp)
-- [WebPortalOta.cpp](file:///c:/Users/rohil/Downloads/MyRobot_fixed/MyRobot_Modular/src/web/WebPortalOta.cpp)
+- [WebPortalDashboard.cpp](../../src/web/WebPortalDashboard.cpp)
+- [WebPortalFaces.cpp](../../src/web/WebPortalFaces.cpp)
+- [WebPortalWiring.cpp](../../src/web/WebPortalWiring.cpp)
+- [WebPortalOta.cpp](../../src/web/WebPortalOta.cpp)

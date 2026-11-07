@@ -56,22 +56,30 @@
 // BOOT WAKE & CONNECTION FLOW STATE
 // ============================================================
 static uint32_t bootStartAt = 0;
-static uint32_t lastBootDrawAt = 0;
 static bool bootWifiFinalizedEarly = false;
 
 // ============================================================
 // MAIN SETUP
 // ============================================================
 void setup() {
+#if BOOT_TIMING_LOG
+  bootSetupEnterAt = millis();
+#endif
   bootStartAt = millis();
   Serial.begin(115200);
 #if ARDUINO_USB_CDC_ON_BOOT
+#if BOOT_SERIAL_WAIT_MS > 0
   uint32_t t0 = millis();
-  while (!Serial && millis() - t0 < 2000) {
+  while (!Serial && millis() - t0 < BOOT_SERIAL_WAIT_MS) {
     delay(10);
   }
+#endif
 #else
   delay(100);
+#endif
+#if BOOT_TIMING_LOG
+  Serial.printf("[BOOT_T] setup_enter t=%lu ms\n",
+                (unsigned long)(millis() - bootSetupEnterAt));
 #endif
   Serial.println();
   Serial.println("==========================================");
@@ -88,6 +96,16 @@ void setup() {
   } else {
     Serial.println("[OLED] Display ready");
   }
+#if BOOT_TIMING_LOG
+  Serial.printf("[BOOT_T] after_display_init t=%lu ms\n",
+                (unsigned long)(millis() - bootSetupEnterAt));
+#endif
+
+  if (oledOK && !bootCompleted) {
+    bootStartAt = millis();
+    bootWakeStart();
+  }
+
   initAnimations();
 
   initTouch();
@@ -109,6 +127,10 @@ void setup() {
     startAP();
     initOfflineBrain();
   }
+#if BOOT_TIMING_LOG
+  Serial.printf("[BOOT_T] after_startAP_or_connect t=%lu ms\n",
+                (unsigned long)(millis() - bootSetupEnterAt));
+#endif
 
   discoverWled();
 
@@ -123,13 +145,16 @@ void setup() {
     playBootChime();
     Serial.printf("[I2S] Audio OK, heap=%u\n", (unsigned)ESP.getFreeHeap());
   }
+#if BOOT_TIMING_LOG
+  Serial.printf("[BOOT_T] after_startAudio t=%lu ms\n",
+                (unsigned long)(millis() - bootSetupEnterAt));
+#endif
 
   lastUserInteractionAt = millis();
-
-  if (oledOK && !bootCompleted) {
-    bootStartAt = millis();
-    bootWakeStart();
-  }
+#if BOOT_TIMING_LOG
+  Serial.printf("[BOOT_T] setup_exit t=%lu ms\n",
+                (unsigned long)(millis() - bootSetupEnterAt));
+#endif
 }
 
 // ============================================================
@@ -164,11 +189,7 @@ static void updateBootFlow() {
       bootWifiFinalizedEarly = true;
       finalizeWifiConnected();
     }
-    if (now - lastBootDrawAt >= 25) {
-      lastBootDrawAt = now;
-      bootWakeDraw(display);
-      presentDisplay(true);
-    }
+    bootAnimPump();
     return;
   }
 
@@ -184,6 +205,78 @@ static void updateBootFlow() {
   eyesInit(now);
   setEmotion(EMOTION_IDLE);
   markDisplayDirty();
+}
+
+// ============================================================
+// VARIED BOOT GREETING (time-of-day aware, no immediate repeats)
+// ============================================================
+static const char *GREET_MORNING[] = {
+    "Good morning{n}! Chai pee li?",
+    "Subah subah{n}! Aaj ka din kaisa rahega?",
+    "Morning{n}! Aaj kuch naya karein?",
+    "Rise and shine{n}! Ready for the day?",
+    "Good morning{n}! Main already ready hoon, tum?",
+};
+static const char *GREET_AFTERNOON[] = {
+    "Good afternoon{n}! Lunch ho gaya?",
+    "Hey{n}, dopahar ho gayi! Kaisa chal raha hai?",
+    "Afternoon{n}! Thodi energy chahiye? Main hoon na.",
+    "Good afternoon{n}! Aaj kuch interesting hua?",
+};
+static const char *GREET_EVENING[] = {
+    "Good evening{n}! Din kaisa gaya?",
+    "Shaam ho gayi{n}! Chai ya coffee?",
+    "Evening{n}! Thaka hua lag raha hai kya?",
+    "Good evening{n}! Chalo, kuch fun karte hain.",
+};
+static const char *GREET_NIGHT[] = {
+    "Itni raat ko{n}? Sab theek hai?",
+    "Hey night owl{n}! Abhi tak jaag rahe ho?",
+    "Late night{n}! Sone ka time ho gaya hai, kya?",
+    "Shh, raat ho gayi{n}. Kya chal raha hai?",
+};
+static const char *GREET_ANY[] = {
+    "Hi{n}! Kaise ho?",
+    "Hello{n}! Kya chal raha hai?",
+    "Hey{n}! Main ready hoon, batao.",
+};
+
+// Picks one template from a pool, never the same index twice in a row.
+static String pickGreetingTemplate(const char *const *pool, int count,
+                                   int &lastIdx) {
+  int idx = random(count);
+  if (count > 1 && idx == lastIdx) {
+    idx = (idx + 1 + random(count - 1)) % count;
+  }
+  lastIdx = idx;
+  return String(pool[idx]);
+}
+
+// hour: 0-23, or -1 if unknown. ownerName: trimmed, may be empty.
+static String buildBootGreeting(int hour, const String &ownerName) {
+  static int lastMorning = -1, lastAfternoon = -1, lastEvening = -1,
+             lastNight = -1, lastAny = -1;
+  String tpl;
+  if (hour >= 5 && hour < 12) {
+    tpl = pickGreetingTemplate(GREET_MORNING,
+            sizeof(GREET_MORNING) / sizeof(GREET_MORNING[0]), lastMorning);
+  } else if (hour >= 12 && hour < 17) {
+    tpl = pickGreetingTemplate(GREET_AFTERNOON,
+            sizeof(GREET_AFTERNOON) / sizeof(GREET_AFTERNOON[0]), lastAfternoon);
+  } else if (hour >= 17 && hour < 21) {
+    tpl = pickGreetingTemplate(GREET_EVENING,
+            sizeof(GREET_EVENING) / sizeof(GREET_EVENING[0]), lastEvening);
+  } else if (hour >= 21 || (hour >= 0 && hour < 5)) {
+    tpl = pickGreetingTemplate(GREET_NIGHT,
+            sizeof(GREET_NIGHT) / sizeof(GREET_NIGHT[0]), lastNight);
+  } else {
+    tpl = pickGreetingTemplate(GREET_ANY,
+            sizeof(GREET_ANY) / sizeof(GREET_ANY[0]), lastAny);
+  }
+  // {n} becomes ", Name" if a name is known, otherwise nothing.
+  String nameTok = ownerName.length() > 0 ? ", " + ownerName : String("");
+  tpl.replace("{n}", nameTok);
+  return tpl;
 }
 
 // ============================================================
@@ -221,28 +314,9 @@ static void checkBootGreeting() {
     }
   }
 
-  String timeGreeting = "good morning";
-  if (hour >= 5 && hour < 12) {
-    timeGreeting = "good morning";
-  } else if (hour >= 12 && hour < 17) {
-    timeGreeting = "good afternoon";
-  } else if (hour >= 17 && hour < 21) {
-    timeGreeting = "good evening";
-  } else if (hour >= 21 || (hour >= 0 && hour < 5)) {
-    timeGreeting = "good night";
-  } else {
-    timeGreeting = "good day";
-  }
-
   String owner = getOwnerName();
   owner.trim();
-
-  String speech;
-  if (owner.length() > 0) {
-    speech = "Hi " + owner + ", " + timeGreeting + "! What's up?";
-  } else {
-    speech = "Hi, " + timeGreeting + "! What's up?";
-  }
+  String speech = buildBootGreeting(hour, owner);
 
   Serial.printf("[BOOT] Greeting: %s (hour=%d)\n", speech.c_str(),
                 hour);

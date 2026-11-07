@@ -8,4 +8,5 @@ void bootWakeStart();
 bool bootWakeTick();
 void bootWakeDraw(Adafruit_SSD1306 &d);
 bool bootWakeDone();
+void bootAnimPump();
 

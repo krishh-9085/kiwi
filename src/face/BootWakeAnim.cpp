@@ -120,3 +120,27 @@ void bootWakeDraw(Adafruit_SSD1306 &d) {
 
   currentEyeSkin = userSkin;
 }
+
+void bootAnimPump() {
+  if (bootCompleted || !oledOK || bootWakeDone())
+    return;
+
+  if (!bootWakeTick())
+    return;
+
+  static uint32_t lastDrawAt = 0;
+  uint32_t now = millis();
+  if (now - lastDrawAt >= 25) {
+    lastDrawAt = now;
+    bootWakeDraw(display);
+    presentDisplay(true);
+#if BOOT_TIMING_LOG
+    static bool firstWakeLogged = false;
+    if (!firstWakeLogged) {
+      firstWakeLogged = true;
+      Serial.printf("[BOOT_T] first_wake_frame t=%lu ms\n",
+                    (unsigned long)(millis() - bootSetupEnterAt));
+    }
+#endif
+  }
+}

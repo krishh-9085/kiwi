@@ -3,6 +3,7 @@
 #include "behavior/OfflineBrain.h"
 #include "config/AppConfig.h"
 #include "config/ConfigManager.h"
+#include "core/Timing.h"
 #include "face/FaceEngine.h"
 #include "hardware/AudioEngine.h"
 #include "services/AiService.h"
@@ -78,11 +79,11 @@ void startAP() {
   createAPName();
   WiFi.persistent(false);
   WiFi.disconnect(true, false);
-  delay(150);
+  waitMs(150);
   WiFi.mode(WIFI_OFF);
-  delay(250);
+  waitMs(250);
   WiFi.mode(WIFI_AP);
-  delay(250);
+  waitMs(250);
   WiFi.setTxPower(WIFI_TX);
   WiFi.softAPConfig(apIP, apIP, apMask);
   bool ok = false;
@@ -90,9 +91,9 @@ void startAP() {
     ok = WiFi.softAP(apSSID.c_str(), AP_PASSWORD, AP_CHANNEL, 0, 4);
     if (!ok) {
       WiFi.mode(WIFI_OFF);
-      delay(300);
+      waitMs(300);
       WiFi.mode(WIFI_AP);
-      delay(300);
+      waitMs(300);
       WiFi.setTxPower(WIFI_TX);
       WiFi.softAPConfig(apIP, apIP, apMask);
     }
@@ -162,7 +163,7 @@ void finalizeWifiConnected() {
 
 void finalizeWifiOffline() {
   wifiConnecting = false;
-  if (WiFi.status() != WL_CONNECTED) {
+  if (WiFi.status() != WL_CONNECTED && !apMode) {
     Serial.println("[WIFI] Connect timed out or unavailable. Starting AP mode.");
     startAP();
     initOfflineBrain();
@@ -249,7 +250,7 @@ bool syncTimeFromNTP() {
                     timeinfo.tm_mon + 1, timeinfo.tm_year + 1900);
       return true;
     }
-    delay(50);
+    waitMs(50);
   }
   return false;
 }

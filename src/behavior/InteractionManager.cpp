@@ -4,6 +4,7 @@
 #include "config/AppConfig.h"
 #include "core/CoreTypes.h"
 #include "face/FaceEngine.h"
+#include "face/BootWakeAnim.h"
 #include "hardware/AudioEngine.h"
 #include "hardware/TouchController.h"
 #include "services/AiService.h"
@@ -14,6 +15,7 @@
 // UI PUMP (Display + Touch + Tone Update)
 // ============================================================
 void pumpUI() {
+  bootAnimPump();
   updateTouch();
   updateTonePlayer();
   tickFace();

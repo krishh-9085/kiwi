@@ -9,6 +9,21 @@
 extern const char *FIRMWARE_VER;
 
 // ============================================================
+// BOOT TIMING & DIAGNOSTICS
+// ============================================================
+#ifndef BOOT_SERIAL_WAIT_MS
+#define BOOT_SERIAL_WAIT_MS 0   // set to 2000 when debugging over USB
+#endif
+
+#ifndef BOOT_TIMING_LOG
+#define BOOT_TIMING_LOG 0
+#endif
+
+#if BOOT_TIMING_LOG
+extern uint32_t bootSetupEnterAt;
+#endif
+
+// ============================================================
 // HARDWARE PIN MAP (ESP32-C3 Super Mini)
 // ============================================================
 #define PIN_TOUCH_LEFT 10

@@ -14,7 +14,6 @@
 #include <WiFi.h>
 #include <time.h>
 
-
 // HTML ESCAPE & TEMPLATES
 // ============================================================
 static String esc(String s) {
@@ -1139,7 +1138,7 @@ static const char DASHBOARD_CSS[] PROGMEM = R"rawcss(
       <div class="id">
         <div class="bezel" aria-hidden="true"><i></i><i></i></div>
         <div>
-          <div class="unit">Kiwi Unit · <span id="fwVer">v1.1</span> · <button type="button" id="dashCheckUpdateBtn" class="dash-ota-pill" title="Check GitHub for newer firmware releases">Update available?</button> · <span id="clock">--:--</span></div>
+          <div class="unit">Kiwi Unit · <span id="fwVer">v1.2</span> · <button type="button" id="dashCheckUpdateBtn" class="dash-ota-pill" title="Check GitHub for newer firmware releases">Update available?</button> · <span id="clock">--:--</span></div>
           <h1>Kiwi</h1>
           <div class="mood" id="moodLine">System Console</div>
         </div>
@@ -3151,7 +3150,7 @@ static const char DASHBOARD_FOOT[] PROGMEM = R"rawfoot(<script>
         // Background check for update notification
         setTimeout(function () {
           var repo = localStorage.getItem('kiwi_ota_repo') || 'krishh-9085/kiwi';
-          var curV = (document.getElementById('fwVer') ? document.getElementById('fwVer').textContent : 'v1.1').replace(/^v/i, '');
+          var curV = (document.getElementById('fwVer') ? document.getElementById('fwVer').textContent : 'v1.2').replace(/^v/i, '');
           fetch('https://api.github.com/repos/' + repo + '/releases/latest')
             .then(function (r) { return r.ok ? r.json() : null; })
             .then(function (rel) {

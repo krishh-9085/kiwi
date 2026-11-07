@@ -2,7 +2,7 @@
 
 Kiwi is a desk companion robot built on an **ESP32-C3 Super Mini**. It has a 128x64 OLED face, an I2S microphone, an I2S amplifier and speaker, and three capacitive touch pads. It listens through a cloud speech-to-text service, thinks with a cloud LLM, and talks back with a cloud text-to-speech service. Its eyes, sounds and behaviour respond to touch, time of day, voice commands and LLM-generated actions.
 
-Firmware version: **v1.1** (`FIRMWARE_VERSION` in `src/config/AppConfig.h`).
+Firmware version: **v1.2** (`FIRMWARE_VERSION` in `src/config/AppConfig.h`).
 
 ---
 

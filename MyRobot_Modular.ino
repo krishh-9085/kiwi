@@ -1,6 +1,6 @@
 /*
  ==============================================================================
-  MyRobot (Kiwi) - Modular v1.1
+  MyRobot (Kiwi) - Modular v1.2
   ESP32-C3 Super Mini / PlatformIO / Arduino Core 3.x
   Tools -> USB CDC On Boot = Enabled
 
@@ -53,7 +53,6 @@
 #include <Arduino.h>
 #include <ESPmDNS.h>
 #include <WiFi.h>
-
 
 // ============================================================
 // BOOT WAKE & CONNECTION FLOW STATE

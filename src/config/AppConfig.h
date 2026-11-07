@@ -55,6 +55,14 @@ extern const char *NTP_SERVER_2;
 #define SOUND_REACT_GAIN 1.0f
 #define SOUND_REACT_MAX_OPEN 3
 
+// ---------- Streaming TTS & Latency Optimization ----------
+#ifndef LLM_STREAM_TTS
+#define LLM_STREAM_TTS 1
+#endif
+#ifndef STREAM_TTS_MIN_MAX_ALLOC
+#define STREAM_TTS_MIN_MAX_ALLOC 60000 // tune on device; bytes
+#endif
+
 // ============================================================
 // TOUCH TIMING CONSTANTS
 // ============================================================

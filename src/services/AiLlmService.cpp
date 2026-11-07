@@ -395,12 +395,16 @@ static String processSseStream(HTTPClient &http, WiFiClient *stream, SentenceCal
                 currentSentence += delta;
 
                 if (isSentenceComplete(currentSentence)) {
-
+                  if (cancelRequest)
+                    break;
                   String toSpeak = cleanSentenceForSpeech(currentSentence);
 
                   if (toSpeak.length() > 0 && onSentence) {
 
                     onSentence(toSpeak, false);
+                    tStart = millis();
+                    if (cancelRequest)
+                      break;
 
                   }
 
@@ -436,7 +440,7 @@ static String processSseStream(HTTPClient &http, WiFiClient *stream, SentenceCal
 
 
 
-  if (!isSSE && fullAnswer.length() > 0) {
+  if (!cancelRequest && !isSSE && fullAnswer.length() > 0) {
 
     String ans = jsonTextField(fullAnswer, "content");
 
@@ -458,7 +462,7 @@ static String processSseStream(HTTPClient &http, WiFiClient *stream, SentenceCal
 
 
 
-  if (currentSentence.length() > 0) {
+  if (!cancelRequest && currentSentence.length() > 0) {
 
     String toSpeak = cleanSentenceForSpeech(currentSentence);
 
@@ -1042,6 +1046,9 @@ String askLLM(const String &question, SentenceCallback onSentence) {
 
   if (ans.length() > 0) {
 
+    // NOTE: With streaming TTS enabled, ACTION tags are executed after the full LLM
+    // reply has completed streaming. Therefore, actions (volume, eye skins, timer, etc.)
+    // fire after the first sentence (and any streaming sentences) has already been spoken.
     parseAndExecuteActions(ans);
 
     // Memory saving disabled

@@ -178,8 +178,137 @@ Emotion detectVocalEmotion(const String &text) {
   return EMOTION_SPEAKING;
 }
 
+#if LLM_STREAM_TTS
+struct StreamSpeakerState {
+  bool firstSpoken = false;
+  bool ttsFailed = false;
+  bool streamActive = false;
+  String pending = "";
+  uint32_t questionStartedAt = 0;
+  bool anySpoken = false;
+  bool heapDecided = false;
+  bool heapOk = false;
+  bool ttsInProgress = false;
+
+  void reset(uint32_t startedAt) {
+    firstSpoken = false;
+    ttsFailed = false;
+    streamActive = true;
+    pending = "";
+    questionStartedAt = startedAt;
+    anySpoken = false;
+    heapDecided = false;
+    heapOk = false;
+    ttsInProgress = false;
+  }
+};
+
+static StreamSpeakerState streamSpk;
+
+static void streamSentenceCallback(const String &sentence, bool isFinal) {
+  // a. If cancelRequest is true -> clear pending, return.
+  if (cancelRequest) {
+    streamSpk.pending = "";
+    return;
+  }
+
+  // b. If sentence is empty -> return.
+  if (sentence.length() == 0) {
+    return;
+  }
+
+  // c. Decide heap mode ONCE per question at the first sentence:
+  //      heapOk = ESP.getMaxAllocHeap() >= STREAM_TTS_MIN_MAX_ALLOC
+  //    Log: "[STREAM] maxAlloc=%u heapOk=%d" and, at first audio,
+  //    "[LATENCY] question->first_audio=%lu ms".
+  if (!streamSpk.heapDecided) {
+    uint32_t maxAlloc = ESP.getMaxAllocHeap();
+    streamSpk.heapOk = (maxAlloc >= STREAM_TTS_MIN_MAX_ALLOC);
+    streamSpk.heapDecided = true;
+    Serial.printf("[STREAM] maxAlloc=%u heapOk=%d\n", (unsigned)maxAlloc, streamSpk.heapOk ? 1 : 0);
+  }
+
+  // d. If heapOk == false -> just append to pending (no TTS during stream).
+  if (!streamSpk.heapOk) {
+    if (streamSpk.pending.length() > 0) {
+      streamSpk.pending += " ";
+    }
+    streamSpk.pending += sentence;
+    return;
+  }
+
+  // f. Never call speakText while another speakText is in progress.
+  if (streamSpk.ttsInProgress) {
+    if (streamSpk.pending.length() > 0) {
+      streamSpk.pending += " ";
+    }
+    streamSpk.pending += sentence;
+    return;
+  }
+
+  // e. If heapOk == true:
+  //      - First sentence (firstSpoken == false): call speakText(sentence)
+  //        immediately. Set firstSpoken = true. If it returns false, set
+  //        ttsFailed = true and append the sentence to pending.
+  if (!streamSpk.firstSpoken) {
+    Emotion vocalEmotion = detectVocalEmotion(sentence);
+    if (vocalEmotion != EMOTION_SPEAKING) {
+      setEmotion(vocalEmotion);
+    } else {
+      setEmotion(EMOTION_SPEAKING);
+    }
+    robotStateDesc = "Speaking...";
+
+    Serial.printf("[LATENCY] question->first_audio=%lu ms\n",
+                  (unsigned long)(millis() - streamSpk.questionStartedAt));
+
+    streamSpk.firstSpoken = true;
+    streamSpk.ttsInProgress = true;
+    bool ok = speakText(sentence);
+    streamSpk.ttsInProgress = false;
+
+    if (ok) {
+      streamSpk.anySpoken = true;
+    } else {
+      streamSpk.ttsFailed = true;
+      if (streamSpk.pending.length() > 0) {
+        streamSpk.pending += " ";
+      }
+      streamSpk.pending += sentence;
+    }
+    return;
+  }
+
+  //      - Later sentences: append to pending. Flush pending with speakText()
+  //        only when pending.length() >= 120 characters, or when isFinal is true.
+  //        Do not call speakText on every sentence (each call is a new TLS handshake).
+  if (streamSpk.pending.length() > 0) {
+    streamSpk.pending += " ";
+  }
+  streamSpk.pending += sentence;
+
+  if (!streamSpk.ttsFailed && (streamSpk.pending.length() >= 120 || isFinal)) {
+    if (cancelRequest) {
+      streamSpk.pending = "";
+      return;
+    }
+    streamSpk.ttsInProgress = true;
+    bool ok = speakText(streamSpk.pending);
+    streamSpk.ttsInProgress = false;
+
+    if (ok) {
+      streamSpk.anySpoken = true;
+      streamSpk.pending = "";
+    } else {
+      streamSpk.ttsFailed = true;
+    }
+  }
+}
+#endif
+
 void handleQuestion(const String &q) {
-  lastUserInteractionAt = millis();
+  uint32_t questionStartedAt = millis();
+  lastUserInteractionAt = questionStartedAt;
   Serial.print("[ROBOT] Q: ");
   Serial.println(q);
   if (cancelRequest)
@@ -216,13 +345,33 @@ void handleQuestion(const String &q) {
                  (llmProvider == "groq" ? groqModel : llmModel) + ": \"" + q +
                  "\"");
 
+#if LLM_STREAM_TTS
+  streamSpk.reset(questionStartedAt);
+  SentenceCallback streamCb = streamSentenceCallback;
+#else
   // Single-core ESP32-C3: Complete LLM cleanly first so max heap (~75KB) is
   // available for TLS TTS and no simultaneous TLS collisions or socket stalling
   // occurs.
-  String answer = askLLM(q, nullptr);
+  SentenceCallback streamCb = nullptr;
+#endif
+
+  String answer = askLLM(q, streamCb);
+#if LLM_STREAM_TTS
+  streamSpk.streamActive = false;
+#endif
   if (cancelRequest)
     return;
   if (!answer.length()) {
+#if LLM_STREAM_TTS
+    if (streamSpk.anySpoken) {
+      robotStateDesc = "Ready";
+      addTerminalLog("[ROBOT] Turn completed. Ready.");
+      setEmotion(EMOTION_IDLE);
+      returnIdleAt = 0;
+      emotionAutoReturnAt = 0;
+      return;
+    }
+#endif
     if (lastActionsExecuted > 0) {
       robotStateDesc = "Ready";
       addTerminalLog("[ROBOT] Action completed.");
@@ -260,6 +409,40 @@ void handleQuestion(const String &q) {
     if (cancelRequest)
       return;
 
+#if LLM_STREAM_TTS
+    // 3. Final flush: after askLLM() returns in handleQuestion():
+    //    - If cancelRequest -> do nothing more for speech.
+    //    - If pending is non-empty and !cancelRequest -> speakText(pending) once.
+    if (!cancelRequest && streamSpk.pending.length() > 0) {
+      streamSpk.ttsInProgress = true;
+      bool ok = speakText(streamSpk.pending);
+      streamSpk.ttsInProgress = false;
+      if (ok) {
+        streamSpk.anySpoken = true;
+      }
+      streamSpk.pending = "";
+    }
+
+    if (cancelRequest)
+      return;
+
+    //    - Do NOT speakText(answer) again if anything was already spoken
+    //      (anySpoken == true). Only fall back to speaking the whole answer if
+    //      nothing was spoken at all and answer is non-empty (keeps the old path).
+    if (!streamSpk.anySpoken && !cancelRequest && answer.length() > 0) {
+      bool ok = speakText(answer);
+      if (cancelRequest)
+        return;
+      if (!ok) {
+        robotStateDesc = "TTS Failed";
+        addTerminalLog("[TTS] Playback error or offline");
+        Serial.println("[ROBOT] TTS failed");
+        setEmotion(EMOTION_CONFUSED);
+        returnIdleAt = millis() + 1500;
+        return;
+      }
+    }
+#else
     bool ok = speakText(answer);
     if (cancelRequest)
       return;
@@ -271,6 +454,7 @@ void handleQuestion(const String &q) {
       returnIdleAt = millis() + 1500;
       return;
     }
+#endif
 
     // If an expressive emotion was shown (e.g. excited, happy, laughing),
     // hold that face for 2.5s after speaking, then auto-return to IDLE!

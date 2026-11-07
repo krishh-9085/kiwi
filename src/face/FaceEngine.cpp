@@ -2,6 +2,7 @@
 #include "animation/AnimationEngine.h"
 #include "config/AppConfig.h"
 #include "face/BootWakeAnim.h"
+#include "face/SleepyWakeAnim.h"
 #include "hardware/SoundLevel.h"
 
 
@@ -49,6 +50,14 @@ void tickFace() {
   if (now - lastFaceDrawAt < gFaceFrameMs)
     return;
   lastFaceDrawAt = now;
+  if (sleepyWakeIsActive()) {
+    sleepyWakeDraw(display, now);
+    return;
+  }
+  if (sleepyFallAsleepIsActive()) {
+    sleepyFallAsleepDraw(display, now);
+    return;
+  }
   float sndLevel = soundLevelGet();
   eyesUpdateAnim(now);
   drawFace(sndLevel);

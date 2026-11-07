@@ -4,6 +4,7 @@
 #include "hardware/AudioEngine.h"
 #include "face/FaceEngine.h"
 #include "face/FaceDisplay.h"
+#include "face/SleepyWakeAnim.h"
 #include "services/AiService.h"
 #include "services/MemoryService.h"
 #include "animation/AnimationEngine.h"
@@ -232,13 +233,13 @@ void handleDoAction() {
     if (manualSleep) {
       showClockScreen = false;
       showWeatherScreen = false;
-      setOledDim(false);
-      setEmotion(EMOTION_SLEEPING);
-      soundPetSleepy();
+      sleepyWakeCancel();
+      sleepyFallAsleepStart();
     } else {
+      sleepyFallAsleepCancel();
       setOledDim(false);
-      setEmotion(EMOTION_HAPPY);
-      soundPetSparkle();
+      updateDisplayBrightnessMode();
+      sleepyWakeStart();
     }
     Serial.printf("[PORTAL] Manual sleep mode set to: %d\n", manualSleep);
     server.send(200, "application/json", "{\"ok\":true,\"sleeping\":" + String(manualSleep ? "true" : "false") + "}");
@@ -411,18 +412,18 @@ void handleDoAction() {
     inCircadianSleep = true;
     showClockScreen = false;
     showWeatherScreen = false;
-    setOledDim(false);
-    setEmotion(EMOTION_SLEEPING);
-    if (snd) soundPetSleepy();
+    sleepyWakeCancel();
+    sleepyFallAsleepStart();
     server.send(200, "application/json", "{\"ok\":true,\"sleeping\":true}");
     return;
   }
   if (e == "wake") {
     manualSleep = false;
     inCircadianSleep = false;
+    sleepyFallAsleepCancel();
     setOledDim(false);
-    setEmotion(EMOTION_HAPPY);
-    if (snd) soundPetSparkle();
+    updateDisplayBrightnessMode();
+    sleepyWakeStart();
     server.send(200, "application/json", "{\"ok\":true,\"sleeping\":false}");
     return;
   }

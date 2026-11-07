@@ -5,11 +5,11 @@
 #include "face/FaceDisplay.h"
 #include "face/FaceIdle.h"
 #include "face/FaceScreens.h"
+#include "face/SleepyWakeAnim.h"
 #include "hardware/AudioEngine.h"
 
 FaceState faceNow, faceTgt;
 uint32_t emotionStartedAt = 0;
-static uint32_t nextRandomEmotionAt = 0;
 extern volatile int8_t pendingSound;
 
 void setFace(float w, float h, float gap, float y, float r, float lidIn,
@@ -43,6 +43,11 @@ static bool emotionSkipsTransitionBlink(Emotion e) {
 }
 
 void setEmotion(Emotion e) {
+  if (e == EMOTION_SLEEPING) {
+    sleepyWakeCancel();
+  } else {
+    sleepyFallAsleepCancel();
+  }
   Emotion prev = currentEmotion;
   uint32_t now = millis();
   currentEmotion = e;
@@ -548,11 +553,13 @@ bool triggerEmotionByName(const String &nameIn, uint32_t holdMs,
         manualSleep = true;
         inCircadianSleep = true;
         setOledDim(false);
-        if (withSound)
-          soundPetSleepy();
+        sleepyWakeCancel();
+        sleepyFallAsleepStart();
+        return true;
       } else {
         manualSleep = false;
         inCircadianSleep = false;
+        sleepyFallAsleepCancel();
         setOledDim(false);
       }
       setEmotion(m.e);

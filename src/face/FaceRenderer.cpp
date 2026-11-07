@@ -202,7 +202,7 @@ static void drawFlourishAt(uint32_t now) {
 }
 
 // Custom clean vector Z renderer (crisp 1px lines on 128x64 OLED)
-static void drawCrispZ(int x, int y, int size) {
+void drawCrispZ(int x, int y, int size) {
   if (x < 0 || x + size > 128 || y < 0 || y + size > 64)
     return;
   display.drawFastHLine(x, y, size, SSD1306_WHITE);

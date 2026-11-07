@@ -5,6 +5,7 @@
 #include "hardware/AudioEngine.h"
 #include "face/FaceEngine.h"
 #include "face/BootWakeAnim.h"
+#include "face/SleepyWakeAnim.h"
 #include "services/AiService.h"
 #include "services/WeatherService.h"
 #include "face/FaceDisplay.h"
@@ -115,7 +116,16 @@ void executeTouchAction(TouchAction act, uint8_t pin) {
     return;
   }
 
-  if (inCircadianSleep || manualSleep) {
+  if (sleepyWakeIsActive()) {
+    sleepyWakeCancel();
+    setEmotion(EMOTION_HAPPY);
+    soundPetSparkle();
+    Serial.println("[TOUCH] Second tap during sleepy wake -> Full Wake-up (Happy)");
+    return;
+  }
+
+  if (sleepyFallAsleepIsActive()) {
+    sleepyFallAsleepCancel();
     manualSleep = false;
     inCircadianSleep = false;
     circadianTempWakeUntil = now + CIRCADIAN_TEMP_WAKE_MS;
@@ -123,7 +133,18 @@ void executeTouchAction(TouchAction act, uint8_t pin) {
     updateDisplayBrightnessMode();
     setEmotion(EMOTION_HAPPY);
     soundPetSparkle();
-    Serial.println("[TOUCH] Wake-up from Sleep Mode");
+    Serial.println("[TOUCH] Tap during falling asleep -> Woke up (Happy)");
+    return;
+  }
+
+  if (inCircadianSleep || manualSleep) {
+    manualSleep = false;
+    inCircadianSleep = false;
+    circadianTempWakeUntil = now + CIRCADIAN_TEMP_WAKE_MS;
+    setOledDim(false);
+    updateDisplayBrightnessMode();
+    sleepyWakeStart();
+    Serial.println("[TOUCH] Sleepy Wake-up from Sleep Mode");
     return;
   }
 
@@ -371,21 +392,21 @@ static void updateOneTouch(TouchSensor &ts, uint32_t now) {
     // Hold 7-10s on Top -> Sleep Mode Toggle!
     if (ts.pin == PIN_TOUCH_TOP && held >= SLEEP_HOLD_MS && !ts.sleepHandled && !busyProcessing) {
       ts.sleepHandled = true;
+      sleepyWakeCancel();
+      sleepyFallAsleepCancel();
       showClockScreen = false;
       showWeatherScreen = false;
       if (!inCircadianSleep && !manualSleep) {
         manualSleep = true;
         inCircadianSleep = true;
-        setEmotion(EMOTION_SLEEPING);
-        setOledDim(true);
-        soundPetSleepy();
-        Serial.println("[TOUCH] Held 7-10s -> Kiwi is now in Sleep Mode (Z Z)");
+        sleepyFallAsleepStart();
+        Serial.println("[TOUCH] Held 7-10s -> Kiwi is falling asleep (Z Z)");
       } else {
         manualSleep = false;
         inCircadianSleep = false;
         setOledDim(false);
-        setEmotion(EMOTION_HAPPY);
-        soundPetSparkle();
+        updateDisplayBrightnessMode();
+        sleepyWakeStart();
         Serial.println("[TOUCH] Held 7-10s -> Kiwi Woke Up!");
       }
     }

@@ -6,6 +6,8 @@
 #include "face/FaceEngine.h"
 #include "face/FaceExpressions.h"
 #include "face/FaceScreens.h"
+#include "face/FaceDisplay.h"
+#include "face/SleepyWakeAnim.h"
 #include "hardware/AudioEngine.h"
 #include "services/AiService.h"
 #include "behavior/CommandHandler.h"
@@ -361,9 +363,11 @@ bool executeRobotAction(const String &actionCmd) {
   if (actionType == "sleep" || actionType == "night") {
     manualSleep = true;
     inCircadianSleep = true;
-    setOledDim(true);
-    soundPetSleepy();
-    addTerminalLog("[ACTION] Entered Sleep Mode");
+    showClockScreen = false;
+    showWeatherScreen = false;
+    sleepyWakeCancel();
+    sleepyFallAsleepStart();
+    addTerminalLog("[ACTION] Falling asleep...");
     return true;
   }
 
@@ -371,9 +375,10 @@ bool executeRobotAction(const String &actionCmd) {
   if (actionType == "wake" || actionType == "morning") {
     manualSleep = false;
     inCircadianSleep = false;
+    sleepyFallAsleepCancel();
     setOledDim(false);
-    setEmotion(EMOTION_HAPPY);
-    soundPetSparkle();
+    updateDisplayBrightnessMode();
+    sleepyWakeStart();
     addTerminalLog("[ACTION] Woke up from Sleep Mode");
     return true;
   }

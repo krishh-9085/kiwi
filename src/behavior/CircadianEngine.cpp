@@ -2,13 +2,15 @@
 #include "config/AppConfig.h"
 #include "face/FaceEngine.h"
 #include "face/FaceDisplay.h"
+#include "face/SleepyWakeAnim.h"
 #include "hardware/AudioEngine.h"
 #include "behavior/ActionExecutor.h"
 
 void checkCircadianSleep() {
   if (manualSleep) {
     if (currentEmotion != EMOTION_SLEEPING && returnIdleAt == 0 &&
-        emotionAutoReturnAt == 0 && !showClockScreen && !showWeatherScreen) {
+        emotionAutoReturnAt == 0 && !showClockScreen && !showWeatherScreen &&
+        !sleepyFallAsleepIsActive() && !sleepyWakeIsActive()) {
       setEmotion(EMOTION_SLEEPING);
       updateDisplayBrightnessMode();
     }
@@ -42,13 +44,14 @@ void checkCircadianSleep() {
   if (isSleepTime) {
     if (!inCircadianSleep) {
       inCircadianSleep = true;
-      setEmotion(EMOTION_SLEEPING);
-      updateDisplayBrightnessMode();
+      sleepyWakeCancel();
+      sleepyFallAsleepStart();
       Serial.printf("[CIRCADIAN] Bedtime reached (%02d:%02d). Entering night sleep mode.\n",
                     curHour, timeinfo.tm_min);
     } else {
       if (currentEmotion != EMOTION_SLEEPING && returnIdleAt == 0 &&
-          emotionAutoReturnAt == 0 && !showClockScreen && !showWeatherScreen) {
+          emotionAutoReturnAt == 0 && !showClockScreen && !showWeatherScreen &&
+          !sleepyFallAsleepIsActive() && !sleepyWakeIsActive()) {
         setEmotion(EMOTION_SLEEPING);
         updateDisplayBrightnessMode();
       }
@@ -56,9 +59,9 @@ void checkCircadianSleep() {
   } else {
     if (inCircadianSleep) {
       inCircadianSleep = false;
+      sleepyFallAsleepCancel();
       updateDisplayBrightnessMode();
-      setEmotion(EMOTION_HAPPY);
-      playBootChime();
+      sleepyWakeStart();
       Serial.printf("[CIRCADIAN] Good morning! (%02d:%02d). Waking up.\n",
                     curHour, timeinfo.tm_min);
     }

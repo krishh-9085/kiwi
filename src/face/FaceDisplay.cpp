@@ -1,5 +1,6 @@
 #include "face/FaceDisplay.h"
 #include "config/AppConfig.h"
+#include "web/WebPortal.h"
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 #include <Wire.h>
@@ -72,6 +73,8 @@ void markDisplayDirty() { frameHashValid = false; }
 
 bool presentDisplay(bool force) {
   if (!oledOK)
+    return false;
+  if (otaInProgress && !force)
     return false;
 
   uint32_t now = millis();
@@ -216,7 +219,8 @@ bool initDisplay() {
   }
 
   if (!oledOK && targetClock > 400000UL) {
-    Serial.printf("[OLED] %lu kHz failed, falling back to 400 kHz\n", targetClock / 1000UL);
+    Serial.printf("[OLED] %lu kHz failed, falling back to 400 kHz\n",
+                  targetClock / 1000UL);
     Wire.setClock(400000UL);
     oledOK = display.begin(SSD1306_SWITCHCAPVCC, OLED_ADDR);
     if (oledOK) {

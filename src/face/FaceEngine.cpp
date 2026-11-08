@@ -6,6 +6,7 @@
 #include "hardware/AudioEngine.h"
 #include "hardware/SoundLevel.h"
 #include "hardware/TouchController.h"
+#include "web/WebPortal.h"
 
 void updateFaceFrameRate() {
   uint32_t now = millis();
@@ -41,7 +42,8 @@ void updateFaceFrameRate() {
   }
 
   // Keep existing speech-time gFaceFrameMs = 100 behavior working
-  if (currentEmotion == EMOTION_SPEAKING || (kiwiIsOutputting() && !isTonePlaying())) {
+  if (currentEmotion == EMOTION_SPEAKING ||
+      (kiwiIsOutputting() && !isTonePlaying())) {
     gFaceFrameMs = FACE_FRAME_MS_IDLE; // 100 ms
   } else if (active) {
     gFaceFrameMs = FACE_FRAME_MS_ACTIVE; // 33 ms
@@ -63,8 +65,8 @@ void updateFaceFrameRate() {
 }
 
 void tickFace() {
-  if (!oledOK)
-    return;
+    if (!oledOK || otaInProgress)
+      return;
   updateFaceFrameRate();
   if (!bootWakeDone() && bootWakeTick()) {
     return;

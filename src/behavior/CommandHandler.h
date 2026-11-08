@@ -2,6 +2,8 @@
 #include <Arduino.h>
 #include <initializer_list>
 
+bool matchWord(const String &s, const char *word);
+bool hasWord(const String &s, std::initializer_list<const char *> words);
 bool hasAny(const String &s, std::initializer_list<const char *> words);
 bool handleTimeCommand(const String &qIn);
 bool handleWeatherCommand(const String &qIn);

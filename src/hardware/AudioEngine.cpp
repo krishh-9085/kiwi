@@ -666,7 +666,7 @@ void spkPushSample(int16_t s) {
 // ============================================================
 void makeWavHeader(uint8_t *h, uint32_t dataSize) {
   memset(h, 0, 44);
-  uint32_t fileSize = dataSize + 36;
+  uint32_t fileSize = (dataSize == 0xFFFFFFFF) ? 0xFFFFFFFF : (dataSize + 36);
   uint32_t byteRate = SAMPLE_RATE * 2;
 
   memcpy(h, "RIFF", 4);

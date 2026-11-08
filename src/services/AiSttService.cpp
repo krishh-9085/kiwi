@@ -10,6 +10,22 @@
 #include <WiFiClientSecure.h>
 
 // ============================================================
+// HTTP/1.1 CHUNKED TRANSFER HELPER
+// ============================================================
+static bool writeChunk(WiFiClient &c, const uint8_t *p, size_t n) {
+  if (n == 0) return true;
+  char hexBuf[16];
+  snprintf(hexBuf, sizeof(hexBuf), "%X\r\n", (unsigned int)n);
+  if (!clientWriteAll(c, (const uint8_t *)hexBuf, strlen(hexBuf)))
+    return false;
+  if (!clientWriteAll(c, p, n))
+    return false;
+  if (!clientWriteAll(c, (const uint8_t *)"\r\n", 2))
+    return false;
+  return true;
+}
+
+// ============================================================
 // SPEECH-TO-TEXT (STT)
 // ============================================================
 SttCfg resolveStt() {
@@ -159,8 +175,6 @@ String recordAndTranscribe(uint32_t recordSeconds) {
   }
 
   String ending = "--" + boundary + "--\r\n";
-  uint32_t total =
-      part1.length() + 44 + audioBytes + part2.length() + ending.length();
 
   client.printf("POST %s HTTP/1.1\r\n", path.c_str());
   client.printf("Host: %s\r\n", host.c_str());
@@ -170,13 +184,15 @@ String recordAndTranscribe(uint32_t recordSeconds) {
     client.printf("Authorization: Bearer %s\r\n", cfg.key.c_str());
   client.printf("Content-Type: multipart/form-data; boundary=%s\r\n",
                 boundary.c_str());
-  client.printf("Content-Length: %lu\r\n", (unsigned long)total);
+  client.print("Transfer-Encoding: chunked\r\n");
   client.print("Connection: close\r\n\r\n");
-  client.print(part1);
+
+  if (!writeChunk(client, (const uint8_t *)part1.c_str(), part1.length()))
+    return bail("upload failed");
 
   static uint8_t wav[44];
-  makeWavHeader(wav, audioBytes);
-  if (!clientWriteAll(client, wav, 44))
+  makeWavHeader(wav, 0xFFFFFFFF);
+  if (!writeChunk(client, wav, 44))
     return bail("upload failed");
 
   setEmotion(EMOTION_LISTENING);
@@ -306,7 +322,7 @@ String recordAndTranscribe(uint32_t recordSeconds) {
       out[outPos++] = (pcm >> 8) & 0xff;
       sent++;
       if (outPos >= (int)sizeof(out)) {
-        if (!clientWriteAll(client, out, outPos))
+        if (!writeChunk(client, out, outPos))
           return bail("upload failed");
         outPos = 0;
       }
@@ -330,29 +346,26 @@ String recordAndTranscribe(uint32_t recordSeconds) {
   }
 
   if (outPos > 0) {
-    if (!clientWriteAll(client, out, outPos))
+    if (!writeChunk(client, out, outPos))
       return bail("upload failed");
-  }
-  // Ensure the WAV reaches its exact declared Content-Length even if mic stopped or had a partial buffer
-  if (sent < recordSamples) {
-    static uint8_t silence[UPLOAD_BATCH * 2] = {};
-    while (sent < recordSamples) {
-      uint32_t remainingSamples = recordSamples - sent;
-      size_t silenceBytes = min((uint32_t)sizeof(silence), remainingSamples * 2U);
-      if (!clientWriteAll(client, silence, silenceBytes))
-        return bail("upload failed");
-      sent += silenceBytes / 2;
-    }
+    outPos = 0;
   }
 
   Serial.printf("[STT] Done. captured %.2f s, avg %.0f, loudest 100ms block %.0f (gate %.0f)\n",
                 (float)capturedSamples / SAMPLE_RATE,
-                sumAbs / recordSamples, maxBlkAvg, speechActivityGate);
+                (sent > 0 ? sumAbs / sent : 0.0f), maxBlkAvg, speechActivityGate);
   if (maxBlkAvg < speechActivityGate)
     return bail("quiet");
 
-  client.print(part2);
-  client.print(ending);
+  if (!writeChunk(client, (const uint8_t *)part2.c_str(), part2.length()))
+    return bail("upload failed");
+  if (!writeChunk(client, (const uint8_t *)ending.c_str(), ending.length()))
+    return bail("upload failed");
+
+  // Send HTTP/1.1 chunked transfer stream terminator (0\r\n\r\n)
+  static const char chunkTerminator[] = "0\r\n\r\n";
+  if (!clientWriteAll(client, (const uint8_t *)chunkTerminator, 5))
+    return bail("upload failed");
   client.flush();
   Serial.println("[STT] Upload complete. Waiting for response...");
   setEmotion(EMOTION_THINKING);

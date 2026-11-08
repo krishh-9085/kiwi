@@ -224,6 +224,17 @@ static void streamSentenceCallback(const String &sentence, bool isFinal) {
     return;
   }
 
+  // When isFinal arrives, LLM stream is finishing right now.
+  // Defer pending text to handleQuestion()'s final flush so the LLM TLS socket
+  // closes first, releasing ~35-40KB heap for TTS without dual-TLS contention.
+  if (isFinal) {
+    if (streamSpk.pending.length() > 0) {
+      streamSpk.pending += " ";
+    }
+    streamSpk.pending += sentence;
+    return;
+  }
+
   // c. Decide heap mode ONCE per question at the first sentence:
   //      heapOk = ESP.getMaxAllocHeap() >= STREAM_TTS_MIN_MAX_ALLOC
   //    Log: "[STREAM] maxAlloc=%u heapOk=%d" and, at first audio,
@@ -255,9 +266,20 @@ static void streamSentenceCallback(const String &sentence, bool isFinal) {
 
   // e. If heapOk == true:
   //      - First sentence (firstSpoken == false): call speakText(sentence)
-  //        immediately. Set firstSpoken = true. If it returns false, set
-  //        ttsFailed = true and append the sentence to pending.
+  //        immediately if contiguous heap is safe. Set firstSpoken = true. If it returns false,
+  //        set ttsFailed = true and append the sentence to pending.
   if (!streamSpk.firstSpoken) {
+    // Contiguous heap protection: Ensure at least 36000 contiguous bytes before dual-TLS
+    if (ESP.getMaxAllocHeap() < 36000) {
+      Serial.printf("[STREAM] Contiguous heap low for first sentence (%u < 36000). Deferring.\n",
+                    (unsigned)ESP.getMaxAllocHeap());
+      if (streamSpk.pending.length() > 0) {
+        streamSpk.pending += " ";
+      }
+      streamSpk.pending += sentence;
+      return;
+    }
+
     Emotion vocalEmotion = detectVocalEmotion(sentence);
     if (vocalEmotion != EMOTION_SPEAKING) {
       setEmotion(vocalEmotion);
@@ -287,16 +309,22 @@ static void streamSentenceCallback(const String &sentence, bool isFinal) {
   }
 
   //      - Later sentences: append to pending. Flush pending with speakText()
-  //        only when pending.length() >= 120 characters, or when isFinal is true.
+  //        only when pending.length() >= 120 characters AND heap is safe.
   //        Do not call speakText on every sentence (each call is a new TLS handshake).
   if (streamSpk.pending.length() > 0) {
     streamSpk.pending += " ";
   }
   streamSpk.pending += sentence;
 
-  if (!streamSpk.ttsFailed && (streamSpk.pending.length() >= 120 || isFinal)) {
+  if (!streamSpk.ttsFailed && streamSpk.pending.length() >= 120) {
     if (cancelRequest) {
       streamSpk.pending = "";
+      return;
+    }
+    // Contiguous heap protection: Check heap before initiating secondary TLS handshake
+    if (ESP.getMaxAllocHeap() < 36000) {
+      Serial.printf("[STREAM] Dual-TLS heap tight (maxAlloc=%u < 36000). Deferring to final flush.\n",
+                    (unsigned)ESP.getMaxAllocHeap());
       return;
     }
     streamSpk.ttsInProgress = true;
@@ -370,6 +398,15 @@ void handleQuestion(const String &q) {
     return;
   if (!answer.length()) {
 #if LLM_STREAM_TTS
+    if (!cancelRequest && streamSpk.pending.length() > 0) {
+      streamSpk.ttsInProgress = true;
+      bool ok = speakText(streamSpk.pending);
+      streamSpk.ttsInProgress = false;
+      if (ok) {
+        streamSpk.anySpoken = true;
+      }
+      streamSpk.pending = "";
+    }
     if (streamSpk.anySpoken) {
       robotStateDesc = "Ready";
       addTerminalLog("[ROBOT] Turn completed. Ready.");

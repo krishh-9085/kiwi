@@ -517,6 +517,16 @@ int ttsPcmOpenAI(const String &text) {
   };
 
   uint32_t lastUiPump = 0;
+#if SAMPLE_RATE == 16000
+  // OpenAI raw PCM is fixed at 24000 Hz. Downsample 3:2 to 16000 Hz with zero float math.
+  // 3 input samples -> 2 output samples:
+  //   Sample 0 -> push s0
+  //   Sample 1 -> cache s1
+  //   Sample 2 -> push (s1 + s2) / 2
+  uint8_t dsPhase = 0;
+  int16_t dsPrev = 0;
+#endif
+
   while (true) {
     if (cancelRequest)
       break;
@@ -539,7 +549,21 @@ int ttsPcmOpenAI(const String &text) {
       } else {
         int16_t s = (int16_t)(lo | (rbuf[i] << 8));
         haveLo = false;
+#if SAMPLE_RATE == 16000
+        if (dsPhase == 0) {
+          pushWithPrebuf(s);
+          dsPhase = 1;
+        } else if (dsPhase == 1) {
+          dsPrev = s;
+          dsPhase = 2;
+        } else {
+          int16_t interpolated = (int16_t)(((int32_t)dsPrev + (int32_t)s) >> 1);
+          pushWithPrebuf(interpolated);
+          dsPhase = 0;
+        }
+#else
         pushWithPrebuf(s);
+#endif
       }
     }
     if (millis() - lastUiPump >= 60) {
@@ -548,6 +572,12 @@ int ttsPcmOpenAI(const String &text) {
     }
   }
   client.stop();
+#if SAMPLE_RATE == 16000
+  if (dsPhase == 2) {
+    pushWithPrebuf(dsPrev);
+    dsPhase = 0;
+  }
+#endif
   if (!prebufDone && prebufCount > 0) {
     for (size_t k = 0; k < prebufCount; k++)
       spkPushSample(prebuf[k]);
@@ -577,7 +607,7 @@ int ttsPcmEleven(const String &text) {
     return 0;
   if (!basePath.endsWith("/"))
     basePath += "/";
-  String path = basePath + elevenVoice + "?output_format=pcm_24000";
+  String path = basePath + elevenVoice + "?output_format=pcm_16000";
 
   bool apWasUp = suspendLocalNet();
   if (ESP.getMaxAllocHeap() < 35000) {
@@ -755,7 +785,7 @@ int ttsFishAudio(const String &text) {
   }
 
   String body = "{\"text\":\"" + jsonEscape(text) +
-                "\",\"format\":\"pcm\",\"sample_rate\":24000";
+                "\",\"format\":\"pcm\",\"sample_rate\":16000";
   if (fishVoice.length() > 0) {
     body += ",\"reference_id\":\"" + jsonEscape(fishVoice) + "\"";
   }

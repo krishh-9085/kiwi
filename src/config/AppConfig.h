@@ -58,7 +58,7 @@ extern int faceTweenMs;
 extern const char *NTP_SERVER_1;
 extern const char *NTP_SERVER_2;
 
-#define SAMPLE_RATE 24000
+#define SAMPLE_RATE 16000
 #define RECORD_SECONDS 6
 #define AUDIO_FRAMES 256
 #define MIC_SLOT_OFFSET 0
@@ -75,7 +75,7 @@ extern const char *NTP_SERVER_2;
 #define LLM_STREAM_TTS 1
 #endif
 #ifndef STREAM_TTS_MIN_MAX_ALLOC
-#define STREAM_TTS_MIN_MAX_ALLOC 60000 // tune on device; bytes
+#define STREAM_TTS_MIN_MAX_ALLOC 45000 // tune on device; bytes
 #endif
 
 // ============================================================

@@ -1,5 +1,6 @@
 #include "power/PowerManager.h"
 #include "config/AppConfig.h"
+#include "config/ConfigManager.h"
 #include "hardware/AudioEngine.h"
 #include "hardware/TouchController.h"
 #include "hardware/SoundLevel.h"
@@ -164,6 +165,7 @@ static void enterLightSleep(uint64_t wakeUs, const char *reason) {
 // Deep Sleep: WiFi radio off, WebServer and DNSServer stopped.
 // Web portal is completely unreachable during deep sleep.
 static void enterDeepSleep(uint8_t mode, uint64_t wakeUs, const char *reason) {
+  saveConfigImmediate();
   powerSetCpuFreq(160);
   setDisplayPower(false);
   audioSleepPrepare();

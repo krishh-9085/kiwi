@@ -1087,7 +1087,7 @@ void handleSave() {
   elevenModel.trim();
   elevenVoice.trim();
 
-  saveConfig();
+  saveConfigImmediate();
   updateDisplayBrightnessMode();
 
   server.sendHeader("Access-Control-Allow-Origin", "*");

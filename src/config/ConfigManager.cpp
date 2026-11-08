@@ -1,10 +1,14 @@
 #include "config/ConfigManager.h"
 #include "config/AppConfig.h"
+#include "hardware/AudioEngine.h"
 #include "services/AiChatHistory.h"
 #include <Preferences.h>
 #include <WiFi.h>
 
 static Preferences prefs;
+static bool configDirty = false;
+static uint32_t configDirtyAt = 0;
+static const uint32_t CONFIG_DEBOUNCE_MS = 10000; // 10 seconds of idle debounce
 
 String sanitizeHostname(const String &raw) {
   String out = "";
@@ -383,8 +387,16 @@ void loadConfig() {
 
 
 
-void saveConfig() {
+bool isConfigDirty() {
+  return configDirty;
+}
 
+void saveConfig() {
+  configDirty = true;
+  configDirtyAt = millis();
+}
+
+void saveConfigImmediate() {
   prefs.begin("myrobot", false);
 
   prefs.putString("ssid", wifiSSID);
@@ -530,18 +542,33 @@ void saveConfig() {
   prefs.putString("ap_pass", String(apPasswordBuf));
 
   prefs.end();
-
+  configDirty = false;
+  configDirtyAt = 0;
+  Serial.println("[CONFIG] NVS flash write completed.");
 }
 
+void serviceConfigManager() {
+  if (!configDirty)
+    return;
 
+  uint32_t now = millis();
+  if (now - configDirtyAt < CONFIG_DEBOUNCE_MS)
+    return;
+
+  // Defer if audio or AI speech is outputting or processing to prevent SPI bus latency clicks
+  if (kiwiIsOutputting() || busyProcessing || isTonePlaying()) {
+    return;
+  }
+
+  Serial.println("[CONFIG] Debounce timeout elapsed: committing dirty settings to NVS flash...");
+  saveConfigImmediate();
+}
 
 void clearConfig() {
-
   prefs.begin("myrobot", false);
-
   prefs.clear();
-
   prefs.end();
-
+  configDirty = false;
+  configDirtyAt = 0;
 }
 

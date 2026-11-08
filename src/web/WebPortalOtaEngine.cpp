@@ -6,6 +6,7 @@
 #include <WebServer.h>
 #include "web/WebPortal.h"
 #include "config/AppConfig.h"
+#include "config/ConfigManager.h"
 #include "face/FaceScreens.h"
 #include "face/FaceDisplay.h"
 
@@ -187,6 +188,7 @@ static void otaDownloadTask(void *param) {
       s_otaState = OTA_SUCCESS;
       drawMessage("OTA COMPLETE", "Rebooting Kiwi...");
       presentDisplay(true);
+      saveConfigImmediate();
       vTaskDelay(1500 / portTICK_PERIOD_MS);
       ESP.restart();
     } else {

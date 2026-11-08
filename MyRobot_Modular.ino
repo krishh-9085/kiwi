@@ -345,6 +345,7 @@ static void checkBootGreeting() {
 // ============================================================
 void loop() {
   powerUpdate();
+  serviceConfigManager();
   pumpWeb();
   maintainWiFi();
 

@@ -2,6 +2,7 @@
 #include "behavior/ActionExecutor.h"
 #include "behavior/CommandHandler.h"
 #include "config/AppConfig.h"
+#include "config/ConfigManager.h"
 #include "core/CoreTypes.h"
 #include "face/FaceEngine.h"
 #include "face/BootWakeAnim.h"
@@ -20,6 +21,7 @@ void pumpUI() {
   bootAnimPump();
   updateTouch();
   updateTonePlayer();
+  serviceConfigManager();
   tickFace();
   pumpWeb();
 }

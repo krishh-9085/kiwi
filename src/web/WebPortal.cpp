@@ -381,6 +381,7 @@ void startWeb() {
             server.send(500, "text/plain",
                         String("FAIL: ") + Update.errorString());
           } else {
+            saveConfigImmediate();
             server.send(200, "text/plain", "OK");
             delay(500);
             ESP.restart();

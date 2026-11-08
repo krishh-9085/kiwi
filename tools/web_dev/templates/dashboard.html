@@ -14,7 +14,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="theme-color" content="#06080d">
   <link rel="icon"
-    href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%2306080d'/%3E%3Crect x='14' y='22' width='10' height='10' fill='%23f2b45c'/%3E%3Crect x='40' y='22' width='10' height='10' fill='%23f2b45c'/%3E%3Cpath d='M20 42h24' stroke='%23f2b45c' stroke-width='4'/%3E%3C/svg%3E">
+    href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E3Crect width='64' height='64' rx='12' fill='%2306080d'/%3E3Crect x='14' y='22' width='10' height='10' fill='%23f2b45c'/%3E3Crect x='40' y='22' width='10' height='10' fill='%23f2b45c'/%3E3Cpath d='M20 42h24' stroke='%23f2b45c' stroke-width='4'/%3E3C/svg%3E">
   <style>
     :root {
       color-scheme: dark;
@@ -1130,7 +1130,7 @@
     <section class="strip" id="statusStrip" aria-label="System status">
       <div class="cell">
         <div class="k">Hotspot SSID</div>
-        <div class="v">%AP%</div>
+        <div class="v" id="statAp">Kiwi-AP</div>
       </div>
       <div class="cell">
         <div class="k">Setup URL / IP</div>
@@ -1138,15 +1138,15 @@
       </div>
       <div class="cell">
         <div class="k">Active Brain</div>
-        <div class="v">%LLMPROV% / %ACTIVEMODEL%</div>
+        <div class="v" id="statLlm">Gemini / 2.5-flash</div>
       </div>
       <div class="cell">
         <div class="k">Speech Engine</div>
-        <div class="v">%STTPROV% / %STTLANGNAME%</div>
+        <div class="v" id="statStt">Sarvam / Auto</div>
       </div>
       <div class="cell">
         <div class="k">Voice Synthesis</div>
-        <div class="v">%TTSPROV%</div>
+        <div class="v" id="statTts">Sarvam</div>
       </div>
     </section>
 
@@ -1219,31 +1219,31 @@
               <span class="live-saved-tick" id="tickBrightness"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg> Live</span>
             </div>
             <div class="kiwi-slider-row rocky-slider-row" style="margin-bottom:12px">
-              <input type="range" name="live_disp_bright" id="dayBrightSlider" min="0" max="100" value="%BRIGHT%"
+              <input type="range" name="live_disp_bright" id="dayBrightSlider" min="0" max="100" value="100"
                 aria-label="Day brightness" oninput="onDayBrightChange(this.value)">
-              <span class="kiwi-percent-badge rocky-percent-badge" id="dayBrightVal">%BRIGHT%%</span>
+              <span class="kiwi-percent-badge rocky-percent-badge" id="dayBrightVal">100%</span>
             </div>
 
             <div class="kiwi-section-title rocky-section-title" style="margin:12px 0 8px">At Night Screen Mode</div>
             <div class="kiwi-pill-group rocky-pill-group" role="radiogroup" aria-label="Night mode">
-              <label class="kiwi-pill rocky-pill %NIGHT_SEL_0%">
-                <input type="radio" name="live_night_mode" value="0" %NIGHT_CHECK_0% onchange="onNightModeChange(0)">
+              <label class="kiwi-pill rocky-pill active">
+                <input type="radio" name="live_night_mode" value="0" checked onchange="onNightModeChange(0)">
                 <span class="kiwi-radio-dot rocky-radio-dot"></span><span>Same</span>
               </label>
-              <label class="kiwi-pill rocky-pill %NIGHT_SEL_1%">
-                <input type="radio" name="live_night_mode" value="1" %NIGHT_CHECK_1% onchange="onNightModeChange(1)">
+              <label class="kiwi-pill rocky-pill ">
+                <input type="radio" name="live_night_mode" value="1"  onchange="onNightModeChange(1)">
                 <span class="kiwi-radio-dot rocky-radio-dot"></span><span>Dim</span>
               </label>
-              <label class="kiwi-pill rocky-pill %NIGHT_SEL_2%">
-                <input type="radio" name="live_night_mode" value="2" %NIGHT_CHECK_2% onchange="onNightModeChange(2)">
+              <label class="kiwi-pill rocky-pill ">
+                <input type="radio" name="live_night_mode" value="2"  onchange="onNightModeChange(2)">
                 <span class="kiwi-radio-dot rocky-radio-dot"></span><span>Off</span>
               </label>
             </div>
 
-            <div class="kiwi-slider-row rocky-slider-row" id="nightSliderRow" style="%NIGHT_SLIDER_STYLE%">
-              <input type="range" name="live_night_bright" id="nightBrightSlider" min="0" max="100" value="%NIGHT_BRIGHT%"
+            <div class="kiwi-slider-row rocky-slider-row" id="nightSliderRow" style="">
+              <input type="range" name="live_night_bright" id="nightBrightSlider" min="0" max="100" value="20"
                 aria-label="Night brightness" oninput="onNightBrightChange(this.value)">
-              <span class="kiwi-percent-badge rocky-percent-badge" id="nightBrightVal">%NIGHT_BRIGHT%%</span>
+              <span class="kiwi-percent-badge rocky-percent-badge" id="nightBrightVal">20%</span>
             </div>
           </div>
 
@@ -1260,14 +1260,14 @@
               <span class="live-saved-tick" id="tickAudio"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg> Live</span>
             </div>
             <div class="kiwi-slider-row rocky-slider-row" style="margin-bottom:12px">
-              <input type="range" id="volSlider" name="live_vol" min="0" max="100" value="%VOL%"
+              <input type="range" id="volSlider" name="live_vol" min="0" max="100" value="80"
                 aria-label="Speaker volume" oninput="onVolumeChangeLive(this.value)">
-              <span class="kiwi-percent-badge rocky-percent-badge"><span id="volLabel">%VOL%</span>%</span>
+              <span class="kiwi-percent-badge rocky-percent-badge"><span id="volLabel">80</span>%</span>
             </div>
 
             <div class="panel" style="margin-top:12px">
               <label class="toggle" style="margin:0 0 8px 0">
-                <input type="checkbox" name="live_boredom" id="rootBoredomToggle" value="1" %BOREDOM_CHECKED%
+                <input type="checkbox" name="live_boredom" id="rootBoredomToggle" value="1" 
                   onchange="toggleBoredomLive(this.checked)">
                 <span class="switch"></span>
                 <span style="font-weight:600;font-size:13px">Autonomous Idle Chatter</span>
@@ -1276,13 +1276,13 @@
                 <label for="boredomMinsSel" style="margin:0;font-size:11px">Interval:</label>
                 <select id="boredomMinsSel" onchange="setBoredomIntervalLive(this.value)"
                   style="width:auto;flex:1;padding:4px 24px 4px 8px;font-size:12px;min-height:36px">
-                  <option value="1" %BM_1_SEL%>Every 1m (Lively)</option>
-                  <option value="2" %BM_2_SEL%>Every 2m (Default)</option>
-                  <option value="3" %BM_3_SEL%>Every 3m</option>
-                  <option value="5" %BM_5_SEL%>Every 5m</option>
-                  <option value="10" %BM_10_SEL%>Every 10m</option>
-                  <option value="15" %BM_15_SEL%>Every 15m</option>
-                  <option value="30" %BM_30_SEL%>Every 30m</option>
+                  <option value="1" >Every 1m (Lively)</option>
+                  <option value="2" >Every 2m (Default)</option>
+                  <option value="3" >Every 3m</option>
+                  <option value="5" >Every 5m</option>
+                  <option value="10" >Every 10m</option>
+                  <option value="15" >Every 15m</option>
+                  <option value="30" >Every 30m</option>
                 </select>
               </div>
             </div>
@@ -1319,7 +1319,7 @@
 
             <div class="panel" style="margin-top:0">
               <label class="toggle" style="margin:0 0 6px 0">
-                <input type="checkbox" id="liveCircEnToggle" %CIRC_EN_CHECKED% onchange="onCircadianToggle(this.checked)">
+                <input type="checkbox" id="liveCircEnToggle"  onchange="onCircadianToggle(this.checked)">
                 <span class="switch"></span>
                 <span style="font-weight:600;font-size:13px">Sleep Schedule</span>
               </label>
@@ -1329,7 +1329,30 @@
                   <div style="font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted);margin-bottom:3px;font-family:var(--display);font-weight:600">Sleep At</div>
                   <div class="kiwi-time-picker rocky-time-picker" style="width:100%;box-sizing:border-box">
                     <select id="circStartSel" onchange="onScheduleChange()" aria-label="Night sleep start time">
-                      %CIRC_START_OPTIONS%
+                                          <option value="0">12:00 AM</option>
+                    <option value="1">01:00 AM</option>
+                    <option value="2">02:00 AM</option>
+                    <option value="3">03:00 AM</option>
+                    <option value="4">04:00 AM</option>
+                    <option value="5">05:00 AM</option>
+                    <option value="6">06:00 AM</option>
+                    <option value="7">07:00 AM</option>
+                    <option value="8">08:00 AM</option>
+                    <option value="9">09:00 AM</option>
+                    <option value="10">10:00 AM</option>
+                    <option value="11">11:00 AM</option>
+                    <option value="12">12:00 PM</option>
+                    <option value="13">01:00 PM</option>
+                    <option value="14">02:00 PM</option>
+                    <option value="15">03:00 PM</option>
+                    <option value="16">04:00 PM</option>
+                    <option value="17">05:00 PM</option>
+                    <option value="18">06:00 PM</option>
+                    <option value="19">07:00 PM</option>
+                    <option value="20">08:00 PM</option>
+                    <option value="21">09:00 PM</option>
+                    <option value="22">10:00 PM</option>
+                    <option value="23">11:00 PM</option>
                     </select>
                   </div>
                 </div>
@@ -1337,7 +1360,30 @@
                   <div style="font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted);margin-bottom:3px;font-family:var(--display);font-weight:600">Wake At</div>
                   <div class="kiwi-time-picker rocky-time-picker" style="width:100%;box-sizing:border-box">
                     <select id="circEndSel" onchange="onScheduleChange()" aria-label="Night wake up time">
-                      %CIRC_END_OPTIONS%
+                                          <option value="0">12:00 AM</option>
+                    <option value="1">01:00 AM</option>
+                    <option value="2">02:00 AM</option>
+                    <option value="3">03:00 AM</option>
+                    <option value="4">04:00 AM</option>
+                    <option value="5">05:00 AM</option>
+                    <option value="6">06:00 AM</option>
+                    <option value="7">07:00 AM</option>
+                    <option value="8">08:00 AM</option>
+                    <option value="9">09:00 AM</option>
+                    <option value="10">10:00 AM</option>
+                    <option value="11">11:00 AM</option>
+                    <option value="12">12:00 PM</option>
+                    <option value="13">01:00 PM</option>
+                    <option value="14">02:00 PM</option>
+                    <option value="15">03:00 PM</option>
+                    <option value="16">04:00 PM</option>
+                    <option value="17">05:00 PM</option>
+                    <option value="18">06:00 PM</option>
+                    <option value="19">07:00 PM</option>
+                    <option value="20">08:00 PM</option>
+                    <option value="21">09:00 PM</option>
+                    <option value="22">10:00 PM</option>
+                    <option value="23">11:00 PM</option>
                     </select>
                   </div>
                 </div>
@@ -1350,7 +1396,7 @@
 
             <div class="panel" style="margin-top:8px">
               <label class="toggle" style="margin:0 0 6px 0">
-                <input type="checkbox" id="liveGreetEnToggle" %GREET_EN_CHECKED% onchange="onGreetingsToggle(this.checked)">
+                <input type="checkbox" id="liveGreetEnToggle"  onchange="onGreetingsToggle(this.checked)">
                 <span class="switch"></span>
                 <span style="font-weight:600;font-size:13px">Greetings</span>
               </label>
@@ -1359,7 +1405,7 @@
 
             <div class="panel" style="margin-top:8px">
               <label class="toggle" style="margin:0 0 6px 0">
-                <input type="checkbox" id="liveSndReactToggle" %SND_REACT_CHECKED% onchange="onSoundReactToggle(this.checked)">
+                <input type="checkbox" id="liveSndReactToggle"  onchange="onSoundReactToggle(this.checked)">
                 <span class="switch"></span>
                 <span style="font-weight:600;font-size:13px">Sound-reactive face</span>
               </label>
@@ -1379,17 +1425,17 @@
 
 <form method="POST" action="/save" class="form-grid" id="cfgForm">
         <!-- Hidden inputs preserving live parameters across form saves -->
-        <input type="hidden" name="vol" id="hiddenFormVol" value="%VOL%">
-        <input type="hidden" name="disp_bright" id="hiddenFormBright" value="%BRIGHT%">
-        <input type="hidden" name="night_bright" id="hiddenFormNightBright" value="%NIGHT_BRIGHT%">
-        <input type="hidden" name="night_mode" id="hiddenFormNightMode" value="%NIGHT_MODE%">
-        <input type="hidden" name="circ_start" id="hiddenFormCircStart" value="%CIRC_START%">
-        <input type="hidden" name="circ_end" id="hiddenFormCircEnd" value="%CIRC_END%">
-        <input type="hidden" name="circ_en" id="hiddenFormCircEn" value="%CIRC_EN_VAL%">
-        <input type="hidden" name="greet_en" id="hiddenFormGreetEn" value="%GREET_EN_VAL%">
-        <input type="hidden" name="snd_react" id="hiddenFormSndReact" value="%SND_REACT_VAL%">
-        <input type="hidden" name="boredom" id="hiddenFormBoredom" value="%BOREDOM_VAL%">
-        <input type="hidden" name="boredom_mins" id="hiddenFormBoredomMins" value="%BOREDOM_MINS%">
+        <input type="hidden" name="vol" id="hiddenFormVol" value="80">
+        <input type="hidden" name="disp_bright" id="hiddenFormBright" value="100">
+        <input type="hidden" name="night_bright" id="hiddenFormNightBright" value="20">
+        <input type="hidden" name="night_mode" id="hiddenFormNightMode" value="0">
+        <input type="hidden" name="circ_start" id="hiddenFormCircStart" value="23">
+        <input type="hidden" name="circ_end" id="hiddenFormCircEnd" value="7">
+        <input type="hidden" name="circ_en" id="hiddenFormCircEn" value="0">
+        <input type="hidden" name="greet_en" id="hiddenFormGreetEn" value="0">
+        <input type="hidden" name="snd_react" id="hiddenFormSndReact" value="0">
+        <input type="hidden" name="boredom" id="hiddenFormBoredom" value="0">
+        <input type="hidden" name="boredom_mins" id="hiddenFormBoredomMins" value="2">
 
         <!-- WI-FI & LOCAL NETWORK SETUP -->
         <div class="card credentials-card" style="margin-bottom:16px">
@@ -1415,12 +1461,12 @@
             </div>
             <div>
               <label for="wifiSsidInput">WI-FI NETWORK (SSID) *</label>
-              <input type="text" name="ssid" id="wifiSsidInput" required value="%SSID%" placeholder="Enter Wi-Fi network name">
+              <input type="text" name="ssid" id="wifiSsidInput" required value="" placeholder="Enter Wi-Fi network name">
             </div>
             <div style="grid-column:1 / -1">
               <label for="wifiPassInput">WI-FI PASSWORD</label>
               <div class="pw">
-                <input name="pass" id="wifiPassInput" type="password" value="%PASS%" placeholder="Enter Wi-Fi password (leave blank for open)">
+                <input name="pass" id="wifiPassInput" type="password" value="" placeholder="Enter Wi-Fi password (leave blank for open)">
                 <button type="button" class="icon-btn" onclick="togglePw('wifiPassInput', this)" title="Show/Hide Password" aria-label="Toggle password visibility">SHOW</button>
               </div>
               <small style="color:var(--muted)">Your password is securely saved in ESP32 flash memory</small>
@@ -1449,7 +1495,7 @@
             <div class="api-key-item" data-provider="gemini">
               <label for="geminiKeyIn">GOOGLE GEMINI API</label>
               <div class="pw">
-                <input name="llmkey" id="geminiKeyIn" type="password" value="%LLMKEY%" placeholder="AIzaSy...">
+                <input name="llmkey" id="geminiKeyIn" type="password" value="" placeholder="AIzaSy...">
                 <button type="button" class="icon-btn" onclick="togglePw('geminiKeyIn', this)" aria-label="Toggle Gemini API visibility">SHOW</button>
               </div>
               <small style="color:var(--muted)">Google Gemini 2.0 Flash &amp; Flash-Lite reasoning</small>
@@ -1459,7 +1505,7 @@
             <div class="api-key-item" data-provider="sarvam">
               <label for="sarvamKeyIn">SARVAM AI API</label>
               <div class="pw">
-                <input name="ttskey" id="sarvamKeyIn" type="password" value="%TTSKEY%" placeholder="Enter Sarvam API key">
+                <input name="ttskey" id="sarvamKeyIn" type="password" value="" placeholder="Enter Sarvam API key">
                 <button type="button" class="icon-btn" onclick="togglePw('sarvamKeyIn', this)" aria-label="Toggle Sarvam API visibility">SHOW</button>
               </div>
               <small style="color:var(--muted)">Indian regional languages STT (Saaras) &amp; TTS (Bulbul v3/v4)</small>
@@ -1469,7 +1515,7 @@
             <div class="api-key-item" data-provider="groq">
               <label for="groqKeyIn">GROQ CLOUD API</label>
               <div class="pw">
-                <input name="groqkey" id="groqKeyIn" type="password" value="%GROQKEY%" placeholder="gsk_...">
+                <input name="groqkey" id="groqKeyIn" type="password" value="" placeholder="gsk_...">
                 <button type="button" class="icon-btn" onclick="togglePw('groqKeyIn', this)" aria-label="Toggle Groq API visibility">SHOW</button>
               </div>
               <small style="color:var(--muted)">Ultra-fast Groq LLM (LLaMA 3.3, Qwen) &amp; Groq Whisper STT</small>
@@ -1479,7 +1525,7 @@
             <div class="api-key-item" data-provider="elevenlabs">
               <label for="elevenKeyIn">ELEVENLABS API</label>
               <div class="pw">
-                <input name="elevkey" id="elevenKeyIn" type="password" value="%ELEVENKEY%" placeholder="Enter ElevenLabs API key">
+                <input name="elevkey" id="elevenKeyIn" type="password" value="" placeholder="Enter ElevenLabs API key">
                 <button type="button" class="icon-btn" onclick="togglePw('elevenKeyIn', this)" aria-label="Toggle ElevenLabs API visibility">SHOW</button>
               </div>
               <small style="color:var(--muted)">ElevenLabs ultra-realistic neural TTS voices</small>
@@ -1489,7 +1535,7 @@
             <div class="api-key-item" data-provider="openai">
               <label for="openaiKeyIn">OPENAI API</label>
               <div class="pw">
-                <input name="openaikey" id="openaiKeyIn" type="password" value="%OPENAIKEY%" placeholder="sk-...">
+                <input name="openaikey" id="openaiKeyIn" type="password" value="" placeholder="sk-...">
                 <button type="button" class="icon-btn" onclick="togglePw('openaiKeyIn', this)" aria-label="Toggle OpenAI API visibility">SHOW</button>
               </div>
               <small style="color:var(--muted)">OpenAI GPT models (gpt-4o-mini), Whisper STT, and OpenAI TTS</small>
@@ -1499,7 +1545,7 @@
             <div class="api-key-item" data-provider="fish">
               <label for="fishKeyIn">FISH AUDIO API</label>
               <div class="pw">
-                <input name="fishkey" id="fishKeyIn" type="password" value="%FISHKEY%" placeholder="Enter Fish Audio API key">
+                <input name="fishkey" id="fishKeyIn" type="password" value="" placeholder="Enter Fish Audio API key">
                 <button type="button" class="icon-btn" onclick="togglePw('fishKeyIn', this)" aria-label="Toggle Fish Audio API visibility">SHOW</button>
               </div>
               <small style="color:var(--muted)">Fish Speech neural voice synthesis (S2.1)</small>
@@ -1513,43 +1559,43 @@
             <div class="card-title">1. SPEECH-TO-TEXT (STT)</div>
             <label for="sttProvSel">STT PROVIDER</label>
             <select name="sttprovider" id="sttProvSel" onchange="toggleStt()">
-              <option value="sarvam" %STT_SARVAM_SEL%>Sarvam AI (saaras:v3)</option>
-              <option value="groq" %STT_GROQ_SEL%>Groq Whisper (fastest)</option>
-              <option value="openai" %STT_OPENAI_SEL%>OpenAI Whisper</option>
+              <option value="sarvam" >Sarvam AI (saaras:v3)</option>
+              <option value="groq" >Groq Whisper (fastest)</option>
+              <option value="openai" >OpenAI Whisper</option>
             </select>
             <label for="sttLangSel">STT LANGUAGE</label>
             <select name="sttlang" id="sttLangSel">
-              <option value="auto" %LANG_AUTO_SEL%>Auto (Hindi + English)</option>
-              <option value="hi" %LANG_HI_SEL%>Force Hindi</option>
-              <option value="en" %LANG_EN_SEL%>Force English</option>
+              <option value="auto" >Auto (Hindi + English)</option>
+              <option value="hi" >Force Hindi</option>
+              <option value="en" >Force English</option>
             </select>
             <div id="sarvamBox">
               <h3>Sarvam AI Settings</h3>
-              <label for="sttUrlIn">Endpoint</label><input type="url" name="stturl" id="sttUrlIn" value="%STTURL%" placeholder="https://...">
+              <label for="sttUrlIn">Endpoint</label><input type="url" name="stturl" id="sttUrlIn" value="" placeholder="https://...">
               <label for="sttModelSel">Model</label>
               <select name="sttmodel" id="sttModelSel">
-                <option value="saaras:v3" %STT_SAARAS_SEL%>saaras:v3</option>
-                <option value="saarika:v2" %STT_SAARIKA_SEL%>saarika:v2</option>
+                <option value="saaras:v3" >saaras:v3</option>
+                <option value="saarika:v2" >saarika:v2</option>
               </select>
             </div>
             <div id="groqSttBox">
               <h3>Groq Whisper Settings</h3>
-              <label for="groqSttUrlIn">Endpoint</label><input type="url" name="groqstturl" id="groqSttUrlIn" value="%GROQSTTURL%" placeholder="https://...">
+              <label for="groqSttUrlIn">Endpoint</label><input type="url" name="groqstturl" id="groqSttUrlIn" value="" placeholder="https://...">
               <label for="groqSttModelSel">Model</label>
               <select name="groqsttmodel" id="groqSttModelSel">
-                <option value="whisper-large-v3-turbo" %GW3T_SEL%>whisper-large-v3-turbo (fast)</option>
-                <option value="whisper-large-v3" %GW3_SEL%>whisper-large-v3 (accurate)</option>
-                <option value="distil-whisper-large-v3-en" %GDW_SEL%>distil-whisper-large-v3-en</option>
+                <option value="whisper-large-v3-turbo" >whisper-large-v3-turbo (fast)</option>
+                <option value="whisper-large-v3" >whisper-large-v3 (accurate)</option>
+                <option value="distil-whisper-large-v3-en" >distil-whisper-large-v3-en</option>
               </select>
             </div>
             <div id="openaiSttBox">
               <h3>OpenAI Whisper Settings</h3>
-              <label for="opaiSttUrlIn">Endpoint</label><input type="url" name="opaistturl" id="opaiSttUrlIn" value="%OPENAIURL%" placeholder="https://...">
+              <label for="opaiSttUrlIn">Endpoint</label><input type="url" name="opaistturl" id="opaiSttUrlIn" value="" placeholder="https://...">
               <label for="opaiSttModelSel">Model</label>
               <select name="opaisttmodel" id="opaiSttModelSel">
-                <option value="whisper-1" %OW1_SEL%>whisper-1</option>
-                <option value="gpt-4o-mini-transcribe" %OG4M_SEL%>gpt-4o-mini-transcribe</option>
-                <option value="gpt-4o-transcribe" %OG4_SEL%>gpt-4o-transcribe</option>
+                <option value="whisper-1" >whisper-1</option>
+                <option value="gpt-4o-mini-transcribe" >gpt-4o-mini-transcribe</option>
+                <option value="gpt-4o-transcribe" >gpt-4o-transcribe</option>
               </select>
             </div>
           </div>
@@ -1559,42 +1605,42 @@
             <div class="card-title">2. AI INTELLIGENCE (LLM)</div>
             <label for="provSel">LLM PROVIDER</label>
             <select name="llmprovider" id="provSel" onchange="toggleModels()">
-              <option value="gemini" %GEMINI_SEL%>Google Gemini</option>
-              <option value="groq" %GROQ_SEL%>Groq Cloud</option>
-              <option value="openai" %OPENAI_SEL%>OpenAI GPT</option>
+              <option value="gemini" >Google Gemini</option>
+              <option value="groq" >Groq Cloud</option>
+              <option value="openai" >OpenAI GPT</option>
             </select>
             <div id="geminiBox">
               <h3>Gemini Model &amp; Settings</h3>
               <label for="geminiModelSel">Model</label>
               <select name="llmmodel" id="geminiModelSel" onchange="updateGeminiUrl()">
-                <option value="gemini-2.5-flash" %GE25_SEL%>gemini-2.5-flash</option>
-                <option value="gemini-3.5-flash-lite" %GE35L_SEL%>gemini-3.5-flash-lite</option>
-                <option value="gemini-3.1-flash-lite" %GE31L_SEL%>gemini-3.1-flash-lite</option>
-                <option value="gemini-3.8-flash" %GE38_SEL%>gemini-3.8-flash</option>
+                <option value="gemini-2.5-flash" >gemini-2.5-flash</option>
+                <option value="gemini-3.5-flash-lite" >gemini-3.5-flash-lite</option>
+                <option value="gemini-3.1-flash-lite" >gemini-3.1-flash-lite</option>
+                <option value="gemini-3.8-flash" >gemini-3.8-flash</option>
               </select>
-              <label for="geminiUrlIn">Endpoint</label><input type="url" name="llmurl" id="geminiUrlIn" value="%LLMURL%" placeholder="https://...">
+              <label for="geminiUrlIn">Endpoint</label><input type="url" name="llmurl" id="geminiUrlIn" value="" placeholder="https://...">
             </div>
             <div id="groqBox">
               <h3>Groq Model &amp; Settings</h3>
               <label for="groqModelSel">Model</label>
               <select name="groqmodel" id="groqModelSel">
-                <option value="openai/gpt-oss-120b" %G120B_SEL%>openai/gpt-oss-120b</option>
-                <option value="openai/gpt-oss-20b" %G20B_SEL%>openai/gpt-oss-20b</option>
-                <option value="qwen/qwen3-32b" %GQ32B_SEL%>qwen/qwen3-32b</option>
-                <option value="llama-3.3-70b-versatile" %GL33_SEL%>llama-3.3-70b-versatile</option>
+                <option value="openai/gpt-oss-120b" >openai/gpt-oss-120b</option>
+                <option value="openai/gpt-oss-20b" >openai/gpt-oss-20b</option>
+                <option value="qwen/qwen3-32b" >qwen/qwen3-32b</option>
+                <option value="llama-3.3-70b-versatile" >llama-3.3-70b-versatile</option>
               </select>
-              <label for="groqUrlIn">Endpoint</label><input type="url" name="groqurl" id="groqUrlIn" value="%GROQURL%" placeholder="https://...">
+              <label for="groqUrlIn">Endpoint</label><input type="url" name="groqurl" id="groqUrlIn" value="" placeholder="https://...">
             </div>
             <div id="openaiBox">
               <h3>OpenAI GPT Model &amp; Settings</h3>
               <label for="openaiModelSel">Model</label>
               <select name="openaimodel" id="openaiModelSel" onchange="updateOpenAiUrl()">
-                <option value="gpt-4o-mini" %GPT4OM_SEL%>gpt-4o-mini (fast, recommended)</option>
-                <option value="gpt-4.1-mini" %GPT41M_SEL%>gpt-4.1-mini (quality)</option>
-                <option value="gpt-4.1-nano" %GPT41N_SEL%>gpt-4.1-nano (fastest)</option>
-                <option value="gpt-4o" %GPT4O_SEL%>gpt-4o (higher quality)</option>
+                <option value="gpt-4o-mini" >gpt-4o-mini (fast, recommended)</option>
+                <option value="gpt-4.1-mini" >gpt-4.1-mini (quality)</option>
+                <option value="gpt-4.1-nano" >gpt-4.1-nano (fastest)</option>
+                <option value="gpt-4o" >gpt-4o (higher quality)</option>
               </select>
-              <label for="openaiUrlIn">Endpoint</label><input type="url" name="openaiurl" id="openaiUrlIn" value="%OPENAI_LLM_URL%" placeholder="https://...">
+              <label for="openaiUrlIn">Endpoint</label><input type="url" name="openaiurl" id="openaiUrlIn" value="" placeholder="https://...">
             </div>
           </div>
         </div>
@@ -1604,50 +1650,78 @@
           <div class="card-title">3. TEXT-TO-SPEECH (TTS)</div>
           <label for="ttsProvSel">TTS PROVIDER</label>
           <select name="ttsprovider" id="ttsProvSel" onchange="toggleTts()">
-            <option value="sarvam" %TTS_SARVAM_SEL%>Sarvam AI (bulbul:v3)</option>
-            <option value="openai" %TTS_OPENAI_SEL%>OpenAI TTS</option>
-            <option value="elevenlabs" %TTS_ELEVEN_SEL%>ElevenLabs</option>
-            <option value="fish" %TTS_FISH_SEL%>Fish Audio (Fish Speech)</option>
+            <option value="sarvam" >Sarvam AI (bulbul:v3)</option>
+            <option value="openai" >OpenAI TTS</option>
+            <option value="elevenlabs" >ElevenLabs</option>
+            <option value="fish" >Fish Audio (Fish Speech)</option>
           </select>
           <div id="ttsSarvamBox">
             <h3>Sarvam TTS Settings</h3>
-            <label for="ttsSarvamUrl">Endpoint</label><input type="url" name="ttsurl" id="ttsSarvamUrl" value="%TTSURL%" placeholder="https://...">
+            <label for="ttsSarvamUrl">Endpoint</label><input type="url" name="ttsurl" id="ttsSarvamUrl" value="" placeholder="https://...">
             <label for="ttsSarvamModel">Model</label>
             <select name="ttsmodel" id="ttsSarvamModel">
-              <option value="bulbul:v4-flash" %SARVAM_V4F_SEL%>bulbul:v4-flash (fastest)</option>
-              <option value="bulbul:v3" %SARVAM_V3_SEL%>bulbul:v3 (recommended)</option>
-              <option value="bulbul:v2" %SARVAM_V2_SEL%>bulbul:v2</option>
+              <option value="bulbul:v4-flash" >bulbul:v4-flash (fastest)</option>
+              <option value="bulbul:v3" >bulbul:v3 (recommended)</option>
+              <option value="bulbul:v2" >bulbul:v2</option>
             </select>
             <label for="ttsSarvamVoice">Voice / Speaker</label>
             <select name="ttsvoice" id="ttsSarvamVoice">
-              %SARVAM_VOICE_OPTIONS%
+                        <option value="amit">Amit (Male · Clear & Expressive)</option>
+          <option value="priya" selected>Priya (Female · Default)</option>
+          <option value="aditya">Aditya (Male · Dynamic)</option>
+          <option value="ritu">Ritu (Female · Natural)</option>
+          <option value="ashutosh">Ashutosh (Male · Deep Voice)</option>
+          <option value="neha">Neha (Female · Warm)</option>
+          <option value="rahul">Rahul (Male · Casual)</option>
+          <option value="pooja">Pooja (Female · Friendly)</option>
+          <option value="rohan">Rohan (Male · Young)</option>
+          <option value="simran">Simran (Female · Cheerful)</option>
+          <option value="kabir">Kabir (Male · Authoritative)</option>
+          <option value="shreya">Shreya (Female · Sweet)</option>
+          <option value="varun">Varun (Male · Energetic)</option>
+          <option value="ishita">Ishita (Female · Professional)</option>
+          <option value="kavya">Kavya (Female · Soft)</option>
+          <option value="dev">Dev (Male · Modern)</option>
+          <option value="ratan">Ratan (Male · Classic)</option>
+          <option value="manan">Manan (Male)</option>
+          <option value="sumit">Sumit (Male)</option>
+          <option value="roopa">Roopa (Female)</option>
+          <option value="aayan">Aayan (Male)</option>
+          <option value="shubh">Shubh (Male)</option>
+          <option value="advait">Advait (Male)</option>
+          <option value="anand">Anand (Male)</option>
+          <option value="tanya">Tanya (Female)</option>
+          <option value="tarun">Tarun (Male)</option>
+          <option value="sunny">Sunny (Male)</option>
+          <option value="mani">Mani (Male)</option>
+          <option value="gokul">Gokul (Male)</option>
             </select>
           </div>
           <div id="ttsOpenAiBox">
             <h3>OpenAI TTS Settings</h3>
-            <label for="openAiTtsUrl">Endpoint</label><input type="url" name="openaittsurl" id="openAiTtsUrl" value="%OPENAITTSURL%" placeholder="https://...">
-            <label for="openAiTtsModel">Model</label><input type="text" name="openaittsmodel" id="openAiTtsModel" value="%OPENAITTSMODEL%">
+            <label for="openAiTtsUrl">Endpoint</label><input type="url" name="openaittsurl" id="openAiTtsUrl" value="" placeholder="https://...">
+            <label for="openAiTtsModel">Model</label><input type="text" name="openaittsmodel" id="openAiTtsModel" value="">
             <label for="openAiTtsVoice">Voice</label>
             <select name="openaittsvoice" id="openAiTtsVoice">
-              <option value="alloy" %OA_ALLOY_SEL%>Alloy (Neutral)</option>
-              <option value="echo" %OA_ECHO_SEL%>Echo (Warm Male)</option>
-              <option value="fable" %OA_FABLE_SEL%>Fable (British Accent)</option>
-              <option value="onyx" %OA_ONYX_SEL%>Onyx (Deep Male)</option>
-              <option value="nova" %OA_NOVA_SEL%>Nova (Energetic Female)</option>
-              <option value="shimmer" %OA_SHIMMER_SEL%>Shimmer (Clear Female)</option>
+              <option value="alloy" >Alloy (Neutral)</option>
+              <option value="echo" >Echo (Warm Male)</option>
+              <option value="fable" >Fable (British Accent)</option>
+              <option value="onyx" >Onyx (Deep Male)</option>
+              <option value="nova" >Nova (Energetic Female)</option>
+              <option value="shimmer" >Shimmer (Clear Female)</option>
             </select>
           </div>
           <div id="ttsElevenBox">
             <h3>ElevenLabs Settings</h3>
-            <label for="elevUrl">Endpoint</label><input type="url" name="elevurl" id="elevUrl" value="%ELEVURL%" placeholder="https://...">
-            <label for="elevModel">Model</label><input type="text" name="elevmodel" id="elevModel" value="%ELEVMODEL%">
-            <label for="elevVoice">Voice ID</label><input type="text" name="elevvoice" id="elevVoice" value="%ELEVVOICE%">
+            <label for="elevUrl">Endpoint</label><input type="url" name="elevurl" id="elevUrl" value="" placeholder="https://...">
+            <label for="elevModel">Model</label><input type="text" name="elevmodel" id="elevModel" value="">
+            <label for="elevVoice">Voice ID</label><input type="text" name="elevvoice" id="elevVoice" value="">
           </div>
           <div id="ttsFishBox">
             <h3>Fish Audio Settings</h3>
-            <label for="fishUrl">Endpoint</label><input type="url" name="fishurl" id="fishUrl" value="%FISHURL%" placeholder="https://...">
-            <label for="fishModel">Model</label><input type="text" name="fishmodel" id="fishModel" value="%FISHMODEL%">
-            <label for="fishVoice">Voice / Reference ID (Optional)</label><input type="text" name="fishvoice" id="fishVoice" value="%FISHVOICE%">
+            <label for="fishUrl">Endpoint</label><input type="url" name="fishurl" id="fishUrl" value="" placeholder="https://...">
+            <label for="fishModel">Model</label><input type="text" name="fishmodel" id="fishModel" value="">
+            <label for="fishVoice">Voice / Reference ID (Optional)</label><input type="text" name="fishvoice" id="fishVoice" value="">
           </div>
         </div>
 
@@ -1655,33 +1729,33 @@
         <div class="card">
           <div class="card-title">Capacitive Touch Mapping &amp; Gestures</div>
           <label class="toggle" style="margin-bottom:10px">
-            <input type="checkbox" name="tch_snd" value="1" %TCH_SND_CHECKED%>
+            <input type="checkbox" name="tch_snd" id="tchSndCheck" value="1" >
             <span class="switch"></span>
             <span>Play Tone Sound on Touch</span>
           </label>
           <label for="tchDebSlider" style="margin-top:6px">Debounce Filter / Sensitivity: <span id="tchDebLabel"
-              style="color:var(--amber);font-family:var(--mono)">%TCH_DEB%</span> ms</label>
-          <input type="range" id="tchDebSlider" name="tch_deb" min="10" max="150" value="%TCH_DEB%"
+              style="color:var(--amber);font-family:var(--mono)">30</span> ms</label>
+          <input type="range" id="tchDebSlider" name="tch_deb" min="10" max="150" value="30"
             oninput="document.getElementById('tchDebLabel').textContent=this.value">
           <div class="touch-grid">
             <div><label for="actTopTap">Top Head (Single Tap)</label><select name="act_top_tap" id="actTopTap" class="touch-act-sel"
-                data-val="%ACT_TOP_TAP%"></select></div>
+                data-val="none"></select></div>
             <div><label for="actTopDbl">Top Head (Double Tap)</label><select name="act_top_dbl" id="actTopDbl" class="touch-act-sel"
-                data-val="%ACT_TOP_DBL%"></select></div>
+                data-val="none"></select></div>
             <div><label for="actTopHld">Top Head (Hold 3s)</label><select name="act_top_hld" id="actTopHld" class="touch-act-sel"
-                data-val="%ACT_TOP_HLD%"></select></div>
+                data-val="none"></select></div>
             <div><label for="actLtTap">Left Cheek (Single Tap)</label><select name="act_lt_tap" id="actLtTap" class="touch-act-sel"
-                data-val="%ACT_LT_TAP%"></select></div>
+                data-val="none"></select></div>
             <div><label for="actLtDbl">Left Cheek (Double Tap)</label><select name="act_lt_dbl" id="actLtDbl" class="touch-act-sel"
-                data-val="%ACT_LT_DBL%"></select></div>
+                data-val="none"></select></div>
             <div><label for="actRtTap">Right Cheek (Single Tap)</label><select name="act_rt_tap" id="actRtTap" class="touch-act-sel"
-                data-val="%ACT_RT_TAP%"></select></div>
+                data-val="none"></select></div>
             <div><label for="actRtDbl">Right Cheek (Double Tap)</label><select name="act_rt_dbl" id="actRtDbl" class="touch-act-sel"
-                data-val="%ACT_RT_DBL%"></select></div>
+                data-val="none"></select></div>
             <div><label for="actLtHld">Left Cheek (Hold 1.5s)</label><select name="act_lt_hld" id="actLtHld" class="touch-act-sel"
-                data-val="%ACT_LT_HLD%"></select></div>
+                data-val="none"></select></div>
             <div><label for="actRtHld">Right Cheek (Hold 1.5s)</label><select name="act_rt_hld" id="actRtHld" class="touch-act-sel"
-                data-val="%ACT_RT_HLD%"></select></div>
+                data-val="none"></select></div>
           </div>
           <small class="tip">Tip: Hold Top Head for 3s to change face skin; hold for 7s to enter Night Sleep.</small>
         </div>
@@ -1689,52 +1763,52 @@
         <!-- Weather & personality -->
         <div class="card">
           <div class="card-title">Weather &amp; Personality</div>
-          <label for="wCity">City Name</label><input type="text" id="wCity" name="wthr_city" value="%WTHR_CITY%">
+          <label for="wCity">City Name</label><input type="text" id="wCity" name="wthr_city" value="">
           <div class="row-2">
-            <div><label for="wLat">Latitude (-90 to 90)</label><input type="number" step="any" min="-90" max="90" id="wLat" name="wthr_lat" value="%WTHR_LAT%"></div>
-            <div><label for="wLon">Longitude (-180 to 180)</label><input type="number" step="any" min="-180" max="180" id="wLon" name="wthr_lon" value="%WTHR_LON%"></div>
+            <div><label for="wLat">Latitude (-90 to 90)</label><input type="number" step="any" min="-90" max="90" id="wLat" name="wthr_lat" value=""></div>
+            <div><label for="wLon">Longitude (-180 to 180)</label><input type="number" step="any" min="-180" max="180" id="wLon" name="wthr_lon" value=""></div>
           </div>
           <label for="skinSel" style="margin-top:16px">OLED Face &amp; Eye Skin</label>
           <select name="skin" id="skinSel" onchange="toggleSkinLive(this.value)">
-            <option value="kiwi" %SKIN_KIWI_SEL%>Desk Buddy (Cute Block) [Default]</option>
-            <option value="default" %SKIN_DEFAULT_SEL%>Default (Clean Round Vector)</option>
-            <option value="cyberpunk" %SKIN_CYBER_SEL%>Cyberpunk Visor &amp; HUD</option>
-            <option value="cat" %SKIN_CAT_SEL%>Kawaii Cat Neko &amp; Ears</option>
-            <option value="retro" %SKIN_RETRO_SEL%>Retro 8-Bit Arcade</option>
-            <option value="anime" %SKIN_ANIME_SEL%>Anime Shounen (Starry Glint)</option>
-            <option value="hearts" %SKIN_HEARTS_SEL%>Lovestruck Heart Eyes</option>
-            <option value="steampunk" %SKIN_STEAM_SEL%>Steampunk Aviator Goggles</option>
-            <option value="demon" %SKIN_DEMON_SEL%>Demon Spooky (Fiery Horns)</option>
-            <option value="matrix" %SKIN_MATRIX_SEL%>Matrix Code Stream (Terminal)</option>
-            <option value="cyborg" %SKIN_CYBORG_SEL%>Cyborg T-800 (Targeting Aperture)</option>
-            <option value="mecha" %SKIN_MECHA_SEL%>Mecha Gundam (V-Fin Crest &amp; Core)</option>
-            <option value="sunglasses" %SKIN_SHADES_SEL%>Boss Shades (Cool Sunglasses)</option>
-            <option value="puppy" %SKIN_PUPPY_SEL%>Kawaii Puppy (Floppy Ears &amp; Boba)</option>
-            <option value="hypno" %SKIN_HYPNO_SEL%>Hypno Spiral (Mesmerizing Vortex)</option>
-            <option value="alien" %SKIN_ALIEN_SEL%>Cosmic Alien (UFO Orbit &amp; Antenna)</option>
-            <option value="ninja" %SKIN_NINJA_SEL%>Shinobi Ninja (Headband &amp; Stealth)</option>
-            <option value="round" %SKIN_ROUND_SEL%>Round Eyes (Classic Ocular)</option>
-            <option value="squircle_solid" %SKIN_SQ_SOLID_SEL%>Squircle Solid</option>
-            <option value="squircle_outline" %SKIN_SQ_OUTLINE_SEL%>Squircle Outline</option>
-            <option value="squircle_glint" %SKIN_SQ_GLINT_SEL%>Squircle Glint</option>
+            <option value="kiwi" >Desk Buddy (Cute Block) [Default]</option>
+            <option value="default" >Default (Clean Round Vector)</option>
+            <option value="cyberpunk" >Cyberpunk Visor &amp; HUD</option>
+            <option value="cat" >Kawaii Cat Neko &amp; Ears</option>
+            <option value="retro" >Retro 8-Bit Arcade</option>
+            <option value="anime" >Anime Shounen (Starry Glint)</option>
+            <option value="hearts" >Lovestruck Heart Eyes</option>
+            <option value="steampunk" >Steampunk Aviator Goggles</option>
+            <option value="demon" >Demon Spooky (Fiery Horns)</option>
+            <option value="matrix" >Matrix Code Stream (Terminal)</option>
+            <option value="cyborg" >Cyborg T-800 (Targeting Aperture)</option>
+            <option value="mecha" >Mecha Gundam (V-Fin Crest &amp; Core)</option>
+            <option value="sunglasses" >Boss Shades (Cool Sunglasses)</option>
+            <option value="puppy" >Kawaii Puppy (Floppy Ears &amp; Boba)</option>
+            <option value="hypno" >Hypno Spiral (Mesmerizing Vortex)</option>
+            <option value="alien" >Cosmic Alien (UFO Orbit &amp; Antenna)</option>
+            <option value="ninja" >Shinobi Ninja (Headband &amp; Stealth)</option>
+            <option value="round" >Round Eyes (Classic Ocular)</option>
+            <option value="squircle_solid" >Squircle Solid</option>
+            <option value="squircle_outline" >Squircle Outline</option>
+            <option value="squircle_glint" >Squircle Glint</option>
           </select>
           <label for="promptIn" style="margin-top:16px">Robot System Prompt</label>
-          <textarea id="promptIn" name="prompt">%PROMPT%</textarea>
+          <textarea id="promptIn" name="prompt"></textarea>
         </div>
 
         <!-- Memory -->
         <div class="card">
           <div class="card-title">Personal Life Diary &amp; Long-Term Memory</div>
           <label for="memName">Your Name (Owner)</label>
-          <input type="text" id="memName" name="mem_name" value="%MEM_NAME%" placeholder="e.g. Rohil">
+          <input type="text" id="memName" name="mem_name" value="" placeholder="e.g. Rohil">
 
           <label for="memFriends" style="margin-top:14px">Friends &amp; Family Members</label>
-          <input type="text" id="memFriends" name="mem_friends" value="%MEM_FRIENDS%" placeholder="e.g. Rohan (best friend), Priya (sister), Papa, Mummy">
+          <input type="text" id="memFriends" name="mem_friends" value="" placeholder="e.g. Rohan (best friend), Priya (sister), Papa, Mummy">
           <small style="display:block;margin-top:4px;color:var(--muted);font-size:12px;line-height:1.45">Kiwi remembers your friends, family and their relationship with you!</small>
 
           <label style="margin-top:14px">Facts Kiwi Remembers About You</label>
-          <div class="readout" style="margin-bottom:12px;max-height:180px;overflow-y:auto">
-            %MEM_LIST_HTML%
+          <div class="readout" id="memListReadout" style="margin-bottom:12px;max-height:180px;overflow-y:auto">
+            <div style="color:var(--muted);padding:8px">No memory facts stored yet.</div>
           </div>
 
           <label for="newMem">Add New Memory Fact / Event</label>
@@ -2721,6 +2795,222 @@
           sel.appendChild(opt);
         });
       });
+
+
+      function escHtml(str) {
+        if (!str) return '';
+        return String(str)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#039;');
+      }
+
+      function loadConfigFromApi() {
+        fetch('/config', { cache: 'no-store' })
+          .then(function (r) { return r.ok ? r.json() : null; })
+          .then(function (cfg) {
+            if (!cfg) return;
+            applyConfigToUI(cfg);
+          })
+          .catch(function (e) {
+            console.warn('Failed to load /config:', e);
+          });
+      }
+
+      function applyConfigToUI(cfg) {
+        function val(id, v) {
+          if (v !== undefined && v !== null) {
+            var el = document.getElementById(id);
+            if (el) el.value = v;
+          }
+        }
+        function txt(id, t) {
+          if (t !== undefined && t !== null) {
+            var el = document.getElementById(id);
+            if (el) el.textContent = t;
+          }
+        }
+        function chk(id, b) {
+          var el = document.getElementById(id);
+          if (el) el.checked = Boolean(b);
+        }
+
+        // Wi-Fi
+        if (cfg.wifi) {
+          val('wifiSsidInput', cfg.wifi.ssid);
+          val('wifiPassInput', cfg.wifi.password);
+        } else {
+          val('wifiSsidInput', cfg.wifiSSID || cfg.ssid);
+          val('wifiPassInput', cfg.wifiPassword || cfg.pass);
+        }
+
+        // Live Controls & Sliders
+        var v = cfg.volume !== undefined ? cfg.volume : cfg.speakerVolume;
+        if (v !== undefined) {
+          val('volSlider', v);
+          txt('volLabel', v);
+          val('hiddenFormVol', v);
+        }
+
+        var b = cfg.brightness !== undefined ? cfg.brightness : cfg.displayBrightness;
+        if (b !== undefined) {
+          val('dayBrightSlider', b);
+          txt('dayBrightVal', b + '%');
+          val('hiddenFormBright', b);
+        }
+
+        var nb = cfg.nightBrightness !== undefined ? cfg.nightBrightness : 20;
+        val('nightBrightSlider', nb);
+        txt('nightBrightVal', nb + '%');
+        val('hiddenFormNightBright', nb);
+
+        var nm = cfg.nightMode !== undefined ? cfg.nightMode : 0;
+        if (typeof window.onNightModeChange === 'function') {
+          window.onNightModeChange(nm);
+        }
+        val('hiddenFormNightMode', nm);
+
+        // Boredom
+        var bEn = cfg.boredom ? cfg.boredom.enabled : cfg.boredomEnabled;
+        chk('rootBoredomToggle', bEn);
+        val('hiddenFormBoredom', bEn ? '1' : '0');
+        var bMin = cfg.boredom ? cfg.boredom.minutes : cfg.boredomMinutes;
+        val('boredomMinsSel', bMin || 2);
+        val('hiddenFormBoredomMins', bMin || 2);
+
+        // Circadian
+        var cEn = cfg.circadian ? cfg.circadian.enabled : cfg.circadianSleepEnabled;
+        chk('liveCircEnToggle', cEn);
+        val('hiddenFormCircEn', cEn ? '1' : '0');
+        var cStart = cfg.circadian ? cfg.circadian.start : cfg.circadianSleepStart;
+        val('circStartSel', cStart !== undefined ? cStart : 23);
+        val('hiddenFormCircStart', cStart !== undefined ? cStart : 23);
+        var cEnd = cfg.circadian ? cfg.circadian.end : cfg.circadianSleepEnd;
+        val('circEndSel', cEnd !== undefined ? cEnd : 7);
+        val('hiddenFormCircEnd', cEnd !== undefined ? cEnd : 7);
+
+        // Greetings & Sound Reactive
+        var gEn = cfg.greetings ? cfg.greetings.enabled : cfg.greetingsEnabled;
+        chk('liveGreetEnToggle', gEn);
+        val('hiddenFormGreetEn', gEn ? '1' : '0');
+
+        var sEn = cfg.soundReactive ? cfg.soundReactive.enabled : cfg.soundReactiveEnabled;
+        chk('liveSndReactToggle', sEn);
+        val('hiddenFormSndReact', sEn ? '1' : '0');
+
+        // STT
+        var stt = cfg.stt || {};
+        val('sttProvSel', stt.provider || cfg.sttProvider || 'sarvam');
+        val('sttLangSel', stt.lang || cfg.sttLang || 'auto');
+        val('sttUrlIn', stt.url || cfg.sttEndpoint || '');
+        val('sarvamKeyIn', stt.key || cfg.sttKey || cfg.ttsKey || '');
+        val('sttModelSel', stt.model || cfg.sttModel || 'saaras:v3');
+        val('groqSttUrlIn', stt.groqUrl || cfg.groqSttEndpoint || '');
+        val('groqKeyIn', stt.groqKey || cfg.groqSttKey || cfg.groqKey || '');
+        val('groqSttModelSel', stt.groqModel || cfg.groqSttModel || 'whisper-large-v3-turbo');
+        val('opaiSttUrlIn', stt.openaiUrl || cfg.openaiSttEndpoint || '');
+        val('openaiKeyIn', stt.openaiKey || cfg.openaiSttKey || cfg.openaiKey || '');
+        val('opaiSttModelSel', stt.openaiModel || cfg.openaiSttModel || 'whisper-1');
+
+        // LLM
+        var llm = cfg.llm || {};
+        val('provSel', llm.provider || cfg.llmProvider || 'gemini');
+        val('geminiUrlIn', llm.url || cfg.llmEndpoint || '');
+        val('geminiKeyIn', llm.key || cfg.llmKey || '');
+        val('geminiModelSel', llm.model || cfg.llmModel || 'gemini-2.5-flash');
+        val('groqUrlIn', llm.groqUrl || cfg.groqEndpoint || '');
+        val('groqModelSel', llm.groqModel || cfg.groqModel || 'openai/gpt-oss-20b');
+        val('openaiUrlIn', llm.url || cfg.llmEndpoint || '');
+        val('openaiModelSel', llm.model || cfg.llmModel || 'gpt-4o-mini');
+
+        // TTS
+        var tts = cfg.tts || {};
+        val('ttsProvSel', tts.provider || cfg.ttsProvider || 'sarvam');
+        val('ttsSarvamUrl', tts.url || cfg.ttsEndpoint || '');
+        val('ttsSarvamModel', tts.model || cfg.ttsModel || 'bulbul:v4-flash');
+        val('ttsSarvamVoice', tts.voice || cfg.ttsVoice || 'priya');
+        val('openAiTtsUrl', tts.openaiUrl || cfg.openaiTtsEndpoint || '');
+        val('openAiTtsModel', tts.openaiModel || cfg.openaiTtsModel || 'gpt-4o-mini-tts');
+        val('openAiTtsVoice', tts.openaiVoice || cfg.openaiTtsVoice || 'alloy');
+        val('elevUrl', tts.elevenUrl || cfg.elevenEndpoint || '');
+        val('elevenKeyIn', tts.elevenKey || cfg.elevenKey || '');
+        val('elevModel', tts.elevenModel || cfg.elevenModel || 'eleven_multilingual_v2');
+        val('elevVoice', tts.elevenVoice || cfg.elevenVoice || '21m00Tcm4TlvDq8ikWAM');
+        val('fishUrl', tts.fishUrl || cfg.fishEndpoint || '');
+        val('fishKeyIn', tts.fishKey || cfg.fishKey || '');
+        val('fishModel', tts.fishModel || cfg.fishModel || 's2.1-pro-free');
+        val('fishVoice', tts.fishVoice || cfg.fishVoice || 'default');
+
+        // Touch
+        if (cfg.touch) {
+          var tch = cfg.touch;
+          val('actTopTap', tch.topTap);
+          val('actTopDbl', tch.topDbl);
+          val('actTopHld', tch.topHld);
+          val('actLtTap', tch.ltTap);
+          val('actLtDbl', tch.ltDbl);
+          val('actLtHld', tch.ltHld);
+          val('actRtTap', tch.rtTap);
+          val('actRtDbl', tch.rtDbl);
+          val('actRtHld', tch.rtHld);
+          if (tch.deb !== undefined) {
+            val('tchDebSlider', tch.deb);
+            txt('tchDebLabel', tch.deb);
+          }
+          if (tch.sound !== undefined) {
+            chk('tchSndCheck', tch.sound);
+          }
+        }
+
+        // Weather
+        var w = cfg.weather || {};
+        val('wCity', w.city || cfg.weatherCity || '');
+        val('wLat', w.lat || cfg.weatherLat || '');
+        val('wLon', w.lon || cfg.weatherLon || '');
+
+        // Persona & Skin
+        val('skinSel', cfg.skin || cfg.currentEyeSkin || 'kiwi');
+
+        // System Prompt
+        val('promptIn', cfg.prompt || cfg.systemPrompt || '');
+
+        // Memory
+        var mem = cfg.memory || {};
+        val('memName', mem.name || cfg.ownerName || '');
+        val('memFriends', mem.friends || '');
+        var rRead = document.getElementById('memListReadout');
+        if (rRead && mem.facts && Array.isArray(mem.facts)) {
+          if (mem.facts.length === 0) {
+            rRead.innerHTML = '<div style="color:var(--muted);padding:8px">No memory facts stored yet.</div>';
+          } else {
+            var fHtml = '';
+            mem.facts.forEach(function (f) {
+              fHtml += '<div style="padding:4px 0;border-bottom:1px solid var(--line);font-size:12px">• ' + escHtml(f) + '</div>';
+            });
+            rRead.innerHTML = fHtml;
+          }
+        }
+
+        // Top Status Strip
+        txt('statAp', cfg.apSSID || cfg.ap || 'Kiwi');
+        var lp = llm.provider || cfg.llmProvider || 'gemini';
+        var lm = llm.model || cfg.llmModel || 'flash';
+        txt('statLlm', lp + ' / ' + lm);
+        var sp = stt.provider || cfg.sttProvider || 'sarvam';
+        var sl = stt.lang || cfg.sttLang || 'auto';
+        txt('statStt', sp + ' / ' + sl);
+        var tp = tts.provider || cfg.ttsProvider || 'sarvam';
+        txt('statTts', tp);
+
+        // Refresh dynamic UI sections
+        if (typeof window.toggleStt === 'function') window.toggleStt();
+        if (typeof window.toggleModels === 'function') window.toggleModels();
+        if (typeof window.toggleTts === 'function') window.toggleTts();
+      }
+
+      loadConfigFromApi();
 
       // Initialize
       if (typeof window.toggleStt === 'function') window.toggleStt();

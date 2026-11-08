@@ -680,6 +680,18 @@ void handleConfigApi() {
        escJson(mdnsHostname + ".local") +
        "\",\"faceTweenMs\":" + String(faceTweenMs) +
        ",\"maxChatHistory\":" + String(maxChatHistory) + ",";
+  j += "\"apSSID\":\"" + escJson(apSSID) + "\",";
+  j += "\"touch\":{\"topTap\":\"" + touchActionToString(touchActTopTap) +
+       "\",\"topDbl\":\"" + touchActionToString(touchActTopDbl) +
+       "\",\"topHld\":\"" + touchActionToString(touchActTopHold) +
+       "\",\"ltTap\":\"" + touchActionToString(touchActLeftTap) +
+       "\",\"ltDbl\":\"" + touchActionToString(touchActLeftDbl) +
+       "\",\"ltHld\":\"" + touchActionToString(touchActLeftHold) +
+       "\",\"rtTap\":\"" + touchActionToString(touchActRightTap) +
+       "\",\"rtDbl\":\"" + touchActionToString(touchActRightDbl) +
+       "\",\"rtHld\":\"" + touchActionToString(touchActRightHold) +
+       "\",\"sound\":" + String(touchFeedbackSound ? "true" : "false") +
+       ",\"deb\":" + String(touchDebounceMs) + "},";
   const char *skinNames[] = {"default",
                              "cyberpunk",
                              "cat",

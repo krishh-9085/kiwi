@@ -9,6 +9,7 @@
 #include "services/AiService.h"
 #include "services/MemoryService.h"
 #include "services/WeatherService.h"
+#include "services/WledService.h"
 #include "power/PowerManager.h"
 #include "web/icon.h"
 #include <DNSServer.h>
@@ -167,6 +168,7 @@ void finalizeWifiConnected() {
   lastNtpTryAt = millis();
   lastWeatherFetchAt = 0;
   Serial.printf("[WIFI] Connected! IP: %s\n", WiFi.localIP().toString().c_str());
+  discoverWledAsync();
 }
 
 void finalizeWifiOffline() {

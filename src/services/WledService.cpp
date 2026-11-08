@@ -3,11 +3,16 @@
 #include <HTTPClient.h>
 #include <WiFi.h>
 #include "config/AppConfig.h"
+#include "core/Timing.h"
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
 
 static String discoveredWledIp = "";
 static String manualWledIp = "";
 static uint32_t lastDiscoveryAttempt = 0;
 static String wledEffectsJson = "";
+static TaskHandle_t s_wledDiscoveryTaskHandle = NULL;
+static volatile bool s_wledDiscoveryActive = false;
 
 struct WledStaticEffect {
   const char *name;
@@ -98,6 +103,75 @@ bool fetchWledEffectsList() {
   return false;
 }
 
+static void wledDiscoveryTask(void *param) {
+  s_wledDiscoveryActive = true;
+  Serial.println("[WLED] Auto-discovering WLED in background via mDNS...");
+
+  // 1. Try discovering via standard WLED mDNS service '_wled._tcp'
+  int n = MDNS.queryService("wled", "tcp");
+  if (n > 0) {
+    discoveredWledIp = MDNS.address(0).toString();
+    String host = MDNS.hostname(0);
+    Serial.printf("[WLED] Found WLED service: %s (%s)\n", discoveredWledIp.c_str(), host.c_str());
+    addTerminalLog("[WLED] Light found at " + discoveredWledIp);
+    fetchWledEffectsList();
+    s_wledDiscoveryActive = false;
+    s_wledDiscoveryTaskHandle = NULL;
+    vTaskDelete(NULL);
+    return;
+  }
+
+  // 2. Fallback: Query default hostname 'wled.local' with short 800ms timeout
+  IPAddress hostIp = MDNS.queryHost("wled", 800);
+  if (hostIp != INADDR_NONE && hostIp != IPAddress(0, 0, 0, 0)) {
+    discoveredWledIp = hostIp.toString();
+    Serial.printf("[WLED] Resolved host 'wled.local': %s\n", discoveredWledIp.c_str());
+    addTerminalLog("[WLED] Light found at " + discoveredWledIp);
+    fetchWledEffectsList();
+  } else {
+    Serial.println("[WLED] No WLED light found on network (scan complete)");
+  }
+
+  s_wledDiscoveryActive = false;
+  s_wledDiscoveryTaskHandle = NULL;
+  vTaskDelete(NULL);
+}
+
+bool isWledDiscoveryRunning() {
+  return s_wledDiscoveryActive;
+}
+
+bool discoverWledAsync(bool force) {
+  if (WiFi.status() != WL_CONNECTED)
+    return false;
+
+  if (manualWledIp.length() > 0) {
+    discoveredWledIp = manualWledIp;
+    if (!wledEffectsJson.length()) fetchWledEffectsList();
+    return true;
+  }
+
+  if (discoveredWledIp.length() > 0 && !force)
+    return true;
+
+  if (s_wledDiscoveryActive)
+    return true; // Already actively scanning in background
+
+  // Rate-limit discovery attempts to avoid network congestion
+  if (!force && millis() - lastDiscoveryAttempt < 15000)
+    return false;
+  lastDiscoveryAttempt = millis();
+
+  BaseType_t res = xTaskCreate(wledDiscoveryTask, "wled_disc_task", 4096, NULL, 1, &s_wledDiscoveryTaskHandle);
+  if (res != pdPASS) {
+    Serial.println("[WLED] Failed to spawn background discovery task");
+    s_wledDiscoveryActive = false;
+    s_wledDiscoveryTaskHandle = NULL;
+    return false;
+  }
+  return true;
+}
+
 bool discoverWled(bool force) {
   if (WiFi.status() != WL_CONNECTED)
     return false;
@@ -111,36 +185,21 @@ bool discoverWled(bool force) {
   if (discoveredWledIp.length() > 0 && !force)
     return true;
 
-  // Rate-limit discovery attempts to avoid network congestion
-  if (!force && millis() - lastDiscoveryAttempt < 8000)
-    return false;
-  lastDiscoveryAttempt = millis();
-
-  Serial.println("[WLED] Auto-discovering WLED on local network via mDNS...");
-
-  // 1. Try discovering via standard WLED mDNS service '_wled._tcp'
-  int n = MDNS.queryService("wled", "tcp");
-  if (n > 0) {
-    discoveredWledIp = MDNS.address(0).toString();
-    String host = MDNS.hostname(0);
-    Serial.printf("[WLED] Found WLED service: %s (%s)\n", discoveredWledIp.c_str(), host.c_str());
-    addTerminalLog("[WLED] Light found at " + discoveredWledIp);
-    fetchWledEffectsList();
-    return true;
+  // Start background task if not already in progress
+  if (!s_wledDiscoveryActive) {
+    if (!discoverWledAsync(force)) {
+      return isWledDiscovered();
+    }
   }
 
-  // 2. Fallback: Query default hostname 'wled.local'
-  IPAddress hostIp = MDNS.queryHost("wled");
-  if (hostIp != INADDR_NONE && hostIp != IPAddress(0, 0, 0, 0)) {
-    discoveredWledIp = hostIp.toString();
-    Serial.printf("[WLED] Resolved host 'wled.local': %s\n", discoveredWledIp.c_str());
-    addTerminalLog("[WLED] Light found at " + discoveredWledIp);
-    fetchWledEffectsList();
-    return true;
+  // Non-blocking wait while servicing procedural UI animations
+  uint32_t t0 = millis();
+  while (s_wledDiscoveryActive && (millis() - t0 < 3500)) {
+    serviceUi();
+    vTaskDelay(20 / portTICK_PERIOD_MS);
   }
 
-  Serial.println("[WLED] No WLED light found on network");
-  return false;
+  return isWledDiscovered();
 }
 
 bool sendWledCommand(const String &urlParams) {

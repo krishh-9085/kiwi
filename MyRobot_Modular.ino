@@ -135,8 +135,6 @@ void setup() {
                 (unsigned long)(millis() - bootSetupEnterAt));
 #endif
 
-  discoverWled();
-
   startWeb();
   Serial.printf("[NET] Heap: %u\n", (unsigned)ESP.getFreeHeap());
 

@@ -2,6 +2,8 @@
 #include <Arduino.h>
 
 bool discoverWled(bool force = false);
+bool discoverWledAsync(bool force = false);
+bool isWledDiscoveryRunning();
 String getWledIp();
 bool isWledDiscovered();
 void setWledManualIp(const String &ip);

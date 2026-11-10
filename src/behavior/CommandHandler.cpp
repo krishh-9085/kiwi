@@ -127,14 +127,19 @@ bool handleTimeCommand(const String &qIn) {
     }
     setEmotion(EMOTION_SPEAKING);
     speakText(timeSpeech);
+    setEmotion(EMOTION_IDLE);
   } else {
     speakText("Time sync nahi hua hai.");
+    setEmotion(EMOTION_IDLE);
   }
 
   uint32_t t0 = millis();
   while (millis() - t0 < 4000) {
-    if (cancelRequest || touchT.state)
+    if (cancelRequest || touchT.state || touchL.state || touchR.state || !showClockScreen) {
+      showClockScreen = false;
+      resyncTouch();
       break;
+    }
     pumpWeb();
     maintainWiFi();
     serviceUi();
@@ -204,11 +209,15 @@ bool handleWeatherCommand(const String &qIn) {
   }
   setEmotion(EMOTION_SPEAKING);
   speakText(voiceReply);
+  setEmotion(EMOTION_IDLE);
 
   uint32_t t0 = millis();
   while (millis() - t0 < 5000) {
-    if (cancelRequest || touchT.state)
+    if (cancelRequest || touchT.state || touchL.state || touchR.state || !showWeatherScreen) {
+      showWeatherScreen = false;
+      resyncTouch();
       break;
+    }
     pumpWeb();
     maintainWiFi();
     serviceUi();
@@ -357,8 +366,10 @@ bool handleSkinCommand(const String &qIn) {
 
   if (hasWord(q, {"cyberpunk", "cyber", "hud", "sci-fi"}) || hasAny(q, {"साइबरपंक", "साइबर"})) {
     targetSkin = SKIN_CYBERPUNK; name = "Cyberpunk";
-  } else if (hasWord(q, {"desk buddy", "deskbuddy", "kiwi", "buddy"}) || hasAny(q, {"कीवी"})) {
+  } else if (hasWord(q, {"desk buddy", "deskbuddy", "kiwi", "buddy", "default", "normal", "clean", "reset skin"}) || hasAny(q, {"कीवी", "डिफ़ॉल्ट", "डिफॉल्ट"})) {
     targetSkin = SKIN_KIWI; name = "Desk Buddy";
+  } else if (hasWord(q, {"vector", "anki"}) || hasAny(q, {"वेक्टर"})) {
+    targetSkin = SKIN_VECTOR; name = "Vector";
   } else if (hasWord(q, {"cat", "neko", "billi", "kitty"}) || hasAny(q, {"कैट", "बिल्ली"})) {
     targetSkin = SKIN_CAT; name = "Cat";
   } else if (hasWord(q, {"retro", "8bit", "8-bit", "pixel", "arcade"}) || hasAny(q, {"रेट्रो"})) {
@@ -389,8 +400,6 @@ bool handleSkinCommand(const String &qIn) {
     targetSkin = SKIN_NINJA; name = "Ninja";
   } else if (hasWord(q, {"round", "circle", "gol", "rounded"}) || hasAny(q, {"गोल"})) {
     targetSkin = SKIN_ROUND; name = "Round";
-  } else if (hasWord(q, {"default", "normal", "clean", "reset skin"}) || hasAny(q, {"डिफ़ॉल्ट", "डिफॉल्ट"})) {
-    targetSkin = SKIN_DEFAULT; name = "Default";
   } else if (hasAny(q, {"squircle outline", "outline squircle"})) {
     targetSkin = SKIN_SQUIRCLE_OUTLINE; name = "Squircle Outline";
   } else if (hasAny(q, {"squircle glint", "glint squircle"})) {

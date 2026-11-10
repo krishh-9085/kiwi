@@ -64,24 +64,24 @@ void initTouch() {
 void resyncTouch() {
   touchL.state = false;
   touchL.lastRaw = digitalRead(PIN_TOUCH_LEFT);
-  touchL.holdHandled = touchL.lastRaw;
-  touchL.sleepHandled = touchL.lastRaw;
+  touchL.holdHandled = (touchL.lastRaw != 0);
+  touchL.sleepHandled = (touchL.lastRaw != 0);
   touchL.startedAt = 0;
   touchL.lastReleaseAt = 0;
   touchL.pendingSingleTap = false;
 
   touchR.state = false;
   touchR.lastRaw = digitalRead(PIN_TOUCH_RIGHT);
-  touchR.holdHandled = touchR.lastRaw;
-  touchR.sleepHandled = touchR.lastRaw;
+  touchR.holdHandled = (touchR.lastRaw != 0);
+  touchR.sleepHandled = (touchR.lastRaw != 0);
   touchR.startedAt = 0;
   touchR.lastReleaseAt = 0;
   touchR.pendingSingleTap = false;
 
   touchT.state = false;
   touchT.lastRaw = digitalRead(PIN_TOUCH_TOP);
-  touchT.holdHandled = touchT.lastRaw;
-  touchT.sleepHandled = touchT.lastRaw;
+  touchT.holdHandled = (touchT.lastRaw != 0);
+  touchT.sleepHandled = (touchT.lastRaw != 0);
   touchT.startedAt = 0;
   touchT.lastReleaseAt = 0;
   touchT.pendingSingleTap = false;
@@ -173,6 +173,16 @@ void executeTouchAction(TouchAction act, uint8_t pin) {
     return;
   }
 
+  if (showClockScreen || showWeatherScreen) {
+    showClockScreen = false;
+    showWeatherScreen = false;
+    setEmotion(EMOTION_HAPPY);
+    returnIdleAt = now + 1500;
+    soundPetSparkle();
+    Serial.println("[TOUCH] Screen active (Clock/Weather) -> Dismissed by touch action!");
+    return;
+  }
+
   // Cheek tickle rapid tap tracking
   if (pin == PIN_TOUCH_LEFT || pin == PIN_TOUCH_RIGHT) {
     if (now - lastCheekTouchAt < TICKLE_CHEEK_WINDOW_MS) {
@@ -189,19 +199,37 @@ void executeTouchAction(TouchAction act, uint8_t pin) {
   }
 
   switch (act) {
-    case TOUCH_ACT_LISTEN:
-      if (busyProcessing || startRecording) {
-        Serial.println("[TOUCH] Action LISTEN -> Cancel current request / listening");
-        cancelRequest = true;
-        startRecording = false;
+    case TOUCH_ACT_LISTEN: {
+      static uint32_t listenStartedAt = 0;
+      if (showClockScreen || showWeatherScreen) {
+        showClockScreen = false;
+        showWeatherScreen = false;
+        setEmotion(EMOTION_HAPPY);
+        returnIdleAt = millis() + 1500;
         soundPetSparkle();
-        setEmotion(EMOTION_IDLE);
+        Serial.println("[TOUCH] Action LISTEN intercepted -> Dismissed Clock/Weather Screen!");
+        return;
+      }
+      if (busyProcessing || startRecording) {
+        // Debounce cancel: only cancel if listening was initiated > 600ms ago.
+        // This prevents the user's initial touch release / bounce from immediately cancelling listening!
+        if (millis() - listenStartedAt > 600) {
+          Serial.println("[TOUCH] Action LISTEN -> Cancel current request / listening");
+          cancelRequest = true;
+          startRecording = false;
+          soundPetSparkle();
+          setEmotion(EMOTION_IDLE);
+        } else {
+          Serial.println("[TOUCH] Action LISTEN -> Ignored cancel bounce (<600ms since start)");
+        }
       } else {
         Serial.println("[TOUCH] Action LISTEN -> Enter Listening Mode!");
+        listenStartedAt = millis();
         setEmotion(EMOTION_LISTENING);
         startRecording = true;
       }
       break;
+    }
 
     case TOUCH_ACT_CLOCK:
       showWeatherScreen = false;
@@ -323,7 +351,23 @@ static void updateOneTouch(TouchSensor &ts, uint32_t now) {
         Serial.printf("[TOUCH] Pin %d touched -> Timer Alarm Dismissed!\n", ts.pin);
         stopRobotTimerAlarm();
         ts.holdHandled = true;
+        ts.sleepHandled = true;
         ts.pendingSingleTap = false;
+        return;
+      }
+
+      // Instant dismissal of Clock or Weather screen on ANY sensor touch
+      if (showClockScreen || showWeatherScreen) {
+        Serial.printf("[TOUCH] Pin %d touched -> Clock/Weather Dismissed!\n", ts.pin);
+        showClockScreen = false;
+        showWeatherScreen = false;
+        ts.holdHandled = true;
+        ts.sleepHandled = true;
+        ts.pendingSingleTap = false;
+        setEmotion(EMOTION_HAPPY);
+        returnIdleAt = now + 1500;
+        soundPetSparkle();
+        updateTonePlayer();
         return;
       }
 
@@ -368,6 +412,12 @@ static void updateOneTouch(TouchSensor &ts, uint32_t now) {
           ts.lastReleaseAt = now;
         }
       }
+
+      // Top Hold Action: executed on release if held >= 3s and not held until 7s sleep
+      if (ts.pin == PIN_TOUCH_TOP && ts.holdHandled && !ts.sleepHandled) {
+        Serial.printf("[TOUCH] Pin %d RELEASED after %lu ms -> Executing Top Hold action!\n", ts.pin, (unsigned long)held);
+        executeTouchAction(touchActTopHold, ts.pin);
+      }
     }
   }
   if (ts.state) {
@@ -396,11 +446,15 @@ static void updateOneTouch(TouchSensor &ts, uint32_t now) {
       executeTouchAction(touchActRightHold, ts.pin);
     }
 
-    // Hold 3s on Top -> Change Face Skin (Cycle Face Skin)
+    // Hold 3s on Top -> Arm Top Hold Action (deferred to release so it doesn't collide with 7s sleep)
     if (ts.pin == PIN_TOUCH_TOP && held >= TOUCH_CLOCK_MS && !ts.holdHandled && !ts.sleepHandled && !busyProcessing && !inCircadianSleep && !manualSleep && !sleepyFallAsleepIsActive()) {
       ts.holdHandled = true;
-      Serial.println("[TOUCH] Top Held 3s -> Changing Face Skin");
-      executeTouchAction(touchActTopHold, ts.pin);
+      Serial.println("[TOUCH] Top Held 3s -> Threshold reached (release to apply, keep holding 7s for sleep)");
+      if (touchFeedbackSound) {
+        soundTouchBlip();
+        updateTonePlayer();
+      }
+      triggerTouchBlink(now);
     }
     // Hold 2s while asleep (or 7s while awake) on Top -> Sleep Mode Toggle!
     uint32_t sleepHoldRequired = (inCircadianSleep || manualSleep || sleepyFallAsleepIsActive()) ? 2000 : SLEEP_HOLD_MS;

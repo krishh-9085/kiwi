@@ -300,7 +300,11 @@ void loadConfig() {
 
   if (boredomMinutes > 60) boredomMinutes = 60;
 
-  currentEyeSkin = (EyeSkin)prefs.getInt("eyeskin", (int)SKIN_KIWI);
+  int savedSkin = prefs.getInt("eyeskin", (int)SKIN_KIWI);
+  if (savedSkin == (int)SKIN_DEFAULT) {
+    savedSkin = (int)SKIN_KIWI;
+  }
+  currentEyeSkin = (EyeSkin)savedSkin;
 
   showMouth = prefs.getBool("showmouth", true);
 
@@ -327,10 +331,16 @@ void loadConfig() {
 
 
   touchActTopTap    = (TouchAction)prefs.getInt("act_top_tap", (int)TOUCH_ACT_LISTEN);
+  if (touchActTopTap >= TOUCH_ACT_NONE) {
+    touchActTopTap = TOUCH_ACT_LISTEN;
+  }
   touchActTopDbl    = (TouchAction)prefs.getInt("act_top_dbl", (int)TOUCH_ACT_NONE);
-  touchActTopHold   = (TouchAction)prefs.getInt("act_top_hld", (int)TOUCH_ACT_CYCLE_SKIN);
-  // Migrate from old default where top double tap was skin cycling
-  if (touchActTopDbl == TOUCH_ACT_CYCLE_SKIN && touchActTopHold == TOUCH_ACT_CYCLE_SKIN) {
+  touchActTopHold   = (TouchAction)prefs.getInt("act_top_hld", (int)TOUCH_ACT_NONE);
+  // Migrate from old default where top hold or double tap cycled skin unexpectedly
+  if (touchActTopHold == TOUCH_ACT_CYCLE_SKIN) {
+    touchActTopHold = TOUCH_ACT_NONE;
+  }
+  if (touchActTopDbl == TOUCH_ACT_CYCLE_SKIN) {
     touchActTopDbl = TOUCH_ACT_NONE;
   }
   touchActLeftTap   = (TouchAction)prefs.getInt("act_lt_tap",  (int)TOUCH_ACT_DISMISS);

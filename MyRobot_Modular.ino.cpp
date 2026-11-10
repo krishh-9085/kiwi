@@ -386,6 +386,16 @@ void loop() {
   }
 
   if (startRecording && !busyProcessing) {
+    if (showClockScreen || showWeatherScreen) {
+      showClockScreen = false;
+      showWeatherScreen = false;
+      startRecording = false;
+      setEmotion(EMOTION_HAPPY);
+      returnIdleAt = millis() + 1500;
+      soundPetSparkle();
+      resyncTouch();
+      return;
+    }
     powerNotifyActivity();
     startRecording = false;
     busyProcessing = true;

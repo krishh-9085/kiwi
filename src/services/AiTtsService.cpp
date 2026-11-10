@@ -43,6 +43,9 @@ bool speakText(const String &text) {
     res = ttsSarvam(toSpeak);
 
   spkEndSpeech();
+  if (currentEmotion == EMOTION_SPEAKING) {
+    setEmotion(EMOTION_IDLE);
+  }
   Serial.printf("[TTS] speakText() returned %d\n", res);
   return res == 1;
 }
@@ -280,7 +283,9 @@ int ttsSarvam(const String &text) {
         if (memcmp(hdr + 36, "data", 4) == 0) {
           dataSeen = true;
           step = (float)srcRate / (float)SAMPLE_RATE;
-          setEmotion(EMOTION_SPEAKING);
+          if (currentEmotion == EMOTION_IDLE || currentEmotion == EMOTION_THINKING) {
+            setEmotion(EMOTION_SPEAKING);
+          }
           gFaceFrameMs = 100;
           playing = true;
           for (size_t i = 44; i < hdrLen; i++) {
@@ -489,7 +494,9 @@ int ttsPcmOpenAI(const String &text) {
     restoreWebAndAP(apWasUp);
     return 0;
   }
-  setEmotion(EMOTION_SPEAKING);
+  if (currentEmotion == EMOTION_IDLE || currentEmotion == EMOTION_THINKING) {
+    setEmotion(EMOTION_SPEAKING);
+  }
   gFaceFrameMs = 100;
   bool playing = false, haveLo = false;
   uint8_t lo = 0;
@@ -676,7 +683,9 @@ int ttsPcmEleven(const String &text) {
     restoreWebAndAP(apWasUp);
     return 0;
   }
-  setEmotion(EMOTION_SPEAKING);
+  if (currentEmotion == EMOTION_IDLE || currentEmotion == EMOTION_THINKING) {
+    setEmotion(EMOTION_SPEAKING);
+  }
   gFaceFrameMs = 100;
   bool playing = false, haveLo = false;
   uint8_t lo = 0;
@@ -843,7 +852,9 @@ int ttsFishAudio(const String &text) {
     restoreWebAndAP(apWasUp);
     return 0;
   }
-  setEmotion(EMOTION_SPEAKING);
+  if (currentEmotion == EMOTION_IDLE || currentEmotion == EMOTION_THINKING) {
+    setEmotion(EMOTION_SPEAKING);
+  }
   gFaceFrameMs = 100;
   bool playing = false, haveLo = false;
   uint8_t lo = 0;

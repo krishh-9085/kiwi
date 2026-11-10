@@ -327,6 +327,10 @@ static void streamSentenceCallback(const String &sentence, bool isFinal) {
                     (unsigned)ESP.getMaxAllocHeap());
       return;
     }
+    Emotion vocalEmotion = detectVocalEmotion(streamSpk.pending);
+    if (vocalEmotion != EMOTION_SPEAKING) {
+      setEmotion(vocalEmotion);
+    }
     streamSpk.ttsInProgress = true;
     bool ok = speakText(streamSpk.pending);
     streamSpk.ttsInProgress = false;
@@ -399,6 +403,10 @@ void handleQuestion(const String &q) {
   if (!answer.length()) {
 #if LLM_STREAM_TTS
     if (!cancelRequest && streamSpk.pending.length() > 0) {
+      Emotion vocalEmotion = detectVocalEmotion(streamSpk.pending);
+      if (vocalEmotion != EMOTION_SPEAKING) {
+        setEmotion(vocalEmotion);
+      }
       streamSpk.ttsInProgress = true;
       bool ok = speakText(streamSpk.pending);
       streamSpk.ttsInProgress = false;
@@ -410,8 +418,12 @@ void handleQuestion(const String &q) {
     if (streamSpk.anySpoken) {
       robotStateDesc = "Ready";
       addTerminalLog("[ROBOT] Turn completed. Ready.");
-      setEmotion(EMOTION_IDLE);
-      returnIdleAt = 0;
+      if (currentEmotion != EMOTION_SPEAKING && currentEmotion != EMOTION_IDLE) {
+        returnIdleAt = millis() + 2500;
+      } else {
+        setEmotion(EMOTION_IDLE);
+        returnIdleAt = 0;
+      }
       emotionAutoReturnAt = 0;
       return;
     }
@@ -458,6 +470,10 @@ void handleQuestion(const String &q) {
     //    - If cancelRequest -> do nothing more for speech.
     //    - If pending is non-empty and !cancelRequest -> speakText(pending) once.
     if (!cancelRequest && streamSpk.pending.length() > 0) {
+      Emotion vocalEmotion = detectVocalEmotion(streamSpk.pending);
+      if (vocalEmotion != EMOTION_SPEAKING) {
+        setEmotion(vocalEmotion);
+      }
       streamSpk.ttsInProgress = true;
       bool ok = speakText(streamSpk.pending);
       streamSpk.ttsInProgress = false;

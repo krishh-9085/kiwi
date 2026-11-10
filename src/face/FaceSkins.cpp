@@ -155,7 +155,9 @@ void drawEye(int cx, int cy, int w, int h, int r, int lidIn, int lidOut,
 
   // 0. DESK BUDDY / KIWI EYES: flat upper edge, rounded bottom base,
   // U-shaped deep pupil cutout with floating top-right catchlight glint dot.
-  if (currentEyeSkin == SKIN_KIWI) {
+  // Universal default eye theme: Desk Buddy is rendered for SKIN_KIWI, SKIN_DEFAULT,
+  // and any unspecified fallback.
+  if (currentEyeSkin == SKIN_KIWI || currentEyeSkin == SKIN_DEFAULT) {
     if (h <= 3) {
       display.fillRoundRect(x0, cy - 1, w, maxI(2, h), 1, SSD1306_WHITE);
       return;
@@ -674,11 +676,44 @@ void drawEye(int cx, int cy, int w, int h, int r, int lidIn, int lidOut,
     return;
   }
 
-  // DEFAULT: Clean Round Vector Eyes
-  display.fillRoundRect(x0, top, w, h, r, SSD1306_WHITE);
+  // 21. VECTOR EYES: Clean Round Vector Eyes (Dedicated theme)
+  if (currentEyeSkin == SKIN_VECTOR) {
+    display.fillRoundRect(x0, top, w, h, r, SSD1306_WHITE);
+    maskLids(x0, x1, top, lidIn, lidOut, isLeft);
+    maskCheek(cx, bot, w, cheek);
+    if (glint && h > 20) {
+      display.fillRect(x0 + w / 5, top + h / 5, 4, 4, SSD1306_BLACK);
+    }
+    return;
+  }
+
+  // DEFAULT FALLBACK: Render Desk Buddy eyes if unknown skin enum is encountered
+  if (h <= 3) {
+    display.fillRoundRect(x0, cy - 1, w, maxI(2, h), 1, SSD1306_WHITE);
+    return;
+  }
+  int rBottom = (r > 2) ? r : minI(7, h / 3);
+  if (rBottom * 2 > h)
+    rBottom = h / 2;
+  display.fillRect(x0, top, w, h - rBottom, SSD1306_WHITE);
+  display.fillRoundRect(x0, bot - rBottom * 2, w, rBottom * 2, rBottom, SSD1306_WHITE);
+  int pw = (int)(w * 0.44f);
+  if (pw < 6) pw = 6;
+  int ph = (int)(h * 0.58f);
+  if (ph < 4) ph = 4;
+  int pr = minI(4, maxI(2, pw / 4));
+  int px = cx - pw / 2;
+  if (px < x0 + 3) px = x0 + 3;
+  if (px + pw > x1 - 3) px = x1 - 3 - pw;
+  int py = top;
+  display.fillRect(px, py, pw, ph - pr, SSD1306_BLACK);
+  display.fillRoundRect(px, py + ph - pr * 2, pw, pr * 2, pr, SSD1306_BLACK);
+  int dotSize = (pw >= 12 && ph >= 12) ? 3 : 2;
+  int dotX = px + pw - dotSize - 2;
+  int dotY = py + 2;
+  if (h > 12) {
+    display.fillRect(dotX, dotY, dotSize, dotSize, SSD1306_WHITE);
+  }
   maskLids(x0, x1, top, lidIn, lidOut, isLeft);
   maskCheek(cx, bot, w, cheek);
-  if (glint && h > 20) {
-    display.fillRect(x0 + w / 5, top + h / 5, 4, 4, SSD1306_BLACK);
-  }
 }

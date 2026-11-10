@@ -177,9 +177,8 @@ void checkAutonomousBoredom() {
 
     Serial.printf("[BOREDOM] ~%d mins idle on desk! Triggering dynamic desk remark...\n", boredomMinutes);
 
-    // If offline, trigger instant physical desk buddy quirks with cute eye theme
+    // If offline, trigger instant physical desk buddy quirks without altering user skin
     if (WiFi.status() != WL_CONNECTED) {
-      currentEyeSkin = SKIN_KIWI;
       int offlineQuirk = random(0, 4);
       if (offlineQuirk == 0) {
         setEmotion(EMOTION_BORED);

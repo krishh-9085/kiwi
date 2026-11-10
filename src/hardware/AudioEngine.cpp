@@ -10,9 +10,10 @@ void pumpUI();
 // ---- Tunables (override in AppConfig.h or build flags) ----------------------
 
 // Tone peak level at maximum volume, as a fraction of full scale.
-// Lower this if tones clip or sound harsh; raise it if they are too quiet.
+// Calibrated for 4-ohm 3W / 8-ohm speakers: 0.35f provides a clear, warm acoustic presence
+// (~4 dB below speech peaks), preventing piercing resonance and power rail brownouts on 5V.
 #ifndef TONE_PEAK_FRACTION
-#define TONE_PEAK_FRACTION 0.70f
+#define TONE_PEAK_FRACTION 0.35f
 #endif
 
 // Samples generated per tone-synth block (stereo frames).
@@ -40,26 +41,37 @@ static SpkOwner spkOwner = SPK_NONE;
 // ---- Sample helpers ---------------------------------------------------------
 
 // Soft-clip a sample given in int16 units and return a left-justified 32-bit
-// I2S frame value. The cubic knee avoids the harsh edges of hard clipping.
+// I2S frame value. A linear response is maintained through normal speech (|n| <= 0.80),
+// with a smooth rational soft-knee applied only above 0.80 to protect 4-ohm / 3W speakers
+// and the MAX98357A amplifier from square-wave clipping without adding harmonic distortion.
 static inline int32_t toFrame32(float x) {
   float n = x * (1.0f / 32768.0f);
+  if (n > 0.80f) {
+    float diff = n - 0.80f;
+    n = 0.80f + 0.20f * (diff / (1.0f + diff));
+  } else if (n < -0.80f) {
+    float diff = -n - 0.80f;
+    n = -(0.80f + 0.20f * (diff / (1.0f + diff)));
+  }
   if (n > 1.0f)
     n = 1.0f;
   else if (n < -1.0f)
     n = -1.0f;
-  n = 1.5f * n - 0.5f * n * n * n; // f(+-1) = +-1, smooth at the edges
   int32_t s16 = (int32_t)(n * 32767.0f);
   return s16 * 65536; // equivalent to << 16 without shifting a negative value
 }
 
-// Perceptual volume curve: speakerVolume 0..100 -> gain 0..1.
+// Perceptual volume curve: speakerVolume 0..100 -> gain 0..SPEAKER_MAX_GAIN.
+// Uses a v^1.5 psychoacoustic curve for smooth, natural loudness progression,
+// multiplied by SPEAKER_MAX_GAIN so 100% volume utilizes the full 3W capacity
+// of 4-ohm desktop speakers with cloud TTS audio.
 static inline float volumeGain() {
   float v = speakerVolume / 100.0f;
-  if (v < 0.0f)
-    v = 0.0f;
-  else if (v > 1.0f)
-    v = 1.0f;
-  return v * v;
+  if (v <= 0.0f)
+    return 0.0f;
+  if (v >= 1.0f)
+    return SPEAKER_MAX_GAIN;
+  return (v * sqrtf(v)) * SPEAKER_MAX_GAIN;
 }
 
 // ============================================================
@@ -102,6 +114,10 @@ void playToneQueue(Tone *tones, int count) {
 
 bool isTonePlaying() {
   return tonePlaying;
+}
+
+bool isSpeechPlaying() {
+  return spkOwner == SPK_SPEECH;
 }
 
 bool kiwiIsOutputting() {
@@ -152,11 +168,15 @@ void updateTonePlayer() {
     // Per-sample time keeps the envelope and pitch smooth within the block.
     float t = elapsed + (float)i / (float)SAMPLE_RATE;
 
+    // Smooth Hann-tapered envelope eliminates sharp digital click transients
     float env = 1.0f;
-    if (attack > 0.001f && t < attack)
-      env = t / attack;
-    else if (release > 0.001f && t > duration - release)
-      env = (duration - t) / release;
+    if (attack > 0.001f && t < attack) {
+      env = 0.5f * (1.0f - cosf((float)M_PI * (t / attack)));
+    } else if (release > 0.001f && t > duration - release) {
+      float rProg = (t - (duration - release)) / release;
+      if (rProg > 1.0f) rProg = 1.0f;
+      env = 0.5f * (1.0f + cosf((float)M_PI * rProg));
+    }
     if (env < 0.0f)
       env = 0.0f;
     else if (env > 1.0f)
@@ -233,31 +253,31 @@ void updateTonePlayer() {
 }
 
 // ============================================================
-// WALL-E / EMO ROBOT VOCAL PRESETS
+// WALL-E / EMO ROBOT VOCAL PRESETS (Warm, Soft & Cute)
 // ============================================================
 
 // Affectionate Wall-E Coo ("Awww <3")
 void soundPetLove() {
   Tone t[] = {
-    {420, 130, 680, SHAPE_WARM_VOCAL, 0, 0},
+    {380, 140, 580, SHAPE_WARM_VOCAL, 0, 0},
     {0, 25, 0, SHAPE_SINE, 0, 0},
-    {840, 240, 520, SHAPE_WARM_VOCAL, 35, 18}
+    {720, 220, 480, SHAPE_WARM_VOCAL, 25, 14}
   };
   playToneQueue(t, 3);
 }
 
-// Cute Robot Tickle & Giggle (rapid chatter laugh)
+// Cute Robot Tickle & Giggle (warm, playful chuckles)
 void soundPetGiggle() {
   Tone t[] = {
-    {1100, 38, 1450, SHAPE_CHIRP, 0, 0},
-    {0, 12, 0, SHAPE_SINE, 0, 0},
-    {1250, 38, 1650, SHAPE_CHIRP, 0, 0},
-    {0, 12, 0, SHAPE_SINE, 0, 0},
-    {1450, 42, 1950, SHAPE_CHIRP, 0, 0},
-    {0, 12, 0, SHAPE_SINE, 0, 0},
-    {1700, 45, 2300, SHAPE_CHIRP, 0, 0},
+    {580, 35, 720, SHAPE_WARM_VOCAL, 0, 0},
     {0, 15, 0, SHAPE_SINE, 0, 0},
-    {1900, 75, 2700, SHAPE_WARBLE, 60, 28}
+    {640, 35, 780, SHAPE_WARM_VOCAL, 0, 0},
+    {0, 15, 0, SHAPE_SINE, 0, 0},
+    {700, 38, 860, SHAPE_WARM_VOCAL, 0, 0},
+    {0, 15, 0, SHAPE_SINE, 0, 0},
+    {780, 42, 960, SHAPE_WARM_VOCAL, 0, 0},
+    {0, 18, 0, SHAPE_SINE, 0, 0},
+    {860, 70, 1050, SHAPE_WARM_VOCAL, 25, 16}
   };
   playToneQueue(t, 9);
 }
@@ -265,29 +285,28 @@ void soundPetGiggle() {
 // Tiny Bashful Squeak / Murmur
 void soundPetShy() {
   Tone t[] = {
-    {480, 95, 740, SHAPE_WARM_VOCAL, 0, 0},
-    {740, 160, 440, SHAPE_WARM_VOCAL, 25, 16}
+    {440, 95, 620, SHAPE_WARM_VOCAL, 0, 0},
+    {620, 160, 400, SHAPE_WARM_VOCAL, 20, 14}
   };
   playToneQueue(t, 2);
 }
 
-// R2-D2 Starburst Excited Trill
+// Gentle, magical glockenspiel chime (warm bell trill without piercing screech)
 void soundPetSparkle() {
   Tone t[] = {
-    {1800, 35, 2400, SHAPE_WARBLE, 0, 0},
-    {2300, 35, 3100, SHAPE_WARBLE, 0, 0},
-    {2900, 40, 3800, SHAPE_WARBLE, 0, 0},
-    {3600, 45, 4500, SHAPE_WARBLE, 0, 0},
-    {4200, 130, 4200, SHAPE_CHIRP, 120, 32}
+    {659, 42, 784, SHAPE_WARM_VOCAL, 0, 0},     // E5 -> G5
+    {784, 42, 988, SHAPE_WARM_VOCAL, 0, 0},     // G5 -> B5
+    {988, 48, 1175, SHAPE_WARM_VOCAL, 0, 0},    // B5 -> D6
+    {1318, 110, 1318, SHAPE_WARM_VOCAL, 20, 12} // E6 warm bell ring
   };
-  playToneQueue(t, 5);
+  playToneQueue(t, 4);
 }
 
 // Cute "Mwah / Squeak-Pop"
 void soundPetKiss() {
   Tone t[] = {
-    {550, 50, 2400, SHAPE_CHIRP, 0, 0},
-    {1900, 40, 750, SHAPE_CHIRP, 0, 0}
+    {480, 45, 960, SHAPE_WARM_VOCAL, 0, 0},
+    {960, 50, 580, SHAPE_WARM_VOCAL, 0, 0}
   };
   playToneQueue(t, 2);
 }
@@ -297,7 +316,7 @@ void soundPetCuddle() {
   Tone t[] = {
     {105, 140, 115, SHAPE_PURR, 0, 0},
     {115, 160, 125, SHAPE_PURR, 0, 0},
-    {580, 90, 1150, SHAPE_WARM_VOCAL, 0, 0}
+    {520, 90, 880, SHAPE_WARM_VOCAL, 0, 0}
   };
   playToneQueue(t, 3);
 }
@@ -305,9 +324,9 @@ void soundPetCuddle() {
 // Wall-E / BB-8 Excited Warble ("Ta-da!")
 void soundPetPlayful() {
   Tone t[] = {
-    {650, 65, 1100, SHAPE_CHIRP, 0, 0},
-    {1150, 95, 1150, SHAPE_WARBLE, 180, 30},
-    {1350, 120, 2300, SHAPE_CHIRP, 50, 20}
+    {520, 60, 680, SHAPE_WARM_VOCAL, 0, 0},
+    {680, 85, 880, SHAPE_WARM_VOCAL, 25, 16},
+    {880, 110, 1050, SHAPE_WARM_VOCAL, 18, 12}
   };
   playToneQueue(t, 3);
 }
@@ -315,8 +334,8 @@ void soundPetPlayful() {
 // Cute Robot Yawn & Sigh
 void soundPetSleepy() {
   Tone t[] = {
-    {340, 220, 720, SHAPE_WARM_VOCAL, 0, 0},
-    {720, 380, 210, SHAPE_WARM_VOCAL, 20, 12}
+    {340, 220, 580, SHAPE_WARM_VOCAL, 0, 0},
+    {580, 360, 220, SHAPE_WARM_VOCAL, 16, 10}
   };
   playToneQueue(t, 2);
 }
@@ -324,10 +343,10 @@ void soundPetSleepy() {
 // Chest-Puffed Robot Fanfare
 void soundPetProud() {
   Tone t[] = {
-    {520, 70, 660, SHAPE_WARM_VOCAL, 0, 0},
-    {660, 70, 840, SHAPE_WARM_VOCAL, 0, 0},
-    {840, 90, 1050, SHAPE_WARM_VOCAL, 0, 0},
-    {1050, 210, 1650, SHAPE_WARM_VOCAL, 40, 20}
+    {440, 70, 554, SHAPE_WARM_VOCAL, 0, 0},
+    {554, 70, 659, SHAPE_WARM_VOCAL, 0, 0},
+    {659, 90, 880, SHAPE_WARM_VOCAL, 0, 0},
+    {880, 200, 1100, SHAPE_WARM_VOCAL, 25, 14}
   };
   playToneQueue(t, 4);
 }
@@ -335,18 +354,18 @@ void soundPetProud() {
 // Wall-E Iconic "Whoooa?!"
 void soundPetSurprised() {
   Tone t[] = {
-    {320, 120, 1950, SHAPE_WARBLE, 0, 0},
-    {1950, 90, 1900, SHAPE_WARM_VOCAL, 90, 24}
+    {360, 100, 920, SHAPE_WARM_VOCAL, 0, 0},
+    {920, 90, 820, SHAPE_WARM_VOCAL, 30, 16}
   };
   playToneQueue(t, 2);
 }
 
-// Futuristic Cyber Startup Chime
+// Futuristic Cyber Startup Chime (warm major chord)
 void playBootChime() {
   Tone t[] = {
-    {440, 80, 660, SHAPE_WARM_VOCAL, 0, 0},
-    {660, 80, 990, SHAPE_WARM_VOCAL, 0, 0},
-    {990, 160, 1480, SHAPE_WARM_VOCAL, 30, 18}
+    {392, 80, 523, SHAPE_WARM_VOCAL, 0, 0},    // G4 -> C5
+    {523, 80, 659, SHAPE_WARM_VOCAL, 0, 0},    // C5 -> E5
+    {659, 160, 1046, SHAPE_WARM_VOCAL, 20, 14} // E5 -> C6 soft bell
   };
   playToneQueue(t, 3);
 }
@@ -354,17 +373,18 @@ void playBootChime() {
 // Wall-E Disappointed "Uh-Oh / Sad Wah"
 void soundError() {
   Tone t[] = {
-    {720, 110, 420, SHAPE_WARM_VOCAL, 0, 0},
+    {580, 110, 380, SHAPE_WARM_VOCAL, 0, 0},
     {0, 25, 0, SHAPE_SINE, 0, 0},
-    {500, 180, 260, SHAPE_WARM_VOCAL, 35, 14}
+    {420, 180, 240, SHAPE_WARM_VOCAL, 25, 12}
   };
   playToneQueue(t, 3);
 }
 
+// Gentle Marimba / Glockenspiel Clock Chime
 void soundClock() {
   Tone t[] = {
-    {880, 70, 1175, SHAPE_CHIRP, 0, 0},
-    {1175, 70, 1568, SHAPE_CHIRP, 0, 0}
+    {523, 70, 523, SHAPE_WARM_VOCAL, 0, 0}, // C5
+    {659, 110, 659, SHAPE_WARM_VOCAL, 0, 0} // E5
   };
   playToneQueue(t, 2);
 }
@@ -372,31 +392,32 @@ void soundClock() {
 // Inquisitive Wall-E "Hm?"
 void soundListening() {
   Tone t[] = {
-    {560, 90, 1180, SHAPE_WARM_VOCAL, 0, 0}
+    {440, 80, 660, SHAPE_WARM_VOCAL, 0, 0}
   };
   playToneQueue(t, 1);
 }
 
-// Delicate Water-Drop Chirp on Touch
+// Soft, tactile water-drop / bubble tap on touch (warm, pleasant, non-fatiguing)
 void soundTouchBlip() {
   Tone t[] = {
-    {1900, 32, 950, SHAPE_CHIRP, 0, 0}
+    {520, 26, 380, SHAPE_WARM_VOCAL, 0, 0}
   };
   playToneQueue(t, 1);
 }
 
+// Smooth Marimba Volume Cues
 void soundVolUp() {
   Tone t[] = {
-    {1100, 30, 1500, SHAPE_CHIRP, 0, 0},
-    {1500, 40, 2000, SHAPE_CHIRP, 0, 0}
+    {440, 35, 440, SHAPE_WARM_VOCAL, 0, 0}, // A4
+    {554, 45, 554, SHAPE_WARM_VOCAL, 0, 0}  // C#5
   };
   playToneQueue(t, 2);
 }
 
 void soundVolDown() {
   Tone t[] = {
-    {2000, 30, 1500, SHAPE_CHIRP, 0, 0},
-    {1500, 40, 1100, SHAPE_CHIRP, 0, 0}
+    {554, 35, 554, SHAPE_WARM_VOCAL, 0, 0}, // C#5
+    {440, 45, 440, SHAPE_WARM_VOCAL, 0, 0}  // A4
   };
   playToneQueue(t, 2);
 }
@@ -418,35 +439,36 @@ void soundFart() {
 
 void soundLaser() {
   Tone t[] = {
-    {3400, 75, 220, SHAPE_CHIRP, 0, 0}
+    {1800, 65, 260, SHAPE_CHIRP, 0, 0}
   };
   playToneQueue(t, 1);
 }
 
 void soundFanfare() {
   Tone t[] = {
-    {523, 100, 523, SHAPE_WARM_VOCAL, 0, 0},
+    {440, 90, 440, SHAPE_WARM_VOCAL, 0, 0},
+    {554, 90, 554, SHAPE_WARM_VOCAL, 0, 0},
     {659, 100, 659, SHAPE_WARM_VOCAL, 0, 0},
-    {784, 120, 784, SHAPE_WARM_VOCAL, 0, 0},
-    {1046, 320, 1046, SHAPE_WARM_VOCAL, 40, 20}
+    {880, 260, 880, SHAPE_WARM_VOCAL, 25, 14}
   };
   playToneQueue(t, 4);
 }
 
+// Soft, musical kalimba / marimba chime for skin and face change
 void soundCoin() {
   Tone t[] = {
-    {988, 70, 988, SHAPE_CHIRP, 0, 0},
-    {1319, 280, 1319, SHAPE_CHIRP, 40, 22}
+    {523, 50, 659, SHAPE_WARM_VOCAL, 0, 0},  // C5 -> E5
+    {784, 130, 784, SHAPE_WARM_VOCAL, 14, 10} // G5 warm chime
   };
   playToneQueue(t, 2);
 }
 
 void soundSadViolin() {
   Tone t[] = {
-    {784, 250, 740, SHAPE_WARM_VOCAL, 20, 8},
-    {740, 250, 659, SHAPE_WARM_VOCAL, 20, 8},
-    {659, 320, 587, SHAPE_WARM_VOCAL, 25, 8},
-    {587, 450, 520, SHAPE_WARM_VOCAL, 30, 6}
+    {659, 250, 620, SHAPE_WARM_VOCAL, 18, 8},
+    {620, 250, 554, SHAPE_WARM_VOCAL, 18, 8},
+    {554, 320, 494, SHAPE_WARM_VOCAL, 20, 8},
+    {494, 450, 440, SHAPE_WARM_VOCAL, 25, 6}
   };
   playToneQueue(t, 4);
 }

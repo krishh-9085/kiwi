@@ -1,22 +1,33 @@
 #include "behavior/GreetingEngine.h"
-#include "config/AppConfig.h"
 #include "behavior/ActionExecutor.h"
-#include "hardware/AudioEngine.h"
+#include "config/AppConfig.h"
 #include "face/FaceExpressions.h"
+#include "hardware/AudioEngine.h"
 #include "services/AiTtsService.h"
+#include "services/MemoryService.h"
 #include <WiFi.h>
 #include <time.h>
 
-struct GreetingEntry {
-  const char *periodName;
-  const char *text;
-};
+static const char *const PERIOD_NAMES[] = {"morning", "afternoon", "evening",
+                                           "night"};
 
-static const GreetingEntry GREETINGS[] = {
-  { "morning",   "Good morning! Aaj ka din achha ho." },
-  { "afternoon", "Good afternoon! Kaise ho?" },
-  { "night",     "Good night! So jao, kal milte hain." }
-};
+static const char *const GREETINGS_MORNING[] = {
+    "Good morning{n}! Aaj ka din achha ho.", "Good morning{n}! Chai pee li?",
+    "Rise and shine{n}! Ready for the day?"};
+
+static const char *const GREETINGS_AFTERNOON[] = {
+    "Good afternoon{n}! Lunch ho gaya?", "Good afternoon{n}! Kaise ho?",
+    "Hey{n}, dopahar ho gayi! Kaisa chal raha hai kaam?"};
+
+static const char *const GREETINGS_EVENING[] = {
+    "Good evening{n}! Shaam ho gayi, chai ya coffee?",
+    "Good evening{n}! Din kaisa gaya?",
+    "Evening{n}! Thoda break le lo, relax karo."};
+
+static const char *const GREETINGS_NIGHT[] = {
+    "Good night{n}! So jao, kal milte hain.",
+    "Late night{n}! Sone ka time ho gaya hai.",
+    "Hey night owl{n}! Ab so jao, good night!"};
 
 static int lastGreetPeriod = -1;
 static int lastGreetDay = -1;
@@ -26,7 +37,38 @@ static inline int getGreetPeriod(int hour) {
     return 0; // 05:00 to 11:59 -> morning
   if (hour >= 12 && hour < 17)
     return 1; // 12:00 to 16:59 -> afternoon
-  return 2;   // 17:00 to 04:59 -> night
+  if (hour >= 17 && hour < 21)
+    return 2; // 17:00 to 20:59 -> evening
+  return 3;   // 21:00 to 04:59 -> night
+}
+
+static String buildPeriodicGreeting(int period, const String &ownerName) {
+  const char *const *pool = nullptr;
+  int count = 0;
+  switch (period) {
+  case 0:
+    pool = GREETINGS_MORNING;
+    count = sizeof(GREETINGS_MORNING) / sizeof(GREETINGS_MORNING[0]);
+    break;
+  case 1:
+    pool = GREETINGS_AFTERNOON;
+    count = sizeof(GREETINGS_AFTERNOON) / sizeof(GREETINGS_AFTERNOON[0]);
+    break;
+  case 2:
+    pool = GREETINGS_EVENING;
+    count = sizeof(GREETINGS_EVENING) / sizeof(GREETINGS_EVENING[0]);
+    break;
+  case 3:
+  default:
+    pool = GREETINGS_NIGHT;
+    count = sizeof(GREETINGS_NIGHT) / sizeof(GREETINGS_NIGHT[0]);
+    break;
+  }
+  int idx = random(count);
+  String tpl = pool[idx];
+  String nameTok = ownerName.length() > 0 ? (", " + ownerName) : "";
+  tpl.replace("{n}", nameTok);
+  return tpl;
 }
 
 void checkGreetings() {
@@ -45,12 +87,14 @@ void checkGreetings() {
   if (lastGreetPeriod == -1) {
     lastGreetPeriod = curPeriod;
     lastGreetDay = curDay;
-    Serial.printf("[GREETINGS] Initialized at boot: period=%d (%s), day=%d. No boot greeting.\n",
-                  curPeriod, GREETINGS[curPeriod].periodName, curDay);
+    Serial.printf("[GREETINGS] Initialized at boot: period=%d (%s), day=%d. No "
+                  "boot greeting.\n",
+                  curPeriod, PERIOD_NAMES[curPeriod], curDay);
     return;
   }
 
-  // Fire at most ONCE per period per day: only proceed if the period has changed
+  // Fire at most ONCE per period per day: only proceed if the period has
+  // changed
   if (curPeriod == lastGreetPeriod)
     return;
 
@@ -69,19 +113,22 @@ void checkGreetings() {
   lastGreetPeriod = curPeriod;
   lastGreetDay = curDay;
 
+  String owner = getOwnerName();
+  owner.trim();
+  String greeting = buildPeriodicGreeting(curPeriod, owner);
+
   Serial.printf("[GREETINGS] Firing %s greeting (hour=%02d:%02d, day=%d): %s\n",
-                GREETINGS[curPeriod].periodName, curHour, timeinfo.tm_min, curDay,
-                GREETINGS[curPeriod].text);
+                PERIOD_NAMES[curPeriod], curHour, timeinfo.tm_min, curDay,
+                greeting.c_str());
 
   if (WiFi.status() == WL_CONNECTED) {
     setEmotion(EMOTION_HAPPY);
-    speakText(GREETINGS[curPeriod].text);
+    speakText(greeting);
   } else {
-    bannerText = GREETINGS[curPeriod].text;
+    bannerText = greeting;
     bannerScrollX = SCREEN_WIDTH + 10;
     bannerLoops = 0;
     bannerActive = true;
     soundPetSparkle();
   }
 }
-

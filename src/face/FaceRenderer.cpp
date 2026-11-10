@@ -6,6 +6,7 @@
 #include "face/FaceIdle.h"
 #include "face/FaceSkins.h"
 #include "hardware/Battery.h"
+#include "hardware/AudioEngine.h"
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 #include <Wire.h>
@@ -23,6 +24,7 @@ static inline float clampf(float v, float lo, float hi) {
 }
 static inline int iround(float v) { return (int)lroundf(v); }
 static inline int minI(int a, int b) { return a < b ? a : b; }
+static inline int maxI(int a, int b) { return a > b ? a : b; }
 
 // Frame-rate independent exponential smoothing.
 static inline float approach(float cur, float tgt, float rate, float dt) {
@@ -129,8 +131,15 @@ static void drawMouthShape(int cx, int cy, int w, int h, float curve) {
   }
   if (h >= 4 && ac <= 0.45f) {
     int rad = minI(w, h) / 2;
-    display.fillRoundRect(cx - halfW, cy - h / 2, halfW * 2, h, rad,
-                          SSD1306_WHITE);
+    int rx = cx - halfW;
+    int ry = cy - h / 2;
+    int rw = halfW * 2;
+    // Elegant hollow round outline with bold 2-pixel lip border
+    display.fillRoundRect(rx, ry, rw, h, rad, SSD1306_BLACK);
+    display.drawRoundRect(rx, ry, rw, h, rad, SSD1306_WHITE);
+    if (h >= 6 && rw >= 8) {
+      display.drawRoundRect(rx + 1, ry + 1, rw - 2, h - 2, maxI(1, rad - 1), SSD1306_WHITE);
+    }
     return;
   }
 
@@ -731,22 +740,44 @@ void drawFace(float soundLevel) {
   int mx = 64 + iround((gazeX + offX) * 0.35f);
   int myBase = 52 + iround(offY * 0.6f + gazeY * 0.25f);
 
-  if (currentEmotion == EMOTION_SPEAKING) {
-    // Syllable-like envelope from incommensurate sines, then smoothed so the
-    // mouth flows instead of flickering.
-    float t = (float)(now % 600000UL) / 1000.0f;
-    float env =
-        fabsf(sinf(t * 12.4f)) * (0.55f + 0.45f * sinf(t * 3.3f + 1.0f));
-    float env2 = 0.5f + 0.5f * sinf(t * 19.1f + 0.7f);
-    float o = clampf(env * 0.8f + env2 * 0.25f, 0.0f, 1.0f);
-    float tw = 19.0f - 5.0f * o; // narrower when the mouth opens ("oo")
-    float th = 3.0f + 7.0f * o;
-    speakW = approach(speakW, tw, 28.0f, dt);
-    speakH = approach(speakH, th, 28.0f, dt);
-    int mw = iround(speakW);
-    int mh = iround(speakH);
-    display.fillRoundRect(mx - mw / 2, myBase - mh / 2, mw, mh,
-                          mh > 3 ? minI(mw, mh) / 2 : 1, SSD1306_WHITE);
+  if (currentEmotion == EMOTION_SPEAKING || isSpeechPlaying()) {
+    if (!isSpeechPlaying()) {
+      // Voice has stopped playing: smoothly snap lips to resting closed line (no silent flapping)
+      speakW = approach(speakW, 16.0f, 35.0f, dt);
+      speakH = approach(speakH, 2.0f, 35.0f, dt);
+      int mw = iround(speakW);
+      int rx = mx - mw / 2;
+      display.fillRoundRect(rx, myBase - 1, mw, 2, 1, SSD1306_WHITE);
+    } else {
+      // Syllable-like envelope from incommensurate sines, then smoothed so the
+      // mouth flows instead of flickering.
+      float t = (float)(now % 600000UL) / 1000.0f;
+      float env =
+          fabsf(sinf(t * 12.4f)) * (0.55f + 0.45f * sinf(t * 3.3f + 1.0f));
+      float env2 = 0.5f + 0.5f * sinf(t * 19.1f + 0.7f);
+      float o = clampf(env * 0.8f + env2 * 0.25f, 0.0f, 1.0f);
+      float tw = 20.0f - 5.0f * o; // narrower when the mouth opens ("oo")
+      float th = 3.0f + 8.5f * o;
+      speakW = approach(speakW, tw, 28.0f, dt);
+      speakH = approach(speakH, th, 28.0f, dt);
+      int mw = iround(speakW);
+      int mh = iround(speakH);
+      int rx = mx - mw / 2;
+      int ry = myBase - mh / 2;
+      int rad = minI(mw, mh) / 2;
+
+      if (mh <= 4) {
+        // Resting / closed slit: sleek 2-pixel horizontal line
+        display.fillRoundRect(rx, myBase - 1, mw, 2, 1, SSD1306_WHITE);
+      } else {
+        // Hollow open lips with bold 2-pixel outline thickness
+        display.fillRoundRect(rx, ry, mw, mh, rad, SSD1306_BLACK);
+        display.drawRoundRect(rx, ry, mw, mh, rad, SSD1306_WHITE);
+        if (mh >= 6 && mw >= 8) {
+          display.drawRoundRect(rx + 1, ry + 1, mw - 2, mh - 2, maxI(1, rad - 1), SSD1306_WHITE);
+        }
+      }
+    }
   } else if (showMouth && faceNow.mouthW > 3) {
     drawMouthShape(mx, myBase + iround(faceNow.mouthY), iround(faceNow.mouthW),
                    iround(faceNow.mouthH + mouthPulse), faceNow.mouthCurve);

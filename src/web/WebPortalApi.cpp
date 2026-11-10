@@ -19,7 +19,6 @@
 #include <time.h>
 #include <vector>
 
-
 static String escJson(String s) {
   s.replace("\\", "\\\\");
   s.replace("\"", "\\\"");
@@ -233,7 +232,7 @@ void handleDoAction() {
     else if (s == "round" || s == "circle" || s == "ocular")
       currentEyeSkin = SKIN_ROUND;
     else if (s == "kiwi" || s == "deskbuddy" || s == "buddy" || s == "cute" ||
-             s == "relaxed" || s == "bored")
+             s == "relaxed" || s == "bored" || s == "default")
       currentEyeSkin = SKIN_KIWI;
     else if (s == "squircle_solid" || s == "squircle")
       currentEyeSkin = SKIN_SQUIRCLE_SOLID;
@@ -241,8 +240,10 @@ void handleDoAction() {
       currentEyeSkin = SKIN_SQUIRCLE_OUTLINE;
     else if (s == "squircle_glint")
       currentEyeSkin = SKIN_SQUIRCLE_GLINT;
+    else if (s == "vector" || s == "anki")
+      currentEyeSkin = SKIN_VECTOR;
     else
-      currentEyeSkin = SKIN_DEFAULT;
+      currentEyeSkin = SKIN_KIWI;
 
     Preferences p;
     p.begin("myrobot", false);
@@ -588,7 +589,8 @@ void handleStatus() {
                              "kiwi",
                              "squircle_solid",
                              "squircle_outline",
-                             "squircle_glint"};
+                             "squircle_glint",
+                             "vector"};
   int skIdx = (int)currentEyeSkin;
   if (skIdx < 0 || skIdx >= SKIN_COUNT)
     skIdx = 0;
@@ -712,7 +714,8 @@ void handleConfigApi() {
                              "kiwi",
                              "squircle_solid",
                              "squircle_outline",
-                             "squircle_glint"};
+                             "squircle_glint",
+                             "vector"};
   int skinIndex = (int)currentEyeSkin;
   if (skinIndex < 0 || skinIndex >= SKIN_COUNT)
     skinIndex = 0;
@@ -1027,7 +1030,7 @@ void handleSave() {
     else if (s == "round" || s == "circle" || s == "ocular")
       currentEyeSkin = SKIN_ROUND;
     else if (s == "kiwi" || s == "deskbuddy" || s == "buddy" || s == "cute" ||
-             s == "relaxed" || s == "bored")
+             s == "relaxed" || s == "bored" || s == "default")
       currentEyeSkin = SKIN_KIWI;
     else if (s == "squircle_solid" || s == "squircle")
       currentEyeSkin = SKIN_SQUIRCLE_SOLID;
@@ -1035,8 +1038,10 @@ void handleSave() {
       currentEyeSkin = SKIN_SQUIRCLE_OUTLINE;
     else if (s == "squircle_glint")
       currentEyeSkin = SKIN_SQUIRCLE_GLINT;
+    else if (s == "vector" || s == "anki")
+      currentEyeSkin = SKIN_VECTOR;
     else
-      currentEyeSkin = SKIN_DEFAULT;
+      currentEyeSkin = SKIN_KIWI;
   }
 
   if (server.hasArg("mem_name"))

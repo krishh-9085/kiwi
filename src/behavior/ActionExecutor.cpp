@@ -191,8 +191,12 @@ bool setEyeSkinByName(const String &nameIn) {
   n.toLowerCase();
   n.trim();
 
-  if (n == "kiwi" || n == "buddy" || n == "desk buddy" || n == "deskbuddy" || n == "कीवी") {
+  if (n == "kiwi" || n == "buddy" || n == "desk buddy" || n == "deskbuddy" || n == "कीवी" ||
+      n == "default" || n == "normal" || n == "clean" || n == "reset" || n == "डिफ़ॉल्ट" || n == "डिफॉल्ट") {
     currentEyeSkin = SKIN_KIWI; return true;
+  }
+  if (n == "vector" || n == "anki" || n == "वेक्टर") {
+    currentEyeSkin = SKIN_VECTOR; return true;
   }
   if (n == "cyberpunk" || n == "cyber" || n == "hud" || n == "sci-fi" || n == "साइबरपंक" || n == "साइबर") {
     currentEyeSkin = SKIN_CYBERPUNK; return true;
@@ -241,9 +245,6 @@ bool setEyeSkinByName(const String &nameIn) {
   }
   if (n == "round" || n == "circle" || n == "gol" || n == "गोल") {
     currentEyeSkin = SKIN_ROUND; return true;
-  }
-  if (n == "default" || n == "normal" || n == "clean" || n == "reset" || n == "डिफ़ॉल्ट" || n == "डिफॉल्ट") {
-    currentEyeSkin = SKIN_DEFAULT; return true;
   }
   if (n == "squircle_solid" || n == "squircle solid" || n == "squircle" || n == "स्क्वार्कल") {
     currentEyeSkin = SKIN_SQUIRCLE_SOLID; return true;

@@ -37,7 +37,9 @@ extern uint32_t bootSetupEnterAt;
 #define PIN_OLED_SCL 9
 
 // ---------- Audio Amplifier Limit ----------
-#define SPEAKER_MAX_GAIN 2.0f // Full-scale gain cap (8ohm 1.5W safe)
+#ifndef SPEAKER_MAX_GAIN
+#define SPEAKER_MAX_GAIN 2.6f // Master digital makeup gain for 4-ohm 3W / MAX98357A (2.6x = +8.3 dB)
+#endif
 
 // ============================================================
 // DISPLAY & AUDIO SPECIFICATIONS

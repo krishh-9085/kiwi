@@ -412,14 +412,14 @@ bool handleSkinCommand(const String &qIn) {
       hasAny(q, {"साइबरपंक", "साइबर"})) {
     targetSkin = SKIN_CYBERPUNK;
     name = "Cyberpunk";
-  } else if (hasWord(q, {"desk buddy", "deskbuddy", "kiwi", "buddy", "default",
-                         "normal", "clean", "reset skin"}) ||
-             hasAny(q, {"कीवी", "डिफ़ॉल्ट", "डिफॉल्ट"})) {
+  } else if (hasWord(q, {"desk buddy", "deskbuddy", "kiwi", "buddy"}) ||
+             hasAny(q, {"कीवी"})) {
     targetSkin = SKIN_KIWI;
     name = "Desk Buddy";
-  } else if (hasWord(q, {"vector", "anki"}) || hasAny(q, {"वेक्टर"})) {
+  } else if (hasWord(q, {"vector", "anki", "default", "normal", "clean", "reset skin"}) ||
+             hasAny(q, {"वेक्टर", "डिफ़ॉल्ट", "डिफॉल्ट"})) {
     targetSkin = SKIN_VECTOR;
-    name = "Vector";
+    name = "Default Vector";
   } else if (hasWord(q, {"cat", "neko", "billi", "kitty"}) ||
              hasAny(q, {"कैट", "बिल्ली"})) {
     targetSkin = SKIN_CAT;

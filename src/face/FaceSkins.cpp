@@ -153,11 +153,20 @@ void drawEye(int cx, int cy, int w, int h, int r, int lidIn, int lidOut,
   int top = cy - h / 2;
   int bot = top + h;
 
-  // 0. DESK BUDDY / KIWI EYES: flat upper edge, rounded bottom base,
+  // 0. VECTOR EYES: Clean Round Vector Eyes (Classic Anki Vector Eyes)
+  if (currentEyeSkin == SKIN_VECTOR || currentEyeSkin == SKIN_DEFAULT) {
+    display.fillRoundRect(x0, top, w, h, r, SSD1306_WHITE);
+    maskLids(x0, x1, top, lidIn, lidOut, isLeft);
+    maskCheek(cx, bot, w, cheek);
+    if (glint && h > 20) {
+      display.fillRect(x0 + w / 5, top + h / 5, 4, 4, SSD1306_BLACK);
+    }
+    return;
+  }
+
+  // 17. DESK BUDDY / KIWI EYES: flat upper edge, rounded bottom base,
   // U-shaped deep pupil cutout with floating top-right catchlight glint dot.
-  // Universal default eye theme: Desk Buddy is rendered for SKIN_KIWI, SKIN_DEFAULT,
-  // and any unspecified fallback.
-  if (currentEyeSkin == SKIN_KIWI || currentEyeSkin == SKIN_DEFAULT) {
+  if (currentEyeSkin == SKIN_KIWI) {
     if (h <= 3) {
       display.fillRoundRect(x0, cy - 1, w, maxI(2, h), 1, SSD1306_WHITE);
       return;
@@ -676,16 +685,6 @@ void drawEye(int cx, int cy, int w, int h, int r, int lidIn, int lidOut,
     return;
   }
 
-  // 21. VECTOR EYES: Clean Round Vector Eyes (Dedicated theme)
-  if (currentEyeSkin == SKIN_VECTOR) {
-    display.fillRoundRect(x0, top, w, h, r, SSD1306_WHITE);
-    maskLids(x0, x1, top, lidIn, lidOut, isLeft);
-    maskCheek(cx, bot, w, cheek);
-    if (glint && h > 20) {
-      display.fillRect(x0 + w / 5, top + h / 5, 4, 4, SSD1306_BLACK);
-    }
-    return;
-  }
 
   // DEFAULT FALLBACK: Render Desk Buddy eyes if unknown skin enum is encountered
   if (h <= 3) {

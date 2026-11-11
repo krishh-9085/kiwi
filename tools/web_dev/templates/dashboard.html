@@ -1770,8 +1770,8 @@
           </div>
           <label for="skinSel" style="margin-top:16px">OLED Face &amp; Eye Skin</label>
           <select name="skin" id="skinSel" onchange="toggleSkinLive(this.value)">
-            <option value="kiwi" >Desk Buddy (Cute Block) [Default]</option>
-            <option value="default" >Default (Clean Round Vector)</option>
+            <option value="vector" >Default Vector (Classic Anki Eyes)</option>
+            <option value="kiwi" >Desk Buddy (Cute Block Eyes)</option>
             <option value="cyberpunk" >Cyberpunk Visor &amp; HUD</option>
             <option value="cat" >Kawaii Cat Neko &amp; Ears</option>
             <option value="retro" >Retro 8-Bit Arcade</option>
@@ -2390,6 +2390,19 @@
         });
       }
 
+      window.deleteFact = function (idx) {
+        if (!confirm('Are you sure you want to delete this memory fact?')) return;
+        api('/do?delmem=' + idx)
+          .then(function () {
+            toast('Memory fact deleted');
+            if (typeof fetchStatus === 'function') fetchStatus();
+            else setTimeout(function () { location.reload(); }, 600);
+          })
+          .catch(function () {
+            toast('Failed to delete memory');
+          });
+      };
+
       /* ── Terminal Management (Filtering, Incremental Append, Copy, Download) ── */
       var autoScroll = true;
       var lastLogCount = 0;
@@ -2986,8 +2999,11 @@
             rRead.innerHTML = '<div style="color:var(--muted);padding:8px">No memory facts stored yet.</div>';
           } else {
             var fHtml = '';
-            mem.facts.forEach(function (f) {
-              fHtml += '<div style="padding:4px 0;border-bottom:1px solid var(--line);font-size:12px">• ' + escHtml(f) + '</div>';
+            mem.facts.forEach(function (f, idx) {
+              fHtml += '<div style="display:flex;align-items:center;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--line);font-size:12px">' +
+                       '<span style="word-break:break-word;flex:1">• ' + escHtml(f) + '</span>' +
+                       '<button type="button" onclick="deleteFact(' + idx + ')" style="background:transparent;border:none;color:#ff6b6b;cursor:pointer;font-size:13px;padding:2px 8px;font-weight:bold" title="Delete Fact">✕</button>' +
+                       '</div>';
             });
             rRead.innerHTML = fHtml;
           }

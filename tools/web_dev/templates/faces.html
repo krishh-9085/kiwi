@@ -878,8 +878,8 @@
         <span id="activeSkinLabel" class="accent">Active: Desk Buddy</span>
       </div>
       <div class="skin-grid">
-        <button class="skin-btn primary" data-skin="kiwi"><span class="px-skin" aria-hidden="true"></span><span class="skin-name">Desk Buddy</span></button>
-        <button class="skin-btn" data-skin="default"><span class="px-skin" aria-hidden="true"></span><span class="skin-name">Default Vector</span></button>
+        <button class="skin-btn primary" data-skin="vector"><span class="px-skin" aria-hidden="true"></span><span class="skin-name">Default Vector</span></button>
+        <button class="skin-btn" data-skin="kiwi"><span class="px-skin" aria-hidden="true"></span><span class="skin-name">Desk Buddy</span></button>
         <button class="skin-btn" data-skin="cyberpunk"><span class="px-skin" aria-hidden="true"></span><span class="skin-name">Cyberpunk</span></button>
         <button class="skin-btn" data-skin="cat"><span class="px-skin" aria-hidden="true"></span><span class="skin-name">Kawaii Cat</span></button>
         <button class="skin-btn" data-skin="retro"><span class="px-skin" aria-hidden="true"></span><span class="skin-name">Retro 8-Bit</span></button>
@@ -1390,6 +1390,7 @@
 
       /* ── Render unique OLED face previews for all 18 Skins ── */
       var SKIN_FACES = {
+        vector: '<rect x="13" y="8" width="14" height="15" rx="4" fill="currentColor"/><circle cx="16.5" cy="11.5" r="1.8" fill="#000"/><rect x="37" y="8" width="14" height="15" rx="4" fill="currentColor"/><circle cx="40.5" cy="11.5" r="1.8" fill="#000"/>',
         default: '<rect x="13" y="8" width="14" height="15" rx="4" fill="currentColor"/><circle cx="16.5" cy="11.5" r="1.8" fill="#000"/><rect x="37" y="8" width="14" height="15" rx="4" fill="currentColor"/><circle cx="40.5" cy="11.5" r="1.8" fill="#000"/>',
         cyberpunk: '<path d="M4 8 V4 H8 M56 4 H60 V8 M4 24 V28 H8 M56 28 H60 V24" stroke="currentColor" stroke-width="1.2" fill="none"/><rect x="13" y="12" width="14" height="8" rx="2" fill="currentColor"/><rect x="18" y="10" width="3" height="12" fill="#000"/><rect x="37" y="12" width="14" height="8" rx="2" fill="currentColor"/><rect x="42" y="10" width="3" height="12" fill="#000"/>',
         cat: '<polygon points="12,12 17,2 24,11" fill="currentColor"/><polygon points="14,11 17,5 21,11" fill="#000"/><polygon points="40,11 47,2 52,12" fill="currentColor"/><polygon points="43,11 47,5 50,11" fill="#000"/><ellipse cx="19" cy="18" rx="6" ry="7" fill="currentColor"/><ellipse cx="19" cy="18" rx="1.8" ry="5.5" fill="#000"/><ellipse cx="45" cy="18" rx="6" ry="7" fill="currentColor"/><ellipse cx="45" cy="18" rx="1.8" ry="5.5" fill="#000"/>',

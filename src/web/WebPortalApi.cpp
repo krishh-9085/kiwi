@@ -232,7 +232,7 @@ void handleDoAction() {
     else if (s == "round" || s == "circle" || s == "ocular")
       currentEyeSkin = SKIN_ROUND;
     else if (s == "kiwi" || s == "deskbuddy" || s == "buddy" || s == "cute" ||
-             s == "relaxed" || s == "bored" || s == "default")
+             s == "relaxed" || s == "bored")
       currentEyeSkin = SKIN_KIWI;
     else if (s == "squircle_solid" || s == "squircle")
       currentEyeSkin = SKIN_SQUIRCLE_SOLID;
@@ -240,7 +240,7 @@ void handleDoAction() {
       currentEyeSkin = SKIN_SQUIRCLE_OUTLINE;
     else if (s == "squircle_glint")
       currentEyeSkin = SKIN_SQUIRCLE_GLINT;
-    else if (s == "vector" || s == "anki")
+    else if (s == "vector" || s == "anki" || s == "default" || s == "normal" || s == "clean")
       currentEyeSkin = SKIN_VECTOR;
     else
       currentEyeSkin = SKIN_KIWI;
@@ -451,6 +451,12 @@ void handleDoAction() {
   if (server.hasArg("clearmem")) {
     clearAllMemory();
     server.send(200, "application/json", "{\"ok\":true,\"cleared\":true}");
+    return;
+  }
+  if (server.hasArg("delmem")) {
+    int idx = server.arg("delmem").toInt();
+    removeMemoryFact(idx);
+    server.send(200, "application/json", "{\"ok\":true,\"deleted\":true}");
     return;
   }
   if (server.hasArg("addmem")) {
@@ -1030,7 +1036,7 @@ void handleSave() {
     else if (s == "round" || s == "circle" || s == "ocular")
       currentEyeSkin = SKIN_ROUND;
     else if (s == "kiwi" || s == "deskbuddy" || s == "buddy" || s == "cute" ||
-             s == "relaxed" || s == "bored" || s == "default")
+             s == "relaxed" || s == "bored")
       currentEyeSkin = SKIN_KIWI;
     else if (s == "squircle_solid" || s == "squircle")
       currentEyeSkin = SKIN_SQUIRCLE_SOLID;
@@ -1038,7 +1044,7 @@ void handleSave() {
       currentEyeSkin = SKIN_SQUIRCLE_OUTLINE;
     else if (s == "squircle_glint")
       currentEyeSkin = SKIN_SQUIRCLE_GLINT;
-    else if (s == "vector" || s == "anki")
+    else if (s == "vector" || s == "anki" || s == "default" || s == "normal" || s == "clean")
       currentEyeSkin = SKIN_VECTOR;
     else
       currentEyeSkin = SKIN_KIWI;

@@ -208,13 +208,12 @@ bool setEyeSkinByName(const String &nameIn) {
   n.toLowerCase();
   n.trim();
 
-  if (n == "kiwi" || n == "buddy" || n == "desk buddy" || n == "deskbuddy" ||
-      n == "कीवी" || n == "default" || n == "normal" || n == "clean" ||
-      n == "reset" || n == "डिफ़ॉल्ट" || n == "डिफॉल्ट") {
+  if (n == "kiwi" || n == "buddy" || n == "desk buddy" || n == "deskbuddy" || n == "कीवी") {
     currentEyeSkin = SKIN_KIWI;
     return true;
   }
-  if (n == "vector" || n == "anki" || n == "वेक्टर") {
+  if (n == "vector" || n == "anki" || n == "default" || n == "normal" || n == "clean" ||
+      n == "reset" || n == "वेक्टर" || n == "डिफ़ॉल्ट" || n == "डिफॉल्ट") {
     currentEyeSkin = SKIN_VECTOR;
     return true;
   }

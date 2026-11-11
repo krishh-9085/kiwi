@@ -1,7 +1,7 @@
 #pragma once
 #include <Arduino.h>
 
-#define MAX_PERSISTENT_MEMORIES 8
+#define MAX_PERSISTENT_MEMORIES 16
 
 struct MemoryProfile {
   String userName;
@@ -22,6 +22,8 @@ void setOwnerNameNoSave(const String &name);
 String getOwnerName();
 void setFriendsFamily(const String &ff);
 void setFriendsFamilyNoSave(const String &ff);
+void addFriendOrFamily(const String &entry);
+void addFriendOrFamilyNoSave(const String &entry);
 String getFriendsFamily();
 bool addMemoryFact(const String &fact);
 bool addMemoryFactNoSave(const String &fact);

@@ -293,10 +293,10 @@ static String cleanSentenceForSpeech(const String &s) {
 
 
 
-  if (out.startsWith("[ACTION:") || out.startsWith("[MEM:") || out.startsWith("[FOLLOWUP:")) {
-
+  if (out.startsWith("[ACTION:") || out.startsWith("[action:") ||
+      out.startsWith("[MEM:") || out.startsWith("[mem:") ||
+      out.startsWith("[FOLLOWUP:") || out.startsWith("[followup:")) {
     return "";
-
   }
 
 
@@ -1049,8 +1049,7 @@ String askLLM(const String &question, SentenceCallback onSentence) {
     // reply has completed streaming. Therefore, actions (volume, eye skins, timer, etc.)
     // fire after the first sentence (and any streaming sentences) has already been spoken.
     parseAndExecuteActions(ans);
-
-    // Memory saving disabled
+    parseAndSaveMemoriesFromLlm(ans);
     addChatHistory(question, ans);
 
   }

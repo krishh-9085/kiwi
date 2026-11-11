@@ -69,6 +69,41 @@ void setFriendsFamily(const String &ff) {
   saveMemory();
 }
 
+void addFriendOrFamilyNoSave(const String &entryIn) {
+  String entry = entryIn;
+  entry.trim();
+  if (!entry.length())
+    return;
+
+  while (entry.endsWith(".") || entry.endsWith("!") || entry.endsWith(",")) {
+    entry.remove(entry.length() - 1);
+    entry.trim();
+  }
+
+  String lowerEntry = entry;
+  lowerEntry.toLowerCase();
+  String lowerExisting = kiwiMemory.friendsFamily;
+  lowerExisting.toLowerCase();
+
+  // Avoid exact or substring duplicate in the list
+  if (lowerExisting.indexOf(lowerEntry) >= 0) {
+    return;
+  }
+
+  if (kiwiMemory.friendsFamily.length() > 0) {
+    kiwiMemory.friendsFamily += ", " + entry;
+  } else {
+    kiwiMemory.friendsFamily = entry;
+  }
+  Serial.printf("[MEMORY] Added to Friends & Family: %s (Now: '%s')\n",
+                entry.c_str(), kiwiMemory.friendsFamily.c_str());
+}
+
+void addFriendOrFamily(const String &entry) {
+  addFriendOrFamilyNoSave(entry);
+  saveMemory();
+}
+
 String getFriendsFamily() {
   return kiwiMemory.friendsFamily;
 }
@@ -130,23 +165,28 @@ void clearAllMemory() {
 }
 
 String getFormattedMemoryPrompt() {
-  String p;
+  String p = " MEMORY CONTEXT: ";
   if (kiwiMemory.userName.length() > 0) {
-    p += " The owner/user's name is " + kiwiMemory.userName +
-         ". If they ask their name ('mera naam kya hai', 'who am I'), answer directly: Tumhara naam " + kiwiMemory.userName + " hai. ";
+    p += "The user's name is " + kiwiMemory.userName +
+         ". If they ask ('mera naam kya hai', 'who am I'), answer directly: Tumhara naam " + kiwiMemory.userName + " hai. ";
   } else {
-    p += " You do not know the user's name yet. If they ask ('mera naam kya hai', 'who am I'), politely say you don't know yet and ask their name. ";
+    p += "You do not know the user's name yet. If they ask ('mera naam kya hai', 'who am I'), politely say you don't know yet and ask their name. ";
   }
   if (kiwiMemory.friendsFamily.length() > 0) {
-    p += " Friends & Family members: " + kiwiMemory.friendsFamily +
-         ". You recognize and know these people and their relation to the user. ";
+    p += "Friends & Family members (from web settings): " + kiwiMemory.friendsFamily +
+         ". You recognize and know all these people and their relation to the user. ";
   }
   if (kiwiMemory.memoryCount > 0) {
-    p += " Remembered facts about the user: ";
+    p += "Known facts about user: ";
     for (int i = 0; i < kiwiMemory.memoryCount; i++) {
       p += "(" + String(i + 1) + ") " + kiwiMemory.memories[i] + ". ";
     }
   }
+  p += "LEARNING RULES: "
+       "1. If user shares a family member or friend's name (e.g. bua, chacha, mama, dadi, dada, mummy, papa, sister, brother, dost, etc.), reply warmly AND append '[MEM: FAMILY: <relation> <name>]' at the very end so it is added directly to their web dashboard list (e.g. 'dadi raj, bua Sunita')! "
+       "Example: User says 'Meri bua ka naam Sunita hai' -> reply warmly AND append '[MEM: FAMILY: bua Sunita]'. "
+       "2. If user shares their own name, append '[MEM: Name is <Name>]'. "
+       "3. If user shares any other general fact or says 'yaad rakhna', append '[MEM: <concise fact>]'. ";
   return p;
 }
 
@@ -180,9 +220,11 @@ void setPendingFollowUp(const String &q) {
 void parseAndSaveMemoriesFromLlm(String &resp) {
   bool modified = false;
 
-  // Extract all [MEM: ...] tags
+  // Extract all [MEM: ...] or [mem: ...] tags
   while (true) {
     int start = resp.indexOf("[MEM:");
+    if (start < 0) start = resp.indexOf("[mem:");
+    if (start < 0) start = resp.indexOf("[Mem:");
     if (start < 0)
       break;
     int end = resp.indexOf(']', start);
@@ -192,15 +234,43 @@ void parseAndSaveMemoriesFromLlm(String &resp) {
     String fact = resp.substring(start + 5, end);
     fact.trim();
     if (fact.length() > 0) {
-      if (fact.startsWith("User name is ") || fact.startsWith("Name is ")) {
-        int idx = fact.lastIndexOf(' ');
-        if (idx > 0) {
-          String name = fact.substring(idx + 1);
-          name.trim();
+      if (fact.startsWith("User name is ") || fact.startsWith("Name is ") ||
+          fact.startsWith("User's name is ") || fact.startsWith("name is ")) {
+        String name = "";
+        int isIdx = fact.lastIndexOf(" is ");
+        if (isIdx >= 0) {
+          name = fact.substring(isIdx + 4);
+        } else {
+          int idx = fact.lastIndexOf(' ');
+          if (idx > 0) name = fact.substring(idx + 1);
+        }
+        name.trim();
+        if (name.length() > 0) {
           setOwnerNameNoSave(name);
           modified = true;
         }
+      } else if (fact.startsWith("FAMILY:") || fact.startsWith("family:") ||
+                 fact.startsWith("RELATION:") || fact.startsWith("FRIEND:")) {
+        int col = fact.indexOf(':');
+        String rel = fact.substring(col + 1);
+        rel.trim();
+        addFriendOrFamilyNoSave(rel);
+        addMemoryFactNoSave("Family: " + rel);
+        modified = true;
       } else {
+        String lowerF = fact;
+        lowerF.toLowerCase();
+        if (lowerF.indexOf("bua") >= 0 || lowerF.indexOf("chacha") >= 0 ||
+            lowerF.indexOf("mama") >= 0 || lowerF.indexOf("mami") >= 0 ||
+            lowerF.indexOf("dadi") >= 0 || lowerF.indexOf("dada") >= 0 ||
+            lowerF.indexOf("nana") >= 0 || lowerF.indexOf("nani") >= 0 ||
+            lowerF.indexOf("mummy") >= 0 || lowerF.indexOf("papa") >= 0 ||
+            lowerF.indexOf("mother") >= 0 || lowerF.indexOf("father") >= 0 ||
+            lowerF.indexOf("brother") >= 0 || lowerF.indexOf("sister") >= 0 ||
+            lowerF.indexOf("bhai") >= 0 || lowerF.indexOf("behen") >= 0 ||
+            lowerF.indexOf("friend") >= 0 || lowerF.indexOf("dost") >= 0) {
+          addFriendOrFamilyNoSave(fact);
+        }
         if (addMemoryFactNoSave(fact)) {
           modified = true;
         }
@@ -211,6 +281,7 @@ void parseAndSaveMemoriesFromLlm(String &resp) {
 
   // Extract [FOLLOWUP: ...] tag
   int fStart = resp.indexOf("[FOLLOWUP:");
+  if (fStart < 0) fStart = resp.indexOf("[followup:");
   if (fStart >= 0) {
     int fEnd = resp.indexOf(']', fStart);
     if (fEnd >= 0) {

@@ -46,6 +46,7 @@
 #include "hardware/TouchController.h"
 #include "power/PowerManager.h"
 #include "services/AiService.h"
+#include "services/HyperHdrService.h"
 #include "services/MemoryService.h"
 #include "services/WeatherService.h"
 #include "services/WledService.h"
@@ -53,6 +54,7 @@
 #include <Arduino.h>
 #include <ESPmDNS.h>
 #include <WiFi.h>
+
 
 // ============================================================
 // BOOT WAKE & CONNECTION FLOW STATE

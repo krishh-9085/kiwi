@@ -9,6 +9,7 @@
 #include "hardware/TouchController.h"
 #include "services/AiService.h"
 #include "services/AiTextTools.h"
+#include "services/HyperHdrService.h"
 #include "services/WeatherService.h"
 #include "services/WledService.h"
 #include "web/WebPortal.h"
@@ -75,27 +76,30 @@ bool handleTimeCommand(const String &qIn) {
                  "काउन्टडाउन", "काउंटडाउन"}))
     return false;
 
-  // Negative filter: Prevent non-clock general questions and conversational queries from being hijacked
-  if (hasAny(q, {"how much time", "kitna time", "kitna samay", "time lagta",
-                 "time lagega", "time travel", "first time", "all time",
-                 "every time", "long time", "take time", "waste time",
-                 "pass time", "speed of", "history of", "meaning of",
-                 "define", "explain", "why do", "why does", "why is",
-                 "tell me about", "watch this", "watch movie", "watch video",
-                 "can you watch", "please watch", "smart watch", "wrist watch"})) {
+  // Negative filter: Prevent non-clock general questions and conversational
+  // queries from being hijacked
+  if (hasAny(q,
+             {"how much time", "kitna time",    "kitna samay",  "time lagta",
+              "time lagega",   "time travel",   "first time",   "all time",
+              "every time",    "long time",     "take time",    "waste time",
+              "pass time",     "speed of",      "history of",   "meaning of",
+              "define",        "explain",       "why do",       "why does",
+              "why is",        "tell me about", "watch this",   "watch movie",
+              "watch video",   "can you watch", "please watch", "smart watch",
+              "wrist watch"})) {
     return false;
   }
 
   // Positive explicit time query phrases
   bool isTime = hasAny(
-      q, {"what time", "what's the time", "whats the time", "tell me time",
-          "tell the time", "show time", "show clock", "current time",
-          "time now", "time right now", "time kya", "kya time",
-          "kitna baja", "kitne baje", "abhi kitna", "abhi time",
-          "abhi kya time", "samay kya", "kya samay", "samay batao",
-          "time batao", "time bolo", "ghadi dikhao", "time check",
-          "समय क्या", "क्या समय", "समय बताओ", "टाइम बताओ",
-          "टाइम क्या", "कितना बजा", "कितने बजे", "अभी समय"});
+      q, {"what time",     "what's the time", "whats the time", "tell me time",
+          "tell the time", "show time",       "show clock",     "current time",
+          "time now",      "time right now",  "time kya",       "kya time",
+          "kitna baja",    "kitne baje",      "abhi kitna",     "abhi time",
+          "abhi kya time", "samay kya",       "kya samay",      "samay batao",
+          "time batao",    "time bolo",       "ghadi dikhao",   "time check",
+          "समय क्या",       "क्या समय",         "समय बताओ",       "टाइम बताओ",
+          "टाइम क्या",      "कितना बजा",       "कितने बजे",        "अभी समय"});
 
   // Short direct queries (e.g. "time", "clock", "samay", "ghadi")
   if (!isTime && q.length() <= 20) {
@@ -116,14 +120,18 @@ bool handleTimeCommand(const String &qIn) {
   struct tm timeinfo;
   if (getLocalTime(&timeinfo, 500)) {
     int hour12 = timeinfo.tm_hour % 12;
-    if (hour12 == 0) hour12 = 12;
+    if (hour12 == 0)
+      hour12 = 12;
     const char *ampm = (timeinfo.tm_hour >= 12) ? "PM" : "AM";
     String timeSpeech;
     if (sttLang == "hi" || containsDevanagari(qIn) ||
         hasAny(q, {"samay", "kya", "baja", "baje", "समय", "टाइम"})) {
-      timeSpeech = "Abhi " + String(hour12) + " bajke " + String(timeinfo.tm_min) + " minute ho rahe hain.";
+      timeSpeech = "Abhi " + String(hour12) + " bajke " +
+                   String(timeinfo.tm_min) + " minute ho rahe hain.";
     } else {
-      timeSpeech = "It is " + String(hour12) + ":" + ((timeinfo.tm_min < 10) ? "0" : "") + String(timeinfo.tm_min) + " " + String(ampm) + ".";
+      timeSpeech = "It is " + String(hour12) + ":" +
+                   ((timeinfo.tm_min < 10) ? "0" : "") +
+                   String(timeinfo.tm_min) + " " + String(ampm) + ".";
     }
     setEmotion(EMOTION_SPEAKING);
     speakText(timeSpeech);
@@ -135,7 +143,8 @@ bool handleTimeCommand(const String &qIn) {
 
   uint32_t t0 = millis();
   while (millis() - t0 < 4000) {
-    if (cancelRequest || touchT.state || touchL.state || touchR.state || !showClockScreen) {
+    if (cancelRequest || touchT.state || touchL.state || touchR.state ||
+        !showClockScreen) {
       showClockScreen = false;
       resyncTouch();
       break;
@@ -159,12 +168,30 @@ bool handleWeatherCommand(const String &qIn) {
   q.toLowerCase();
   q.trim();
 
-  // Negative filter: Prevent science, educational, or biology questions from being hijacked
-  if (hasAny(q, {"why does it", "why do", "what causes", "how does", "how do",
-                 "boiling", "body temperature", "human body", "fever", "sun",
-                 "solar", "water boils", "acid rain", "rainforest", "rain water",
-                 "process of", "explain", "definition", "thermodynamics",
-                 "difference between", "cpu temp", "gpu temp"})) {
+  // Negative filter: Prevent science, educational, or biology questions from
+  // being hijacked
+  if (hasAny(q, {"why does it",
+                 "why do",
+                 "what causes",
+                 "how does",
+                 "how do",
+                 "boiling",
+                 "body temperature",
+                 "human body",
+                 "fever",
+                 "sun",
+                 "solar",
+                 "water boils",
+                 "acid rain",
+                 "rainforest",
+                 "rain water",
+                 "process of",
+                 "explain",
+                 "definition",
+                 "thermodynamics",
+                 "difference between",
+                 "cpu temp",
+                 "gpu temp"})) {
     return false;
   }
 
@@ -177,7 +204,8 @@ bool handleWeatherCommand(const String &qIn) {
 
   // Conditional triggers: temp, temperature, barish, rain, garmi, thand
   if (!isWeather) {
-    if (hasWord(q, {"temp", "temperature", "taapmaan", "barish", "rain", "garmi", "thand"}) ||
+    if (hasWord(q, {"temp", "temperature", "taapmaan", "barish", "rain",
+                    "garmi", "thand"}) ||
         hasAny(q, {"तापमान"})) {
       if (hasWord(q, {"outside", "today", "aaj", "bahar", "current", "now",
                       "city", "forecast", "degree", "here"}) ||
@@ -201,11 +229,13 @@ bool handleWeatherCommand(const String &qIn) {
   String voiceReply;
   if (sttLang == "hi" || containsDevanagari(qIn) ||
       hasAny(q, {"mausam", "मौसम", "वेदर"})) {
-    voiceReply = weatherCity + " mein mausam " + weatherDesc + " hai, aur taapmaan " +
-                 String((int)round(weatherTemp)) + " degree Celsius hai.";
+    voiceReply = weatherCity + " mein mausam " + weatherDesc +
+                 " hai, aur taapmaan " + String((int)round(weatherTemp)) +
+                 " degree Celsius hai.";
   } else {
     voiceReply = "The weather in " + weatherCity + " is " + weatherDesc +
-                 " and " + String((int)round(weatherTemp)) + " degrees Celsius.";
+                 " and " + String((int)round(weatherTemp)) +
+                 " degrees Celsius.";
   }
   setEmotion(EMOTION_SPEAKING);
   speakText(voiceReply);
@@ -213,7 +243,8 @@ bool handleWeatherCommand(const String &qIn) {
 
   uint32_t t0 = millis();
   while (millis() - t0 < 5000) {
-    if (cancelRequest || touchT.state || touchL.state || touchR.state || !showWeatherScreen) {
+    if (cancelRequest || touchT.state || touchL.state || touchR.state ||
+        !showWeatherScreen) {
       showWeatherScreen = false;
       resyncTouch();
       break;
@@ -242,20 +273,21 @@ bool handleEmotionCommand(const String &qIn) {
                  "make a ", "make an ", "story", "difference"}))
     return false;
 
-  bool isCommand =
-      hasWord(q, {"face", "expression", "bana", "dikha", "show", "make", "look",
-                  "ho ja", "ho jao", "kar do"}) ||
-      hasAny(q, {"फेस", "चेहरा", "चेहरे", "एक्सप्रेशन", "बना", "दिखा", "हो जा",
-                 "हो जाओ", "कर दो"});
+  bool isCommand = hasWord(q, {"face", "expression", "bana", "dikha", "show",
+                               "make", "look", "ho ja", "ho jao", "kar do"}) ||
+                   hasAny(q, {"फेस", "चेहरा", "चेहरे", "एक्सप्रेशन", "बना", "दिखा",
+                              "हो जा", "हो जाओ", "कर दो"});
 
   if (!isCommand && q.length() > 25)
     return false;
 
-  if (hasWord(q, {"happy", "smile"}) || hasAny(q, {"हैप्पी", "खुश", "khush", "स्माइल"})) {
+  if (hasWord(q, {"happy", "smile"}) ||
+      hasAny(q, {"हैप्पी", "खुश", "khush", "स्माइल"})) {
     showEmotionFor(EMOTION_HAPPY);
     return true;
   }
-  if (hasWord(q, {"sad"}) || hasAny(q, {"सैड", "उदास", "udaas", "दुखी", "dukhi"})) {
+  if (hasWord(q, {"sad"}) ||
+      hasAny(q, {"सैड", "उदास", "udaas", "दुखी", "dukhi"})) {
     showEmotionFor(EMOTION_SAD);
     return true;
   }
@@ -267,11 +299,13 @@ bool handleEmotionCommand(const String &qIn) {
     showEmotionFor(EMOTION_EXCITED);
     return true;
   }
-  if (hasWord(q, {"confused", "confuse"}) || hasAny(q, {"confus", "कन्फ्यूज", "उलझ", "ulajh"})) {
+  if (hasWord(q, {"confused", "confuse"}) ||
+      hasAny(q, {"confus", "कन्फ्यूज", "उलझ", "ulajh"})) {
     showEmotionFor(EMOTION_CONFUSED);
     return true;
   }
-  if (hasWord(q, {"sleep", "sleeping"}) || hasAny(q, {"स्लीप", "सो जा", "so ja", "नींद", "neend"})) {
+  if (hasWord(q, {"sleep", "sleeping"}) ||
+      hasAny(q, {"स्लीप", "सो जा", "so ja", "नींद", "neend"})) {
     showEmotionFor(EMOTION_SLEEPING, 6000);
     return true;
   }
@@ -279,11 +313,13 @@ bool handleEmotionCommand(const String &qIn) {
     showEmotionFor(EMOTION_THINKING);
     return true;
   }
-  if (hasWord(q, {"love"}) || hasAny(q, {"लव", "प्यार", "pyar", "pyaar", "dil"})) {
+  if (hasWord(q, {"love"}) ||
+      hasAny(q, {"लव", "प्यार", "pyar", "pyaar", "dil"})) {
     showPetMood(PET_LOVE);
     return true;
   }
-  if (hasWord(q, {"laugh", "laughing", "giggle"}) || hasAny(q, {"लाफ", "हंस", "hans"})) {
+  if (hasWord(q, {"laugh", "laughing", "giggle"}) ||
+      hasAny(q, {"लाफ", "हंस", "hans"})) {
     showPetMood(PET_GIGGLE);
     return true;
   }
@@ -291,7 +327,8 @@ bool handleEmotionCommand(const String &qIn) {
     showPetMood(PET_SHY);
     return true;
   }
-  if (hasWord(q, {"sparkle", "shine"}) || hasAny(q, {"स्पार्कल", "चमक", "chamak"})) {
+  if (hasWord(q, {"sparkle", "shine"}) ||
+      hasAny(q, {"स्पार्कल", "चमक", "chamak"})) {
     showPetMood(PET_SPARKLE);
     return true;
   }
@@ -299,15 +336,18 @@ bool handleEmotionCommand(const String &qIn) {
     showPetMood(PET_KISS);
     return true;
   }
-  if (hasWord(q, {"cool", "shades", "sunglass"}) || hasAny(q, {"कूल", "chashma", "चश्मा"})) {
+  if (hasWord(q, {"cool", "shades", "sunglass"}) ||
+      hasAny(q, {"कूल", "chashma", "चश्मा"})) {
     showEmotionFor(EMOTION_COOL);
     return true;
   }
-  if (hasWord(q, {"evil", "devil"}) || hasAny(q, {"शैतान", "shaitan", "rakshas"})) {
+  if (hasWord(q, {"evil", "devil"}) ||
+      hasAny(q, {"शैतान", "shaitan", "rakshas"})) {
     showEmotionFor(EMOTION_EVIL);
     return true;
   }
-  if (hasWord(q, {"cry", "crying"}) || hasAny(q, {"रोना", "rona", "ro mat", "aansu"})) {
+  if (hasWord(q, {"cry", "crying"}) ||
+      hasAny(q, {"रोना", "rona", "ro mat", "aansu"})) {
     showEmotionFor(EMOTION_CRYING);
     return true;
   }
@@ -319,15 +359,18 @@ bool handleEmotionCommand(const String &qIn) {
     showEmotionFor(EMOTION_DEAD);
     return true;
   }
-  if (hasWord(q, {"party", "celebrate", "celebrating"}) || hasAny(q, {"पार्टी", "celebrat", "jashn"})) {
+  if (hasWord(q, {"party", "celebrate", "celebrating"}) ||
+      hasAny(q, {"पार्टी", "celebrat", "jashn"})) {
     showEmotionFor(EMOTION_PARTY);
     return true;
   }
-  if (hasWord(q, {"sing", "singing", "music"}) || hasAny(q, {"गाना", "gana", "गीत"})) {
+  if (hasWord(q, {"sing", "singing", "music"}) ||
+      hasAny(q, {"गाना", "gana", "गीत"})) {
     showEmotionFor(EMOTION_SINGING);
     return true;
   }
-  if (hasWord(q, {"shock", "shocked"}) || hasAny(q, {"शॉक", "hairan", "hairat"})) {
+  if (hasWord(q, {"shock", "shocked"}) ||
+      hasAny(q, {"शॉक", "hairan", "hairat"})) {
     showEmotionFor(EMOTION_SHOCKED);
     return true;
   }
@@ -350,7 +393,8 @@ bool handleSkinCommand(const String &qIn) {
   q.toLowerCase();
   q.trim();
 
-  // Negative filter: Reject stories, general questions, movie/animal discussions
+  // Negative filter: Reject stories, general questions, movie/animal
+  // discussions
   if (hasAny(q, {"tell me", "story", "what is", "who is", "why", "explain",
                  "how to", "movie", "video", "breed", "animal"}))
     return false;
@@ -358,60 +402,100 @@ bool handleSkinCommand(const String &qIn) {
   bool isThemeIntent =
       hasWord(q, {"skin", "eyes", "eye skin", "looks", "theme", "look", "mode",
                   "change", "switch", "set"}) ||
-      hasAny(q, {"थीम", "स्किन", "आंखें", "चश्मा", "चेहरा", "रखो", "लगाओ",
-                 "करो", "बदलो", "rakho", "lagao", "karo", "bana", "banao", "kardo"});
+      hasAny(q, {"थीम", "स्किन", "आंखें", "चश्मा", "चेहरा", "रखो", "लगाओ", "करो",
+                 "बदलो", "rakho", "lagao", "karo", "bana", "banao", "kardo"});
 
   String name = "";
   EyeSkin targetSkin = currentEyeSkin;
 
-  if (hasWord(q, {"cyberpunk", "cyber", "hud", "sci-fi"}) || hasAny(q, {"साइबरपंक", "साइबर"})) {
-    targetSkin = SKIN_CYBERPUNK; name = "Cyberpunk";
-  } else if (hasWord(q, {"desk buddy", "deskbuddy", "kiwi", "buddy", "default", "normal", "clean", "reset skin"}) || hasAny(q, {"कीवी", "डिफ़ॉल्ट", "डिफॉल्ट"})) {
-    targetSkin = SKIN_KIWI; name = "Desk Buddy";
+  if (hasWord(q, {"cyberpunk", "cyber", "hud", "sci-fi"}) ||
+      hasAny(q, {"साइबरपंक", "साइबर"})) {
+    targetSkin = SKIN_CYBERPUNK;
+    name = "Cyberpunk";
+  } else if (hasWord(q, {"desk buddy", "deskbuddy", "kiwi", "buddy", "default",
+                         "normal", "clean", "reset skin"}) ||
+             hasAny(q, {"कीवी", "डिफ़ॉल्ट", "डिफॉल्ट"})) {
+    targetSkin = SKIN_KIWI;
+    name = "Desk Buddy";
   } else if (hasWord(q, {"vector", "anki"}) || hasAny(q, {"वेक्टर"})) {
-    targetSkin = SKIN_VECTOR; name = "Vector";
-  } else if (hasWord(q, {"cat", "neko", "billi", "kitty"}) || hasAny(q, {"कैट", "बिल्ली"})) {
-    targetSkin = SKIN_CAT; name = "Cat";
-  } else if (hasWord(q, {"retro", "8bit", "8-bit", "pixel", "arcade"}) || hasAny(q, {"रेट्रो"})) {
-    targetSkin = SKIN_RETRO8BIT; name = "Retro 8-Bit";
-  } else if (hasWord(q, {"anime", "shounen", "starry"}) || hasAny(q, {"एनिमे", "एनीमे"})) {
-    targetSkin = SKIN_ANIME; name = "Anime";
+    targetSkin = SKIN_VECTOR;
+    name = "Vector";
+  } else if (hasWord(q, {"cat", "neko", "billi", "kitty"}) ||
+             hasAny(q, {"कैट", "बिल्ली"})) {
+    targetSkin = SKIN_CAT;
+    name = "Cat";
+  } else if (hasWord(q, {"retro", "8bit", "8-bit", "pixel", "arcade"}) ||
+             hasAny(q, {"रेट्रो"})) {
+    targetSkin = SKIN_RETRO8BIT;
+    name = "Retro 8-Bit";
+  } else if (hasWord(q, {"anime", "shounen", "starry"}) ||
+             hasAny(q, {"एनिमे", "एनीमे"})) {
+    targetSkin = SKIN_ANIME;
+    name = "Anime";
   } else if (hasWord(q, {"heart", "hearts"}) || hasAny(q, {"हार्ट", "दिल"})) {
-    targetSkin = SKIN_HEARTS; name = "Hearts";
-  } else if (hasWord(q, {"steampunk", "goggles", "aviator"}) || hasAny(q, {"स्टीमपंक"})) {
-    targetSkin = SKIN_STEAMPUNK; name = "Steampunk";
-  } else if (hasWord(q, {"demon", "devil", "horns"}) || hasAny(q, {"shaitan", "डेमन", "शैतान"})) {
-    targetSkin = SKIN_DEMON; name = "Demon";
-  } else if (hasWord(q, {"matrix", "terminal", "hacker"}) || hasAny(q, {"मैट्रिक्स"})) {
-    targetSkin = SKIN_MATRIX; name = "Matrix";
-  } else if (hasWord(q, {"cyborg", "terminator", "t800", "t-800"}) || hasAny(q, {"साइबोर्ग"})) {
-    targetSkin = SKIN_CYBORG; name = "Cyborg";
-  } else if (hasWord(q, {"mecha", "gundam", "robot eyes", "v-fin"}) || hasAny(q, {"मेका"})) {
-    targetSkin = SKIN_MECHA; name = "Mecha";
-  } else if (hasWord(q, {"sunglass", "sunglasses", "shades", "thug life"}) || hasAny(q, {"काला चश्मा"})) {
-    targetSkin = SKIN_SUNGLASSES; name = "Sunglasses";
-  } else if (hasWord(q, {"puppy", "dog", "doggy", "kutta"}) || hasAny(q, {"पपी", "कुत्ता"})) {
-    targetSkin = SKIN_PUPPY; name = "Puppy";
-  } else if (hasWord(q, {"hypno", "spiral", "vortex", "dizzy"}) || hasAny(q, {"हिप्नो"})) {
-    targetSkin = SKIN_HYPNO; name = "Hypno";
-  } else if (hasWord(q, {"alien", "ufo", "cosmic", "galaxy"}) || hasAny(q, {"एलियन"})) {
-    targetSkin = SKIN_ALIEN; name = "Alien";
-  } else if (hasWord(q, {"ninja", "shinobi", "naruto", "headband"}) || hasAny(q, {"निंजा"})) {
-    targetSkin = SKIN_NINJA; name = "Ninja";
-  } else if (hasWord(q, {"round", "circle", "gol", "rounded"}) || hasAny(q, {"गोल"})) {
-    targetSkin = SKIN_ROUND; name = "Round";
+    targetSkin = SKIN_HEARTS;
+    name = "Hearts";
+  } else if (hasWord(q, {"steampunk", "goggles", "aviator"}) ||
+             hasAny(q, {"स्टीमपंक"})) {
+    targetSkin = SKIN_STEAMPUNK;
+    name = "Steampunk";
+  } else if (hasWord(q, {"demon", "devil", "horns"}) ||
+             hasAny(q, {"shaitan", "डेमन", "शैतान"})) {
+    targetSkin = SKIN_DEMON;
+    name = "Demon";
+  } else if (hasWord(q, {"matrix", "terminal", "hacker"}) ||
+             hasAny(q, {"मैट्रिक्स"})) {
+    targetSkin = SKIN_MATRIX;
+    name = "Matrix";
+  } else if (hasWord(q, {"cyborg", "terminator", "t800", "t-800"}) ||
+             hasAny(q, {"साइबोर्ग"})) {
+    targetSkin = SKIN_CYBORG;
+    name = "Cyborg";
+  } else if (hasWord(q, {"mecha", "gundam", "robot eyes", "v-fin"}) ||
+             hasAny(q, {"मेका"})) {
+    targetSkin = SKIN_MECHA;
+    name = "Mecha";
+  } else if (hasWord(q, {"sunglass", "sunglasses", "shades", "thug life"}) ||
+             hasAny(q, {"काला चश्मा"})) {
+    targetSkin = SKIN_SUNGLASSES;
+    name = "Sunglasses";
+  } else if (hasWord(q, {"puppy", "dog", "doggy", "kutta"}) ||
+             hasAny(q, {"पपी", "कुत्ता"})) {
+    targetSkin = SKIN_PUPPY;
+    name = "Puppy";
+  } else if (hasWord(q, {"hypno", "spiral", "vortex", "dizzy"}) ||
+             hasAny(q, {"हिप्नो"})) {
+    targetSkin = SKIN_HYPNO;
+    name = "Hypno";
+  } else if (hasWord(q, {"alien", "ufo", "cosmic", "galaxy"}) ||
+             hasAny(q, {"एलियन"})) {
+    targetSkin = SKIN_ALIEN;
+    name = "Alien";
+  } else if (hasWord(q, {"ninja", "shinobi", "naruto", "headband"}) ||
+             hasAny(q, {"निंजा"})) {
+    targetSkin = SKIN_NINJA;
+    name = "Ninja";
+  } else if (hasWord(q, {"round", "circle", "gol", "rounded"}) ||
+             hasAny(q, {"गोल"})) {
+    targetSkin = SKIN_ROUND;
+    name = "Round";
   } else if (hasAny(q, {"squircle outline", "outline squircle"})) {
-    targetSkin = SKIN_SQUIRCLE_OUTLINE; name = "Squircle Outline";
+    targetSkin = SKIN_SQUIRCLE_OUTLINE;
+    name = "Squircle Outline";
   } else if (hasAny(q, {"squircle glint", "glint squircle"})) {
-    targetSkin = SKIN_SQUIRCLE_GLINT; name = "Squircle Glint";
-  } else if (hasWord(q, {"squircle"}) || hasAny(q, {"squircle solid", "स्क्वार्कल"})) {
-    targetSkin = SKIN_SQUIRCLE_SOLID; name = "Squircle Solid";
+    targetSkin = SKIN_SQUIRCLE_GLINT;
+    name = "Squircle Glint";
+  } else if (hasWord(q, {"squircle"}) ||
+             hasAny(q, {"squircle solid", "स्क्वार्कल"})) {
+    targetSkin = SKIN_SQUIRCLE_SOLID;
+    name = "Squircle Solid";
   }
 
   if (name.length() == 0)
     return false;
 
-  // If a theme name was matched, only trigger if it's a theme intent OR a short direct command (<= 25 chars)
+  // If a theme name was matched, only trigger if it's a theme intent OR a short
+  // direct command (<= 25 chars)
   if (!isThemeIntent && q.length() > 25)
     return false;
 
@@ -419,7 +503,8 @@ bool handleSkinCommand(const String &qIn) {
   saveConfig();
   soundPetSparkle();
   if (sttLang == "hi" || containsDevanagari(qIn) ||
-      hasAny(q, {"rakho", "karo", "lagao", "थीम", "बदलो", "रखो", "लगाओ", "kardo"})) {
+      hasAny(q, {"rakho", "karo", "lagao", "थीम", "बदलो", "रखो", "लगाओ",
+                 "kardo"})) {
     speakText("Theme " + name + " set kar di hai!");
   } else {
     speakText("Theme set to " + name + "!");
@@ -439,12 +524,13 @@ bool handleVolumeCommand(const String &qIn) {
 
   // Negative filter: Prevent science/acoustics questions from triggering volume
   if (hasAny(q, {"speed of sound", "sound wave", "sound waves", "ultrasound",
-                 "infrasound", "sound of music", "sound quality", "how does sound",
-                 "what is sound"})) {
+                 "infrasound", "sound of music", "sound quality",
+                 "how does sound", "what is sound"})) {
     return false;
   }
 
-  bool hasVolWord = hasWord(q, {"volume", "vol", "aawaz", "awaz", "sound", "loudness", "mute"}) ||
+  bool hasVolWord = hasWord(q, {"volume", "vol", "aawaz", "awaz", "sound",
+                                "loudness", "mute"}) ||
                     hasAny(q, {"आवाज़", "आवाज", "वॉल्यूम", "म्यूट"});
 
   if (!hasVolWord)
@@ -453,9 +539,11 @@ bool handleVolumeCommand(const String &qIn) {
   int targetVol = -1;
   if (hasWord(q, {"mute", "silent"}) || hasAny(q, {"chup", "म्यूट", "शांत"})) {
     targetVol = 0;
-  } else if (hasWord(q, {"up", "high", "increase", "louder"}) || hasAny(q, {"badhao", "badha", "tez", "बढ़ाओ", "तेज़"})) {
+  } else if (hasWord(q, {"up", "high", "increase", "louder"}) ||
+             hasAny(q, {"badhao", "badha", "tez", "बढ़ाओ", "तेज़"})) {
     targetVol = min(100, speakerVolume + 20);
-  } else if (hasWord(q, {"down", "low", "decrease", "softer"}) || hasAny(q, {"kam", "ghatao", "dheere", "कम", "घटाओ"})) {
+  } else if (hasWord(q, {"down", "low", "decrease", "softer"}) ||
+             hasAny(q, {"kam", "ghatao", "dheere", "कम", "घटाओ"})) {
     targetVol = max(10, speakerVolume - 20);
   } else if (hasWord(q, {"max", "full"}) || hasAny(q, {"pura", "पूरा"})) {
     targetVol = 100;
@@ -480,7 +568,8 @@ bool handleVolumeCommand(const String &qIn) {
     speakerVolume = targetVol;
     saveConfig();
     soundPetSparkle();
-    String reply = (sttLang == "hi" || q.indexOf("aawaz") >= 0 || q.indexOf("awaz") >= 0 || containsDevanagari(qIn))
+    String reply = (sttLang == "hi" || q.indexOf("aawaz") >= 0 ||
+                    q.indexOf("awaz") >= 0 || containsDevanagari(qIn))
                        ? "Aawaz " + String(speakerVolume) + " percent kar di!"
                        : "Volume set to " + String(speakerVolume) + " percent!";
     speakText(reply);
@@ -506,7 +595,8 @@ bool handleTimerCommand(const String &qIn) {
 
   // 1. Cancel / Stop Timer or Alarm
   if (hasWord(q, {"stop", "cancel", "off", "dismiss"}) ||
-      hasAny(q, {"band", "hatao", "rok", "बंद", "रोको", "हटाओ", "कैंसिल", "स्टॉप"})) {
+      hasAny(q,
+             {"band", "hatao", "rok", "बंद", "रोको", "हटाओ", "कैंसिल", "स्टॉप"})) {
     if (isRobotTimerRinging()) {
       stopRobotTimerAlarm();
       speakText((sttLang == "hi") ? "Alarm band kar diya!" : "Alarm stopped!");
@@ -514,10 +604,12 @@ bool handleTimerCommand(const String &qIn) {
     }
     if (isRobotTimerActive()) {
       cancelRobotTimer();
-      speakText((sttLang == "hi") ? "Timer cancel kar diya!" : "Timer cancelled!");
+      speakText((sttLang == "hi") ? "Timer cancel kar diya!"
+                                  : "Timer cancelled!");
       return true;
     }
-    speakText((sttLang == "hi") ? "Koi timer ya alarm chal nahi raha hai." : "No timer or alarm is active.");
+    speakText((sttLang == "hi") ? "Koi timer ya alarm chal nahi raha hai."
+                                : "No timer or alarm is active.");
     return true;
   }
 
@@ -531,11 +623,14 @@ bool handleTimerCommand(const String &qIn) {
         i++;
       }
       if (val > 0) {
-        if (hasWord(q, {"hour", "hours", "hr", "hrs"}) || hasAny(q, {"ghanta", "ghante", "घंटा", "घंटे"})) {
+        if (hasWord(q, {"hour", "hours", "hr", "hrs"}) ||
+            hasAny(q, {"ghanta", "ghante", "घंटा", "घंटे"})) {
           totalSec = (uint32_t)val * 3600;
-        } else if (hasWord(q, {"minute", "minutes", "min", "mins"}) || hasAny(q, {"minto", "minut", "minuite", "मिनट", "मिन्ट"})) {
+        } else if (hasWord(q, {"minute", "minutes", "min", "mins"}) ||
+                   hasAny(q, {"minto", "minut", "minuite", "मिनट", "मिन्ट"})) {
           totalSec = (uint32_t)val * 60;
-        } else if (hasWord(q, {"second", "seconds", "sec", "secs"}) || hasAny(q, {"सेकंड", "सेकेंड"})) {
+        } else if (hasWord(q, {"second", "seconds", "sec", "secs"}) ||
+                   hasAny(q, {"सेकंड", "सेकेंड"})) {
           totalSec = (uint32_t)val;
         } else {
           // If no unit specified: <= 10 assume minutes, > 10 assume seconds
@@ -548,20 +643,47 @@ bool handleTimerCommand(const String &qIn) {
 
   // Word-based numbers (Hindi & English, including Devanagari script)
   if (totalSec == 0) {
-    if (hasAny(q, {"aadha ghanta", "half an hour", "half hour", "आधा घंटा"})) totalSec = 1800;
-    else if (hasAny(q, {"ek minute", "one minute", "a minute", "1 minute", "एक मिनट", "1 मिनट"})) totalSec = 60;
-    else if (hasAny(q, {"do minute", "two minute", "two minutes", "2 minute", "दो मिनट", "2 मिनट"})) totalSec = 120;
-    else if (hasAny(q, {"teen minute", "three minute", "three minutes", "3 minute", "तीन मिनट", "3 मिनट"})) totalSec = 180;
-    else if (hasAny(q, {"chaar minute", "char minute", "four minute", "four minutes", "4 minute", "चार मिनट", "4 मिनट"})) totalSec = 240;
-    else if (hasAny(q, {"paanch minute", "panch minute", "five minute", "five minutes", "5 minute", "पांच मिनट", "पाँच मिनट", "5 मिनट"})) totalSec = 300;
-    else if (hasAny(q, {"das minute", "ten minute", "ten minutes", "10 minute", "दस मिनट", "10 मिनट"})) totalSec = 600;
-    else if (hasAny(q, {"pandrah minute", "fifteen minute", "fifteen minutes", "15 minute", "पंद्रह मिनट", "15 मिनट"})) totalSec = 900;
-    else if (hasAny(q, {"bees minute", "twenty minute", "20 minute", "बीस मिनट", "20 मिनट"})) totalSec = 1200;
-    else if (hasAny(q, {"tees minute", "thirty minute", "thirty minutes", "30 minute", "तीस मिनट", "30 मिनट"})) totalSec = 1800;
-    else if (hasAny(q, {"ek ghanta", "one hour", "1 hour", "एक घंटा", "1 घंटा"})) totalSec = 3600;
-    else if (hasAny(q, {"tees second", "thirty second", "thirty seconds", "30 second", "तीस सेकंड", "30 सेकंड"})) totalSec = 30;
-    else if (hasAny(q, {"pandrah second", "fifteen second", "fifteen seconds", "15 second", "पंद्रह सेकंड", "15 सेकंड"})) totalSec = 15;
-    else if (hasAny(q, {"das second", "ten second", "ten seconds", "10 second", "दस सेकंड", "10 सेकंड"})) totalSec = 10;
+    if (hasAny(q, {"aadha ghanta", "half an hour", "half hour", "आधा घंटा"}))
+      totalSec = 1800;
+    else if (hasAny(q, {"ek minute", "one minute", "a minute", "1 minute",
+                        "एक मिनट", "1 मिनट"}))
+      totalSec = 60;
+    else if (hasAny(q, {"do minute", "two minute", "two minutes", "2 minute",
+                        "दो मिनट", "2 मिनट"}))
+      totalSec = 120;
+    else if (hasAny(q, {"teen minute", "three minute", "three minutes",
+                        "3 minute", "तीन मिनट", "3 मिनट"}))
+      totalSec = 180;
+    else if (hasAny(q, {"chaar minute", "char minute", "four minute",
+                        "four minutes", "4 minute", "चार मिनट", "4 मिनट"}))
+      totalSec = 240;
+    else if (hasAny(q, {"paanch minute", "panch minute", "five minute",
+                        "five minutes", "5 minute", "पांच मिनट", "पाँच मिनट",
+                        "5 मिनट"}))
+      totalSec = 300;
+    else if (hasAny(q, {"das minute", "ten minute", "ten minutes", "10 minute",
+                        "दस मिनट", "10 मिनट"}))
+      totalSec = 600;
+    else if (hasAny(q, {"pandrah minute", "fifteen minute", "fifteen minutes",
+                        "15 minute", "पंद्रह मिनट", "15 मिनट"}))
+      totalSec = 900;
+    else if (hasAny(q, {"bees minute", "twenty minute", "20 minute", "बीस मिनट",
+                        "20 मिनट"}))
+      totalSec = 1200;
+    else if (hasAny(q, {"tees minute", "thirty minute", "thirty minutes",
+                        "30 minute", "तीस मिनट", "30 मिनट"}))
+      totalSec = 1800;
+    else if (hasAny(q, {"ek ghanta", "one hour", "1 hour", "एक घंटा", "1 घंटा"}))
+      totalSec = 3600;
+    else if (hasAny(q, {"tees second", "thirty second", "thirty seconds",
+                        "30 second", "तीस सेकंड", "30 सेकंड"}))
+      totalSec = 30;
+    else if (hasAny(q, {"pandrah second", "fifteen second", "fifteen seconds",
+                        "15 second", "पंद्रह सेकंड", "15 सेकंड"}))
+      totalSec = 15;
+    else if (hasAny(q, {"das second", "ten second", "ten seconds", "10 second",
+                        "दस सेकंड", "10 सेकंड"}))
+      totalSec = 10;
   }
 
   if (totalSec > 0) {
@@ -570,7 +692,8 @@ bool handleTimerCommand(const String &qIn) {
     if (forIdx >= 0) {
       label = q.substring(forIdx + 4);
       int endP = label.indexOf(" timer");
-      if (endP >= 0) label = label.substring(0, endP);
+      if (endP >= 0)
+        label = label.substring(0, endP);
       label.trim();
     }
     if (label == "Timer" || label.length() == 0) {
@@ -578,11 +701,13 @@ bool handleTimerCommand(const String &qIn) {
       if (keLiyeIdx > 0) {
         label = q.substring(0, keLiyeIdx);
         int sp = label.lastIndexOf(' ');
-        if (sp >= 0) label = label.substring(sp + 1);
+        if (sp >= 0)
+          label = label.substring(sp + 1);
         label.trim();
       }
     }
-    if (label.length() == 0 || label.length() > 20) label = "Timer";
+    if (label.length() == 0 || label.length() > 20)
+      label = "Timer";
 
     startRobotTimer(totalSec, label);
 
@@ -591,12 +716,18 @@ bool handleTimerCommand(const String &qIn) {
       uint32_t m = totalSec / 60;
       uint32_t s = totalSec % 60;
       if (s > 0) {
-        durationDesc = String(m) + (sttLang == "hi" ? " minute " : " minute ") + String(s) + (sttLang == "hi" ? " second" : " seconds");
+        durationDesc = String(m) + (sttLang == "hi" ? " minute " : " minute ") +
+                       String(s) + (sttLang == "hi" ? " second" : " seconds");
       } else {
-        durationDesc = String(m) + (sttLang == "hi" ? " minute" : (m == 1 ? " minute" : " minutes"));
+        durationDesc =
+            String(m) +
+            (sttLang == "hi" ? " minute" : (m == 1 ? " minute" : " minutes"));
       }
     } else {
-      durationDesc = String(totalSec) + (sttLang == "hi" ? " second" : (totalSec == 1 ? " second" : " seconds"));
+      durationDesc =
+          String(totalSec) + (sttLang == "hi"
+                                  ? " second"
+                                  : (totalSec == 1 ? " second" : " seconds"));
     }
 
     String reply = (sttLang == "hi")
@@ -609,28 +740,34 @@ bool handleTimerCommand(const String &qIn) {
 }
 
 // ============================================================
-// COMMAND: WLED LIGHTS
+// COMMAND: WLED & HYPERHDR LIGHTS
 // ============================================================
 bool handleLightCommand(const String &qIn) {
   String q = qIn;
   q.toLowerCase();
   q.trim();
 
-  // Negative filter: Prevent science/optics questions from hijacking light control
-  if (hasAny(q, {"speed of light", "traffic light", "traffic lights", "light year",
-                 "light years", "sunlight", "tubelight", "what is light",
-                 "quantum", "optics"})) {
+  // Negative filter: Prevent science/optics questions from hijacking light
+  // control
+  if (hasAny(q, {"speed of light", "traffic light", "traffic lights",
+                 "light year", "light years", "sunlight", "tubelight",
+                 "what is light", "quantum", "optics"})) {
     return false;
   }
 
-  // Check if query is talking about light / lights / batti / bulb / lamp / wled / brightness / roshni
-  bool hasLightTrigger = hasWord(q, {"light", "lights", "bulb", "lamp", "wled", "brightness"}) ||
-                         hasAny(q, {"batti", "roshni", "बत्ती", "रोशनी", "लाइट"});
+  // ambilight / hyperhdr / monitor / batti / bulb
+  bool hasScreenTrigger =
+      hasWord(q, {"sync", "ambilight", "hyperhdr", "monitor"}) ||
+      hasAny(q, {"screen sync", "pc sync", "screen light", "monitor light"});
+  bool hasLightTrigger =
+      hasWord(q, {"light", "lights", "bulb", "lamp", "wled", "brightness"}) ||
+  hasAny(q, {"batti", "roshni", "बत्ती", "रोशनी", "लाइट"}) || hasScreenTrigger;
   int directFxId = -1;
   String directFxName = "";
 
   if (!hasLightTrigger) {
-    // If "light" is not explicitly mentioned, only match if query has "mode" or "effect" AND matches a valid WLED effect
+    // If "light" is not explicitly mentioned, only match if query has "mode" or
+    // "effect" AND matches a valid WLED effect
     if (hasWord(q, {"mode", "effect"})) {
       directFxId = findWledEffectId(q, &directFxName);
       if (directFxId < 0)
@@ -640,140 +777,257 @@ bool handleLightCommand(const String &qIn) {
     }
   }
 
-  // 1. Turn OFF
-  if (hasWord(q, {"off", "close"}) || hasAny(q, {"band", "bujha", "turn off", "switch off", "close light", "बंद"})) {
-    if (executeWledAction("off")) {
-      setEmotion(EMOTION_IDLE);
-      soundPetSparkle();
-      speakText((sttLang == "hi") ? "Light band kar di!" : "Lights turned off!");
-      return true;
-    }
-  }
-
-  // 2. Turn ON
-  if (hasWord(q, {"on", "open"}) || hasAny(q, {"chalu", "turn on", "switch on", "jalao", "on kar", "open light", "चालू", "जलाओ"})) {
-    if (executeWledAction("on")) {
-      setEmotion(EMOTION_IDLE);
-      soundPetSparkle();
-      speakText((sttLang == "hi") ? "Light on kar di!" : "Lights turned on!");
-      return true;
-    }
-  }
-
-  // 3. Brightness presets
-  if (hasWord(q, {"dim", "low", "night", "slight"}) || hasAny(q, {"kam", "dheemi", "kam karo", "कम"})) {
-    if (executeWledAction("dim")) {
-      setEmotion(EMOTION_IDLE);
-      soundPetSparkle();
-      speakText((sttLang == "hi") ? "Light dim kar di!" : "Light dimmed!");
-      return true;
-    }
-  }
-  if (hasWord(q, {"bright", "full", "max", "increase"}) || hasAny(q, {"tez", "badhao", "poori", "puri", "तेज़"})) {
-    if (executeWledAction("full")) {
-      setEmotion(EMOTION_IDLE);
-      soundPetSparkle();
-      speakText((sttLang == "hi") ? "Light full bright kar di!" : "Lights set to full brightness!");
-      return true;
-    }
-  }
-  if (hasWord(q, {"medium", "half"}) || hasAny(q, {"aadhi", "adha", "आधी"})) {
-    if (executeWledAction("medium")) {
-      setEmotion(EMOTION_IDLE);
-      soundPetSparkle();
-      speakText((sttLang == "hi") ? "Light 50 percent brightness kar di!" : "Light set to 50 percent brightness!");
-      return true;
-    }
-  }
-
-  // 4. Effects / Modes
-  // 4a. Next / Change Mode
-  if (hasAny(q, {"mode badlo", "mode badal", "effect badlo", "effect badal", "change mode", "next mode",
-                 "switch mode", "koi aur mode", "aur koi mode", "dusra mode", "doosra mode", "agla mode",
-                 "next effect", "aur effect", "koi aur effect", "dusra effect", "doosra effect", "agla effect",
-                 "random mode", "random effect", "kuch aur dikhao", "aur mode", "mode change", "effect change"})) {
-    if (setWledNextEffect()) {
-      showEmotionFor(EMOTION_PARTY, 2000);
-      soundPetSparkle();
-      speakText((sttLang == "hi") ? "Light ka agla mode laga diya!" : "Switched to next light mode!");
-      return true;
-    }
-  }
-
-  // 4b. Find ANY named effect (from all 160+ WLED effects!)
-  String effectQuery = q;
-  if (hasAny(q, {"aag", "mombatti"})) effectQuery += " fire candle";
-  if (hasAny(q, {"rang birang", "disco", "party"})) effectQuery += " rainbow";
-  if (hasAny(q, {"jugnu", "taare", "tare"})) effectQuery += " twinkle";
-  if (hasAny(q, {"samundar", "lahar", "pani"})) effectQuery += " pacifica waves";
-  if (hasAny(q, {"bijli", "tufan"})) effectQuery += " lightning";
-  if (hasAny(q, {"barish"})) effectQuery += " rain";
-  if (hasAny(q, {"patakha", "diwali"})) effectQuery += " fireworks";
-  if (hasAny(q, {"suraj", "subah", "dhoop"})) effectQuery += " sunrise";
-  if (hasAny(q, {"dhadkan"})) effectQuery += " heartbeat";
-  if (hasAny(q, {"bhoot"})) effectQuery += " halloween eyes";
-  if (hasAny(q, {"siren"})) effectQuery += " police";
-
-  String matchedFx = directFxName;
-  int fxId = (directFxId >= 0) ? directFxId : findWledEffectId(effectQuery, &matchedFx);
-  if (fxId >= 0) {
-    if (setWledEffectById(fxId, matchedFx)) {
-      showEmotionFor(EMOTION_PARTY, 2200);
-      soundPetSparkle();
-      String reply = (sttLang == "hi")
-                         ? "Light ka " + matchedFx + " mode laga diya!"
-                         : "Light set to " + matchedFx + " mode!";
-      speakText(reply);
-      return true;
-    }
-  }
-
-  // 5. Colors (Leaves brightness untouched!)
-  struct ColorMatch {
-    const char *names[5];
-    const char *action;
-    const char *hiReply;
-    const char *enReply;
-  } colors[] = {
-      {{"red", "laal", nullptr}, "red", "Light red kar di!", "Light set to red!"},
-      {{"green", "hara", "haree", nullptr}, "green", "Light green kar di!", "Light set to green!"},
-      {{"blue", "neela", "neeli", nullptr}, "blue", "Light blue kar di!", "Light set to blue!"},
-      {{"yellow", "peela", "peeli", nullptr}, "yellow", "Light yellow kar di!", "Light set to yellow!"},
-      {{"pink", "gulabi", nullptr}, "pink", "Light pink kar di!", "Light set to pink!"},
-      {{"purple", "violet", "baingani", nullptr}, "purple", "Light purple kar di!", "Light set to purple!"},
-      {{"orange", "narangi", nullptr}, "orange", "Light orange kar di!", "Light set to orange!"},
-      {{"cyan", "aqua", "firozi", nullptr}, "cyan", "Light cyan kar di!", "Light set to cyan!"},
-      {{"white", "safed", nullptr}, "white", "Light white kar di!", "Light set to white!"},
-      {{"warm", "night", nullptr}, "warm", "Warm light on kar di!", "Warm light activated!"},
-      {{"cool", nullptr}, "cool", "Cool white light on kar di!", "Cool white light activated!"},
-      {{nullptr}, nullptr, nullptr, nullptr}
-  };
-
-  for (int i = 0; colors[i].action != nullptr; i++) {
-    for (int k = 0; colors[i].names[k] != nullptr; k++) {
-      if (matchWord(q, colors[i].names[k])) {
-        if (executeWledAction(colors[i].action)) {
-          setEmotion(EMOTION_IDLE);
-          soundPetSparkle();
-          speakText((sttLang == "hi") ? colors[i].hiReply : colors[i].enReply);
-          return true;
-        }
+  // 0. Screen Sync / Ambilight Controls
+  if (hasScreenTrigger) {
+    if (hasWord(q, {"off", "close", "stop", "pause"}) ||
+        hasAny(q, {"band", "bujha", "turn off", "switch off", "pause"})) {
+      if (executeUnifiedLightAction("screensyncoff")) {
+        setEmotion(EMOTION_IDLE);
+        soundPetSparkle();
+        speakText((sttLang == "hi") ? "Screen sync band kar diya!"
+                                    : "Screen sync paused!");
+        return true;
+      }
+    } else {
+      if (executeUnifiedLightAction("screensync")) {
+        showEmotionFor(EMOTION_HAPPY, 2000);
+        soundPetSparkle();
+        speakText((sttLang == "hi") ? "Screen sync chalu kar diya!"
+                                    : "Screen sync activated!");
+        return true;
       }
     }
   }
 
-  // 6. Status / Discover query
-  if (hasWord(q, {"status", "connected", "scan"}) || hasAny(q, {"kahan hai", "dhundo"})) {
-    if (discoverWled(true)) {
-      setEmotion(EMOTION_IDLE);
-      speakText("WLED light connected at " + getWledIp());
-      return true;
-    } else {
-      showEmotionFor(EMOTION_CONFUSED, 1800);
-      speakText("Mujhe network par WLED light nahi mili. Check karo ki light on hai!");
+  // HDR Mode Toggle
+  if (hasWord(q, {"hdr"})) {
+    bool enableHdr =
+        !(hasWord(q, {"off", "close"}) || hasAny(q, {"band", "turn off"}));
+    if (executeUnifiedLightAction(enableHdr ? "hdr on" : "hdr off")) {
+      soundPetSparkle();
+      speakText(enableHdr ? "HDR mode on kar diya!" : "HDR mode off kar diya!");
       return true;
     }
   }
 
-  return false;
-}
+  // 1. Turn OFF
+  if (hasWord(q, {"off", "close"}) ||
+      hasAny(q, {"band", "bujha", "turn off", "switch off", "close light",
+                 "बंद"})) {
+      if (executeUnifiedLightAction("off")) {
+        setEmotion(EMOTION_IDLE);
+        soundPetSparkle();
+        speakText((sttLang == "hi") ? "Light band kar di!"
+                                    : "Lights turned off!");
+        return true;
+      }
+    }
+
+    // 2. Turn ON
+    if (hasWord(q, {"on", "open"}) ||
+        hasAny(q, {"chalu", "turn on", "switch on", "jalao", "on kar",
+                   "open light", "चालू", "जलाओ"})) {
+        if (executeUnifiedLightAction("on")) {
+          setEmotion(EMOTION_IDLE);
+          soundPetSparkle();
+          speakText((sttLang == "hi") ? "Light on kar di!"
+                                      : "Lights turned on!");
+          return true;
+        }
+      }
+
+      // 3. Brightness presets
+      if (hasWord(q, {"dim", "low", "night", "slight"}) ||
+          hasAny(q, {"kam", "dheemi", "kam karo", "कम"})) {
+          if (executeUnifiedLightAction("dim")) {
+            setEmotion(EMOTION_IDLE);
+            soundPetSparkle();
+            speakText((sttLang == "hi") ? "Light dim kar di!"
+                                        : "Light dimmed!");
+            return true;
+          }
+        }
+        if (hasWord(q, {"bright", "full", "max", "increase"}) ||
+            hasAny(q, {"tez", "badhao", "poori", "puri", "तेज़"})) {
+            if (executeUnifiedLightAction("full")) {
+              setEmotion(EMOTION_IDLE);
+              soundPetSparkle();
+              speakText((sttLang == "hi") ? "Light full bright kar di!"
+                                          : "Lights set to full brightness!");
+              return true;
+            }
+          }
+          if (hasWord(q, {"medium", "half"}) ||
+              hasAny(q, {"aadhi", "adha", "आधी"})) {
+              if (executeUnifiedLightAction("medium")) {
+                setEmotion(EMOTION_IDLE);
+                soundPetSparkle();
+                speakText((sttLang == "hi")
+                              ? "Light 50 percent brightness kar di!"
+                              : "Light set to 50 percent brightness!");
+                return true;
+              }
+            }
+
+            // 4. Effects / Modes
+            // 4a. Next / Change Mode
+            if (hasAny(q, {"mode badlo",   "mode badal",    "effect badlo",
+                           "effect badal", "change mode",   "next mode",
+                           "switch mode",  "koi aur mode",  "aur koi mode",
+                           "dusra mode",   "doosra mode",   "agla mode",
+                           "next effect",  "aur effect",    "koi aur effect",
+                           "dusra effect", "doosra effect", "agla effect",
+                           "random mode",  "random effect", "kuch aur dikhao",
+                           "aur mode",     "mode change",   "effect change"})) {
+              if (isHyperHdrDiscovered()) {
+                setHyperHdrLedDevice(false);
+              }
+              if (setWledNextEffect()) {
+                showEmotionFor(EMOTION_PARTY, 2000);
+                soundPetSparkle();
+                speakText((sttLang == "hi") ? "Light ka agla mode laga diya!"
+                                            : "Switched to next light mode!");
+                return true;
+              }
+            }
+
+            // 4b. Find ANY named effect (from all 160+ WLED effects!)
+            String effectQuery = q;
+            if (hasAny(q, {"aag", "mombatti"}))
+              effectQuery += " fire candle";
+            if (hasAny(q, {"rang birang", "disco", "party"}))
+              effectQuery += " rainbow";
+            if (hasAny(q, {"jugnu", "taare", "tare"}))
+              effectQuery += " twinkle";
+            if (hasAny(q, {"samundar", "lahar", "pani"}))
+              effectQuery += " pacifica waves";
+            if (hasAny(q, {"bijli", "tufan"}))
+              effectQuery += " lightning";
+            if (hasAny(q, {"barish"}))
+              effectQuery += " rain";
+            if (hasAny(q, {"patakha", "diwali"}))
+              effectQuery += " fireworks";
+            if (hasAny(q, {"suraj", "subah", "dhoop"}))
+              effectQuery += " sunrise";
+            if (hasAny(q, {"dhadkan"}))
+              effectQuery += " heartbeat";
+            if (hasAny(q, {"bhoot"}))
+              effectQuery += " halloween eyes";
+            if (hasAny(q, {"siren"}))
+              effectQuery += " police";
+
+            String matchedFx = directFxName;
+            int fxId = (directFxId >= 0)
+                           ? directFxId
+                           : findWledEffectId(effectQuery, &matchedFx);
+            if (fxId >= 0) {
+              if (isHyperHdrDiscovered()) {
+                setHyperHdrLedDevice(false);
+              }
+              if (setWledEffectById(fxId, matchedFx)) {
+                showEmotionFor(EMOTION_PARTY, 2200);
+                soundPetSparkle();
+                String reply =
+                    (sttLang == "hi")
+                        ? "Light ka " + matchedFx + " mode laga diya!"
+                        : "Light set to " + matchedFx + " mode!";
+                speakText(reply);
+                return true;
+              }
+            }
+
+            // 5. Colors (Leaves brightness untouched!)
+            struct ColorMatch {
+              const char *names[5];
+              const char *action;
+              const char *hiReply;
+              const char *enReply;
+            } colors[] = {{{"red", "laal", nullptr},
+                           "red",
+                           "Light red kar di!",
+                           "Light set to red!"},
+                          {{"green", "hara", "haree", nullptr},
+                           "green",
+                           "Light green kar di!",
+                           "Light set to green!"},
+                          {{"blue", "neela", "neeli", nullptr},
+                           "blue",
+                           "Light blue kar di!",
+                           "Light set to blue!"},
+                          {{"yellow", "peela", "peeli", nullptr},
+                           "yellow",
+                           "Light yellow kar di!",
+                           "Light set to yellow!"},
+                          {{"pink", "gulabi", nullptr},
+                           "pink",
+                           "Light pink kar di!",
+                           "Light set to pink!"},
+                          {{"purple", "violet", "baingani", nullptr},
+                           "purple",
+                           "Light purple kar di!",
+                           "Light set to purple!"},
+                          {{"orange", "narangi", nullptr},
+                           "orange",
+                           "Light orange kar di!",
+                           "Light set to orange!"},
+                          {{"cyan", "aqua", "firozi", nullptr},
+                           "cyan",
+                           "Light cyan kar di!",
+                           "Light set to cyan!"},
+                          {{"white", "safed", nullptr},
+                           "white",
+                           "Light white kar di!",
+                           "Light set to white!"},
+                          {{"warm", "night", nullptr},
+                           "warm",
+                           "Warm light on kar di!",
+                           "Warm light activated!"},
+                          {{"cool", nullptr},
+                           "cool",
+                           "Cool white light on kar di!",
+                           "Cool white light activated!"},
+                          {{nullptr}, nullptr, nullptr, nullptr}};
+
+            for (int i = 0; colors[i].action != nullptr; i++) {
+              for (int k = 0; colors[i].names[k] != nullptr; k++) {
+                if (matchWord(q, colors[i].names[k])) {
+                    if (executeUnifiedLightAction(colors[i].action)) {
+                      setEmotion(EMOTION_IDLE);
+                      soundPetSparkle();
+                      speakText((sttLang == "hi") ? colors[i].hiReply
+                                                  : colors[i].enReply);
+                      return true;
+                    }
+                  }
+                }
+              }
+
+              // 6. Status / Discover query
+              if (hasWord(q, {"status", "connected", "scan"}) ||
+                  hasAny(q, {"kahan hai", "dhundo"})) {
+                  String reply = "";
+                  bool hhdrOk = discoverHyperHdr(true);
+                  bool wledOk = discoverWled(true);
+                  if (hhdrOk) {
+                    reply +=
+                        "HyperHDR is connected at " + getHyperHdrIp() + ". ";
+                  }
+                  if (wledOk) {
+                    reply += "WLED light is connected at " + getWledIp() + ".";
+                  }
+                  if (!hhdrOk && !wledOk) {
+                    reply =
+                        (sttLang == "hi")
+                            ? "Mujhe network par koi light ya HyperHDR nahi "
+                              "mila."
+                            : "No light or HyperHDR server found on network.";
+                    showEmotionFor(EMOTION_CONFUSED, 1800);
+                  } else {
+                    setEmotion(EMOTION_IDLE);
+                  }
+                  speakText(reply);
+                  return true;
+                }
+
+                return false;
+              }

@@ -6,11 +6,12 @@
 #include "core/Timing.h"
 #include "face/FaceEngine.h"
 #include "hardware/AudioEngine.h"
+#include "power/PowerManager.h"
 #include "services/AiService.h"
+#include "services/HyperHdrService.h"
 #include "services/MemoryService.h"
 #include "services/WeatherService.h"
 #include "services/WledService.h"
-#include "power/PowerManager.h"
 #include "web/icon.h"
 #include <DNSServer.h>
 #include <ESPmDNS.h>
@@ -19,6 +20,7 @@
 #include <WebServer.h>
 #include <WiFi.h>
 #include <time.h>
+
 
 WebServer server(80);
 DNSServer dnsServer;
@@ -167,14 +169,17 @@ void finalizeWifiConnected() {
   startNtpAsync();
   lastNtpTryAt = millis();
   lastWeatherFetchAt = 0;
-  Serial.printf("[WIFI] Connected! IP: %s\n", WiFi.localIP().toString().c_str());
+  Serial.printf("[WIFI] Connected! IP: %s\n",
+                WiFi.localIP().toString().c_str());
   discoverWledAsync();
+  discoverHyperHdrAsync();
 }
 
 void finalizeWifiOffline() {
   wifiConnecting = false;
   if (WiFi.status() != WL_CONNECTED && !apMode) {
-    Serial.println("[WIFI] Connect timed out or unavailable. Starting AP mode.");
+    Serial.println(
+        "[WIFI] Connect timed out or unavailable. Starting AP mode.");
     startAP();
     initOfflineBrain();
   }
@@ -204,7 +209,8 @@ void maintainWiFi() {
       }
     }
     static uint32_t lastWeatherAttempt = 0;
-    if (bootCompleted && (lastWeatherFetchAt == 0 ||
+    if (bootCompleted &&
+        (lastWeatherFetchAt == 0 ||
          millis() - lastWeatherFetchAt > 30UL * 60UL * 1000UL) &&
         (millis() - lastWeatherAttempt > 60000UL || lastWeatherAttempt == 0)) {
       if (millis() > 8000) {
@@ -400,7 +406,8 @@ void startWeb() {
           if (upload.status == UPLOAD_FILE_START) {
             otaInProgress = true;
             Serial.printf("[OTA] Update: %s\n", upload.filename.c_str());
-            if (server.hasHeader("Content-Length") && (size_t)server.header("Content-Length").toInt() > 0x1E0000UL) {
+            if (server.hasHeader("Content-Length") &&
+                (size_t)server.header("Content-Length").toInt() > 0x1E0000UL) {
               Serial.println("[OTA] Update rejected: upload size exceeds app "
                              "partition (1.9MB)");
               otaInProgress = false;

@@ -408,8 +408,8 @@ void loop() {
       showClockScreen = false;
       showWeatherScreen = false;
       startRecording = false;
-      setEmotion(EMOTION_HAPPY);
-      returnIdleAt = millis() + 1500;
+      setEmotion(EMOTION_IDLE);
+      returnIdleAt = 0;
       soundPetSparkle();
       resyncTouch();
       return;

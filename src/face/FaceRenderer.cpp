@@ -784,13 +784,24 @@ void drawFace(float soundLevel) {
   }
 
   if (currentEmotion == EMOTION_LISTENING) {
-    // Sleek, minimal voice spectrum pulse (5 micro-bars, undulating wave)
-    for (int i = 0; i < 5; i++) {
-      float phase = (i - 2) * 0.9f;
-      float wave = fabsf(sinf((float)(now % 100000UL) / 140.0f + phase));
-      int bh = 1 + iround(wave * (i == 2 ? 5 : (i == 1 || i == 3 ? 4 : 2)));
-      int bx = 56 + i * 4; // x = 56, 60, 64, 68, 72
-      display.fillRect(bx, 53 - bh, 2, bh * 2 + 1, SSD1306_WHITE);
+    // -----------------------------------------------------------------------
+    // MINIMAL & MODERN VOICE DOTS (Google / Siri / ChatGPT style):
+    // 4 smooth rounded glowing capsules centered at bottom (x=50, 58, 66, 74, y=53)
+    // Undulates in a calm, elegant wave; smoothly stretches taller with voice volume!
+    // -----------------------------------------------------------------------
+    const int centerY = 53;
+    float t = (float)(now % 100000UL) / 150.0f;
+    float liveSnd = clampf(soundLevel * 10.0f, 0.0f, 7.0f);
+
+    const int dotX[4] = {50, 58, 66, 74};
+    for (int i = 0; i < 4; i++) {
+      float phase = (float)i * 0.85f;
+      float wave = 0.5f + 0.5f * sinf(t * 3.6f - phase);
+      int dotH = 4 + iround(wave * (3.0f + liveSnd));
+      if (dotH > 14) dotH = 14;
+      int rx = dotX[i];
+      int ry = centerY - dotH / 2;
+      display.fillRoundRect(rx, ry, 4, dotH, 2, SSD1306_WHITE);
     }
   }
 

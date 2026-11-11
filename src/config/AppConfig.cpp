@@ -117,7 +117,7 @@ bool touchFeedbackSound = true; // Instant audio/visual feedback on touch
 // ---------- Touch Gesture Remapping ----------
 TouchAction touchActTopTap = TOUCH_ACT_LISTEN;
 TouchAction touchActTopDbl = TOUCH_ACT_NONE;
-TouchAction touchActTopHold = TOUCH_ACT_NONE;
+TouchAction touchActTopHold = TOUCH_ACT_CYCLE_SKIN;
 TouchAction touchActLeftTap = TOUCH_ACT_DISMISS;
 TouchAction touchActLeftDbl = TOUCH_ACT_CLOCK;
 TouchAction touchActRightTap = TOUCH_ACT_DISMISS;

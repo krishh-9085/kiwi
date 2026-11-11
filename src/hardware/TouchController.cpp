@@ -162,13 +162,15 @@ void executeTouchAction(TouchAction act, uint8_t pin) {
 
   if (animationIsActive()) {
     stopAnimation();
-    setEmotion(EMOTION_HAPPY);
+    setEmotion(EMOTION_IDLE);
+    returnIdleAt = 0;
     soundPetSparkle();
     return;
   }
   if (bannerActive) {
     bannerActive = false;
-    setEmotion(EMOTION_HAPPY);
+    setEmotion(EMOTION_IDLE);
+    returnIdleAt = 0;
     soundPetSparkle();
     return;
   }
@@ -176,8 +178,8 @@ void executeTouchAction(TouchAction act, uint8_t pin) {
   if (showClockScreen || showWeatherScreen) {
     showClockScreen = false;
     showWeatherScreen = false;
-    setEmotion(EMOTION_HAPPY);
-    returnIdleAt = now + 1500;
+    setEmotion(EMOTION_IDLE);
+    returnIdleAt = 0;
     soundPetSparkle();
     Serial.println("[TOUCH] Screen active (Clock/Weather) -> Dismissed by touch action!");
     return;
@@ -204,8 +206,8 @@ void executeTouchAction(TouchAction act, uint8_t pin) {
       if (showClockScreen || showWeatherScreen) {
         showClockScreen = false;
         showWeatherScreen = false;
-        setEmotion(EMOTION_HAPPY);
-        returnIdleAt = millis() + 1500;
+        setEmotion(EMOTION_IDLE);
+        returnIdleAt = 0;
         soundPetSparkle();
         Serial.println("[TOUCH] Action LISTEN intercepted -> Dismissed Clock/Weather Screen!");
         return;
@@ -239,7 +241,8 @@ void executeTouchAction(TouchAction act, uint8_t pin) {
         if (!timeSynced && WiFi.status() == WL_CONNECTED)
           syncTimeFromNTP();
       } else {
-        setEmotion(EMOTION_HAPPY);
+        setEmotion(EMOTION_IDLE);
+        returnIdleAt = 0;
       }
       break;
 
@@ -251,12 +254,16 @@ void executeTouchAction(TouchAction act, uint8_t pin) {
         if (millis() - lastWeatherFetchAt > 600000UL)
           fetchWeather();
       } else {
-        setEmotion(EMOTION_HAPPY);
+        setEmotion(EMOTION_IDLE);
+        returnIdleAt = 0;
       }
       break;
 
     case TOUCH_ACT_CYCLE_SKIN: {
       int nextSkin = ((int)currentEyeSkin + 1) % SKIN_COUNT;
+      if (nextSkin == (int)SKIN_DEFAULT) {
+        nextSkin = (int)SKIN_CYBERPUNK; // Skip duplicate Desk Buddy at 0, cycle to Cyberpunk
+      }
       currentEyeSkin = (EyeSkin)nextSkin;
       soundCoin();
       saveConfig();
@@ -364,8 +371,8 @@ static void updateOneTouch(TouchSensor &ts, uint32_t now) {
         ts.holdHandled = true;
         ts.sleepHandled = true;
         ts.pendingSingleTap = false;
-        setEmotion(EMOTION_HAPPY);
-        returnIdleAt = now + 1500;
+        setEmotion(EMOTION_IDLE);
+        returnIdleAt = 0;
         soundPetSparkle();
         updateTonePlayer();
         return;
@@ -412,12 +419,6 @@ static void updateOneTouch(TouchSensor &ts, uint32_t now) {
           ts.lastReleaseAt = now;
         }
       }
-
-      // Top Hold Action: executed on release if held >= 3s and not held until 7s sleep
-      if (ts.pin == PIN_TOUCH_TOP && ts.holdHandled && !ts.sleepHandled) {
-        Serial.printf("[TOUCH] Pin %d RELEASED after %lu ms -> Executing Top Hold action!\n", ts.pin, (unsigned long)held);
-        executeTouchAction(touchActTopHold, ts.pin);
-      }
     }
   }
   if (ts.state) {
@@ -446,15 +447,11 @@ static void updateOneTouch(TouchSensor &ts, uint32_t now) {
       executeTouchAction(touchActRightHold, ts.pin);
     }
 
-    // Hold 3s on Top -> Arm Top Hold Action (deferred to release so it doesn't collide with 7s sleep)
+    // Hold 3s on Top -> Instantly Change Face Skin (Cycle Face Theme)
     if (ts.pin == PIN_TOUCH_TOP && held >= TOUCH_CLOCK_MS && !ts.holdHandled && !ts.sleepHandled && !busyProcessing && !inCircadianSleep && !manualSleep && !sleepyFallAsleepIsActive()) {
       ts.holdHandled = true;
-      Serial.println("[TOUCH] Top Held 3s -> Threshold reached (release to apply, keep holding 7s for sleep)");
-      if (touchFeedbackSound) {
-        soundTouchBlip();
-        updateTonePlayer();
-      }
-      triggerTouchBlink(now);
+      Serial.println("[TOUCH] Top Held 3s -> Instant Skin Cycle!");
+      executeTouchAction(touchActTopHold, ts.pin);
     }
     // Hold 2s while asleep (or 7s while awake) on Top -> Sleep Mode Toggle!
     uint32_t sleepHoldRequired = (inCircadianSleep || manualSleep || sleepyFallAsleepIsActive()) ? 2000 : SLEEP_HOLD_MS;

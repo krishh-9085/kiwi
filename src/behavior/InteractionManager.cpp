@@ -418,12 +418,8 @@ void handleQuestion(const String &q) {
     if (streamSpk.anySpoken) {
       robotStateDesc = "Ready";
       addTerminalLog("[ROBOT] Turn completed. Ready.");
-      if (currentEmotion != EMOTION_SPEAKING && currentEmotion != EMOTION_IDLE) {
-        returnIdleAt = millis() + 2500;
-      } else {
-        setEmotion(EMOTION_IDLE);
-        returnIdleAt = 0;
-      }
+      setEmotion(EMOTION_IDLE);
+      returnIdleAt = 0;
       emotionAutoReturnAt = 0;
       return;
     }
@@ -431,8 +427,9 @@ void handleQuestion(const String &q) {
     if (lastActionsExecuted > 0) {
       robotStateDesc = "Ready";
       addTerminalLog("[ROBOT] Action completed.");
-      setEmotion(EMOTION_HAPPY);
-      returnIdleAt = millis() + 1500;
+      setEmotion(EMOTION_IDLE);
+      returnIdleAt = 0;
+      emotionAutoReturnAt = 0;
       return;
     }
     robotStateDesc = "LLM Empty / Error";
@@ -524,15 +521,9 @@ void handleQuestion(const String &q) {
       return;
     }
 
-    // If an expressive emotion was shown (e.g. excited, happy, laughing),
-    // hold that face for 2.5s after speaking, then auto-return to IDLE!
-    if (vocalEmotion != EMOTION_SPEAKING && vocalEmotion != EMOTION_IDLE) {
-      setEmotion(vocalEmotion);
-      returnIdleAt = millis() + 2500;
-    } else {
-      setEmotion(EMOTION_IDLE);
-      returnIdleAt = 0;
-    }
+    // Turn completed: return immediately to natural IDLE eye skin
+    setEmotion(EMOTION_IDLE);
+    returnIdleAt = 0;
   }
 
   robotStateDesc = "Ready";

@@ -146,8 +146,8 @@ bool handleTimeCommand(const String &qIn) {
     yield();
   }
   showClockScreen = false;
-  setEmotion(EMOTION_HAPPY);
-  returnIdleAt = millis() + 1500;
+  setEmotion(EMOTION_IDLE);
+  returnIdleAt = 0;
   return true;
 }
 
@@ -224,8 +224,8 @@ bool handleWeatherCommand(const String &qIn) {
     yield();
   }
   showWeatherScreen = false;
-  setEmotion(EMOTION_HAPPY);
-  returnIdleAt = millis() + 1500;
+  setEmotion(EMOTION_IDLE);
+  returnIdleAt = 0;
   return true;
 }
 
@@ -424,8 +424,8 @@ bool handleSkinCommand(const String &qIn) {
   } else {
     speakText("Theme set to " + name + "!");
   }
-  setEmotion(EMOTION_HAPPY);
-  returnIdleAt = millis() + 1500;
+  setEmotion(EMOTION_IDLE);
+  returnIdleAt = 0;
   return true;
 }
 
@@ -480,12 +480,12 @@ bool handleVolumeCommand(const String &qIn) {
     speakerVolume = targetVol;
     saveConfig();
     soundPetSparkle();
-    setEmotion(EMOTION_HAPPY);
     String reply = (sttLang == "hi" || q.indexOf("aawaz") >= 0 || q.indexOf("awaz") >= 0 || containsDevanagari(qIn))
                        ? "Aawaz " + String(speakerVolume) + " percent kar di!"
                        : "Volume set to " + String(speakerVolume) + " percent!";
     speakText(reply);
-    returnIdleAt = millis() + 1500;
+    setEmotion(EMOTION_IDLE);
+    returnIdleAt = 0;
     return true;
   }
   return false;
@@ -643,7 +643,7 @@ bool handleLightCommand(const String &qIn) {
   // 1. Turn OFF
   if (hasWord(q, {"off", "close"}) || hasAny(q, {"band", "bujha", "turn off", "switch off", "close light", "बंद"})) {
     if (executeWledAction("off")) {
-      showEmotionFor(EMOTION_HAPPY, 1800);
+      setEmotion(EMOTION_IDLE);
       soundPetSparkle();
       speakText((sttLang == "hi") ? "Light band kar di!" : "Lights turned off!");
       return true;
@@ -653,7 +653,7 @@ bool handleLightCommand(const String &qIn) {
   // 2. Turn ON
   if (hasWord(q, {"on", "open"}) || hasAny(q, {"chalu", "turn on", "switch on", "jalao", "on kar", "open light", "चालू", "जलाओ"})) {
     if (executeWledAction("on")) {
-      showEmotionFor(EMOTION_HAPPY, 1800);
+      setEmotion(EMOTION_IDLE);
       soundPetSparkle();
       speakText((sttLang == "hi") ? "Light on kar di!" : "Lights turned on!");
       return true;
@@ -663,7 +663,7 @@ bool handleLightCommand(const String &qIn) {
   // 3. Brightness presets
   if (hasWord(q, {"dim", "low", "night", "slight"}) || hasAny(q, {"kam", "dheemi", "kam karo", "कम"})) {
     if (executeWledAction("dim")) {
-      showEmotionFor(EMOTION_HAPPY, 1800);
+      setEmotion(EMOTION_IDLE);
       soundPetSparkle();
       speakText((sttLang == "hi") ? "Light dim kar di!" : "Light dimmed!");
       return true;
@@ -671,7 +671,7 @@ bool handleLightCommand(const String &qIn) {
   }
   if (hasWord(q, {"bright", "full", "max", "increase"}) || hasAny(q, {"tez", "badhao", "poori", "puri", "तेज़"})) {
     if (executeWledAction("full")) {
-      showEmotionFor(EMOTION_EXCITED, 1800);
+      setEmotion(EMOTION_IDLE);
       soundPetSparkle();
       speakText((sttLang == "hi") ? "Light full bright kar di!" : "Lights set to full brightness!");
       return true;
@@ -679,7 +679,7 @@ bool handleLightCommand(const String &qIn) {
   }
   if (hasWord(q, {"medium", "half"}) || hasAny(q, {"aadhi", "adha", "आधी"})) {
     if (executeWledAction("medium")) {
-      showEmotionFor(EMOTION_HAPPY, 1800);
+      setEmotion(EMOTION_IDLE);
       soundPetSparkle();
       speakText((sttLang == "hi") ? "Light 50 percent brightness kar di!" : "Light set to 50 percent brightness!");
       return true;
@@ -753,7 +753,7 @@ bool handleLightCommand(const String &qIn) {
     for (int k = 0; colors[i].names[k] != nullptr; k++) {
       if (matchWord(q, colors[i].names[k])) {
         if (executeWledAction(colors[i].action)) {
-          showEmotionFor(EMOTION_HAPPY, 1800);
+          setEmotion(EMOTION_IDLE);
           soundPetSparkle();
           speakText((sttLang == "hi") ? colors[i].hiReply : colors[i].enReply);
           return true;
@@ -765,7 +765,7 @@ bool handleLightCommand(const String &qIn) {
   // 6. Status / Discover query
   if (hasWord(q, {"status", "connected", "scan"}) || hasAny(q, {"kahan hai", "dhundo"})) {
     if (discoverWled(true)) {
-      showEmotionFor(EMOTION_HAPPY, 1800);
+      setEmotion(EMOTION_IDLE);
       speakText("WLED light connected at " + getWledIp());
       return true;
     } else {

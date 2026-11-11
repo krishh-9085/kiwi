@@ -335,10 +335,9 @@ void loadConfig() {
     touchActTopTap = TOUCH_ACT_LISTEN;
   }
   touchActTopDbl    = (TouchAction)prefs.getInt("act_top_dbl", (int)TOUCH_ACT_NONE);
-  touchActTopHold   = (TouchAction)prefs.getInt("act_top_hld", (int)TOUCH_ACT_NONE);
-  // Migrate from old default where top hold or double tap cycled skin unexpectedly
-  if (touchActTopHold == TOUCH_ACT_CYCLE_SKIN) {
-    touchActTopHold = TOUCH_ACT_NONE;
+  touchActTopHold   = (TouchAction)prefs.getInt("act_top_hld", (int)TOUCH_ACT_CYCLE_SKIN);
+  if (touchActTopHold >= TOUCH_ACT_NONE) {
+    touchActTopHold = TOUCH_ACT_CYCLE_SKIN;
   }
   if (touchActTopDbl == TOUCH_ACT_CYCLE_SKIN) {
     touchActTopDbl = TOUCH_ACT_NONE;

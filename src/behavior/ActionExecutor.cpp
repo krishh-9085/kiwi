@@ -56,8 +56,8 @@ void stopRobotTimerAlarm() {
     Serial.println("[TIMER] Alarm stopped by touch / command");
     addTerminalLog("[TIMER] Alarm stopped");
     soundPetSparkle();
-    setEmotion(EMOTION_HAPPY);
-    returnIdleAt = millis() + 2000;
+    setEmotion(EMOTION_IDLE);
+    returnIdleAt = 0;
   }
 }
 
@@ -70,8 +70,8 @@ void cancelRobotTimer() {
     Serial.println("[TIMER] Cancelled");
     addTerminalLog("[TIMER] Timer cancelled");
     soundPetSparkle();
-    setEmotion(EMOTION_HAPPY);
-    returnIdleAt = millis() + 1500;
+    setEmotion(EMOTION_IDLE);
+    returnIdleAt = 0;
   }
 }
 
@@ -90,8 +90,8 @@ void startRobotTimer(uint32_t seconds, const String &label) {
   soundPetSparkle();
 
   // Natural response without interrupting OLED face or error-beeping
-  setEmotion(EMOTION_HAPPY);
-  returnIdleAt = millis() + 2000;
+  setEmotion(EMOTION_IDLE);
+  returnIdleAt = 0;
 }
 
 void checkRobotTimer() {

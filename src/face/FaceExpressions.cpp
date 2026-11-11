@@ -80,7 +80,8 @@ void faceTargetsForEmotion(Emotion e, PetMood pm) {
     faceTgt.mouthCurve = 0.4f;
     break;
   case EMOTION_LISTENING:
-    setFace(32, 32, 30, 27, 6);
+    // Natural, focused eyes with glowing glint and clear mouth area for the voice dots
+    setFace(34, 30, 30, 28, 6);
     faceTgt.glint = 1;
     faceTgt.blush = 0.0f;
     faceTgt.mouthW = 0;

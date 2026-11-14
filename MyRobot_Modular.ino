@@ -32,6 +32,7 @@
 #include "behavior/CircadianEngine.h"
 #include "behavior/CommandHandler.h"
 #include "behavior/GreetingEngine.h"
+#include "behavior/HungerEngine.h"
 #include "behavior/InteractionManager.h"
 #include "behavior/OfflineBrain.h"
 #include "config/AppConfig.h"
@@ -116,6 +117,7 @@ void setup() {
   initTouch();
   resetBoredomInterval();
   initMemory();
+  initHungerEngine();
 
   Serial.printf("[LLM] %s / %s\n", llmProvider.c_str(),
                 llmProvider == "groq" ? groqModel.c_str() : llmModel.c_str());
@@ -364,6 +366,7 @@ void loop() {
   checkRobotTimer();
   updateOfflineBrain();
   checkAutonomousBoredom();
+  checkHungerBehavior();
   updateIdleVariety();
   soundLevelTick();
   tickFace();

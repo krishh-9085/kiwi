@@ -16,7 +16,6 @@
 #include "services/WledService.h"
 #include <WiFi.h>
 
-
 // ============================================================
 // COUNTDOWN TIMER STATE
 // ============================================================
@@ -208,104 +207,52 @@ bool setEyeSkinByName(const String &nameIn) {
   n.toLowerCase();
   n.trim();
 
-  if (n == "kiwi" || n == "buddy" || n == "desk buddy" || n == "deskbuddy" || n == "कीवी") {
+  // 1. Kiwi (Default / #1)
+  if (n == "kiwi" || n == "desk buddy" || n == "deskbuddy" || n == "buddy" ||
+      n == "default" || n == "cute" || n == "कीवी") {
     currentEyeSkin = SKIN_KIWI;
     return true;
   }
-  if (n == "vector" || n == "anki" || n == "default" || n == "normal" || n == "clean" ||
-      n == "reset" || n == "वेक्टर" || n == "डिफ़ॉल्ट" || n == "डिफॉल्ट") {
+  // 2. Vector Classic (#2)
+  if (n == "vector" || n == "vector classic" || n == "classic vector" ||
+      n == "anki" || n == "classic" || n == "glow" || n == "वेक्टर") {
     currentEyeSkin = SKIN_VECTOR;
     return true;
   }
-  if (n == "cyberpunk" || n == "cyber" || n == "hud" || n == "sci-fi" ||
-      n == "साइबरपंक" || n == "साइबर") {
-    currentEyeSkin = SKIN_CYBERPUNK;
+  // 3. Neon Capsule (from image)
+  if (n == "capsule" || n == "neon capsule" || n == "pill" || n == "stadium" ||
+      n == "neon" || n == "कैप्सूल") {
+    currentEyeSkin = SKIN_CAPSULE;
     return true;
   }
-  if (n == "cat" || n == "neko" || n == "kitty" || n == "billi" || n == "कैट" ||
-      n == "बिल्ली") {
-    currentEyeSkin = SKIN_CAT;
+  // 4. Pixel 8-Bit
+  if (n == "pixel" || n == "pixel 8-bit" || n == "arcade" || n == "retro" ||
+      n == "8bit" || n == "8-bit" || n == "पिक्सेल") {
+    currentEyeSkin = SKIN_PIXEL;
     return true;
   }
-  if (n == "retro8bit" || n == "retro" || n == "8bit" || n == "8-bit" ||
-      n == "pixel" || n == "रेट्रो") {
-    currentEyeSkin = SKIN_RETRO8BIT;
+  // 5. Squircle Bold
+  if (n == "squircle bold" || n == "squircle solid" || n == "bold" ||
+      n == "squircle" || n == "स्क्वार्कल") {
+    currentEyeSkin = SKIN_SQUIRCLE_BOLD;
     return true;
   }
-  if (n == "anime" || n == "star" || n == "starry" || n == "shounen" ||
-      n == "एनिमे" || n == "एनीमे") {
-    currentEyeSkin = SKIN_ANIME;
+  // 6. Neon Frame
+  if (n == "neon frame" || n == "squircle outline" || n == "frame" ||
+      n == "outline") {
+    currentEyeSkin = SKIN_NEON_FRAME;
     return true;
   }
-  if (n == "hearts" || n == "heart" || n == "dil" || n == "love" ||
-      n == "हार्ट" || n == "दिल") {
-    currentEyeSkin = SKIN_HEARTS;
+  // 7. Lumina Spark
+  if (n == "lumina spark" || n == "squircle glint" || n == "spark" ||
+      n == "lumina" || n == "glint") {
+    currentEyeSkin = SKIN_LUMINA_SPARK;
     return true;
   }
-  if (n == "steampunk" || n == "goggles" || n == "aviator" || n == "स्टीमपंक") {
-    currentEyeSkin = SKIN_STEAMPUNK;
-    return true;
-  }
-  if (n == "demon" || n == "devil" || n == "horns" || n == "shaitan" ||
-      n == "डेमन" || n == "शैतान") {
-    currentEyeSkin = SKIN_DEMON;
-    return true;
-  }
-  if (n == "matrix" || n == "code" || n == "hacker" || n == "terminal" ||
-      n == "मैट्रिक्स") {
-    currentEyeSkin = SKIN_MATRIX;
-    return true;
-  }
-  if (n == "cyborg" || n == "t800" || n == "t-800" || n == "terminator" ||
-      n == "साइबोर्ग") {
-    currentEyeSkin = SKIN_CYBORG;
-    return true;
-  }
-  if (n == "mecha" || n == "gundam" || n == "v-fin" || n == "मेका") {
-    currentEyeSkin = SKIN_MECHA;
-    return true;
-  }
-  if (n == "sunglasses" || n == "shades" || n == "cool" || n == "sunglass" ||
-      n == "boss" || n == "चश्मा") {
-    currentEyeSkin = SKIN_SUNGLASSES;
-    return true;
-  }
-  if (n == "puppy" || n == "dog" || n == "doggy" || n == "kutta" ||
-      n == "पपी" || n == "कुत्ता") {
-    currentEyeSkin = SKIN_PUPPY;
-    return true;
-  }
-  if (n == "hypno" || n == "spiral" || n == "vortex" || n == "dizzy" ||
-      n == "हिप्नो") {
-    currentEyeSkin = SKIN_HYPNO;
-    return true;
-  }
-  if (n == "alien" || n == "ufo" || n == "cosmic" || n == "एलियन") {
-    currentEyeSkin = SKIN_ALIEN;
-    return true;
-  }
-  if (n == "ninja" || n == "shinobi" || n == "naruto" || n == "निंजा") {
-    currentEyeSkin = SKIN_NINJA;
-    return true;
-  }
-  if (n == "round" || n == "circle" || n == "gol" || n == "गोल") {
-    currentEyeSkin = SKIN_ROUND;
-    return true;
-  }
-  if (n == "squircle_solid" || n == "squircle solid" || n == "squircle" ||
-      n == "स्क्वार्कल") {
-    currentEyeSkin = SKIN_SQUIRCLE_SOLID;
-    return true;
-  }
-  if (n == "squircle_outline" || n == "squircle outline") {
-    currentEyeSkin = SKIN_SQUIRCLE_OUTLINE;
-    return true;
-  }
-  if (n == "squircle_glint" || n == "squircle glint") {
-    currentEyeSkin = SKIN_SQUIRCLE_GLINT;
-    return true;
-  }
-  return false;
+
+  // Gracefully fallback to Kiwi for any unrecognized or retired theme name
+  currentEyeSkin = SKIN_KIWI;
+  return true;
 }
 
 void triggerSoundByName(const String &nameIn) {
@@ -484,68 +431,68 @@ bool executeRobotAction(const String &actionCmd) {
     return true;
   }
 
-      // 11. WLED & HYPERHDR SMART LIGHT CONTROL
-      if (actionType == "light" || actionType == "wled" ||
-          actionType == "lamp" || actionType == "ambilight" ||
-          actionType == "hyperhdr" || actionType == "screen_sync") {
-        if (executeUnifiedLightAction(param)) {
-          soundPetSparkle();
-          addTerminalLog("[ACTION] Light control: " + param);
-          return true;
-        }
-        return false;
-      }
-
-      // 10. SOUND FX
-      if (actionType == "sound" || actionType == "sfx") {
-        triggerSoundByName(param);
-        addTerminalLog("[ACTION] Played sound: " + param);
-        return true;
-      }
-
-      return false;
+  // 11. WLED & HYPERHDR SMART LIGHT CONTROL
+  if (actionType == "light" || actionType == "wled" || actionType == "lamp" ||
+      actionType == "ambilight" || actionType == "hyperhdr" ||
+      actionType == "screen_sync") {
+    if (executeUnifiedLightAction(param)) {
+      soundPetSparkle();
+      addTerminalLog("[ACTION] Light control: " + param);
+      return true;
     }
+    return false;
+  }
 
-    int lastActionsExecuted = 0;
+  // 10. SOUND FX
+  if (actionType == "sound" || actionType == "sfx") {
+    triggerSoundByName(param);
+    addTerminalLog("[ACTION] Played sound: " + param);
+    return true;
+  }
 
-    // ============================================================
-    // SCAN, EXECUTE AND STRIP [ACTION: ...] TAGS FROM LLM
-    // ============================================================
-    int parseAndExecuteActions(String & text) {
-      int actionCount = 0;
-      while (true) {
-        int start = -1;
-        for (int i = 0; i < (int)text.length(); i++) {
-          if (text[i] == '[') {
-            int k = i + 1;
-            while (k < (int)text.length() && text[k] == ' ')
-              k++;
-            if (k + 7 <= (int)text.length() &&
-                text.substring(k, k + 7).equalsIgnoreCase("action:")) {
-              start = i;
-              break;
-            }
-          }
-        }
-        if (start < 0)
+  return false;
+}
+
+int lastActionsExecuted = 0;
+
+// ============================================================
+// SCAN, EXECUTE AND STRIP [ACTION: ...] TAGS FROM LLM
+// ============================================================
+int parseAndExecuteActions(String &text) {
+  int actionCount = 0;
+  while (true) {
+    int start = -1;
+    for (int i = 0; i < (int)text.length(); i++) {
+      if (text[i] == '[') {
+        int k = i + 1;
+        while (k < (int)text.length() && text[k] == ' ')
+          k++;
+        if (k + 7 <= (int)text.length() &&
+            text.substring(k, k + 7).equalsIgnoreCase("action:")) {
+          start = i;
           break;
-        int end = text.indexOf(']', start);
-        if (end < 0)
-          break;
-
-        int colon = text.indexOf(':', start);
-        if (colon > start && colon < end) {
-          String actionCmd = text.substring(colon + 1, end);
-          actionCmd.trim();
-          if (actionCmd.length() > 0) {
-            if (executeRobotAction(actionCmd)) {
-              actionCount++;
-            }
-          }
         }
-        text.remove(start, (end - start) + 1);
       }
-      text.trim();
-      lastActionsExecuted = actionCount;
-      return actionCount;
     }
+    if (start < 0)
+      break;
+    int end = text.indexOf(']', start);
+    if (end < 0)
+      break;
+
+    int colon = text.indexOf(':', start);
+    if (colon > start && colon < end) {
+      String actionCmd = text.substring(colon + 1, end);
+      actionCmd.trim();
+      if (actionCmd.length() > 0) {
+        if (executeRobotAction(actionCmd)) {
+          actionCount++;
+        }
+      }
+    }
+    text.remove(start, (end - start) + 1);
+  }
+  text.trim();
+  lastActionsExecuted = actionCount;
+  return actionCount;
+}

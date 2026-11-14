@@ -12,20 +12,22 @@ struct SttCfg {
 };
 
 enum ToneShape : uint8_t {
-  SHAPE_SINE = 0,         // Pure sine wave (clean tone)
-  SHAPE_WARM_VOCAL = 1,   // Warm organic harmonics (voice / vowel formant style)
-  SHAPE_PURR = 2,         // Low purring motor with warm tremolo & flutter
-  SHAPE_CHIRP = 3,        // Bright expressive robot chirp (harmonic overtones)
-  SHAPE_WARBLE = 4        // Wall-E / R2-D2 expressive FM warble & robotic vocal
+  SHAPE_SINE = 0,       // Pure sine wave (clean tone)
+  SHAPE_WARM_VOCAL = 1, // Warm organic harmonics (voice / vowel formant style)
+  SHAPE_PURR = 2,       // Low purring motor with warm tremolo & flutter
+  SHAPE_CHIRP = 3,      // Bright expressive robot chirp (harmonic overtones)
+  SHAPE_WARBLE = 4      // Wall-E / R2-D2 expressive FM warble & robotic vocal
 };
 
 struct Tone {
-  float freq = 0.0f;       // Start frequency in Hz (0 = rest/pause)
-  int ms = 0;              // Duration in milliseconds
-  float endFreq = 0.0f;    // Target frequency (0 = keep constant; > 0 = smooth pitch glide)
-  uint8_t shape = 0;       // ToneShape timbre (SHAPE_SINE, SHAPE_WARM_VOCAL, etc.)
-  float vibDepth = 0.0f;   // Vibrato / FM modulation depth in Hz
-  float vibRate = 0.0f;    // Vibrato / FM modulation rate in Hz (e.g. 15.0f - 35.0f)
+  float freq = 0.0f; // Start frequency in Hz (0 = rest/pause)
+  int ms = 0;        // Duration in milliseconds
+  float endFreq =
+      0.0f; // Target frequency (0 = keep constant; > 0 = smooth pitch glide)
+  uint8_t shape = 0; // ToneShape timbre (SHAPE_SINE, SHAPE_WARM_VOCAL, etc.)
+  float vibDepth = 0.0f; // Vibrato / FM modulation depth in Hz
+  float vibRate =
+      0.0f; // Vibrato / FM modulation rate in Hz (e.g. 15.0f - 35.0f)
 };
 
 struct FaceState {
@@ -124,40 +126,25 @@ enum PetMood {
 };
 #define PET_MOOD_COUNT 10
 
-enum Flourish {
-  FL_NONE,
-  FL_HEART,
-  FL_SPARKLE,
-  FL_NOTE,
-  FL_MOON,
-  FL_STAR
-};
+enum Flourish { FL_NONE, FL_HEART, FL_SPARKLE, FL_NOTE, FL_MOON, FL_STAR };
 
 enum EyeSkin : uint8_t {
-  SKIN_DEFAULT = 0,
-  SKIN_CYBERPUNK = 1,
-  SKIN_CAT = 2,
-  SKIN_RETRO8BIT = 3,
-  SKIN_ANIME = 4,
-  SKIN_HEARTS = 5,
-  SKIN_STEAMPUNK = 6,
-  SKIN_DEMON = 7,
-  SKIN_MATRIX = 8,
-  SKIN_CYBORG = 9,
-  SKIN_MECHA = 10,
-  SKIN_SUNGLASSES = 11,
-  SKIN_PUPPY = 12,
-  SKIN_HYPNO = 13,
-  SKIN_ALIEN = 14,
-  SKIN_NINJA = 15,
-  SKIN_ROUND = 16,
-  SKIN_KIWI = 17,
-  SKIN_SQUIRCLE_SOLID = 18,
-  SKIN_SQUIRCLE_OUTLINE = 19,
-  SKIN_SQUIRCLE_GLINT = 20,
-  SKIN_VECTOR = 21
+  SKIN_KIWI = 0,          // Kiwi (Flagship Cute Desk Buddy) - Default #1
+  SKIN_VECTOR = 1,        // Vector Classic (#2)
+  SKIN_CAPSULE = 2,       // Neon Capsule (#3, new pill eye with glint)
+  SKIN_PIXEL = 3,         // Pixel 8-Bit (#4, arcade retro)
+  SKIN_SQUIRCLE_BOLD = 4, // Squircle Bold (#5, modern solid)
+  SKIN_NEON_FRAME = 5,    // Neon Frame (#6, outline frame)
+  SKIN_LUMINA_SPARK = 6   // Lumina Spark (#7, dual glint)
 };
-#define SKIN_COUNT 22
+#define SKIN_COUNT 7
+
+// Compatibility aliases
+#define SKIN_DEFAULT SKIN_KIWI
+#define SKIN_RETRO8BIT SKIN_PIXEL
+#define SKIN_SQUIRCLE_SOLID SKIN_SQUIRCLE_BOLD
+#define SKIN_SQUIRCLE_OUTLINE SKIN_NEON_FRAME
+#define SKIN_SQUIRCLE_GLINT SKIN_LUMINA_SPARK
 
 enum IdleEye : uint8_t {
   IE_NORMAL,

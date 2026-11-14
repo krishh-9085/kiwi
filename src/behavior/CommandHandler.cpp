@@ -1,5 +1,6 @@
 #include "behavior/CommandHandler.h"
 #include "behavior/ActionExecutor.h"
+#include "behavior/HungerEngine.h"
 #include "behavior/InteractionManager.h"
 #include "config/AppConfig.h"
 #include "config/ConfigManager.h"
@@ -10,6 +11,7 @@
 #include "services/AiService.h"
 #include "services/AiTextTools.h"
 #include "services/HyperHdrService.h"
+#include "services/MemoryService.h"
 #include "services/WeatherService.h"
 #include "services/WledService.h"
 #include "web/WebPortal.h"
@@ -408,87 +410,39 @@ bool handleSkinCommand(const String &qIn) {
   String name = "";
   EyeSkin targetSkin = currentEyeSkin;
 
-  if (hasWord(q, {"cyberpunk", "cyber", "hud", "sci-fi"}) ||
-      hasAny(q, {"साइबरपंक", "साइबर"})) {
-    targetSkin = SKIN_CYBERPUNK;
-    name = "Cyberpunk";
-  } else if (hasWord(q, {"desk buddy", "deskbuddy", "kiwi", "buddy"}) ||
-             hasAny(q, {"कीवी"})) {
+  if (hasWord(q, {"kiwi", "desk buddy", "deskbuddy", "buddy", "cute"}) ||
+      hasAny(q, {"कीवी"})) {
     targetSkin = SKIN_KIWI;
-    name = "Desk Buddy";
-  } else if (hasWord(q, {"vector", "anki", "default", "normal", "clean", "reset skin"}) ||
-             hasAny(q, {"वेक्टर", "डिफ़ॉल्ट", "डिफॉल्ट"})) {
+    name = "Kiwi";
+  } else if (hasWord(q, {"vector", "vector classic", "anki", "default",
+                         "classic", "glow"}) ||
+             hasAny(q, {"वेक्टर"})) {
     targetSkin = SKIN_VECTOR;
-    name = "Default Vector";
-  } else if (hasWord(q, {"cat", "neko", "billi", "kitty"}) ||
-             hasAny(q, {"कैट", "बिल्ली"})) {
-    targetSkin = SKIN_CAT;
-    name = "Cat";
-  } else if (hasWord(q, {"retro", "8bit", "8-bit", "pixel", "arcade"}) ||
-             hasAny(q, {"रेट्रो"})) {
-    targetSkin = SKIN_RETRO8BIT;
-    name = "Retro 8-Bit";
-  } else if (hasWord(q, {"anime", "shounen", "starry"}) ||
-             hasAny(q, {"एनिमे", "एनीमे"})) {
-    targetSkin = SKIN_ANIME;
-    name = "Anime";
-  } else if (hasWord(q, {"heart", "hearts"}) || hasAny(q, {"हार्ट", "दिल"})) {
-    targetSkin = SKIN_HEARTS;
-    name = "Hearts";
-  } else if (hasWord(q, {"steampunk", "goggles", "aviator"}) ||
-             hasAny(q, {"स्टीमपंक"})) {
-    targetSkin = SKIN_STEAMPUNK;
-    name = "Steampunk";
-  } else if (hasWord(q, {"demon", "devil", "horns"}) ||
-             hasAny(q, {"shaitan", "डेमन", "शैतान"})) {
-    targetSkin = SKIN_DEMON;
-    name = "Demon";
-  } else if (hasWord(q, {"matrix", "terminal", "hacker"}) ||
-             hasAny(q, {"मैट्रिक्स"})) {
-    targetSkin = SKIN_MATRIX;
-    name = "Matrix";
-  } else if (hasWord(q, {"cyborg", "terminator", "t800", "t-800"}) ||
-             hasAny(q, {"साइबोर्ग"})) {
-    targetSkin = SKIN_CYBORG;
-    name = "Cyborg";
-  } else if (hasWord(q, {"mecha", "gundam", "robot eyes", "v-fin"}) ||
-             hasAny(q, {"मेका"})) {
-    targetSkin = SKIN_MECHA;
-    name = "Mecha";
-  } else if (hasWord(q, {"sunglass", "sunglasses", "shades", "thug life"}) ||
-             hasAny(q, {"काला चश्मा"})) {
-    targetSkin = SKIN_SUNGLASSES;
-    name = "Sunglasses";
-  } else if (hasWord(q, {"puppy", "dog", "doggy", "kutta"}) ||
-             hasAny(q, {"पपी", "कुत्ता"})) {
-    targetSkin = SKIN_PUPPY;
-    name = "Puppy";
-  } else if (hasWord(q, {"hypno", "spiral", "vortex", "dizzy"}) ||
-             hasAny(q, {"हिप्नो"})) {
-    targetSkin = SKIN_HYPNO;
-    name = "Hypno";
-  } else if (hasWord(q, {"alien", "ufo", "cosmic", "galaxy"}) ||
-             hasAny(q, {"एलियन"})) {
-    targetSkin = SKIN_ALIEN;
-    name = "Alien";
-  } else if (hasWord(q, {"ninja", "shinobi", "naruto", "headband"}) ||
-             hasAny(q, {"निंजा"})) {
-    targetSkin = SKIN_NINJA;
-    name = "Ninja";
-  } else if (hasWord(q, {"round", "circle", "gol", "rounded"}) ||
-             hasAny(q, {"गोल"})) {
-    targetSkin = SKIN_ROUND;
-    name = "Round";
-  } else if (hasAny(q, {"squircle outline", "outline squircle"})) {
-    targetSkin = SKIN_SQUIRCLE_OUTLINE;
-    name = "Squircle Outline";
-  } else if (hasAny(q, {"squircle glint", "glint squircle"})) {
-    targetSkin = SKIN_SQUIRCLE_GLINT;
-    name = "Squircle Glint";
-  } else if (hasWord(q, {"squircle"}) ||
-             hasAny(q, {"squircle solid", "स्क्वार्कल"})) {
-    targetSkin = SKIN_SQUIRCLE_SOLID;
-    name = "Squircle Solid";
+    name = "Vector Classic";
+  } else if (hasWord(q,
+                     {"capsule", "neon capsule", "pill", "stadium", "neon"}) ||
+             hasAny(q, {"कैप्सूल"})) {
+    targetSkin = SKIN_CAPSULE;
+    name = "Neon Capsule";
+  } else if (hasWord(q, {"pixel", "pixel 8-bit", "arcade", "retro", "8bit",
+                         "8-bit"}) ||
+             hasAny(q, {"रेट्रो", "पिक्सेल"})) {
+    targetSkin = SKIN_PIXEL;
+    name = "Pixel 8-Bit";
+  } else if (hasAny(q, {"squircle bold", "squircle solid", "bold"})) {
+    targetSkin = SKIN_SQUIRCLE_BOLD;
+    name = "Squircle Bold";
+  } else if (hasAny(q,
+                    {"neon frame", "squircle outline", "frame", "outline"})) {
+    targetSkin = SKIN_NEON_FRAME;
+    name = "Neon Frame";
+  } else if (hasAny(q, {"lumina spark", "squircle glint", "spark", "lumina",
+                        "glint"})) {
+    targetSkin = SKIN_LUMINA_SPARK;
+    name = "Lumina Spark";
+  } else if (hasWord(q, {"squircle"}) || hasAny(q, {"स्क्वार्कल"})) {
+    targetSkin = SKIN_SQUIRCLE_BOLD;
+    name = "Squircle Bold";
   }
 
   if (name.length() == 0)
@@ -761,7 +715,8 @@ bool handleLightCommand(const String &qIn) {
       hasAny(q, {"screen sync", "pc sync", "screen light", "monitor light"});
   bool hasLightTrigger =
       hasWord(q, {"light", "lights", "bulb", "lamp", "wled", "brightness"}) ||
-  hasAny(q, {"batti", "roshni", "बत्ती", "रोशनी", "लाइट"}) || hasScreenTrigger;
+      hasAny(q, {"batti", "roshni", "बत्ती", "रोशनी", "लाइट"}) ||
+      hasScreenTrigger;
   int directFxId = -1;
   String directFxName = "";
 
@@ -814,220 +769,252 @@ bool handleLightCommand(const String &qIn) {
   if (hasWord(q, {"off", "close"}) ||
       hasAny(q, {"band", "bujha", "turn off", "switch off", "close light",
                  "बंद"})) {
-      if (executeUnifiedLightAction("off")) {
-        setEmotion(EMOTION_IDLE);
-        soundPetSparkle();
-        speakText((sttLang == "hi") ? "Light band kar di!"
-                                    : "Lights turned off!");
-        return true;
-      }
+    if (executeUnifiedLightAction("off")) {
+      setEmotion(EMOTION_IDLE);
+      soundPetSparkle();
+      speakText((sttLang == "hi") ? "Light band kar di!"
+                                  : "Lights turned off!");
+      return true;
     }
+  }
 
-    // 2. Turn ON
-    if (hasWord(q, {"on", "open"}) ||
-        hasAny(q, {"chalu", "turn on", "switch on", "jalao", "on kar",
-                   "open light", "चालू", "जलाओ"})) {
-        if (executeUnifiedLightAction("on")) {
+  // 2. Turn ON
+  if (hasWord(q, {"on", "open"}) ||
+      hasAny(q, {"chalu", "turn on", "switch on", "jalao", "on kar",
+                 "open light", "चालू", "जलाओ"})) {
+    if (executeUnifiedLightAction("on")) {
+      setEmotion(EMOTION_IDLE);
+      soundPetSparkle();
+      speakText((sttLang == "hi") ? "Light on kar di!" : "Lights turned on!");
+      return true;
+    }
+  }
+
+  // 3. Brightness presets
+  if (hasWord(q, {"dim", "low", "night", "slight"}) ||
+      hasAny(q, {"kam", "dheemi", "kam karo", "कम"})) {
+    if (executeUnifiedLightAction("dim")) {
+      setEmotion(EMOTION_IDLE);
+      soundPetSparkle();
+      speakText((sttLang == "hi") ? "Light dim kar di!" : "Light dimmed!");
+      return true;
+    }
+  }
+  if (hasWord(q, {"bright", "full", "max", "increase"}) ||
+      hasAny(q, {"tez", "badhao", "poori", "puri", "तेज़"})) {
+    if (executeUnifiedLightAction("full")) {
+      setEmotion(EMOTION_IDLE);
+      soundPetSparkle();
+      speakText((sttLang == "hi") ? "Light full bright kar di!"
+                                  : "Lights set to full brightness!");
+      return true;
+    }
+  }
+  if (hasWord(q, {"medium", "half"}) || hasAny(q, {"aadhi", "adha", "आधी"})) {
+    if (executeUnifiedLightAction("medium")) {
+      setEmotion(EMOTION_IDLE);
+      soundPetSparkle();
+      speakText((sttLang == "hi") ? "Light 50 percent brightness kar di!"
+                                  : "Light set to 50 percent brightness!");
+      return true;
+    }
+  }
+
+  // 4. Effects / Modes
+  // 4a. Next / Change Mode
+  if (hasAny(q, {"mode badlo",   "mode badal",    "effect badlo",
+                 "effect badal", "change mode",   "next mode",
+                 "switch mode",  "koi aur mode",  "aur koi mode",
+                 "dusra mode",   "doosra mode",   "agla mode",
+                 "next effect",  "aur effect",    "koi aur effect",
+                 "dusra effect", "doosra effect", "agla effect",
+                 "random mode",  "random effect", "kuch aur dikhao",
+                 "aur mode",     "mode change",   "effect change"})) {
+    if (isHyperHdrDiscovered()) {
+      setHyperHdrLedDevice(false);
+    }
+    if (setWledNextEffect()) {
+      showEmotionFor(EMOTION_PARTY, 2000);
+      soundPetSparkle();
+      speakText((sttLang == "hi") ? "Light ka agla mode laga diya!"
+                                  : "Switched to next light mode!");
+      return true;
+    }
+  }
+
+  // 4b. Find ANY named effect (from all 160+ WLED effects!)
+  String effectQuery = q;
+  if (hasAny(q, {"aag", "mombatti"}))
+    effectQuery += " fire candle";
+  if (hasAny(q, {"rang birang", "disco", "party"}))
+    effectQuery += " rainbow";
+  if (hasAny(q, {"jugnu", "taare", "tare"}))
+    effectQuery += " twinkle";
+  if (hasAny(q, {"samundar", "lahar", "pani"}))
+    effectQuery += " pacifica waves";
+  if (hasAny(q, {"bijli", "tufan"}))
+    effectQuery += " lightning";
+  if (hasAny(q, {"barish"}))
+    effectQuery += " rain";
+  if (hasAny(q, {"patakha", "diwali"}))
+    effectQuery += " fireworks";
+  if (hasAny(q, {"suraj", "subah", "dhoop"}))
+    effectQuery += " sunrise";
+  if (hasAny(q, {"dhadkan"}))
+    effectQuery += " heartbeat";
+  if (hasAny(q, {"bhoot"}))
+    effectQuery += " halloween eyes";
+  if (hasAny(q, {"siren"}))
+    effectQuery += " police";
+
+  String matchedFx = directFxName;
+  int fxId = (directFxId >= 0) ? directFxId
+                               : findWledEffectId(effectQuery, &matchedFx);
+  if (fxId >= 0) {
+    if (isHyperHdrDiscovered()) {
+      setHyperHdrLedDevice(false);
+    }
+    if (setWledEffectById(fxId, matchedFx)) {
+      showEmotionFor(EMOTION_PARTY, 2200);
+      soundPetSparkle();
+      String reply = (sttLang == "hi")
+                         ? "Light ka " + matchedFx + " mode laga diya!"
+                         : "Light set to " + matchedFx + " mode!";
+      speakText(reply);
+      return true;
+    }
+  }
+
+  // 5. Colors (Leaves brightness untouched!)
+  struct ColorMatch {
+    const char *names[5];
+    const char *action;
+    const char *hiReply;
+    const char *enReply;
+  } colors[] = {{{"red", "laal", nullptr},
+                 "red",
+                 "Light red kar di!",
+                 "Light set to red!"},
+                {{"green", "hara", "haree", nullptr},
+                 "green",
+                 "Light green kar di!",
+                 "Light set to green!"},
+                {{"blue", "neela", "neeli", nullptr},
+                 "blue",
+                 "Light blue kar di!",
+                 "Light set to blue!"},
+                {{"yellow", "peela", "peeli", nullptr},
+                 "yellow",
+                 "Light yellow kar di!",
+                 "Light set to yellow!"},
+                {{"pink", "gulabi", nullptr},
+                 "pink",
+                 "Light pink kar di!",
+                 "Light set to pink!"},
+                {{"purple", "violet", "baingani", nullptr},
+                 "purple",
+                 "Light purple kar di!",
+                 "Light set to purple!"},
+                {{"orange", "narangi", nullptr},
+                 "orange",
+                 "Light orange kar di!",
+                 "Light set to orange!"},
+                {{"cyan", "aqua", "firozi", nullptr},
+                 "cyan",
+                 "Light cyan kar di!",
+                 "Light set to cyan!"},
+                {{"white", "safed", nullptr},
+                 "white",
+                 "Light white kar di!",
+                 "Light set to white!"},
+                {{"warm", "night", nullptr},
+                 "warm",
+                 "Warm light on kar di!",
+                 "Warm light activated!"},
+                {{"cool", nullptr},
+                 "cool",
+                 "Cool white light on kar di!",
+                 "Cool white light activated!"},
+                {{nullptr}, nullptr, nullptr, nullptr}};
+
+  for (int i = 0; colors[i].action != nullptr; i++) {
+    for (int k = 0; colors[i].names[k] != nullptr; k++) {
+      if (matchWord(q, colors[i].names[k])) {
+        if (executeUnifiedLightAction(colors[i].action)) {
           setEmotion(EMOTION_IDLE);
           soundPetSparkle();
-          speakText((sttLang == "hi") ? "Light on kar di!"
-                                      : "Lights turned on!");
+          speakText((sttLang == "hi") ? colors[i].hiReply : colors[i].enReply);
           return true;
         }
       }
+    }
+  }
 
-      // 3. Brightness presets
-      if (hasWord(q, {"dim", "low", "night", "slight"}) ||
-          hasAny(q, {"kam", "dheemi", "kam karo", "कम"})) {
-          if (executeUnifiedLightAction("dim")) {
-            setEmotion(EMOTION_IDLE);
-            soundPetSparkle();
-            speakText((sttLang == "hi") ? "Light dim kar di!"
-                                        : "Light dimmed!");
-            return true;
-          }
-        }
-        if (hasWord(q, {"bright", "full", "max", "increase"}) ||
-            hasAny(q, {"tez", "badhao", "poori", "puri", "तेज़"})) {
-            if (executeUnifiedLightAction("full")) {
-              setEmotion(EMOTION_IDLE);
-              soundPetSparkle();
-              speakText((sttLang == "hi") ? "Light full bright kar di!"
-                                          : "Lights set to full brightness!");
-              return true;
-            }
-          }
-          if (hasWord(q, {"medium", "half"}) ||
-              hasAny(q, {"aadhi", "adha", "आधी"})) {
-              if (executeUnifiedLightAction("medium")) {
-                setEmotion(EMOTION_IDLE);
-                soundPetSparkle();
-                speakText((sttLang == "hi")
-                              ? "Light 50 percent brightness kar di!"
-                              : "Light set to 50 percent brightness!");
-                return true;
-              }
-            }
+  // 6. Status / Discover query
+  if (hasWord(q, {"status", "connected", "scan"}) ||
+      hasAny(q, {"kahan hai", "dhundo"})) {
+    String reply = "";
+    bool hhdrOk = discoverHyperHdr(true);
+    bool wledOk = discoverWled(true);
+    if (hhdrOk) {
+      reply += "HyperHDR is connected at " + getHyperHdrIp() + ". ";
+    }
+    if (wledOk) {
+      reply += "WLED light is connected at " + getWledIp() + ".";
+    }
+    if (!hhdrOk && !wledOk) {
+      reply = (sttLang == "hi")
+                  ? "Mujhe network par koi light ya HyperHDR nahi "
+                    "mila."
+                  : "No light or HyperHDR server found on network.";
+      showEmotionFor(EMOTION_CONFUSED, 1800);
+    } else {
+      setEmotion(EMOTION_IDLE);
+    }
+    speakText(reply);
+    return true;
+  }
 
-            // 4. Effects / Modes
-            // 4a. Next / Change Mode
-            if (hasAny(q, {"mode badlo",   "mode badal",    "effect badlo",
-                           "effect badal", "change mode",   "next mode",
-                           "switch mode",  "koi aur mode",  "aur koi mode",
-                           "dusra mode",   "doosra mode",   "agla mode",
-                           "next effect",  "aur effect",    "koi aur effect",
-                           "dusra effect", "doosra effect", "agla effect",
-                           "random mode",  "random effect", "kuch aur dikhao",
-                           "aur mode",     "mode change",   "effect change"})) {
-              if (isHyperHdrDiscovered()) {
-                setHyperHdrLedDevice(false);
-              }
-              if (setWledNextEffect()) {
-                showEmotionFor(EMOTION_PARTY, 2000);
-                soundPetSparkle();
-                speakText((sttLang == "hi") ? "Light ka agla mode laga diya!"
-                                            : "Switched to next light mode!");
-                return true;
-              }
-            }
+  return false;
+}
 
-            // 4b. Find ANY named effect (from all 160+ WLED effects!)
-            String effectQuery = q;
-            if (hasAny(q, {"aag", "mombatti"}))
-              effectQuery += " fire candle";
-            if (hasAny(q, {"rang birang", "disco", "party"}))
-              effectQuery += " rainbow";
-            if (hasAny(q, {"jugnu", "taare", "tare"}))
-              effectQuery += " twinkle";
-            if (hasAny(q, {"samundar", "lahar", "pani"}))
-              effectQuery += " pacifica waves";
-            if (hasAny(q, {"bijli", "tufan"}))
-              effectQuery += " lightning";
-            if (hasAny(q, {"barish"}))
-              effectQuery += " rain";
-            if (hasAny(q, {"patakha", "diwali"}))
-              effectQuery += " fireworks";
-            if (hasAny(q, {"suraj", "subah", "dhoop"}))
-              effectQuery += " sunrise";
-            if (hasAny(q, {"dhadkan"}))
-              effectQuery += " heartbeat";
-            if (hasAny(q, {"bhoot"}))
-              effectQuery += " halloween eyes";
-            if (hasAny(q, {"siren"}))
-              effectQuery += " police";
+// ============================================================
+// COMMAND: HUNGER & PET FEEDING / APOLOGY
+// ============================================================
+bool handleHungerCommand(const String &qIn) {
+  String q = qIn;
+  q.toLowerCase();
 
-            String matchedFx = directFxName;
-            int fxId = (directFxId >= 0)
-                           ? directFxId
-                           : findWledEffectId(effectQuery, &matchedFx);
-            if (fxId >= 0) {
-              if (isHyperHdrDiscovered()) {
-                setHyperHdrLedDevice(false);
-              }
-              if (setWledEffectById(fxId, matchedFx)) {
-                showEmotionFor(EMOTION_PARTY, 2200);
-                soundPetSparkle();
-                String reply =
-                    (sttLang == "hi")
-                        ? "Light ka " + matchedFx + " mode laga diya!"
-                        : "Light set to " + matchedFx + " mode!";
-                speakText(reply);
-                return true;
-              }
-            }
+  if (hasAny(q,
+             {"khana khao", "khana kha lo", "kuch khao", "feed kiwi",
+              "khana khila", "pet bhar lo", "kuch khale", "bhook lagi hai"})) {
+    if (isKiwiHungry()) {
+      feedKiwi();
+      return true;
+    } else if (isKiwiAngry()) {
+      handleAngryFeedAttempt();
+      return true;
+    } else {
+      String n = getOwnerName();
+      if (n.length() == 0)
+        n = "Krishna";
+      speakText("Mera pet pehle se bhara hua hai " + n + "!");
+      setEmotion(EMOTION_HAPPY);
+      return true;
+    }
+  }
 
-            // 5. Colors (Leaves brightness untouched!)
-            struct ColorMatch {
-              const char *names[5];
-              const char *action;
-              const char *hiReply;
-              const char *enReply;
-            } colors[] = {{{"red", "laal", nullptr},
-                           "red",
-                           "Light red kar di!",
-                           "Light set to red!"},
-                          {{"green", "hara", "haree", nullptr},
-                           "green",
-                           "Light green kar di!",
-                           "Light set to green!"},
-                          {{"blue", "neela", "neeli", nullptr},
-                           "blue",
-                           "Light blue kar di!",
-                           "Light set to blue!"},
-                          {{"yellow", "peela", "peeli", nullptr},
-                           "yellow",
-                           "Light yellow kar di!",
-                           "Light set to yellow!"},
-                          {{"pink", "gulabi", nullptr},
-                           "pink",
-                           "Light pink kar di!",
-                           "Light set to pink!"},
-                          {{"purple", "violet", "baingani", nullptr},
-                           "purple",
-                           "Light purple kar di!",
-                           "Light set to purple!"},
-                          {{"orange", "narangi", nullptr},
-                           "orange",
-                           "Light orange kar di!",
-                           "Light set to orange!"},
-                          {{"cyan", "aqua", "firozi", nullptr},
-                           "cyan",
-                           "Light cyan kar di!",
-                           "Light set to cyan!"},
-                          {{"white", "safed", nullptr},
-                           "white",
-                           "Light white kar di!",
-                           "Light set to white!"},
-                          {{"warm", "night", nullptr},
-                           "warm",
-                           "Warm light on kar di!",
-                           "Warm light activated!"},
-                          {{"cool", nullptr},
-                           "cool",
-                           "Cool white light on kar di!",
-                           "Cool white light activated!"},
-                          {{nullptr}, nullptr, nullptr, nullptr}};
+  if (hasAny(q, {"maaf kardo", "maaf kar do", "sorry kiwi", "maan jao",
+                 "man jao", "gussa mat ho", "gussa thook do"})) {
+    if (isKiwiAngry()) {
+      reconcileKiwi();
+      return true;
+    } else {
+      speakText("Arey main to gussa hoon hi nahi!");
+      setEmotion(EMOTION_HAPPY);
+      return true;
+    }
+  }
 
-            for (int i = 0; colors[i].action != nullptr; i++) {
-              for (int k = 0; colors[i].names[k] != nullptr; k++) {
-                if (matchWord(q, colors[i].names[k])) {
-                    if (executeUnifiedLightAction(colors[i].action)) {
-                      setEmotion(EMOTION_IDLE);
-                      soundPetSparkle();
-                      speakText((sttLang == "hi") ? colors[i].hiReply
-                                                  : colors[i].enReply);
-                      return true;
-                    }
-                  }
-                }
-              }
-
-              // 6. Status / Discover query
-              if (hasWord(q, {"status", "connected", "scan"}) ||
-                  hasAny(q, {"kahan hai", "dhundo"})) {
-                  String reply = "";
-                  bool hhdrOk = discoverHyperHdr(true);
-                  bool wledOk = discoverWled(true);
-                  if (hhdrOk) {
-                    reply +=
-                        "HyperHDR is connected at " + getHyperHdrIp() + ". ";
-                  }
-                  if (wledOk) {
-                    reply += "WLED light is connected at " + getWledIp() + ".";
-                  }
-                  if (!hhdrOk && !wledOk) {
-                    reply =
-                        (sttLang == "hi")
-                            ? "Mujhe network par koi light ya HyperHDR nahi "
-                              "mila."
-                            : "No light or HyperHDR server found on network.";
-                    showEmotionFor(EMOTION_CONFUSED, 1800);
-                  } else {
-                    setEmotion(EMOTION_IDLE);
-                  }
-                  speakText(reply);
-                  return true;
-                }
-
-                return false;
-              }
+  return false;
+}

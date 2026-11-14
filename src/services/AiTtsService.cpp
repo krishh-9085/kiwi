@@ -135,8 +135,8 @@ int ttsSarvam(const String &text) {
 
   WiFiClientSecure client;
   client.setInsecure();
-  client.setTimeout(6000);
-  client.setHandshakeTimeout(6);
+  client.setTimeout(8000);
+  client.setHandshakeTimeout(8);
   if (!tlsConnect(client, host, "TTS")) {
     client.stop();
     restoreWebAndAP(apWasUp);
@@ -456,8 +456,8 @@ int ttsPcmOpenAI(const String &text) {
 
   WiFiClientSecure client;
   client.setInsecure();
-  client.setTimeout(6000);
-  client.setHandshakeTimeout(6);
+  client.setTimeout(15000);
+  client.setHandshakeTimeout(12);
   if (!tlsConnect(client, host, "TTS")) {
     client.stop();
     restoreWebAndAP(apWasUp);
@@ -644,8 +644,8 @@ int ttsPcmEleven(const String &text) {
 
   WiFiClientSecure client;
   client.setInsecure();
-  client.setTimeout(6000);
-  client.setHandshakeTimeout(6);
+  client.setTimeout(15000);
+  client.setHandshakeTimeout(12);
   if (!tlsConnect(client, host, "TTS")) {
     client.stop();
     restoreWebAndAP(apWasUp);
@@ -802,8 +802,8 @@ int ttsFishAudio(const String &text) {
 
   WiFiClientSecure client;
   client.setInsecure();
-  client.setTimeout(6000);
-  client.setHandshakeTimeout(6);
+  client.setTimeout(15000);
+  client.setHandshakeTimeout(12);
   if (!tlsConnect(client, host, "TTS/FishAudio")) {
     client.stop();
     restoreWebAndAP(apWasUp);

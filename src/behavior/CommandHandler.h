@@ -12,3 +12,4 @@ bool handleSkinCommand(const String &qIn);
 bool handleVolumeCommand(const String &qIn);
 bool handleTimerCommand(const String &qIn);
 bool handleLightCommand(const String &qIn);
+bool handleHungerCommand(const String &qIn);

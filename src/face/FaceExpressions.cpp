@@ -1,4 +1,5 @@
 #include "face/FaceExpressions.h"
+#include "behavior/HungerEngine.h"
 #include "behavior/InteractionManager.h"
 #include "config/AppConfig.h"
 #include "core/Timing.h"
@@ -389,6 +390,12 @@ void faceTargetsForEmotion(Emotion e, PetMood pm) {
 void maybeChangeEmotion() {
   if (showClockScreen || showWeatherScreen || bannerActive)
     return;
+  if (isKiwiAngry()) {
+    if (currentEmotion != EMOTION_ANGRY) {
+      setEmotion(EMOTION_ANGRY);
+    }
+    return;
+  }
   uint32_t now = millis();
   if (errorFaceUntil && now < errorFaceUntil)
     return;

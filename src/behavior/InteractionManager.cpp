@@ -366,6 +366,8 @@ void handleQuestion(const String &q) {
     return;
   if (handleLightCommand(q))
     return;
+  if (handleHungerCommand(q))
+    return;
   if (hasAny(q, {"new topic", "naya topic", "naya sawal", "reset chat",
                  "clear memory", "bhool jao", "forget that",
                  "forget everything"})) {
@@ -500,6 +502,7 @@ void handleQuestion(const String &q) {
       }
     }
 #else
+    cancelRequest = false;
     bool ok = speakText(answer);
     if (cancelRequest)
       return;

@@ -1,5 +1,6 @@
 #include "animation/AnimationEngine.h"
 #include "behavior/ActionExecutor.h"
+#include "behavior/HungerEngine.h"
 #include "config/AppConfig.h"
 #include "config/ConfigManager.h"
 #include "face/FaceDisplay.h"
@@ -74,6 +75,28 @@ void handleDoAction() {
   if (server.hasArg("clearlog")) {
     clearTerminalLog();
     server.send(200, "application/json", "{\"ok\":true,\"cleared\":true}");
+    return;
+  }
+
+  // Hunger & Mood System Triggers
+  if (server.hasArg("hunger")) {
+    String mArg = server.arg("hunger");
+    MealType m = MEAL_GENERIC;
+    if (mArg == "breakfast") m = MEAL_BREAKFAST;
+    else if (mArg == "lunch") m = MEAL_LUNCH;
+    else if (mArg == "dinner") m = MEAL_DINNER;
+    triggerHunger(m);
+    server.send(200, "application/json", "{\"ok\":true,\"hunger\":true}");
+    return;
+  }
+  if (server.hasArg("feed")) {
+    bool ok = feedKiwi();
+    server.send(200, "application/json", ok ? "{\"ok\":true,\"fed\":true}" : "{\"ok\":false,\"reason\":\"not_hungry\"}");
+    return;
+  }
+  if (server.hasArg("apologize") || server.hasArg("reconcile")) {
+    bool ok = reconcileKiwi();
+    server.send(200, "application/json", ok ? "{\"ok\":true,\"reconciled\":true}" : "{\"ok\":false,\"reason\":\"not_angry\"}");
     return;
   }
 
@@ -199,49 +222,20 @@ void handleDoAction() {
   if (server.hasArg("skin")) {
     String s = server.arg("skin");
     s.toLowerCase();
-    if (s == "cyberpunk")
-      currentEyeSkin = SKIN_CYBERPUNK;
-    else if (s == "cat" || s == "neko")
-      currentEyeSkin = SKIN_CAT;
-    else if (s == "retro" || s == "8bit")
-      currentEyeSkin = SKIN_RETRO8BIT;
-    else if (s == "anime" || s == "star")
-      currentEyeSkin = SKIN_ANIME;
-    else if (s == "hearts" || s == "heart" || s == "love")
-      currentEyeSkin = SKIN_HEARTS;
-    else if (s == "steampunk" || s == "goggles")
-      currentEyeSkin = SKIN_STEAMPUNK;
-    else if (s == "demon" || s == "devil")
-      currentEyeSkin = SKIN_DEMON;
-    else if (s == "matrix" || s == "code" || s == "terminal")
-      currentEyeSkin = SKIN_MATRIX;
-    else if (s == "cyborg" || s == "terminator" || s == "t800")
-      currentEyeSkin = SKIN_CYBORG;
-    else if (s == "mecha" || s == "gundam" || s == "robot")
-      currentEyeSkin = SKIN_MECHA;
-    else if (s == "sunglasses" || s == "shades" || s == "cool")
-      currentEyeSkin = SKIN_SUNGLASSES;
-    else if (s == "puppy" || s == "dog" || s == "doggy")
-      currentEyeSkin = SKIN_PUPPY;
-    else if (s == "hypno" || s == "spiral" || s == "vortex")
-      currentEyeSkin = SKIN_HYPNO;
-    else if (s == "alien" || s == "ufo" || s == "cosmic")
-      currentEyeSkin = SKIN_ALIEN;
-    else if (s == "ninja" || s == "shinobi" || s == "naruto")
-      currentEyeSkin = SKIN_NINJA;
-    else if (s == "round" || s == "circle" || s == "ocular")
-      currentEyeSkin = SKIN_ROUND;
-    else if (s == "kiwi" || s == "deskbuddy" || s == "buddy" || s == "cute" ||
-             s == "relaxed" || s == "bored")
+    if (s == "kiwi" || s == "deskbuddy" || s == "buddy" || s == "cute" || s == "relaxed" || s == "bored")
       currentEyeSkin = SKIN_KIWI;
-    else if (s == "squircle_solid" || s == "squircle")
-      currentEyeSkin = SKIN_SQUIRCLE_SOLID;
-    else if (s == "squircle_outline")
-      currentEyeSkin = SKIN_SQUIRCLE_OUTLINE;
-    else if (s == "squircle_glint")
-      currentEyeSkin = SKIN_SQUIRCLE_GLINT;
     else if (s == "vector" || s == "anki" || s == "default" || s == "normal" || s == "clean")
       currentEyeSkin = SKIN_VECTOR;
+    else if (s == "capsule" || s == "neon_capsule" || s == "pill" || s == "stadium" || s == "oval")
+      currentEyeSkin = SKIN_CAPSULE;
+    else if (s == "pixel" || s == "8bit" || s == "retro" || s == "retro8bit")
+      currentEyeSkin = SKIN_PIXEL;
+    else if (s == "squircle_solid" || s == "squircle_bold" || s == "squircle")
+      currentEyeSkin = SKIN_SQUIRCLE_BOLD;
+    else if (s == "squircle_outline" || s == "neon_frame" || s == "outline")
+      currentEyeSkin = SKIN_NEON_FRAME;
+    else if (s == "squircle_glint" || s == "lumina_spark" || s == "spark" || s == "glint")
+      currentEyeSkin = SKIN_LUMINA_SPARK;
     else
       currentEyeSkin = SKIN_KIWI;
 
@@ -575,28 +569,14 @@ void handleStatus() {
   j += "\"sleeping\":";
   j += (inCircadianSleep || manualSleep) ? "true," : "false,";
   j += "\"history\":" + String(getConversationHistoryCount());
-  const char *skinNames[] = {"default",
-                             "cyberpunk",
-                             "cat",
-                             "retro",
-                             "anime",
-                             "hearts",
-                             "steampunk",
-                             "demon",
-                             "matrix",
-                             "cyborg",
-                             "mecha",
-                             "sunglasses",
-                             "puppy",
-                             "hypno",
-                             "alien",
-                             "ninja",
-                             "round",
-                             "kiwi",
-                             "squircle_solid",
-                             "squircle_outline",
-                             "squircle_glint",
-                             "vector"};
+  const char *skinNames[SKIN_COUNT] = {
+      "kiwi",
+      "vector",
+      "capsule",
+      "pixel",
+      "squircle_solid",
+      "squircle_outline",
+      "squircle_glint"};
   int skIdx = (int)currentEyeSkin;
   if (skIdx < 0 || skIdx >= SKIN_COUNT)
     skIdx = 0;
@@ -610,6 +590,9 @@ void handleStatus() {
   j += ",\"timer_active\":" + String(isRobotTimerActive() ? "true" : "false");
   j += ",\"timer_ringing\":" + String(isRobotTimerRinging() ? "true" : "false");
   j += ",\"timer_remaining\":" + String(getRobotTimerRemainingSec());
+  j += ",\"hunger\":\"" + String(isKiwiAngry() ? "angry" : (isKiwiHungry() ? "hungry" : "satisfied")) + "\"";
+  j += ",\"hunger_sec\":" + String(getHungerRemainingSec());
+  j += ",\"meal\":\"" + String(getCurrentMealName()) + "\"";
   j += ",\"state\":\"" + escJson(robotStateDesc) + "\"";
   j += ",\"question\":\"" + escJson(lastTranscribedQuestion) + "\"";
   j += ",\"answer\":\"" + escJson(lastLlmAnswer) + "\"";
@@ -700,28 +683,14 @@ void handleConfigApi() {
        "\",\"rtHld\":\"" + touchActionToString(touchActRightHold) +
        "\",\"sound\":" + String(touchFeedbackSound ? "true" : "false") +
        ",\"deb\":" + String(touchDebounceMs) + "},";
-  const char *skinNames[] = {"default",
-                             "cyberpunk",
-                             "cat",
-                             "retro",
-                             "anime",
-                             "hearts",
-                             "steampunk",
-                             "demon",
-                             "matrix",
-                             "cyborg",
-                             "mecha",
-                             "sunglasses",
-                             "puppy",
-                             "hypno",
-                             "alien",
-                             "ninja",
-                             "round",
-                             "kiwi",
-                             "squircle_solid",
-                             "squircle_outline",
-                             "squircle_glint",
-                             "vector"};
+  const char *skinNames[SKIN_COUNT] = {
+      "kiwi",
+      "vector",
+      "capsule",
+      "pixel",
+      "squircle_solid",
+      "squircle_outline",
+      "squircle_glint"};
   int skinIndex = (int)currentEyeSkin;
   if (skinIndex < 0 || skinIndex >= SKIN_COUNT)
     skinIndex = 0;
@@ -1003,49 +972,20 @@ void handleSave() {
   if (server.hasArg("skin")) {
     String s = server.arg("skin");
     s.toLowerCase();
-    if (s == "cyberpunk")
-      currentEyeSkin = SKIN_CYBERPUNK;
-    else if (s == "cat" || s == "neko")
-      currentEyeSkin = SKIN_CAT;
-    else if (s == "retro" || s == "8bit")
-      currentEyeSkin = SKIN_RETRO8BIT;
-    else if (s == "anime" || s == "star")
-      currentEyeSkin = SKIN_ANIME;
-    else if (s == "hearts" || s == "heart" || s == "love")
-      currentEyeSkin = SKIN_HEARTS;
-    else if (s == "steampunk" || s == "goggles")
-      currentEyeSkin = SKIN_STEAMPUNK;
-    else if (s == "demon" || s == "devil")
-      currentEyeSkin = SKIN_DEMON;
-    else if (s == "matrix" || s == "code" || s == "terminal")
-      currentEyeSkin = SKIN_MATRIX;
-    else if (s == "cyborg" || s == "terminator" || s == "t800")
-      currentEyeSkin = SKIN_CYBORG;
-    else if (s == "mecha" || s == "gundam" || s == "robot")
-      currentEyeSkin = SKIN_MECHA;
-    else if (s == "sunglasses" || s == "shades" || s == "cool")
-      currentEyeSkin = SKIN_SUNGLASSES;
-    else if (s == "puppy" || s == "dog" || s == "doggy")
-      currentEyeSkin = SKIN_PUPPY;
-    else if (s == "hypno" || s == "spiral" || s == "vortex")
-      currentEyeSkin = SKIN_HYPNO;
-    else if (s == "alien" || s == "ufo" || s == "cosmic")
-      currentEyeSkin = SKIN_ALIEN;
-    else if (s == "ninja" || s == "shinobi" || s == "naruto")
-      currentEyeSkin = SKIN_NINJA;
-    else if (s == "round" || s == "circle" || s == "ocular")
-      currentEyeSkin = SKIN_ROUND;
-    else if (s == "kiwi" || s == "deskbuddy" || s == "buddy" || s == "cute" ||
-             s == "relaxed" || s == "bored")
+    if (s == "kiwi" || s == "deskbuddy" || s == "buddy" || s == "cute" || s == "relaxed" || s == "bored")
       currentEyeSkin = SKIN_KIWI;
-    else if (s == "squircle_solid" || s == "squircle")
-      currentEyeSkin = SKIN_SQUIRCLE_SOLID;
-    else if (s == "squircle_outline")
-      currentEyeSkin = SKIN_SQUIRCLE_OUTLINE;
-    else if (s == "squircle_glint")
-      currentEyeSkin = SKIN_SQUIRCLE_GLINT;
     else if (s == "vector" || s == "anki" || s == "default" || s == "normal" || s == "clean")
       currentEyeSkin = SKIN_VECTOR;
+    else if (s == "capsule" || s == "neon_capsule" || s == "pill" || s == "stadium" || s == "oval")
+      currentEyeSkin = SKIN_CAPSULE;
+    else if (s == "pixel" || s == "8bit" || s == "retro" || s == "retro8bit")
+      currentEyeSkin = SKIN_PIXEL;
+    else if (s == "squircle_solid" || s == "squircle_bold" || s == "squircle")
+      currentEyeSkin = SKIN_SQUIRCLE_BOLD;
+    else if (s == "squircle_outline" || s == "neon_frame" || s == "outline")
+      currentEyeSkin = SKIN_NEON_FRAME;
+    else if (s == "squircle_glint" || s == "lumina_spark" || s == "spark" || s == "glint")
+      currentEyeSkin = SKIN_LUMINA_SPARK;
     else
       currentEyeSkin = SKIN_KIWI;
   }

@@ -5,8 +5,8 @@
 #include "face/FaceExpressions.h"
 #include "face/FaceIdle.h"
 #include "face/FaceSkins.h"
-#include "hardware/Battery.h"
 #include "hardware/AudioEngine.h"
+#include "hardware/Battery.h"
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 #include <Wire.h>
@@ -138,7 +138,8 @@ static void drawMouthShape(int cx, int cy, int w, int h, float curve) {
     display.fillRoundRect(rx, ry, rw, h, rad, SSD1306_BLACK);
     display.drawRoundRect(rx, ry, rw, h, rad, SSD1306_WHITE);
     if (h >= 6 && rw >= 8) {
-      display.drawRoundRect(rx + 1, ry + 1, rw - 2, h - 2, maxI(1, rad - 1), SSD1306_WHITE);
+      display.drawRoundRect(rx + 1, ry + 1, rw - 2, h - 2, maxI(1, rad - 1),
+                            SSD1306_WHITE);
     }
     return;
   }
@@ -283,123 +284,11 @@ static void drawSleepingFace(uint32_t now) {
 }
 
 // ---------------------------------------------------------------------------
-// Skin accents and decorations (Cat ears, HUD brackets, horns, etc.)
+// Skin accents and decorations
 // ---------------------------------------------------------------------------
 void drawSkinAccents(uint32_t now, int cxL, int cxR, int cy, int w, int h,
                      int lidIn, int lidOut) {
-  if (currentEyeSkin == SKIN_CAT) {
-    float earTwitch = swing(now, 900.0f);
-    int twL = iround(clampf((earTwitch - 0.75f) / 0.25f, 0.0f, 1.0f) * 3.0f);
-    int twR = iround(clampf((-earTwitch - 0.75f) / 0.25f, 0.0f, 1.0f) * 3.0f);
-    int earBaseY = cy - h / 2;
-    if (earBaseY > 15) {
-      display.fillTriangle(cxL - w / 2 - 2, earBaseY, cxL - w / 4,
-                           earBaseY - 12 - twL, cxL + 4, earBaseY,
-                           SSD1306_WHITE);
-      display.fillTriangle(cxL - w / 2, earBaseY, cxL - w / 4,
-                           earBaseY - 9 - twL, cxL + 1, earBaseY,
-                           SSD1306_BLACK);
-      display.fillTriangle(cxR - 4, earBaseY, cxR + w / 4, earBaseY - 12 - twR,
-                           cxR + w / 2 + 2, earBaseY, SSD1306_WHITE);
-      display.fillTriangle(cxR - 1, earBaseY, cxR + w / 4, earBaseY - 9 - twR,
-                           cxR + w / 2, earBaseY, SSD1306_BLACK);
-    }
-  } else if (currentEyeSkin == SKIN_CYBERPUNK) {
-    display.drawFastHLine(3, 3, 7, SSD1306_WHITE);
-    display.drawFastVLine(3, 3, 7, SSD1306_WHITE);
-    display.drawFastHLine(118, 3, 7, SSD1306_WHITE);
-    display.drawFastVLine(121, 3, 7, SSD1306_WHITE);
-    display.drawFastHLine(3, 60, 7, SSD1306_WHITE);
-    display.drawFastVLine(3, 54, 7, SSD1306_WHITE);
-    display.drawFastHLine(118, 60, 7, SSD1306_WHITE);
-    display.drawFastVLine(121, 54, 7, SSD1306_WHITE);
-  } else if (currentEyeSkin == SKIN_DEMON) {
-    int hornBaseY = cy - h / 2 - 1;
-    if (hornBaseY > 14) {
-      display.fillTriangle(cxL - 8, hornBaseY, cxL - 16, hornBaseY - 13,
-                           cxL - 2, hornBaseY, SSD1306_WHITE);
-      display.fillTriangle(cxR + 2, hornBaseY, cxR + 16, hornBaseY - 13,
-                           cxR + 8, hornBaseY, SSD1306_WHITE);
-    }
-  } else if (currentEyeSkin == SKIN_STEAMPUNK) {
-    int bridgeY = cy;
-    int bw = (cxR - w / 2) - (cxL + w / 2);
-    display.drawFastHLine(cxL + w / 2 + 1, bridgeY - 2, bw - 2, SSD1306_WHITE);
-    display.drawFastHLine(cxL + w / 2 + 1, bridgeY + 2, bw - 2, SSD1306_WHITE);
-    display.drawFastHLine(cxL + w / 2 + 3, bridgeY, bw - 6, SSD1306_WHITE);
-  } else if (currentEyeSkin == SKIN_MATRIX) {
-    display.drawFastHLine(36, 1, 56, SSD1306_WHITE);
-    display.drawFastVLine(36, 1, 4, SSD1306_WHITE);
-    display.drawFastVLine(91, 1, 4, SSD1306_WHITE);
-    display.drawPixel(6, 4, SSD1306_WHITE);
-    display.drawPixel(10, 2, SSD1306_WHITE);
-    display.drawPixel(118, 4, SSD1306_WHITE);
-    display.drawPixel(122, 2, SSD1306_WHITE);
-  } else if (currentEyeSkin == SKIN_CYBORG) {
-    display.drawCircle(118, 9, 6, SSD1306_WHITE);
-    display.drawFastHLine(110, 9, 17, SSD1306_WHITE);
-    display.drawFastVLine(118, 1, 17, SSD1306_WHITE);
-    display.drawPixel(118, 9, SSD1306_WHITE);
-    display.drawFastHLine(2, 62, 12, SSD1306_WHITE);
-    display.drawFastVLine(2, 54, 8, SSD1306_WHITE);
-  } else if (currentEyeSkin == SKIN_MECHA) {
-    int vY = cy - h / 2 - 2;
-    if (vY > 10) {
-      display.fillTriangle(63, vY, 48, vY - 9, 60, vY - 5, SSD1306_WHITE);
-      display.fillTriangle(65, vY, 80, vY - 9, 68, vY - 5, SSD1306_WHITE);
-      display.fillTriangle(61, vY - 2, 64, vY - 8, 67, vY - 2, SSD1306_WHITE);
-      display.fillTriangle(61, vY - 2, 64, vY + 2, 67, vY - 2, SSD1306_WHITE);
-    }
-  } else if (currentEyeSkin == SKIN_SUNGLASSES) {
-    int bridgeY = cy - 2;
-    display.fillRect(cxL + w / 2 - 1, bridgeY,
-                     (cxR - w / 2) - (cxL + w / 2) + 2, 4, SSD1306_WHITE);
-    display.drawFastHLine(cxL - w / 2, cy - h / 2 - 1,
-                          (cxR + w / 2) - (cxL - w / 2) + 1, SSD1306_WHITE);
-  } else if (currentEyeSkin == SKIN_PUPPY) {
-    int sway = iround(swing(now, 800.0f) * 2.0f);
-    display.fillRoundRect(2, cy - 8 + sway, 9, 22, 4, SSD1306_WHITE);
-    display.fillRoundRect(3, cy - 5 + sway, 7, 16, 3, SSD1306_BLACK);
-    display.fillRoundRect(117, cy - 8 - sway, 9, 22, 4, SSD1306_WHITE);
-    display.fillRoundRect(118, cy - 5 - sway, 7, 16, 3, SSD1306_BLACK);
-    display.fillTriangle(62, cy + h / 2 + 3, 66, cy + h / 2 + 3, 64,
-                         cy + h / 2 + 6, SSD1306_WHITE);
-  } else if (currentEyeSkin == SKIN_HYPNO) {
-    float a = (float)(now % 1000) / 1000.0f * TWO_PI_F;
-    int dX = iround(cosf(a) * 4);
-    int dY = iround(sinf(a) * 2);
-    display.drawPixel(20 + dX, 8 + dY, SSD1306_WHITE);
-    display.drawPixel(108 - dX, 8 - dY, SSD1306_WHITE);
-  } else if (currentEyeSkin == SKIN_ALIEN) {
-    display.drawFastVLine(64, 1, 9, SSD1306_WHITE);
-    display.drawCircle(64, 2, 2, SSD1306_WHITE);
-    if ((now / 250) % 2 == 0) {
-      display.fillCircle(64, 2, 1, SSD1306_WHITE);
-      display.drawFastHLine(61, 2, 7, SSD1306_WHITE);
-    }
-  } else if (currentEyeSkin == SKIN_NINJA) {
-    display.drawFastHLine(0, 6, 128, SSD1306_WHITE);
-    display.drawFastHLine(0, 7, 128, SSD1306_WHITE);
-    display.fillRoundRect(48, 2, 32, 9, 2, SSD1306_BLACK);
-    display.drawRoundRect(48, 2, 32, 9, 2, SSD1306_WHITE);
-    display.drawPixel(50, 4, SSD1306_WHITE);
-    display.drawPixel(78, 4, SSD1306_WHITE);
-    display.drawPixel(50, 8, SSD1306_WHITE);
-    display.drawPixel(78, 8, SSD1306_WHITE);
-    display.drawLine(60, 6, 68, 6, SSD1306_WHITE);
-    display.drawLine(66, 4, 62, 8, SSD1306_WHITE);
-  } else if (currentEyeSkin == SKIN_ROUND) {
-    // Dynamic floating micro-brows that articulate with emotion
-    int browY = cy - h / 2 - 3;
-    if (browY >= 2 && h > 10) {
-      int tiltL = iround((lidIn - lidOut) / 3.0f);
-      int tiltR = iround((lidOut - lidIn) / 3.0f);
-      display.drawLine(cxL - 7, browY + tiltL, cxL + 7, browY - tiltL,
-                       SSD1306_WHITE);
-      display.drawLine(cxR - 7, browY - tiltR, cxR + 7, browY + tiltR,
-                       SSD1306_WHITE);
-    }
-  }
+  // Accents reserved for future themes
 }
 
 // ---------------------------------------------------------------------------
@@ -421,7 +310,8 @@ void drawFace(float soundLevel) {
   float mouthPulse = 0.0f;
   if (soundReactiveEnabled && bootWakeDone() && soundLevel > 0.05f) {
     float norm = (soundLevel - 0.05f) / 0.95f;
-    if (norm > 1.0f) norm = 1.0f;
+    if (norm > 1.0f)
+      norm = 1.0f;
     eyeOffset = norm * (float)SOUND_REACT_MAX_OPEN;
     mouthPulse = norm * 2.0f;
   }
@@ -742,7 +632,8 @@ void drawFace(float soundLevel) {
 
   if (currentEmotion == EMOTION_SPEAKING || isSpeechPlaying()) {
     if (!isSpeechPlaying()) {
-      // Voice has stopped playing: smoothly snap lips to resting closed line (no silent flapping)
+      // Voice has stopped playing: smoothly snap lips to resting closed line
+      // (no silent flapping)
       speakW = approach(speakW, 16.0f, 35.0f, dt);
       speakH = approach(speakH, 2.0f, 35.0f, dt);
       int mw = iround(speakW);
@@ -774,7 +665,8 @@ void drawFace(float soundLevel) {
         display.fillRoundRect(rx, ry, mw, mh, rad, SSD1306_BLACK);
         display.drawRoundRect(rx, ry, mw, mh, rad, SSD1306_WHITE);
         if (mh >= 6 && mw >= 8) {
-          display.drawRoundRect(rx + 1, ry + 1, mw - 2, mh - 2, maxI(1, rad - 1), SSD1306_WHITE);
+          display.drawRoundRect(rx + 1, ry + 1, mw - 2, mh - 2,
+                                maxI(1, rad - 1), SSD1306_WHITE);
         }
       }
     }
@@ -786,8 +678,9 @@ void drawFace(float soundLevel) {
   if (currentEmotion == EMOTION_LISTENING) {
     // -----------------------------------------------------------------------
     // MINIMAL & MODERN VOICE DOTS (Google / Siri / ChatGPT style):
-    // 4 smooth rounded glowing capsules centered at bottom (x=50, 58, 66, 74, y=53)
-    // Undulates in a calm, elegant wave; smoothly stretches taller with voice volume!
+    // 4 smooth rounded glowing capsules centered at bottom (x=50, 58, 66, 74,
+    // y=53) Undulates in a calm, elegant wave; smoothly stretches taller with
+    // voice volume!
     // -----------------------------------------------------------------------
     const int centerY = 53;
     float t = (float)(now % 100000UL) / 150.0f;
@@ -798,7 +691,8 @@ void drawFace(float soundLevel) {
       float phase = (float)i * 0.85f;
       float wave = 0.5f + 0.5f * sinf(t * 3.6f - phase);
       int dotH = 4 + iround(wave * (3.0f + liveSnd));
-      if (dotH > 14) dotH = 14;
+      if (dotH > 14)
+        dotH = 14;
       int rx = dotX[i];
       int ry = centerY - dotH / 2;
       display.fillRoundRect(rx, ry, 4, dotH, 2, SSD1306_WHITE);

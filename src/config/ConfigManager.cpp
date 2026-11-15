@@ -1,6 +1,7 @@
 #include "config/ConfigManager.h"
 #include "config/AppConfig.h"
 #include "hardware/AudioEngine.h"
+#include "hardware/RgbLed.h"
 #include "services/AiChatHistory.h"
 #include <Preferences.h>
 #include <WiFi.h>
@@ -310,7 +311,22 @@ void loadConfig() {
 
   circadianSleepEnabled = prefs.getBool("circ_en", true);
   greetingsEnabled = prefs.getBool("greet_en", false);
+  hungerEnabled = prefs.getBool("hunger_en", true);
   soundReactiveEnabled = prefs.getBool("snd_react", false);
+  wakeWordEnabled = prefs.getBool("ww_en", true);
+  wakeWordModel = prefs.getUChar("ww_model", 0);
+  if (wakeWordModel > 2) wakeWordModel = 0;
+
+  float defCutoff = (wakeWordModel == 2) ? 0.82f : ((wakeWordModel == 1) ? 0.30f : 0.26f);
+  wakeWordCutoff = prefs.getFloat("ww_cutoff", defCutoff);
+  rgbLedEnabled = prefs.getBool("rgb_en", true);
+  rgbLedBrightness = prefs.getUChar("rgb_bright", 160);
+  rgbLedSetBrightness(rgbLedBrightness);
+  if (wakeWordModel == 0 && wakeWordCutoff > 0.34f) {
+    // Automatically migrate old strict cutoff down to far-field sensitive 0.26
+    wakeWordCutoff = 0.26f;
+    prefs.putFloat("ww_cutoff", 0.26f);
+  }
 
   circadianSleepStart = prefs.getInt("circ_start", 23);
 
@@ -395,17 +411,10 @@ void loadConfig() {
     Serial.printf("[MIC] Slot %d cached from NVS\n", micSlot);
   }
 
-  // AP password (MAC last 4 hex + random suffix)
-  String savedApPass = prefs.getString("ap_pass", "");
-  if (savedApPass.length() < 8 || savedApPass == "25691128") {
-    uint8_t mac[6];
-    WiFi.macAddress(mac);
-    char mac4[5];
-    snprintf(mac4, sizeof(mac4), "%02X%02X", mac[4], mac[5]);
-    uint16_t r = (uint16_t)(esp_random() & 0xFFFF);
-    char sfx[5];
-    snprintf(sfx, sizeof(sfx), "%04X", r);
-    savedApPass = "kiwi-" + String(mac4) + "-" + String(sfx);
+  // AP password (default: 25691128)
+  String savedApPass = prefs.getString("ap_pass", "25691128");
+  if (savedApPass.length() < 8 || savedApPass.startsWith("kiwi-")) {
+    savedApPass = "25691128";
     prefs.end();
     prefs.begin("myrobot", false);
     prefs.putString("ap_pass", savedApPass);
@@ -526,7 +535,13 @@ void saveConfigImmediate() {
 
   prefs.putBool("circ_en", circadianSleepEnabled);
   prefs.putBool("greet_en", greetingsEnabled);
+  prefs.putBool("hunger_en", hungerEnabled);
   prefs.putBool("snd_react", soundReactiveEnabled);
+  prefs.putBool("ww_en", wakeWordEnabled);
+  prefs.putFloat("ww_cutoff", wakeWordCutoff);
+  prefs.putUChar("ww_model", wakeWordModel);
+  prefs.putBool("rgb_en", rgbLedEnabled);
+  prefs.putUChar("rgb_bright", rgbLedBrightness);
 
   prefs.putInt("circ_start", circadianSleepStart);
 

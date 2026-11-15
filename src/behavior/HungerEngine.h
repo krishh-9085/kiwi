@@ -25,6 +25,10 @@ const char *getCurrentMealName();
 
 void triggerHunger(MealType meal = MEAL_GENERIC);
 bool feedKiwi();
+void markCurrentMealFed();
+void saveHungerDays();
+void loadHungerDays();
+void resetHungerForToday();
 bool reconcileKiwi();
 void handleAngryRejection();
 void handleAngryFeedAttempt();

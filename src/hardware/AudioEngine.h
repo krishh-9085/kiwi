@@ -17,6 +17,7 @@ void spkFlush();
 void spkPushSample(int16_t s);
 void spkBeginSpeech();
 void spkEndSpeech();
+void spkAbortSpeech();
 void audioSleepPrepare();
 void audioSleepWake();
 void makeWavHeader(uint8_t *h, uint32_t dataSize);
@@ -24,9 +25,11 @@ void makeWavHeader(uint8_t *h, uint32_t dataSize);
 // ---------- Tone Synthesis Engine ----------
 void playToneQueue(Tone *tones, int count);
 void updateTonePlayer();
+void toneStop();
 bool isTonePlaying();
 bool isSpeechPlaying();
 bool kiwiIsOutputting();
+float getSpeechAmplitude();
 
 // ---------- Robotic Sound Effects ----------
 void soundPetLove();

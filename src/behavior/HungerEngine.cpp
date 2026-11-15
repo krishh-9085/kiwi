@@ -6,6 +6,7 @@
 #include "hardware/AudioEngine.h"
 #include "services/AiTtsService.h"
 #include "services/MemoryService.h"
+#include <Preferences.h>
 #include <WiFi.h>
 #include <time.h>
 
@@ -21,11 +22,60 @@ static uint32_t s_lastReminderAt = 0;
 static uint32_t s_angryAt = 0;
 static String s_pendingHungerSpeech = "";
 
-// Daily meal tracking (prevents duplicate triggers on the same day)
+// Daily meal tracking (persisted in NVS to prevent duplicate triggers on boot/upload)
 static int s_lastBreakfastDay = -1;
 static int s_lastLunchDay = -1;
 static int s_lastDinnerDay = -1;
 static bool s_bootMealsInitialized = false;
+
+void saveHungerDays() {
+  Preferences p;
+  if (p.begin("kiwi_hunger", false)) {
+    p.putInt("bf_day", s_lastBreakfastDay);
+    p.putInt("lu_day", s_lastLunchDay);
+    p.putInt("di_day", s_lastDinnerDay);
+    p.end();
+    Serial.printf("[HUNGER] Saved meal days to NVS: BF=%d, LU=%d, DI=%d\n",
+                  s_lastBreakfastDay, s_lastLunchDay, s_lastDinnerDay);
+  }
+}
+
+void loadHungerDays() {
+  Preferences p;
+  if (p.begin("kiwi_hunger", true)) {
+    s_lastBreakfastDay = p.getInt("bf_day", -1);
+    s_lastLunchDay = p.getInt("lu_day", -1);
+    s_lastDinnerDay = p.getInt("di_day", -1);
+    p.end();
+    Serial.printf("[HUNGER] Loaded meal days from NVS: BF=%d, LU=%d, DI=%d\n",
+                  s_lastBreakfastDay, s_lastLunchDay, s_lastDinnerDay);
+  }
+}
+
+void resetHungerForToday() {
+  s_lastBreakfastDay = -1;
+  s_lastLunchDay = -1;
+  s_lastDinnerDay = -1;
+  s_hungerState = HUNGER_SATISFIED;
+  s_currentMeal = MEAL_GENERIC;
+  s_pendingHungerSpeech = "";
+  saveHungerDays();
+  Serial.println("[HUNGER] Meal records reset for today");
+}
+
+void markCurrentMealFed() {
+  if (timeSynced) {
+    struct tm timeinfo;
+    if (getLocalTime(&timeinfo, 10)) {
+      int curHour = timeinfo.tm_hour;
+      int curDay = timeinfo.tm_yday;
+      if (curHour >= 7 && curHour < 11) s_lastBreakfastDay = curDay;
+      else if (curHour >= 12 && curHour < 15) s_lastLunchDay = curDay;
+      else if (curHour >= 19 && curHour < 22) s_lastDinnerDay = curDay;
+      saveHungerDays();
+    }
+  }
+}
 
 // Cheek tap history for combo (L-R-L-R)
 struct TapEvent {
@@ -61,10 +111,10 @@ void initHungerEngine() {
   s_tapCount = 0;
   s_pendingHungerSpeech = "";
   s_bootMealsInitialized = false;
-  s_lastBreakfastDay = -1;
-  s_lastLunchDay = -1;
-  s_lastDinnerDay = -1;
-  Serial.println("[HUNGER] HungerEngine initialized (3 Meals: Breakfast 8:30am, Lunch 1:00pm, Dinner 8:00pm | Quiet: 10pm-7am)");
+
+  loadHungerDays();
+  Serial.printf("[HUNGER] HungerEngine initialized (BF=%d, LU=%d, DI=%d | Quiet: 10pm-7am)\n",
+                s_lastBreakfastDay, s_lastLunchDay, s_lastDinnerDay);
 }
 
 bool isKiwiHungry() {
@@ -100,6 +150,8 @@ int32_t getHungerRemainingSec() {
 }
 
 void triggerHunger(MealType meal) {
+  if (!hungerEnabled) return;
+
   s_currentMeal = meal;
   manualSleep = false;
   inCircadianSleep = false;
@@ -107,6 +159,18 @@ void triggerHunger(MealType meal) {
   s_hungerState = HUNGER_HUNGRY;
   s_hungerStartedAt = millis();
   s_lastReminderAt = s_hungerStartedAt;
+
+  // Persist meal trigger in NVS so reboots or firmware uploads don't re-trigger it
+  if (timeSynced) {
+    struct tm timeinfo;
+    if (getLocalTime(&timeinfo, 10)) {
+      int curDay = timeinfo.tm_yday;
+      if (meal == MEAL_BREAKFAST) s_lastBreakfastDay = curDay;
+      else if (meal == MEAL_LUNCH) s_lastLunchDay = curDay;
+      else if (meal == MEAL_DINNER) s_lastDinnerDay = curDay;
+      saveHungerDays();
+    }
+  }
 
   setEmotion(EMOTION_SAD);
   soundSadViolin();
@@ -143,6 +207,24 @@ bool feedKiwi() {
     s_currentMeal = MEAL_GENERIC;
     s_tapCount = 0;
 
+    // Persist fed status in NVS so reboots or firmware uploads don't re-trigger it
+    if (timeSynced) {
+      struct tm timeinfo;
+      if (getLocalTime(&timeinfo, 10)) {
+        int curDay = timeinfo.tm_yday;
+        if (finishedMeal == MEAL_BREAKFAST) s_lastBreakfastDay = curDay;
+        else if (finishedMeal == MEAL_LUNCH) s_lastLunchDay = curDay;
+        else if (finishedMeal == MEAL_DINNER) s_lastDinnerDay = curDay;
+        else {
+          int curHour = timeinfo.tm_hour;
+          if (curHour >= 7 && curHour < 11) s_lastBreakfastDay = curDay;
+          else if (curHour >= 12 && curHour < 15) s_lastLunchDay = curDay;
+          else if (curHour >= 19 && curHour < 22) s_lastDinnerDay = curDay;
+        }
+        saveHungerDays();
+      }
+    }
+
     Serial.println("[HUNGER] Kiwi fed! Hunger satisfied.");
     addTerminalLog("[HUNGER] Kiwi fed with dual-cheek touch! Full and happy.");
 
@@ -161,7 +243,7 @@ bool feedKiwi() {
       s_pendingHungerSpeech = "Mmm yummy! Mera pet bhar gaya! Thank you " + name + "!";
     }
 
-    setEmotion(EMOTION_HAPPY);
+    setEmotion(EMOTION_IDLE);
     returnIdleAt = millis() + 3000;
     return true;
   }
@@ -201,8 +283,20 @@ void handleAngryRejection() {
 bool reconcileKiwi() {
   if (s_hungerState == HUNGER_ANGRY) {
     s_hungerState = HUNGER_SATISFIED;
+    MealType finishedMeal = s_currentMeal;
     s_currentMeal = MEAL_GENERIC;
     s_tapCount = 0;
+
+    if (timeSynced) {
+      struct tm timeinfo;
+      if (getLocalTime(&timeinfo, 10)) {
+        int curDay = timeinfo.tm_yday;
+        if (finishedMeal == MEAL_BREAKFAST) s_lastBreakfastDay = curDay;
+        else if (finishedMeal == MEAL_LUNCH) s_lastLunchDay = curDay;
+        else if (finishedMeal == MEAL_DINNER) s_lastDinnerDay = curDay;
+        saveHungerDays();
+      }
+    }
 
     Serial.println("[HUNGER] Reconciliation combo triggered! Kiwi is happy again!");
     addTerminalLog("[HUNGER] Left-Right tickle combo! Kiwi forgave user!");
@@ -212,7 +306,7 @@ bool reconcileKiwi() {
 
     s_pendingHungerSpeech = "Haha bas bas gudgudi mat karo! Haha okay okay maaf kara!";
 
-    setEmotion(EMOTION_HAPPY);
+    setEmotion(EMOTION_IDLE);
     returnIdleAt = millis() + 3000;
     return true;
   }
@@ -262,6 +356,16 @@ bool checkCheekComboLRLR() {
 void checkHungerBehavior() {
   uint32_t now = millis();
 
+  // If hunger disabled by user, ensure satisfied and return immediately
+  if (!hungerEnabled) {
+    if (s_hungerState != HUNGER_SATISFIED) {
+      s_hungerState = HUNGER_SATISFIED;
+      s_pendingHungerSpeech = "";
+      s_currentMeal = MEAL_GENERIC;
+    }
+    return;
+  }
+
   // Async Speech Pump (runs in loop, does not block WebServer)
   if (s_pendingHungerSpeech.length() > 0 && !busyProcessing && !kiwiIsOutputting()) {
     String spk = s_pendingHungerSpeech;
@@ -291,10 +395,16 @@ void checkHungerBehavior() {
 
         if (!s_bootMealsInitialized) {
           s_bootMealsInitialized = true;
-          // If robot booted after a meal window, don't trigger that past meal today
-          if (curHour >= 10) s_lastBreakfastDay = curDay;
-          if (curHour >= 14) s_lastLunchDay = curDay;
-          if (curHour >= 21) s_lastDinnerDay = curDay;
+          // If robot booted after a meal window, mark that past meal as done today
+          if (curHour >= 10 && s_lastBreakfastDay < 0) s_lastBreakfastDay = curDay;
+          if (curHour >= 14 && s_lastLunchDay < 0) s_lastLunchDay = curDay;
+          if (curHour >= 21 && s_lastDinnerDay < 0) s_lastDinnerDay = curDay;
+          saveHungerDays();
+        }
+
+        // Boot grace period: don't trigger meal alarms within the first 3 minutes of boot
+        if (millis() < 180000UL) {
+          return;
         }
 
         // Idle checks: only trigger if awake, idle, and no active UI/animations
@@ -304,21 +414,18 @@ void checkHungerBehavior() {
 
           // Breakfast: 8:30 AM to 9:30 AM
           if (s_lastBreakfastDay != curDay && ((curHour == 8 && curMin >= 30) || (curHour == 9 && curMin < 30))) {
-            s_lastBreakfastDay = curDay;
             triggerHunger(MEAL_BREAKFAST);
             return;
           }
 
           // Lunch: 1:00 PM to 2:00 PM (13:00 to 13:59)
           if (s_lastLunchDay != curDay && curHour == 13) {
-            s_lastLunchDay = curDay;
             triggerHunger(MEAL_LUNCH);
             return;
           }
 
           // Dinner: 8:00 PM to 9:00 PM (20:00 to 20:59)
           if (s_lastDinnerDay != curDay && curHour == 20) {
-            s_lastDinnerDay = curDay;
             triggerHunger(MEAL_DINNER);
             return;
           }

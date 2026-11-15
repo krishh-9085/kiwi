@@ -1,7 +1,7 @@
 /*
  ==============================================================================
   MyRobot (Kiwi) - Modular v1.2
-  ESP32-C3 Super Mini / PlatformIO / Arduino Core 3.x
+  ESP32-S3 Super Mini / PlatformIO / Arduino Core 3.x
   Tools -> USB CDC On Boot = Enabled
 
   Architecture & Modules:
@@ -43,8 +43,11 @@
 #include "face/FaceEngine.h"
 #include "face/SleepyWakeAnim.h"
 #include "hardware/AudioEngine.h"
+#include "hardware/RgbLed.h"
 #include "hardware/SoundLevel.h"
 #include "hardware/TouchController.h"
+#include "hardware/WakeWordEngine.h"
+#include <ESP_TF.h>
 #include "power/PowerManager.h"
 #include "services/AiService.h"
 #include "services/HyperHdrService.h"
@@ -125,6 +128,7 @@ void setup() {
   Serial.printf("[TTS] %s\n", ttsProvider.c_str());
   Serial.printf("[VOL] %d%%\n", speakerVolume);
 
+  rgbLedInit();
   eyesInit(millis());
   setEmotion(EMOTION_IDLE);
 
@@ -149,6 +153,10 @@ void setup() {
     detectMicSlot();
     playBootChime();
     Serial.printf("[I2S] Audio OK, heap=%u\n", (unsigned)ESP.getFreeHeap());
+    if (wakeWordEnabled) {
+      wakeWordSetSensitivity(wakeWordCutoff);
+      wakeWordInit();
+    }
   }
 #if BOOT_TIMING_LOG
   Serial.printf("[BOOT_T] after_startAudio t=%lu ms\n",
@@ -347,6 +355,9 @@ static void checkBootGreeting() {
 // ============================================================
 void loop() {
   powerUpdate();
+  if (!uiTaskRunning) {
+    rgbLedUpdate();
+  }
   serviceConfigManager();
   pumpWeb();
   maintainWiFi();
@@ -356,6 +367,11 @@ void loop() {
     updateTonePlayer();
     yield();
     return;
+  }
+
+  // Once boot is complete, offload Display rendering and NeoPixel LED to dedicated Core 0 task
+  if (!uiTaskRunning) {
+    startUiDisplayTask();
   }
 
   checkBootGreeting();
@@ -369,7 +385,9 @@ void loop() {
   checkHungerBehavior();
   updateIdleVariety();
   soundLevelTick();
-  tickFace();
+  if (!uiTaskRunning) {
+    tickFace();
+  }
   maybeChangeEmotion();
   updateTonePlayer();
   processPendingSound();
@@ -412,12 +430,7 @@ void loop() {
     if (showClockScreen || showWeatherScreen) {
       showClockScreen = false;
       showWeatherScreen = false;
-      startRecording = false;
-      setEmotion(EMOTION_IDLE);
       returnIdleAt = 0;
-      soundPetSparkle();
-      resyncTouch();
-      return;
     }
     powerNotifyActivity();
     startRecording = false;
@@ -471,25 +484,36 @@ void loop() {
       robotStateDesc = "STT: " + sttFail;
       addTerminalLog("[STT] Speech not recognized: " + sttFail);
       Serial.printf("[ROBOT] STT failed: %s\n", sttFail.c_str());
-      setEmotion(EMOTION_CONFUSED);
       if (sttFail == "quiet" || sttFail == "empty" || sttFail == "") {
-        static const char *const quietReplies[] = {
-            "Kuch bola kya? Mujhe theek se sunai nahi diya!",
-            "Did you say something? Sunai nahi diya mujhe!",
-            "Arey kuch kaha kya? Ek baar firse bolo!"};
-        speakText(quietReplies[random(0, 3)]);
+        // Siri / Alexa style: if user didn't speak, smoothly & silently return to idle!
+        setEmotion(EMOTION_IDLE);
+        robotStateDesc = "Ready";
       } else {
+        setEmotion(EMOTION_CONFUSED);
         speakText("Awaaz theek se nahi aayi, ek baar firse try karo!");
+        returnIdleAt = millis() + 2000;
       }
-      returnIdleAt = millis() + 2000;
     }
     bool wasCancelled = cancelRequest;
     cancelRequest = false;
-    if (wasCancelled) {
+    if (bargeInTriggered) {
+      bargeInTriggered = false;
+      toneStop();
+      spkAbortSpeech();
+      wakeWordReset();
+      busyProcessing = false;
+      startRecording = true;
+      setEmotion(EMOTION_LISTENING);
+      robotStateDesc = "Listening...";
+      Serial.println("[BARGE-IN] Speech cut off -> Recording next command immediately!");
+    } else if (wasCancelled) {
       pendingSleepAction = false;
       returnIdleAt = 0;
       setEmotion(EMOTION_IDLE);
       robotStateDesc = "Ready";
+      toneStop();
+      spkEndSpeech();
+      wakeWordReset();
       Serial.println("[ROBOT] Cancelled - returning to Ready");
     } else if (pendingSleepAction) {
       triggerPendingSleepAction();
@@ -498,8 +522,10 @@ void loop() {
       setEmotion(EMOTION_IDLE);
     }
     resyncTouch();
-    spkEndSpeech();
-    busyProcessing = false;
+    if (!startRecording) {
+      spkEndSpeech();
+      busyProcessing = false;
+    }
   }
 
   // 30s Inactivity Watchdog

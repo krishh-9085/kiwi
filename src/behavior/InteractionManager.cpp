@@ -7,6 +7,7 @@
 #include "face/FaceEngine.h"
 #include "face/BootWakeAnim.h"
 #include "hardware/AudioEngine.h"
+#include "hardware/RgbLed.h"
 #include "hardware/TouchController.h"
 #include "services/AiService.h"
 #include "web/WebPortal.h"
@@ -19,10 +20,13 @@
 void pumpUI() {
   powerNotifyActivity();
   bootAnimPump();
+  if (!uiTaskRunning) {
+    rgbLedUpdate();
+    tickFace();
+  }
   updateTouch();
   updateTonePlayer();
   serviceConfigManager();
-  tickFace();
   pumpWeb();
 }
 
@@ -97,11 +101,11 @@ Emotion detectVocalEmotion(const String &text) {
             lower.indexOf("(" + t + ")") >= 0);
   };
 
-  // 1. Laughing / Amused
+  // 1. Laughing / Amused -> Keep natural speaking/idle face (no ugly squinch)
   if (hasTag("laugh") || hasTag("laughs") || hasTag("laughing") ||
       hasTag("chuckle") || hasTag("chuckles") || hasTag("chuckling") ||
       hasTag("giggle") || hasTag("giggles") || hasTag("giggling")) {
-    return EMOTION_LAUGHING;
+    return EMOTION_SPEAKING;
   }
 
   // 2. Crying / Sobbing / Heartbroken
@@ -128,10 +132,10 @@ Emotion detectVocalEmotion(const String &text) {
     return EMOTION_EXCITED;
   }
 
-  // 6. Happy / Joy / Delighted / Satisfied
+  // 6. Happy / Joy / Delighted / Satisfied -> Keep natural speaking/idle face (no ugly squinch)
   if (hasTag("happy") || hasTag("delighted") || hasTag("satisfied") ||
       hasTag("cheerful") || hasTag("joyful") || hasTag("glad")) {
-    return EMOTION_HAPPY;
+    return EMOTION_SPEAKING;
   }
 
   // 7. Surprised / Shocked / Gasp
@@ -269,10 +273,10 @@ static void streamSentenceCallback(const String &sentence, bool isFinal) {
   //        immediately if contiguous heap is safe. Set firstSpoken = true. If it returns false,
   //        set ttsFailed = true and append the sentence to pending.
   if (!streamSpk.firstSpoken) {
-    // Contiguous heap protection: Ensure at least 36000 contiguous bytes before dual-TLS
-    if (ESP.getMaxAllocHeap() < 36000) {
-      Serial.printf("[STREAM] Contiguous heap low for first sentence (%u < 36000). Deferring.\n",
-                    (unsigned)ESP.getMaxAllocHeap());
+    // Contiguous heap protection: Ensure at least STREAM_TTS_MIN_MAX_ALLOC contiguous bytes before dual-TLS
+    if (ESP.getMaxAllocHeap() < STREAM_TTS_MIN_MAX_ALLOC) {
+      Serial.printf("[STREAM] Contiguous heap low for first sentence (%u < %u). Deferring.\n",
+                    (unsigned)ESP.getMaxAllocHeap(), (unsigned)STREAM_TTS_MIN_MAX_ALLOC);
       if (streamSpk.pending.length() > 0) {
         streamSpk.pending += " ";
       }
@@ -322,9 +326,9 @@ static void streamSentenceCallback(const String &sentence, bool isFinal) {
       return;
     }
     // Contiguous heap protection: Check heap before initiating secondary TLS handshake
-    if (ESP.getMaxAllocHeap() < 36000) {
-      Serial.printf("[STREAM] Dual-TLS heap tight (maxAlloc=%u < 36000). Deferring to final flush.\n",
-                    (unsigned)ESP.getMaxAllocHeap());
+    if (ESP.getMaxAllocHeap() < STREAM_TTS_MIN_MAX_ALLOC) {
+      Serial.printf("[STREAM] Dual-TLS heap tight (maxAlloc=%u < %u). Deferring to final flush.\n",
+                    (unsigned)ESP.getMaxAllocHeap(), (unsigned)STREAM_TTS_MIN_MAX_ALLOC);
       return;
     }
     Emotion vocalEmotion = detectVocalEmotion(streamSpk.pending);
@@ -352,19 +356,28 @@ void handleQuestion(const String &q) {
   Serial.println(q);
   if (cancelRequest)
     return;
+
+  // ============================================================
+  // ZERO-LATENCY OFFLINE LOCAL INTENT FAST-PATH (<50ms)
+  // Executes locally on ESP32 without touching cloud LLM
+  // ============================================================
   if (handleTimerCommand(q))
     return;
   if (handleTimeCommand(q))
     return;
-  if (handleWeatherCommand(q))
-    return;
-  if (handleSkinCommand(q))
-    return;
-  if (handleEmotionCommand(q))
+  if (handleBatteryCommand(q))
     return;
   if (handleVolumeCommand(q))
     return;
   if (handleLightCommand(q))
+    return;
+  if (handleSkinCommand(q))
+    return;
+  if (handleSleepCommand(q))
+    return;
+  if (handleWeatherCommand(q))
+    return;
+  if (handleEmotionCommand(q))
     return;
   if (handleHungerCommand(q))
     return;
@@ -453,18 +466,43 @@ void handleQuestion(const String &q) {
   robotStateDesc = "Speaking...";
   {
     Emotion vocalEmotion = detectVocalEmotion(answer);
+    if (vocalEmotion == EMOTION_HAPPY || vocalEmotion == EMOTION_LAUGHING) {
+      vocalEmotion = EMOTION_SPEAKING;
+    }
     if (vocalEmotion == EMOTION_SPEAKING &&
         currentEmotion != EMOTION_THINKING &&
-        currentEmotion != EMOTION_LISTENING && currentEmotion != EMOTION_IDLE) {
+        currentEmotion != EMOTION_LISTENING && currentEmotion != EMOTION_IDLE &&
+        currentEmotion != EMOTION_HAPPY && currentEmotion != EMOTION_LAUGHING) {
       vocalEmotion =
-          currentEmotion; // Retain emotion set by [ACTION: emotion ...]
+          currentEmotion; // Retain emotion set by [ACTION: emotion ...] (e.g. angry, sad)
     }
     setEmotion(vocalEmotion);
 
-    if (cancelRequest)
+    // Bedtime / sleep fallback: If user asked to sleep or answer says good night / shubh ratri,
+    // queue sleep action so Kiwi falls asleep as soon as speaking completes!
+    if (!pendingSleepAction) {
+      String qLower = q;
+      qLower.toLowerCase();
+      String aLower = answer;
+      aLower.toLowerCase();
+      if (hasAny(qLower, {"so jao", "sone jao", "sone chalo", "soja", "so ja", "sleep mode",
+                          "go to sleep", "good night", "goodnight", "shubh ratri",
+                          "सोने जाओ", "सोने जा", "सो जाओ", "सो जा", "सोने चलो", "शुभ रात्रि", "गुड नाईट"}) ||
+          ((hasAny(aLower, {"शुभ रात्रि", "shubh ratri", "good night", "goodnight"}) ||
+            hasAny(aLower, {"so raha hoon", "so ja", "sone ja"})) &&
+           hasAny(qLower, {"so", "sleep", "night", "sone", "सो", "रात", "नींद"}))) {
+        pendingSleepAction = true;
+      }
+    }
+
+    if (cancelRequest || bargeInTriggered)
       return;
 
 #if LLM_STREAM_TTS
+    // Allow LwIP to finalize and free the LLM TCP socket buffers before starting TTS TLS
+    yield();
+    delay(40);
+
     // 3. Final flush: after askLLM() returns in handleQuestion():
     //    - If cancelRequest -> do nothing more for speech.
     //    - If pending is non-empty and !cancelRequest -> speakText(pending) once.
@@ -482,7 +520,7 @@ void handleQuestion(const String &q) {
       streamSpk.pending = "";
     }
 
-    if (cancelRequest)
+    if (cancelRequest || bargeInTriggered)
       return;
 
     //    - Do NOT speakText(answer) again if anything was already spoken
@@ -504,7 +542,7 @@ void handleQuestion(const String &q) {
 #else
     cancelRequest = false;
     bool ok = speakText(answer);
-    if (cancelRequest)
+    if (cancelRequest || bargeInTriggered)
       return;
     if (!ok) {
       robotStateDesc = "TTS Failed";
@@ -524,10 +562,16 @@ void handleQuestion(const String &q) {
       return;
     }
 
+    if (bargeInTriggered)
+      return;
+
     // Turn completed: return immediately to natural IDLE eye skin
     setEmotion(EMOTION_IDLE);
     returnIdleAt = 0;
   }
+
+  if (bargeInTriggered)
+    return;
 
   robotStateDesc = "Ready";
   addTerminalLog("[ROBOT] Turn completed. Ready.");

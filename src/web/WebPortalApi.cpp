@@ -7,6 +7,8 @@
 #include "face/FaceEngine.h"
 #include "face/SleepyWakeAnim.h"
 #include "hardware/AudioEngine.h"
+#include "hardware/RgbLed.h"
+#include "hardware/WakeWordEngine.h"
 #include "services/AiService.h"
 #include "services/MemoryService.h"
 #include "services/WeatherService.h"
@@ -333,6 +335,24 @@ void handleDoAction() {
     return;
   }
 
+  // Live Hunger Routine Toggle
+  if (server.hasArg("hunger_en")) {
+    String he = server.arg("hunger_en");
+    hungerEnabled = (he == "1" || he == "true" || he == "on");
+    Preferences p;
+    p.begin("myrobot", false);
+    p.putBool("hunger_en", hungerEnabled);
+    p.end();
+    if (!hungerEnabled && (isKiwiHungry() || isKiwiAngry())) {
+      reconcileKiwi();
+    }
+    Serial.printf("[PORTAL] Hunger toggle live set to: %d\n", hungerEnabled);
+    server.send(200, "application/json",
+                "{\"ok\":true,\"hunger_en\":" +
+                    String(hungerEnabled ? "true" : "false") + "}");
+    return;
+  }
+
   // Live Sound-Reactive Face Toggle
   if (server.hasArg("snd_react")) {
     String sr = server.arg("snd_react");
@@ -346,6 +366,91 @@ void handleDoAction() {
     server.send(200, "application/json",
                 "{\"ok\":true,\"snd_react\":" +
                     String(soundReactiveEnabled ? "true" : "false") + "}");
+    return;
+  }
+
+  // Live Wake-Word Toggle & Cutoff Tuning
+  if (server.hasArg("ww_en")) {
+    String we = server.arg("ww_en");
+    wakeWordEnabled = (we == "1" || we == "true" || we == "on");
+    wakeWordSetEnabled(wakeWordEnabled);
+    Preferences p;
+    p.begin("myrobot", false);
+    p.putBool("ww_en", wakeWordEnabled);
+    p.end();
+    Serial.printf("[PORTAL] Wake-word live set to: %d\n", wakeWordEnabled);
+    server.send(200, "application/json",
+                "{\"ok\":true,\"ww_en\":" +
+                    String(wakeWordEnabled ? "true" : "false") + "}");
+    return;
+  }
+
+  if (server.hasArg("ww_cutoff")) {
+    wakeWordCutoff = server.arg("ww_cutoff").toFloat();
+    wakeWordSetSensitivity(wakeWordCutoff);
+    Preferences p;
+    p.begin("myrobot", false);
+    p.putFloat("ww_cutoff", wakeWordCutoff);
+    p.end();
+    Serial.printf("[PORTAL] Wake-word cutoff set to: %.2f\n", wakeWordCutoff);
+    server.send(200, "application/json",
+                "{\"ok\":true,\"ww_cutoff\":" + String(wakeWordCutoff, 2) + "}");
+    return;
+  }
+
+  // Live Wake-Word Model Switch (0=Hey Jarvis, 1=Hey Edith, 2=Alexa)
+  if (server.hasArg("ww_model")) {
+    String wm = server.arg("ww_model");
+    uint8_t mIdx = 0;
+    if (wm == "1" || wm == "hey_edith" || wm == "edith") mIdx = 1;
+    else if (wm == "2" || wm == "alexa") mIdx = 2;
+    else mIdx = 0;
+
+    wakeWordSetModel(mIdx);
+    Preferences p;
+    p.begin("myrobot", false);
+    p.putUChar("ww_model", wakeWordModel);
+    p.putFloat("ww_cutoff", wakeWordCutoff);
+    p.end();
+    Serial.printf("[PORTAL] Wake-word model switched to: %d (%s), cutoff: %.2f\n",
+                  wakeWordModel, wakeWordGetModelName(), wakeWordCutoff);
+    server.send(200, "application/json",
+                "{\"ok\":true,\"ww_model\":" + String(wakeWordModel) +
+                    ",\"name\":\"" + String(wakeWordGetModelName()) +
+                    "\",\"cutoff\":" + String(wakeWordCutoff, 2) + "}");
+    return;
+  }
+
+  // Live RGB LED (Pin 48) Toggle
+  if (server.hasArg("rgb_en")) {
+    String re = server.arg("rgb_en");
+    rgbLedEnabled = (re == "1" || re == "true" || re == "on");
+    rgbLedSetEnabled(rgbLedEnabled);
+    Preferences p;
+    p.begin("myrobot", false);
+    p.putBool("rgb_en", rgbLedEnabled);
+    p.end();
+    Serial.printf("[PORTAL] Pin 48 RGB LED live set to: %d\n", rgbLedEnabled);
+    server.send(200, "application/json",
+                "{\"ok\":true,\"rgb_en\":" +
+                    String(rgbLedEnabled ? "true" : "false") + "}");
+    return;
+  }
+
+  // Live RGB LED (Pin 48) Brightness (0-100%)
+  if (server.hasArg("rgb_bright")) {
+    int bPct = server.arg("rgb_bright").toInt();
+    if (bPct < 0) bPct = 0;
+    if (bPct > 100) bPct = 100;
+    rgbLedBrightness = (uint8_t)((bPct * 255) / 100);
+    rgbLedSetBrightness(rgbLedBrightness);
+    Preferences p;
+    p.begin("myrobot", false);
+    p.putUChar("rgb_bright", rgbLedBrightness);
+    p.end();
+    Serial.printf("[PORTAL] Pin 48 RGB LED brightness set to: %d%% (%d/255)\n", bPct, rgbLedBrightness);
+    server.send(200, "application/json",
+                "{\"ok\":true,\"rgb_bright\":" + String(bPct) + "}");
     return;
   }
 
@@ -587,6 +692,13 @@ void handleStatus() {
   // Status JSON: soundReactive (snd_react)
   j += ",\"soundReactive\":{\"enabled\":" +
        String(soundReactiveEnabled ? "true" : "false") + "}";
+  j += ",\"wakeWord\":{\"enabled\":" + String(wakeWordEnabled ? "true" : "false") +
+       ",\"model\":" + String(wakeWordModel) +
+       ",\"name\":\"" + String(wakeWordGetModelName()) + "\"" +
+       ",\"cutoff\":" + String(wakeWordCutoff, 2) +
+       ",\"listening\":" + String(wakeWordIsListening() ? "true" : "false") + "}";
+  j += ",\"rgbLed\":{\"enabled\":" + String(rgbLedEnabled ? "true" : "false") +
+       ",\"brightness\":" + String((int)((rgbLedBrightness * 100) / 255)) + "}";
   j += ",\"timer_active\":" + String(isRobotTimerActive() ? "true" : "false");
   j += ",\"timer_ringing\":" + String(isRobotTimerRinging() ? "true" : "false");
   j += ",\"timer_remaining\":" + String(getRobotTimerRemainingSec());
@@ -661,8 +773,17 @@ void handleConfigApi() {
        ",\"end\":" + String(circadianSleepEnd) + "},";
   j += "\"greetings\":{\"enabled\":" +
        String(greetingsEnabled ? "true" : "false") + "},";
+  j += "\"hunger\":{\"enabled\":" +
+       String(hungerEnabled ? "true" : "false") + "},";
   j += "\"soundReactive\":{\"enabled\":" +
        String(soundReactiveEnabled ? "true" : "false") + "},";
+  j += "\"wakeWord\":{\"enabled\":" + String(wakeWordEnabled ? "true" : "false") +
+       ",\"model\":" + String(wakeWordModel) +
+       ",\"name\":\"" + String(wakeWordGetModelName()) + "\"" +
+       ",\"cutoff\":" + String(wakeWordCutoff, 2) + "},";
+  j += "\"rgbLed\":{\"enabled\":" + String(rgbLedEnabled ? "true" : "false") +
+       ",\"brightness\":" + String((int)((rgbLedBrightness * 100) / 255)) +
+       ",\"pin\":48},";
   j += "\"boredom\":{\"enabled\":" + String(boredomEnabled ? "true" : "false") +
        ",\"minutes\":" + String(boredomMinutes) + "},";
   j += "\"weather\":{\"city\":\"" + escJson(weatherCity) + "\",\"lat\":\"" +
@@ -911,9 +1032,43 @@ void handleSave() {
     String ge = server.arg("greet_en");
     greetingsEnabled = (ge == "1" || ge == "true" || ge == "on");
   }
+  if (server.hasArg("hunger_en")) {
+    String he = server.arg("hunger_en");
+    hungerEnabled = (he == "1" || he == "true" || he == "on");
+    if (!hungerEnabled && (isKiwiHungry() || isKiwiAngry())) {
+      reconcileKiwi();
+    }
+  }
   if (server.hasArg("snd_react")) {
     String sr = server.arg("snd_react");
     soundReactiveEnabled = (sr == "1" || sr == "true" || sr == "on");
+  }
+  if (server.hasArg("ww_en")) {
+    String we = server.arg("ww_en");
+    wakeWordEnabled = (we == "1" || we == "true" || we == "on");
+    wakeWordSetEnabled(wakeWordEnabled);
+  }
+  if (server.hasArg("ww_cutoff")) {
+    wakeWordCutoff = server.arg("ww_cutoff").toFloat();
+    wakeWordSetSensitivity(wakeWordCutoff);
+  }
+  if (server.hasArg("ww_model")) {
+    uint8_t m = server.arg("ww_model").toInt();
+    if (m > 2) m = 0;
+    wakeWordModel = m;
+    wakeWordSetModel(wakeWordModel);
+  }
+  if (server.hasArg("rgb_en")) {
+    String re = server.arg("rgb_en");
+    rgbLedEnabled = (re == "1" || re == "true" || re == "on");
+    rgbLedSetEnabled(rgbLedEnabled);
+  }
+  if (server.hasArg("rgb_bright")) {
+    int bPct = server.arg("rgb_bright").toInt();
+    if (bPct < 0) bPct = 0;
+    if (bPct > 100) bPct = 100;
+    rgbLedBrightness = (uint8_t)((bPct * 255) / 100);
+    rgbLedSetBrightness(rgbLedBrightness);
   }
   if (server.hasArg("circ_start"))
     circadianSleepStart = server.arg("circ_start").toInt();

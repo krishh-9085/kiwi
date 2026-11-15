@@ -1,5 +1,6 @@
 #include "hardware/SoundLevel.h"
 #include "hardware/AudioEngine.h"
+#include "hardware/WakeWordEngine.h"
 #include "config/AppConfig.h"
 #include <driver/i2s_std.h>
 #include <math.h>
@@ -25,6 +26,11 @@ void soundLevelTick() {
     s_smoothedLevel = 0.0f;
     s_prevIn = 0.0f;
     s_prevOut = 0.0f;
+    return;
+  }
+
+  // If wake-word engine is actively listening, it feeds samples directly
+  if (wakeWordIsListening()) {
     return;
   }
 
@@ -74,6 +80,42 @@ void soundLevelTick() {
     s_smoothedLevel += 0.08f * (rawLevel - s_smoothedLevel);
   }
 
+  if (s_smoothedLevel < 0.001f) {
+    s_smoothedLevel = 0.0f;
+  }
+}
+
+void soundLevelFeedSamples(const int16_t *pcm, int count) {
+  if (!soundReactiveEnabled || count <= 0 || !pcm) {
+    return;
+  }
+  uint32_t now = millis();
+  bool outputting = kiwiIsOutputting();
+  if (outputting) {
+    s_lastOutputAt = now;
+  }
+  if (outputting || (now - s_lastOutputAt < 400)) {
+    s_smoothedLevel = 0.0f;
+    return;
+  }
+
+  float sumAbs = 0.0f;
+  for (int i = 0; i < count; i++) {
+    sumAbs += fabsf((float)pcm[i]);
+  }
+  float meanAbs = sumAbs / (float)count;
+  float scaled = meanAbs * SOUND_REACT_GAIN;
+  float net = scaled - (float)NOISE_GATE_THRESHOLD;
+  if (net < 0.0f) net = 0.0f;
+  float rawLevel = net / 16000.0f;
+  if (rawLevel < 0.0f) rawLevel = 0.0f;
+  else if (rawLevel > 1.0f) rawLevel = 1.0f;
+
+  if (rawLevel > s_smoothedLevel) {
+    s_smoothedLevel += 0.5f * (rawLevel - s_smoothedLevel);
+  } else {
+    s_smoothedLevel += 0.08f * (rawLevel - s_smoothedLevel);
+  }
   if (s_smoothedLevel < 0.001f) {
     s_smoothedLevel = 0.0f;
   }

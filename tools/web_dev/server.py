@@ -30,7 +30,7 @@ CONFIG_PATH = os.path.join(DEV_DIR, "mock_config.json")
 # State for local simulation
 proxy_robot_ip = None
 simulated_logs = [
-    "[BOOT] Kiwi System Booting (ESP32-C3 DevKitM-1)",
+    "[BOOT] Kiwi System Booting (ESP32-S3 DevKit)",
     "[OLED] SSD1306 128x64 display initialized OK",
     "[I2S] Audio engine ready (MAX98357A + INMP441)",
     "[NET] Connected to Wi-Fi. IP: 192.168.1.100 (RSSI: -52dBm)",
@@ -475,6 +475,17 @@ class DevPortalHandler(BaseHTTPRequestHandler):
                 "soundReactive": {
                     "enabled": cfg_curr.get("soundReactiveEnabled", False)
                 },
+                "rgbLed": {
+                    "enabled": cfg_curr.get("rgbLedEnabled", True),
+                    "brightness": cfg_curr.get("rgbLedBrightness", 63)
+                },
+                "wakeWord": {
+                    "enabled": cfg_curr.get("wakeWordEnabled", True),
+                    "model": cfg_curr.get("wakeWordModel", 0),
+                    "name": "Alexa" if cfg_curr.get("wakeWordModel", 0) == 2 else ("Hey Edith" if cfg_curr.get("wakeWordModel", 0) == 1 else "Hey Jarvis"),
+                    "cutoff": 0.82 if cfg_curr.get("wakeWordModel", 0) == 2 else (0.30 if cfg_curr.get("wakeWordModel", 0) == 1 else 0.26),
+                    "listening": True
+                },
                 "state": ("Sleeping" if cfg_curr.get("sleeping", False) else "Idle & Happy"),
                 "question": "What's up Kiwi?",
                 "answer": "Surviving on 3.3V and pure attitude! What are we building today?",
@@ -557,6 +568,22 @@ class DevPortalHandler(BaseHTTPRequestHandler):
                     cfg["greetingsEnabled"] = (val == "1" or val == "true" or val == "on"); cfg_changed = True
                 elif k == "snd_react":
                     cfg["soundReactiveEnabled"] = (val == "1" or val == "true" or val == "on"); cfg_changed = True
+                elif k == "rgb_en":
+                    cfg["rgbLedEnabled"] = (val == "1" or val == "true" or val == "on"); cfg_changed = True
+                elif k == "rgb_bright":
+                    try:
+                        cfg["rgbLedBrightness"] = int(val)
+                    except ValueError:
+                        cfg["rgbLedBrightness"] = 63
+                    cfg_changed = True
+                elif k == "ww_en":
+                    cfg["wakeWordEnabled"] = (val == "1" or val == "true" or val == "on"); cfg_changed = True
+                elif k == "ww_model":
+                    try:
+                        cfg["wakeWordModel"] = int(val)
+                    except ValueError:
+                        cfg["wakeWordModel"] = 0
+                    cfg_changed = True
                 elif k == "circ_start":
                     cfg["circadianSleepStart"] = int(val); cfg_changed = True
                 elif k == "circ_end":

@@ -207,6 +207,12 @@ bool setEyeSkinByName(const String &nameIn) {
   n.toLowerCase();
   n.trim();
 
+  // 0. Next / Cycle / Change
+  if (n == "next" || n == "cycle" || n == "change" || n == "अगला" || n == "बदलो") {
+    currentEyeSkin = (EyeSkin)(((uint8_t)currentEyeSkin + 1) % SKIN_COUNT);
+    return true;
+  }
+
   // 1. Kiwi (Default / #1)
   if (n == "kiwi" || n == "desk buddy" || n == "deskbuddy" || n == "buddy" ||
       n == "default" || n == "cute" || n == "कीवी") {
@@ -343,6 +349,10 @@ bool executeRobotAction(const String &actionCmd) {
 
   // 3. FACIAL EMOTION CHANGE
   if (actionType == "emotion" || actionType == "face" || actionType == "mood") {
+    // Suppress unwanted generic "happy" face from LLM so eyes stay natural idle/speaking
+    if (param.equalsIgnoreCase("happy") || param.equalsIgnoreCase("joy")) {
+      return true;
+    }
     if (triggerEmotionByName(param, 4000, true)) {
       addTerminalLog("[ACTION] Facial emotion set to: " + param);
       return true;

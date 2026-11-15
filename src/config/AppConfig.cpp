@@ -183,8 +183,15 @@ int nightMode = 1; // 0: Same as day, 1: Dim, 2: Screen off (Rocky default: Dim)
 int nightBrightness = 10; // Night brightness (0-100%, Rocky default 10%)
 bool circadianSleepEnabled = true;
 bool greetingsEnabled = false;
+bool hungerEnabled = true;         // NVS: hunger_en (default true)
 bool soundReactiveEnabled = false; // NVS: snd_react
+bool wakeWordEnabled = true;       // NVS: ww_en (default true)
+float wakeWordCutoff = 0.26f;      // NVS: ww_cutoff (tuned for far-field responsiveness)
+uint8_t wakeWordModel = 0;         // NVS: ww_model (0=Hey Jarvis, 1=Hey Edith, 2=Alexa)
+bool rgbLedEnabled = true;         // NVS: rgb_en (default true)
+uint8_t rgbLedBrightness = 160;     // NVS: rgb_bright (0-255, default 160 ~63%)
 bool bootCompleted = false;
+volatile bool uiTaskRunning = false;
 int circadianSleepStart = 23; // 11:00 PM
 int circadianSleepEnd = 7;    // 07:00 AM
 bool inCircadianSleep = false;
@@ -212,6 +219,7 @@ uint32_t lastNtpTryAt = 0;
 volatile bool startRecording = false;
 volatile bool busyProcessing = false;
 volatile bool cancelRequest = false;
+volatile bool bargeInTriggered = false;
 volatile uint32_t lastProgressAt = 0;
 
 int micSlot = MIC_SLOT_OFFSET;

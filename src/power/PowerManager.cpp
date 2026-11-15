@@ -4,6 +4,7 @@
 #include "hardware/AudioEngine.h"
 #include "hardware/TouchController.h"
 #include "hardware/SoundLevel.h"
+#include "hardware/WakeWordEngine.h"
 #include "face/FaceDisplay.h"
 #include "face/FaceEngine.h"
 #include "face/SleepyWakeAnim.h"
@@ -197,7 +198,11 @@ static void enterDeepSleep(uint8_t mode, uint64_t wakeUs, const char *reason) {
   Serial.println("[POWER] Note: Web portal is UNREACHABLE during deep sleep.");
   Serial.flush();
 
+#if defined(ESP_GPIO_WAKEUP_GPIO_HIGH)
   esp_deep_sleep_enable_gpio_wakeup(1ULL << PIN_TOUCH_TOP, ESP_GPIO_WAKEUP_GPIO_HIGH);
+#else
+  esp_sleep_enable_ext0_wakeup((gpio_num_t)PIN_TOUCH_TOP, 1);
+#endif
   esp_deep_sleep_start();
   // Never returns
 }
@@ -339,6 +344,7 @@ void powerUpdate() {
   // - not in deep sleep
   // Wait at least 10 s in idle before switching down.
   bool canDropTo80 = (!displayPowerState || isOledDimmed) &&
+                     !wakeWordEnabled && !wakeWordIsListening() &&
                      !kiwiIsOutputting() && !isTonePlaying() &&
                      !busyProcessing && (now - lastWebRequestAt >= 2000) &&
                      !isRobotTimerRinging() &&

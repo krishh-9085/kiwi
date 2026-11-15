@@ -49,6 +49,7 @@ static String getSmartActionInstruction() {
 
 
          "[ACTION: sleep] [ACTION: weather] [ACTION: time] [ACTION: sound NAME] [ACTION: light COLOR/on/off/dim/bright/bri N/rainbow/fire/breathe/mode] "
+         "If user tells you to sleep/go to sleep or says good night ('so jao', 'sone jao', 'good night', 'shubh ratri'), always append [ACTION: sleep]. "
 
 
 
@@ -60,7 +61,7 @@ static String getSmartActionInstruction() {
 
 
 
-         "Emotions: happy excited sad angry confused cool cute evil crying dead "
+         "Emotions: excited sad angry confused cool cute evil crying dead "
 
 
 
@@ -84,12 +85,12 @@ static String getSmartActionInstruction() {
 
 static String getVoiceExpressionInstruction() {
   if (ttsProvider == "fish" || ttsProvider == "fishaudio") {
-    // Fish Audio S2: Emotion tags in [square brackets] at the START of sentences/clauses
-    return " VOCAL TAGS: Keep speech natural without emotion tags for normal answers. "
-           "Do NOT add [happy] to normal or factual responses. "
-           "Only use tags when the user's topic genuinely calls for strong emotion. "
-           "Examples: '[laugh] Haha yeh to kamaal tha!', '[sad] Oh, yeh sunkar bura laga.', '[whisper] Yeh secret baat hai.'. "
-           "Allowed tags when appropriate: [laugh] [chuckle] [whisper] [excited] [sad] [angry] [gasp] [sigh].";
+    // Fish Audio S2: Keep speech clean, natural and direct without laughter
+    return " VOCAL RULES: "
+           "1. NEVER use [laugh], [chuckle], [giggle], [happy], or laughing audio cues. Do NOT laugh or giggle in answers. "
+           "2. For normal answers, speak naturally in plain text with ZERO vocal tags. "
+           "3. ONLY use emotion tags if user explicitly demands a specific tone (e.g. user asks 'gusse me bolo' -> use [angry] [ACTION: emotion angry]; user asks 'sad hoke bolo' -> use [sad] [ACTION: emotion sad]). "
+           "Allowed dramatic tags ONLY when explicitly requested: [angry] [sad] [whisper] [excited].";
   } else {
     return " VOICE: Plain text only. No bracketed tone or sound tags.";
   }

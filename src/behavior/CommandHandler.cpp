@@ -7,6 +7,8 @@
 #include "core/Timing.h"
 #include "face/FaceEngine.h"
 #include "hardware/AudioEngine.h"
+#include "hardware/Battery.h"
+#include "hardware/RgbLed.h"
 #include "hardware/TouchController.h"
 #include "services/AiService.h"
 #include "services/AiTextTools.h"
@@ -15,6 +17,7 @@
 #include "services/WeatherService.h"
 #include "services/WledService.h"
 #include "web/WebPortal.h"
+#include <Preferences.h>
 #include <WiFi.h>
 
 // ============================================================
@@ -94,14 +97,17 @@ bool handleTimeCommand(const String &qIn) {
 
   // Positive explicit time query phrases
   bool isTime = hasAny(
-      q, {"what time",     "what's the time", "whats the time", "tell me time",
-          "tell the time", "show time",       "show clock",     "current time",
-          "time now",      "time right now",  "time kya",       "kya time",
-          "kitna baja",    "kitne baje",      "abhi kitna",     "abhi time",
-          "abhi kya time", "samay kya",       "kya samay",      "samay batao",
-          "time batao",    "time bolo",       "ghadi dikhao",   "time check",
-          "समय क्या",       "क्या समय",         "समय बताओ",       "टाइम बताओ",
-          "टाइम क्या",      "कितना बजा",       "कितने बजे",        "अभी समय"});
+      q, {"what time",     "what's the time", "whats the time", "what is the time",
+          "what time is it", "tell me time",  "tell the time",   "show time",
+          "show clock",    "current time",    "time now",        "time right now",
+          "time kya",      "kya time",        "time kya hua",    "time kya hua hai",
+          "kya time hua",  "kya time hua hai", "kitna baja",     "kitne baje",
+          "kitne baje hain", "kitna baj raha", "kitna baj raha hai", "abhi kitna",
+          "abhi time",     "abhi kya time",   "samay kya",       "kya samay",
+          "samay batao",   "time batao",      "time bolo",       "ghadi dikhao",
+          "time check",    "समय क्या",         "क्या समय",         "समय बताओ",
+          "टाइम बताओ",     "टाइम क्या",        "कितना बजा",       "कितने बजे",
+          "अभी समय"});
 
   // Short direct queries (e.g. "time", "clock", "samay", "ghadi")
   if (!isTime && q.length() <= 20) {
@@ -112,7 +118,7 @@ bool handleTimeCommand(const String &qIn) {
   if (!isTime)
     return false;
 
-  Serial.println("[CMD] time -> show clock & speak");
+  Serial.println("[CMD] Fast-path: time -> show clock & speak");
   if (!timeSynced && WiFi.status() == WL_CONNECTED)
     syncTimeFromNTP();
 
@@ -127,7 +133,7 @@ bool handleTimeCommand(const String &qIn) {
     const char *ampm = (timeinfo.tm_hour >= 12) ? "PM" : "AM";
     String timeSpeech;
     if (sttLang == "hi" || containsDevanagari(qIn) ||
-        hasAny(q, {"samay", "kya", "baja", "baje", "समय", "टाइम"})) {
+        hasAny(q, {"samay", "kya", "baja", "baje", "hua", "समय", "टाइम"})) {
       timeSpeech = "Abhi " + String(hour12) + " bajke " +
                    String(timeinfo.tm_min) + " minute ho rahe hain.";
     } else {
@@ -157,6 +163,71 @@ bool handleTimeCommand(const String &qIn) {
     yield();
   }
   showClockScreen = false;
+  setEmotion(EMOTION_IDLE);
+  returnIdleAt = 0;
+  return true;
+}
+
+// ============================================================
+// COMMAND: BATTERY STATUS FAST-PATH (<50ms)
+// ============================================================
+bool handleBatteryCommand(const String &qIn) {
+  String q = qIn;
+  q.toLowerCase();
+  q.trim();
+
+  // Negative filter: Prevent science/technology discussions
+  if (hasAny(q, {"what is a battery", "history of battery", "how does a battery",
+                 "battery car", "battery technology", "battery chemistry", "inverter"})) {
+    return false;
+  }
+
+  bool isBattery = hasAny(
+      q, {"battery", "battery kitni", "battery kitna", "battery status",
+          "battery percent", "battery percentage", "battery level", "charge kitna",
+          "kitna charge", "charging", "battery check", "battery batao",
+          "battery btao", "battery low", "बैटरी", "चार्ज", "बैटरी कितनी", "बैटरी लेवल"});
+
+  if (!isBattery) {
+    if (hasWord(q, {"charge", "charging", "battery"}) &&
+        (hasWord(q, {"status", "level", "percent", "percentage", "check", "kitni",
+                     "kitna", "batao", "btao"}) ||
+         q.length() <= 20)) {
+      isBattery = true;
+    }
+  }
+
+  if (!isBattery)
+    return false;
+
+  Serial.println("[CMD] Fast-path: battery requested");
+  int bp = batteryPercent();
+  soundCoin();
+  setEmotion(EMOTION_SPEAKING);
+
+  String reply;
+  if (bp >= 0) {
+    if (sttLang == "hi" || containsDevanagari(qIn) ||
+        hasAny(q, {"kitni", "kitna", "batao", "btao", "बैटरी", "चार्ज"})) {
+      reply = "Battery abhi " + String(bp) + " percent hai!";
+    } else {
+      reply = "Battery is at " + String(bp) + " percent!";
+    }
+  } else {
+    // Direct USB power (powered via Type-C cable)
+    if (sttLang == "hi" || containsDevanagari(qIn) ||
+        hasAny(q, {"kitni", "kitna", "batao", "btao", "बैटरी", "चार्ज"})) {
+      String name = getOwnerName();
+      if (name.length() == 0)
+        name = "Krishna";
+      reply = "Main direct USB power par chal raha hoon " + name + "! Full charge hoon!";
+    } else {
+      reply = "I am running on direct USB power! Fully powered up!";
+    }
+  }
+
+  setEmotion(EMOTION_SPEAKING);
+  speakText(reply);
   setEmotion(EMOTION_IDLE);
   returnIdleAt = 0;
   return true;
@@ -280,7 +351,7 @@ bool handleEmotionCommand(const String &qIn) {
                    hasAny(q, {"फेस", "चेहरा", "चेहरे", "एक्सप्रेशन", "बना", "दिखा",
                               "हो जा", "हो जाओ", "कर दो"});
 
-  if (!isCommand && q.length() > 25)
+  if (!isCommand)
     return false;
 
   if (hasWord(q, {"happy", "smile"}) ||
@@ -401,11 +472,16 @@ bool handleSkinCommand(const String &qIn) {
                  "how to", "movie", "video", "breed", "animal"}))
     return false;
 
+  // Strict Negative filter: Never hijack light, LED, volume, timer, or battery commands!
+  if (hasWord(q, {"led", "leds", "light", "lights", "bulb", "lamp", "volume",
+                  "timer", "alarm", "battery"}) ||
+      hasAny(q, {"बत्ती", "लाइट", "एलईडी", "आवाज़", "वॉल्यूम"})) {
+    return false;
+  }
+
   bool isThemeIntent =
-      hasWord(q, {"skin", "eyes", "eye skin", "looks", "theme", "look", "mode",
-                  "change", "switch", "set"}) ||
-      hasAny(q, {"थीम", "स्किन", "आंखें", "चश्मा", "चेहरा", "रखो", "लगाओ", "करो",
-                 "बदलो", "rakho", "lagao", "karo", "bana", "banao", "kardo"});
+      hasWord(q, {"skin", "eyes", "eye skin", "looks", "theme", "look", "face"}) ||
+      hasAny(q, {"थीम", "स्किन", "आंखें", "चश्मा", "चेहरा"});
 
   String name = "";
   EyeSkin targetSkin = currentEyeSkin;
@@ -445,21 +521,35 @@ bool handleSkinCommand(const String &qIn) {
     name = "Squircle Bold";
   }
 
+  // Check for generic "cycle / next / change" eyes command
+  bool isCycleCommand = isThemeIntent &&
+      (hasWord(q, {"change", "next", "switch", "cycle", "toggle", "badlo"}) ||
+       hasAny(q, {"eyes change", "eye change", "change eye", "change eyes", "change skin",
+                  "skin change", "next skin", "next eyes", "next eye", "aankhein badlo",
+                  "aankh badlo", "aankhein change", "aankh change", "dusri skin",
+                  "dusri aankhein", "dusra look", "naya look", "theme badlo"}));
+
+  // If user asked to cycle or change eyes without specifying a theme name:
+  if (name.length() == 0 && isCycleCommand) {
+    targetSkin = (EyeSkin)(((uint8_t)currentEyeSkin + 1) % SKIN_COUNT);
+    const char *skinNames[SKIN_COUNT] = {
+        "Kiwi", "Vector Classic", "Neon Capsule", "Pixel 8-Bit",
+        "Squircle Bold", "Neon Frame", "Lumina Spark"};
+    name = skinNames[targetSkin];
+  }
+
   if (name.length() == 0)
     return false;
 
-  // If a theme name was matched, only trigger if it's a theme intent OR a short
-  // direct command (<= 25 chars)
-  if (!isThemeIntent && q.length() > 25)
-    return false;
-
+  // Apply new skin immediately (<10ms!)
+  Serial.printf("[CMD] Fast-path: eye skin -> %s\n", name.c_str());
   currentEyeSkin = targetSkin;
   saveConfig();
   soundPetSparkle();
   if (sttLang == "hi" || containsDevanagari(qIn) ||
       hasAny(q, {"rakho", "karo", "lagao", "थीम", "बदलो", "रखो", "लगाओ",
-                 "kardo"})) {
-    speakText("Theme " + name + " set kar di hai!");
+                 "kardo", "aankhein", "aankh"})) {
+    speakText("Aankhein badal di! Yeh hai " + name + " skin!");
   } else {
     speakText("Theme set to " + name + "!");
   }
@@ -469,7 +559,7 @@ bool handleSkinCommand(const String &qIn) {
 }
 
 // ============================================================
-// COMMAND: VOLUME
+// COMMAND: VOLUME FAST-PATH (<50ms)
 // ============================================================
 bool handleVolumeCommand(const String &qIn) {
   String q = qIn;
@@ -484,23 +574,37 @@ bool handleVolumeCommand(const String &qIn) {
   }
 
   bool hasVolWord = hasWord(q, {"volume", "vol", "aawaz", "awaz", "sound",
-                                "loudness", "mute"}) ||
-                    hasAny(q, {"आवाज़", "आवाज", "वॉल्यूम", "म्यूट"});
+                                "loudness", "mute", "audio"}) ||
+                    hasAny(q, {"volume", "vol", "aawaz", "awaz", "awaaz", "avaz",
+                               "आवाज़", "आवाज", "वॉल्यूम", "म्यूट"});
 
-  if (!hasVolWord)
+  // Also support direct "tez bolo", "dheere bolo", "chup ho jao", "shant ho jao"
+  bool directIntent = hasAny(q, {"tez bolo", "zor se", "dheere bolo", "chup ho jao",
+                                 "shant ho jao", "mute karo", "mute kar", "sound badhao",
+                                 "sound kam"});
+
+  if (!hasVolWord && !directIntent)
     return false;
 
   int targetVol = -1;
-  if (hasWord(q, {"mute", "silent"}) || hasAny(q, {"chup", "म्यूट", "शांत"})) {
+  bool isUp = false;
+  bool isDown = false;
+
+  if (hasWord(q, {"mute", "silent"}) ||
+      hasAny(q, {"chup", "shant", "म्यूट", "शांत", "aawaz band", "sound off"})) {
     targetVol = 0;
   } else if (hasWord(q, {"up", "high", "increase", "louder"}) ||
-             hasAny(q, {"badhao", "badha", "tez", "बढ़ाओ", "तेज़"})) {
+             hasAny(q, {"badhao", "badha", "badha do", "tez", "zor se", "unche", "बढ़ाओ", "तेज़", "ज्यादा"})) {
     targetVol = min(100, speakerVolume + 20);
+    isUp = true;
   } else if (hasWord(q, {"down", "low", "decrease", "softer"}) ||
-             hasAny(q, {"kam", "ghatao", "dheere", "कम", "घटाओ"})) {
+             hasAny(q, {"kam", "ghatao", "dheere", "dheemi", "dheema", "कम", "घटाओ", "धीमे"})) {
     targetVol = max(10, speakerVolume - 20);
-  } else if (hasWord(q, {"max", "full"}) || hasAny(q, {"pura", "पूरा"})) {
+    isDown = true;
+  } else if (hasWord(q, {"max", "full", "maximum"}) ||
+             hasAny(q, {"pura", "poora", "100%", "100 percent", "पूरा", "फुल"})) {
     targetVol = 100;
+    isUp = true;
   } else {
     // Scan for direct number in string (e.g. 80, 50, 75)
     for (int i = 0; i < (int)q.length(); i++) {
@@ -521,11 +625,33 @@ bool handleVolumeCommand(const String &qIn) {
   if (targetVol >= 0) {
     speakerVolume = targetVol;
     saveConfig();
-    soundPetSparkle();
-    String reply = (sttLang == "hi" || q.indexOf("aawaz") >= 0 ||
-                    q.indexOf("awaz") >= 0 || containsDevanagari(qIn))
-                       ? "Aawaz " + String(speakerVolume) + " percent kar di!"
-                       : "Volume set to " + String(speakerVolume) + " percent!";
+
+    // Instant acoustic feedback in new volume
+    if (targetVol == 0) {
+      soundTouchBlip();
+    } else if (isUp) {
+      soundVolUp();
+    } else if (isDown) {
+      soundVolDown();
+    } else {
+      soundPetSparkle();
+    }
+
+    String reply;
+    if (targetVol == 0) {
+      reply = (sttLang == "hi" || containsDevanagari(qIn) || hasAny(q, {"chup", "aawaz", "awaz"}))
+                  ? "Kiwi mute ho gaya hai!"
+                  : "Muted!";
+    } else {
+      reply = (sttLang == "hi" || q.indexOf("aawaz") >= 0 ||
+               q.indexOf("awaz") >= 0 || q.indexOf("awaaz") >= 0 ||
+               containsDevanagari(qIn) ||
+               hasAny(q, {"kar", "karo", "badha", "kam", "tez", "dheere"}))
+                  ? "Aawaz " + String(speakerVolume) + " percent kar di!"
+                  : "Volume set to " + String(speakerVolume) + " percent!";
+    }
+
+    setEmotion(EMOTION_SPEAKING);
     speakText(reply);
     setEmotion(EMOTION_IDLE);
     returnIdleAt = 0;
@@ -714,8 +840,10 @@ bool handleLightCommand(const String &qIn) {
       hasWord(q, {"sync", "ambilight", "hyperhdr", "monitor"}) ||
       hasAny(q, {"screen sync", "pc sync", "screen light", "monitor light"});
   bool hasLightTrigger =
-      hasWord(q, {"light", "lights", "bulb", "lamp", "wled", "brightness"}) ||
-      hasAny(q, {"batti", "roshni", "बत्ती", "रोशनी", "लाइट"}) ||
+      hasWord(q, {"light", "lights", "led", "leds", "rgb", "bulb", "lamp",
+                  "wled", "brightness", "torch", "color", "colour"}) ||
+      hasAny(q, {"batti", "roshni", "बत्ती", "रोशनी", "लाइट", "एलईडी", "color",
+                 "colour", "onboard"}) ||
       hasScreenTrigger;
   int directFxId = -1;
   String directFxName = "";
@@ -745,7 +873,7 @@ bool handleLightCommand(const String &qIn) {
       }
     } else {
       if (executeUnifiedLightAction("screensync")) {
-        showEmotionFor(EMOTION_HAPPY, 2000);
+        setEmotion(EMOTION_SPEAKING);
         soundPetSparkle();
         speakText((sttLang == "hi") ? "Screen sync chalu kar diya!"
                                     : "Screen sync activated!");
@@ -769,55 +897,59 @@ bool handleLightCommand(const String &qIn) {
   if (hasWord(q, {"off", "close"}) ||
       hasAny(q, {"band", "bujha", "turn off", "switch off", "close light",
                  "बंद"})) {
-    if (executeUnifiedLightAction("off")) {
-      setEmotion(EMOTION_IDLE);
-      soundPetSparkle();
-      speakText((sttLang == "hi") ? "Light band kar di!"
-                                  : "Lights turned off!");
-      return true;
-    }
+    executeUnifiedLightAction("off");
+    rgbLedClearOverride();
+    rgbLedShow(0, 0, 0);
+    setEmotion(EMOTION_IDLE);
+    soundPetSparkle();
+    speakText((sttLang == "hi" || hasAny(q, {"band", "bujha", "बंद"}))
+                  ? "Light band kar di!"
+                  : "Lights turned off!");
+    return true;
   }
 
   // 2. Turn ON
   if (hasWord(q, {"on", "open"}) ||
       hasAny(q, {"chalu", "turn on", "switch on", "jalao", "on kar",
                  "open light", "चालू", "जलाओ"})) {
-    if (executeUnifiedLightAction("on")) {
-      setEmotion(EMOTION_IDLE);
-      soundPetSparkle();
-      speakText((sttLang == "hi") ? "Light on kar di!" : "Lights turned on!");
-      return true;
-    }
+    executeUnifiedLightAction("on");
+    rgbLedSetOverride(255, 240, 220);
+    setEmotion(EMOTION_IDLE);
+    soundPetSparkle();
+    speakText((sttLang == "hi" || hasAny(q, {"chalu", "jalao", "चालू", "जलाओ"}))
+                  ? "Light on kar di!"
+                  : "Lights turned on!");
+    return true;
   }
 
   // 3. Brightness presets
   if (hasWord(q, {"dim", "low", "night", "slight"}) ||
       hasAny(q, {"kam", "dheemi", "kam karo", "कम"})) {
-    if (executeUnifiedLightAction("dim")) {
-      setEmotion(EMOTION_IDLE);
-      soundPetSparkle();
-      speakText((sttLang == "hi") ? "Light dim kar di!" : "Light dimmed!");
-      return true;
-    }
+    executeUnifiedLightAction("dim");
+    rgbLedSetOverride(60, 40, 20);
+    setEmotion(EMOTION_IDLE);
+    soundPetSparkle();
+    speakText((sttLang == "hi") ? "Light dim kar di!" : "Light dimmed!");
+    return true;
   }
   if (hasWord(q, {"bright", "full", "max", "increase"}) ||
       hasAny(q, {"tez", "badhao", "poori", "puri", "तेज़"})) {
-    if (executeUnifiedLightAction("full")) {
-      setEmotion(EMOTION_IDLE);
-      soundPetSparkle();
-      speakText((sttLang == "hi") ? "Light full bright kar di!"
-                                  : "Lights set to full brightness!");
-      return true;
-    }
+    executeUnifiedLightAction("full");
+    rgbLedSetOverride(255, 255, 255);
+    setEmotion(EMOTION_IDLE);
+    soundPetSparkle();
+    speakText((sttLang == "hi") ? "Light full bright kar di!"
+                                : "Lights set to full brightness!");
+    return true;
   }
   if (hasWord(q, {"medium", "half"}) || hasAny(q, {"aadhi", "adha", "आधी"})) {
-    if (executeUnifiedLightAction("medium")) {
-      setEmotion(EMOTION_IDLE);
-      soundPetSparkle();
-      speakText((sttLang == "hi") ? "Light 50 percent brightness kar di!"
-                                  : "Light set to 50 percent brightness!");
-      return true;
-    }
+    executeUnifiedLightAction("medium");
+    rgbLedSetOverride(160, 140, 100);
+    setEmotion(EMOTION_IDLE);
+    soundPetSparkle();
+    speakText((sttLang == "hi") ? "Light 50 percent brightness kar di!"
+                                : "Light set to 50 percent brightness!");
+    return true;
   }
 
   // 4. Effects / Modes
@@ -885,67 +1017,53 @@ bool handleLightCommand(const String &qIn) {
     }
   }
 
+  // 4c. Onboard RGB LED specific controls
+  if (hasAny(q, {"onboard", "choti light", "chhoti light", "robot light",
+                 "robot ki light", "torch", "flashlight"})) {
+    if (hasWord(q, {"off", "close"}) || hasAny(q, {"band", "bujha"})) {
+      rgbLedClearOverride();
+      rgbLedShow(0, 0, 0);
+      soundPetSparkle();
+      speakText("Onboard light band kar di!");
+      return true;
+    } else {
+      rgbLedSetOverride(255, 255, 255);
+      soundPetSparkle();
+      speakText("Onboard light on kar di!");
+      return true;
+    }
+  }
+
   // 5. Colors (Leaves brightness untouched!)
   struct ColorMatch {
     const char *names[5];
     const char *action;
+    uint8_t r, g, b;
     const char *hiReply;
     const char *enReply;
-  } colors[] = {{{"red", "laal", nullptr},
-                 "red",
-                 "Light red kar di!",
-                 "Light set to red!"},
-                {{"green", "hara", "haree", nullptr},
-                 "green",
-                 "Light green kar di!",
-                 "Light set to green!"},
-                {{"blue", "neela", "neeli", nullptr},
-                 "blue",
-                 "Light blue kar di!",
-                 "Light set to blue!"},
-                {{"yellow", "peela", "peeli", nullptr},
-                 "yellow",
-                 "Light yellow kar di!",
-                 "Light set to yellow!"},
-                {{"pink", "gulabi", nullptr},
-                 "pink",
-                 "Light pink kar di!",
-                 "Light set to pink!"},
-                {{"purple", "violet", "baingani", nullptr},
-                 "purple",
-                 "Light purple kar di!",
-                 "Light set to purple!"},
-                {{"orange", "narangi", nullptr},
-                 "orange",
-                 "Light orange kar di!",
-                 "Light set to orange!"},
-                {{"cyan", "aqua", "firozi", nullptr},
-                 "cyan",
-                 "Light cyan kar di!",
-                 "Light set to cyan!"},
-                {{"white", "safed", nullptr},
-                 "white",
-                 "Light white kar di!",
-                 "Light set to white!"},
-                {{"warm", "night", nullptr},
-                 "warm",
-                 "Warm light on kar di!",
-                 "Warm light activated!"},
-                {{"cool", nullptr},
-                 "cool",
-                 "Cool white light on kar di!",
-                 "Cool white light activated!"},
-                {{nullptr}, nullptr, nullptr, nullptr}};
+  } colors[] = {
+      {{"red", "laal", nullptr}, "red", 255, 0, 0, "Light red kar di!", "Light set to red!"},
+      {{"green", "hara", "haree", nullptr}, "green", 0, 255, 0, "Light green kar di!", "Light set to green!"},
+      {{"blue", "neela", "neeli", nullptr}, "blue", 0, 100, 255, "Light blue kar di!", "Light set to blue!"},
+      {{"yellow", "peela", "peeli", nullptr}, "yellow", 255, 200, 0, "Light yellow kar di!", "Light set to yellow!"},
+      {{"pink", "gulabi", nullptr}, "pink", 255, 50, 150, "Light pink kar di!", "Light set to pink!"},
+      {{"purple", "violet", "baingani", nullptr}, "purple", 160, 0, 255, "Light purple kar di!", "Light set to purple!"},
+      {{"orange", "narangi", nullptr}, "orange", 255, 100, 0, "Light orange kar di!", "Light set to orange!"},
+      {{"cyan", "aqua", "firozi", nullptr}, "cyan", 0, 255, 255, "Light cyan kar di!", "Light set to cyan!"},
+      {{"white", "safed", nullptr}, "white", 255, 255, 255, "Light white kar di!", "Light set to white!"},
+      {{"warm", "night", nullptr}, "warm", 255, 180, 80, "Warm light on kar di!", "Warm light activated!"},
+      {{"cool", nullptr}, "cool", 200, 220, 255, "Cool white light on kar di!", "Cool white light activated!"},
+      {{nullptr}, nullptr, 0, 0, 0, nullptr, nullptr}};
 
   for (int i = 0; colors[i].action != nullptr; i++) {
     for (int k = 0; colors[i].names[k] != nullptr; k++) {
       if (matchWord(q, colors[i].names[k])) {
-        if (executeUnifiedLightAction(colors[i].action)) {
-          setEmotion(EMOTION_IDLE);
-          soundPetSparkle();
-          speakText((sttLang == "hi") ? colors[i].hiReply : colors[i].enReply);
-          return true;
-        }
+        executeUnifiedLightAction(colors[i].action);
+        rgbLedSetOverride(colors[i].r, colors[i].g, colors[i].b);
+        setEmotion(EMOTION_IDLE);
+        soundPetSparkle();
+        speakText((sttLang == "hi") ? colors[i].hiReply : colors[i].enReply);
+        return true;
       }
     }
   }
@@ -979,12 +1097,92 @@ bool handleLightCommand(const String &qIn) {
 }
 
 // ============================================================
+// COMMAND: SLEEP MODE FAST-PATH (<50ms)
+// ============================================================
+bool handleSleepCommand(const String &qIn) {
+  String q = qIn;
+  q.toLowerCase();
+  q.trim();
+
+  // Negative filter: Reject explanations or questions about sleep
+  if (hasAny(q, {"why do", "how much", "what is", "explain", "story",
+                 "sleeping beauty", "sleepless", "meaning of", "kyun sote",
+                 "kyu sote", "mat so", "don't sleep"})) {
+    return false;
+  }
+
+  bool isSleep = hasAny(
+      q, {
+          // Hindi Devanagari
+          "सोने जाओ", "सोने जा", "सोने चलो", "सोने चल", "सो जाओ", "सो जा",
+          "सो जाना", "अब सो जाओ", "अब सो जा", "तुम सो जाओ", "चलो सो जाओ",
+          "नींद आ रही", "शुभ रात्रि", "गुड नाईट", "गुड नाइट", "जाके सो जाओ",
+          "जाओ सो जाओ", "सो जाओ ना",
+          // Roman / Hinglish
+          "so jao", "so ja", "sone jao", "sone ja", "sone chalo", "sone chal",
+          "soja", "so jaao", "so jana", "so jane", "ab so jao", "ab so ja",
+          "tum so jao", "chalo so jao", "kuch der so", "neend aa rahi",
+          "shubh ratri", "shubhratri", "good night", "goodnight", "gud night",
+          "gudnight", "sleep mode", "go to sleep", "go to bed", "sleep now",
+          "time to sleep", "fall asleep", "take a nap", "night mode"
+      });
+
+  if (!isSleep && q.length() <= 25) {
+    isSleep = hasWord(q, {"sleep", "sleeping"}) &&
+              (hasWord(q, {"mode", "now", "go", "please", "bed"}) || hasAny(q, {"so ja", "jao", "sone"}));
+  }
+
+  if (!isSleep)
+    return false;
+
+  Serial.println("[CMD] Fast-path: sleep mode requested");
+  soundPetSleepy();
+  String reply = (sttLang == "hi" || containsDevanagari(qIn) || hasAny(q, {"so ja", "jao", "sone", "ratri"}))
+                     ? "Theek hai, shubh ratri! Main sone ja raha hoon."
+                     : "Alright, going to sleep. Good night!";
+  speakText(reply);
+  triggerPendingSleepAction();
+  return true;
+}
+
+// ============================================================
 // COMMAND: HUNGER & PET FEEDING / APOLOGY
 // ============================================================
 bool handleHungerCommand(const String &qIn) {
   String q = qIn;
   q.toLowerCase();
 
+  // 1. Toggle / Disable Hunger Routine
+  if (hasAny(q, {"bhook band", "bhookh band", "hunger band", "disable hunger",
+                 "stop hunger", "bhook mat mango", "bhook mat maango",
+                 "khana mat mango", "khana mat maango"})) {
+    hungerEnabled = false;
+    Preferences p;
+    p.begin("myrobot", false);
+    p.putBool("hunger_en", false);
+    p.end();
+    if (isKiwiHungry() || isKiwiAngry()) {
+      reconcileKiwi();
+    }
+    speakText("Theek hai! Ab main khane ke liye pareshaan nahi karunga.");
+    setEmotion(EMOTION_IDLE);
+    return true;
+  }
+
+  // 2. Enable Hunger Routine
+  if (hasAny(q, {"bhook chalu", "bhookh chalu", "hunger chalu", "enable hunger",
+                 "start hunger", "khana maango", "khana mango"})) {
+    hungerEnabled = true;
+    Preferences p;
+    p.begin("myrobot", false);
+    p.putBool("hunger_en", true);
+    p.end();
+    speakText("Yay! Ab main time par apna khana maangunga!");
+    setEmotion(EMOTION_IDLE);
+    return true;
+  }
+
+  // 3. Feeding Kiwi
   if (hasAny(q,
              {"khana khao", "khana kha lo", "kuch khao", "feed kiwi",
               "khana khila", "pet bhar lo", "kuch khale", "bhook lagi hai"})) {
@@ -998,12 +1196,14 @@ bool handleHungerCommand(const String &qIn) {
       String n = getOwnerName();
       if (n.length() == 0)
         n = "Krishna";
+      markCurrentMealFed();
       speakText("Mera pet pehle se bhara hua hai " + n + "!");
-      setEmotion(EMOTION_HAPPY);
+      setEmotion(EMOTION_IDLE);
       return true;
     }
   }
 
+  // 4. Apology / Reconciliation
   if (hasAny(q, {"maaf kardo", "maaf kar do", "sorry kiwi", "maan jao",
                  "man jao", "gussa mat ho", "gussa thook do"})) {
     if (isKiwiAngry()) {
@@ -1011,7 +1211,7 @@ bool handleHungerCommand(const String &qIn) {
       return true;
     } else {
       speakText("Arey main to gussa hoon hi nahi!");
-      setEmotion(EMOTION_HAPPY);
+      setEmotion(EMOTION_IDLE);
       return true;
     }
   }

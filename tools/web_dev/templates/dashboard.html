@@ -1257,7 +1257,7 @@
 
           <div class="term">
             <div class="term-head">
-              <span class="lamps"><i></i><i></i><i></i>&nbsp;ESP32-C3 · 115200 BAUD</span>
+              <span class="lamps"><i></i><i></i><i></i>&nbsp;ESP32-S3 · 115200 BAUD</span>
               <div class="term-tools">
                 <input type="search" id="termFilter" class="term-filter" placeholder="Filter logs..."
                   aria-label="Filter logs">
@@ -1280,17 +1280,29 @@
 
       <!-- Live Hardware Adjustments Deck (Real-Time · No Reboot Required) -->
       <div class="live-hardware-grid">
-        <!-- Col 1: Display Brightness & Night Mode -->
+        <!-- Col 1: Display Brightness, Night Mode & Visuals -->
         <div class="card kiwi-bright-card rocky-bright-card"
           style="margin-bottom:0;display:flex;flex-direction:column;justify-content:space-between">
           <div>
             <div class="card-title" style="display:flex;align-items:center;justify-content:space-between">
-              <span>Display Brightness</span>
-              <span class="live-saved-tick" id="tickBrightness"><svg width="12" height="12" viewBox="0 0 24 24"
-                  fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"
-                  aria-hidden="true">
-                  <polyline points="20 6 9 17 4 12" />
-                </svg> Live</span>
+              <span>Display &amp; Lights</span>
+              <div style="display:flex;gap:4px">
+                <span class="live-saved-tick" id="tickBrightness"><svg width="12" height="12" viewBox="0 0 24 24"
+                    fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"
+                    aria-hidden="true">
+                    <polyline points="20 6 9 17 4 12" />
+                  </svg> Live</span>
+                <span class="live-saved-tick" id="tickSndReact"><svg width="12" height="12" viewBox="0 0 24 24"
+                    fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"
+                    aria-hidden="true">
+                    <polyline points="20 6 9 17 4 12" />
+                  </svg> Live</span>
+                <span class="live-saved-tick" id="tickRgbLed"><svg width="12" height="12" viewBox="0 0 24 24"
+                    fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"
+                    aria-hidden="true">
+                    <polyline points="20 6 9 17 4 12" />
+                  </svg> Live</span>
+              </div>
             </div>
             <div class="kiwi-slider-row rocky-slider-row" style="margin-bottom:12px">
               <input type="range" name="live_disp_bright" id="dayBrightSlider" min="0" max="100" value="100"
@@ -1319,23 +1331,56 @@
                 aria-label="Night brightness" oninput="onNightBrightChange(this.value)">
               <span class="kiwi-percent-badge rocky-percent-badge" id="nightBrightVal">20%</span>
             </div>
+
+            <div class="panel" style="margin-top:12px">
+              <label class="toggle" style="margin:0 0 6px 0">
+                <input type="checkbox" id="liveSndReactToggle" onchange="onSoundReactToggle(this.checked)">
+                <span class="switch"></span>
+                <span style="font-weight:600;font-size:13px">Sound-reactive face</span>
+              </label>
+              <div style="font-size:11px;color:var(--muted)">Kiwi ki aankhein awaaz ke saath halke se react karengi.
+                Kiwi khud bolte waqt ye band rehta hai.</div>
+            </div>
+
+            <div class="panel" style="margin-top:8px">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+                <label class="toggle" style="margin:0">
+                  <input type="checkbox" id="liveRgbLedToggle" onchange="onRgbLedToggle(this.checked)">
+                  <span class="switch"></span>
+                  <span style="font-weight:600;font-size:13px">Pin 48 NeoPixel RGB LED</span>
+                </label>
+                <span class="kiwi-percent-badge rocky-percent-badge" id="rgbBrightVal">63%</span>
+              </div>
+              <div class="kiwi-slider-row rocky-slider-row" id="rgbSliderRow" style="margin:8px 0 6px">
+                <input type="range" name="live_rgb_bright" id="rgbBrightSlider" min="0" max="100" value="63"
+                  aria-label="NeoPixel LED Brightness" oninput="onRgbBrightChange(this.value)">
+              </div>
+              <div style="font-size:11px;color:var(--muted)">Mood, listening aur answering ke mutabiq onboard Pin 48 LED glow karegi.</div>
+            </div>
           </div>
 
           <p class="kiwi-footnote rocky-footnote" style="margin-top:12px">
-            Night mode applies during sleep hours or when put to sleep. Changes apply instantly.
+            Night mode applies during sleep hours. Screen &amp; LED react in real time.
           </p>
         </div>
 
-        <!-- Col 2: Live Speaker Volume & Desk Quirks -->
+        <!-- Col 2: Live Speaker Volume & Desk Voice -->
         <div class="card" style="margin-bottom:0;display:flex;flex-direction:column;justify-content:space-between">
           <div>
             <div class="card-title" style="display:flex;align-items:center;justify-content:space-between">
-              <span>Speaker Volume &amp; Desk</span>
-              <span class="live-saved-tick" id="tickAudio"><svg width="12" height="12" viewBox="0 0 24 24" fill="none"
-                  stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"
-                  aria-hidden="true">
-                  <polyline points="20 6 9 17 4 12" />
-                </svg> Live</span>
+              <span>Speaker &amp; Voice</span>
+              <div style="display:flex;gap:4px">
+                <span class="live-saved-tick" id="tickAudio"><svg width="12" height="12" viewBox="0 0 24 24" fill="none"
+                    stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"
+                    aria-hidden="true">
+                    <polyline points="20 6 9 17 4 12" />
+                  </svg> Live</span>
+                <span class="live-saved-tick" id="tickWakeWord"><svg width="12" height="12" viewBox="0 0 24 24"
+                    fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"
+                    aria-hidden="true">
+                    <polyline points="20 6 9 17 4 12" />
+                  </svg> Live</span>
+              </div>
             </div>
             <div class="kiwi-slider-row rocky-slider-row" style="margin-bottom:12px">
               <input type="range" id="volSlider" name="live_vol" min="0" max="100" value="80"
@@ -1344,6 +1389,32 @@
             </div>
 
             <div class="panel" style="margin-top:12px">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+                <label class="toggle" style="margin:0">
+                  <input type="checkbox" id="liveWakeWordToggle" onchange="onWakeWordToggle(this.checked)">
+                  <span class="switch"></span>
+                  <span style="font-weight:600;font-size:13px" id="wakeWordTitle">Wake Word ("Hey Jarvis")</span>
+                </label>
+                <span id="wakeWordStatusBadge"
+                  style="font-size:11px;padding:2px 8px;border-radius:12px;background:rgba(52,199,89,0.15);color:#34c759;font-weight:bold">Active</span>
+              </div>
+
+              <div style="display:flex;align-items:center;gap:8px;margin-top:8px">
+                <label for="wakeWordModelSel" style="margin:0;font-size:11px;color:var(--muted)">Model:</label>
+                <select id="wakeWordModelSel" onchange="onWakeWordModelChange(this.value)"
+                  style="width:auto;flex:1;padding:4px 24px 4px 8px;font-size:12px;min-height:34px">
+                  <option value="0">Hey Jarvis (Default)</option>
+                  <option value="1">Hey Edith</option>
+                  <option value="2">Alexa</option>
+                </select>
+              </div>
+
+              <div id="wakeWordSubHint" style="font-size:11px;color:var(--muted);margin-top:6px">
+                Bina touch kare <b id="wakeWordPromptWord" style="color:var(--text)">"Hey Jarvis"</b> bol kar Kiwi ko activate karein.
+              </div>
+            </div>
+
+            <div class="panel" style="margin-top:8px">
               <label class="toggle" style="margin:0 0 8px 0">
                 <input type="checkbox" name="live_boredom" id="rootBoredomToggle" value="1"
                   onchange="toggleBoredomLive(this.checked)">
@@ -1366,7 +1437,7 @@
             </div>
 
             <!-- Kiwi Pet Mood & Hunger -->
-            <div class="panel" style="margin-top:12px">
+            <div class="panel" style="margin-top:8px">
               <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
                 <span style="font-weight:600;font-size:13px">Pet Hunger &amp; Mood</span>
                 <span id="hungerBadge"
@@ -1394,7 +1465,7 @@
         <div class="card" style="margin-bottom:0;display:flex;flex-direction:column;justify-content:space-between">
           <div>
             <div class="card-title" style="display:flex;align-items:center;justify-content:space-between">
-              <span>Night Sleep &amp; Mode</span>
+              <span>Night Sleep &amp; Schedule</span>
               <div style="display:flex;gap:4px">
                 <span class="live-saved-tick" id="tickCircadian"><svg width="12" height="12" viewBox="0 0 24 24"
                     fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"
@@ -1402,11 +1473,6 @@
                     <polyline points="20 6 9 17 4 12" />
                   </svg> Live</span>
                 <span class="live-saved-tick" id="tickGreetings"><svg width="12" height="12" viewBox="0 0 24 24"
-                    fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"
-                    aria-hidden="true">
-                    <polyline points="20 6 9 17 4 12" />
-                  </svg> Live</span>
-                <span class="live-saved-tick" id="tickSndReact"><svg width="12" height="12" viewBox="0 0 24 24"
                     fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"
                     aria-hidden="true">
                     <polyline points="20 6 9 17 4 12" />
@@ -1520,16 +1586,6 @@
               <div style="font-size:11px;color:var(--muted)">Kiwi bolega Good morning / afternoon / night, din mein ek
                 baar.</div>
             </div>
-
-            <div class="panel" style="margin-top:8px">
-              <label class="toggle" style="margin:0 0 6px 0">
-                <input type="checkbox" id="liveSndReactToggle" onchange="onSoundReactToggle(this.checked)">
-                <span class="switch"></span>
-                <span style="font-weight:600;font-size:13px">Sound-reactive face</span>
-              </label>
-              <div style="font-size:11px;color:var(--muted)">Kiwi ki aankhein awaaz ke saath halke se react karengi.
-                Kiwi khud bolte waqt ye band rehta hai.</div>
-            </div>
           </div>
 
           <p class="kiwi-footnote rocky-footnote" style="margin-top:12px">
@@ -1555,6 +1611,10 @@
         <input type="hidden" name="snd_react" id="hiddenFormSndReact" value="0">
         <input type="hidden" name="boredom" id="hiddenFormBoredom" value="0">
         <input type="hidden" name="boredom_mins" id="hiddenFormBoredomMins" value="2">
+        <input type="hidden" name="ww_en" id="hiddenFormWakeWord" value="1">
+        <input type="hidden" name="ww_model" id="hiddenFormWakeWordModel" value="0">
+        <input type="hidden" name="rgb_en" id="hiddenFormRgbLed" value="1">
+        <input type="hidden" name="rgb_bright" id="hiddenFormRgbBright" value="63">
 
         <!-- WI-FI & LOCAL NETWORK SETUP -->
         <div class="card credentials-card" style="margin-bottom:16px">
@@ -2264,6 +2324,84 @@
           .catch(function () { toast('Failed to update sound reactive face'); });
       };
 
+      function getWakeWordName(m) {
+        if (m === 1 || m === '1') return 'Hey Edith';
+        if (m === 2 || m === '2') return 'Alexa';
+        return 'Hey Jarvis';
+      }
+
+      function updateWakeWordHint(m, en) {
+        var name = getWakeWordName(m);
+        var p = document.getElementById('wakeWordPromptWord');
+        var title = document.getElementById('wakeWordTitle');
+        var badge = document.getElementById('wakeWordStatusBadge');
+        if (p) p.textContent = '"' + name + '"';
+        if (title) title.textContent = 'Wake Word ("' + name + '")';
+        if (badge) {
+          if (typeof en === 'undefined') {
+            var wt = document.getElementById('liveWakeWordToggle');
+            en = wt ? wt.checked : true;
+          }
+          if (en) {
+            badge.textContent = 'Active';
+            badge.style.background = 'rgba(52,199,89,0.15)';
+            badge.style.color = '#34c759';
+          } else {
+            badge.textContent = 'Disabled';
+            badge.style.background = 'rgba(255,255,255,0.08)';
+            badge.style.color = 'var(--muted)';
+          }
+        }
+      }
+
+      window.onWakeWordToggle = function (en) {
+        var hw = document.getElementById('hiddenFormWakeWord');
+        if (hw) hw.value = en ? '1' : '0';
+        var sel = document.getElementById('wakeWordModelSel');
+        var m = sel ? sel.value : 0;
+        updateWakeWordHint(m, en);
+        api('/do?ww_en=' + (en ? '1' : '0'))
+          .then(function () { showLiveTick('tickWakeWord'); })
+          .catch(function () { toast('Failed to update wake word'); });
+      };
+
+      window.onWakeWordModelChange = function (val) {
+        var m = parseInt(val, 10);
+        var hm = document.getElementById('hiddenFormWakeWordModel');
+        if (hm) hm.value = m;
+        updateWakeWordHint(m);
+        api('/do?ww_model=' + encodeURIComponent(m))
+          .then(function () {
+            showLiveTick('tickWakeWord');
+            toast('Wake word switched to ' + getWakeWordName(m));
+          })
+          .catch(function () { toast('Failed to switch wake word'); });
+      };
+
+      var rgbBrightDebounce = null;
+      window.onRgbBrightChange = function (val) {
+        var v = document.getElementById('rgbBrightVal');
+        if (v) v.textContent = val + '%';
+        var hid = document.getElementById('hiddenFormRgbBright');
+        if (hid) hid.value = val;
+        clearTimeout(rgbBrightDebounce);
+        rgbBrightDebounce = setTimeout(function () {
+          api('/do?rgb_bright=' + encodeURIComponent(val))
+            .then(function () { showLiveTick('tickRgbLed'); })
+            .catch(function () { toast('Failed to update RGB LED brightness'); });
+        }, 120);
+      };
+
+      window.onRgbLedToggle = function (en) {
+        var hr = document.getElementById('hiddenFormRgbLed');
+        if (hr) hr.value = en ? '1' : '0';
+        var row = document.getElementById('rgbSliderRow');
+        if (row) row.style.opacity = en ? '1' : '0.4';
+        api('/do?rgb_en=' + (en ? '1' : '0'))
+          .then(function () { showLiveTick('tickRgbLed'); })
+          .catch(function () { toast('Failed to update RGB LED'); });
+      };
+
       window.onScheduleChange = function () {
         var s = document.getElementById('circStartSel');
         var e = document.getElementById('circEndSel');
@@ -2853,6 +2991,44 @@
               if (hs) hs.value = j.soundReactive.enabled ? '1' : '0';
             }
 
+            if (j.wakeWord) {
+              var wt = document.getElementById('liveWakeWordToggle');
+              if (wt && typeof j.wakeWord.enabled !== 'undefined' && document.activeElement !== wt) {
+                wt.checked = Boolean(j.wakeWord.enabled);
+              }
+              var hw = document.getElementById('hiddenFormWakeWord');
+              if (hw && typeof j.wakeWord.enabled !== 'undefined') hw.value = j.wakeWord.enabled ? '1' : '0';
+
+              var sel = document.getElementById('wakeWordModelSel');
+              if (sel && typeof j.wakeWord.model !== 'undefined' && document.activeElement !== sel) {
+                sel.value = String(j.wakeWord.model);
+              }
+              var hm = document.getElementById('hiddenFormWakeWordModel');
+              if (hm && typeof j.wakeWord.model !== 'undefined') hm.value = String(j.wakeWord.model);
+
+              updateWakeWordHint(j.wakeWord.model, j.wakeWord.enabled);
+            }
+
+            if (j.rgbLed) {
+              var rt = document.getElementById('liveRgbLedToggle');
+              if (rt && typeof j.rgbLed.enabled !== 'undefined' && document.activeElement !== rt) {
+                rt.checked = Boolean(j.rgbLed.enabled);
+                var row = document.getElementById('rgbSliderRow');
+                if (row) row.style.opacity = j.rgbLed.enabled ? '1' : '0.4';
+              }
+              var hr = document.getElementById('hiddenFormRgbLed');
+              if (hr && typeof j.rgbLed.enabled !== 'undefined') hr.value = j.rgbLed.enabled ? '1' : '0';
+
+              if (typeof j.rgbLed.brightness !== 'undefined') {
+                var sl = document.getElementById('rgbBrightSlider');
+                if (sl && document.activeElement !== sl) sl.value = j.rgbLed.brightness;
+                var valEl = document.getElementById('rgbBrightVal');
+                if (valEl) valEl.textContent = j.rgbLed.brightness + '%';
+                var hb = document.getElementById('hiddenFormRgbBright');
+                if (hb) hb.value = j.rgbLed.brightness;
+              }
+            }
+
             if (j.circadian && typeof j.circadian.enabled !== 'undefined') {
               var ct = document.getElementById('liveCircEnToggle');
               if (ct && document.activeElement !== ct) {
@@ -3152,6 +3328,25 @@
         var sEn = cfg.soundReactive ? cfg.soundReactive.enabled : cfg.soundReactiveEnabled;
         chk('liveSndReactToggle', sEn);
         val('hiddenFormSndReact', sEn ? '1' : '0');
+
+        var wEn = cfg.wakeWord ? cfg.wakeWord.enabled : (cfg.wakeWordEnabled !== undefined ? cfg.wakeWordEnabled : true);
+        chk('liveWakeWordToggle', wEn);
+        val('hiddenFormWakeWord', wEn ? '1' : '0');
+        var wModel = cfg.wakeWord ? cfg.wakeWord.model : (cfg.wakeWordModel !== undefined ? cfg.wakeWordModel : 0);
+        val('wakeWordModelSel', String(wModel || 0));
+        val('hiddenFormWakeWordModel', String(wModel || 0));
+        updateWakeWordHint(wModel, wEn);
+
+        var rEn = cfg.rgbLed ? cfg.rgbLed.enabled : (cfg.rgbLedEnabled !== undefined ? cfg.rgbLedEnabled : true);
+        chk('liveRgbLedToggle', rEn);
+        val('hiddenFormRgbLed', rEn ? '1' : '0');
+        var rBright = cfg.rgbLed ? cfg.rgbLed.brightness : (cfg.rgbLedBrightness !== undefined ? cfg.rgbLedBrightness : 63);
+        val('rgbBrightSlider', rBright || 63);
+        val('hiddenFormRgbBright', rBright || 63);
+        var rValEl = document.getElementById('rgbBrightVal');
+        if (rValEl) rValEl.textContent = (rBright || 63) + '%';
+        var rRow = document.getElementById('rgbSliderRow');
+        if (rRow) rRow.style.opacity = rEn ? '1' : '0.4';
 
         // STT
         var stt = cfg.stt || {};

@@ -10,3 +10,4 @@
 
 void tickFace();
 void updateFaceFrameRate();
+void startUiDisplayTask();

@@ -47,8 +47,8 @@ void triggerTickleMode() {
       "Hehe haha! Cheeks mat chhedo, gudgudi lagti hai!"};
   int idx = random(0, 3);
   speakText(tickleReplies[idx]);
-  setEmotion(EMOTION_HAPPY);
-  returnIdleAt = millis() + 1500;
+  setEmotion(EMOTION_IDLE);
+  returnIdleAt = 0;
   resyncTouch();
   busyProcessing = false;
 }
@@ -57,8 +57,12 @@ void initTouch() {
   pinMode(PIN_TOUCH_LEFT, INPUT_PULLDOWN);
   pinMode(PIN_TOUCH_RIGHT, INPUT_PULLDOWN);
   pinMode(PIN_TOUCH_TOP, INPUT_PULLDOWN);
+#if defined(ESP_GPIO_WAKEUP_GPIO_HIGH)
   esp_deep_sleep_enable_gpio_wakeup(1ULL << PIN_TOUCH_TOP,
                                     ESP_GPIO_WAKEUP_GPIO_HIGH);
+#else
+  esp_sleep_enable_ext0_wakeup((gpio_num_t)PIN_TOUCH_TOP, 1);
+#endif
   touchL.armed = true;
   touchR.armed = true;
   touchT.armed = true;
@@ -132,7 +136,7 @@ void executeTouchAction(TouchAction act, uint8_t pin) {
     manualSleep = false;
     inCircadianSleep = false;
     circadianTempWakeUntil = now + 30000;
-    setEmotion(EMOTION_HAPPY);
+    setEmotion(EMOTION_IDLE);
     soundPetSparkle();
     Serial.println(
         "[TOUCH] Second tap during sleepy wake -> Full Wake-up (Happy)");
@@ -236,6 +240,21 @@ void executeTouchAction(TouchAction act, uint8_t pin) {
                      "Clock/Weather Screen!");
       return;
     }
+
+    bool isSpeaking = isSpeechPlaying() || currentEmotion == EMOTION_SPEAKING;
+    if (isSpeaking) {
+      // Barge-in: Tapping top button while Kiwi is speaking cuts off speech
+      // and immediately starts listening for the new question!
+      Serial.println("[TOUCH] Barge-in top tap during speech -> Cut off speech & start listening!");
+      cancelRequest = true;
+      bargeInTriggered = true;
+      toneStop();
+      spkAbortSpeech();
+      listenStartedAt = millis();
+      setEmotion(EMOTION_LISTENING);
+      return;
+    }
+
     if (busyProcessing || startRecording) {
       // Debounce cancel: only cancel if listening was initiated > 600ms ago.
       // This prevents the user's initial touch release / bounce from
@@ -244,8 +263,10 @@ void executeTouchAction(TouchAction act, uint8_t pin) {
         Serial.println(
             "[TOUCH] Action LISTEN -> Cancel current request / listening");
         cancelRequest = true;
+        bargeInTriggered = false;
         startRecording = false;
-        soundPetSparkle();
+        toneStop();
+        spkEndSpeech();
         setEmotion(EMOTION_IDLE);
       } else {
         Serial.println("[TOUCH] Action LISTEN -> Ignored cancel bounce (<600ms "
@@ -448,6 +469,12 @@ static void updateOneTouch(TouchSensor &ts, uint32_t now) {
       }
     } else {
       uint32_t held = now - ts.startedAt;
+      if (!touchL.state && !touchR.state && !touchT.state) {
+        if (currentEmotion == EMOTION_IDLE || currentEmotion == EMOTION_HAPPY) {
+          gazeTgtX = 0.0f;
+          gazeTgtY = 0.0f;
+        }
+      }
       Serial.printf("[TOUCH] Pin %d RELEASED after %lu ms\n", ts.pin,
                     (unsigned long)held);
       uint32_t tapMax =
@@ -478,6 +505,17 @@ static void updateOneTouch(TouchSensor &ts, uint32_t now) {
   if (ts.state) {
     lastUserInteractionAt = now;
     uint32_t held = now - ts.startedAt;
+
+    // Directional Gazing: Eyes look towards the touched cheek or head
+    if (!busyProcessing && !inCircadianSleep && !manualSleep) {
+      if (touchL.state && !touchR.state) {
+        gazeTgtX = -10.0f;
+      } else if (touchR.state && !touchL.state) {
+        gazeTgtX = 10.0f;
+      } else if (touchT.state) {
+        gazeTgtY = -6.0f;
+      }
+    }
 
     // Dual-cheek hold (both left & right cheeks pressed simultaneously)
     if (touchL.state && touchR.state) {

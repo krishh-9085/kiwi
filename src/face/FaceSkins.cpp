@@ -1,14 +1,17 @@
 #include "face/FaceSkins.h"
 #include "config/AppConfig.h"
 #include "face/FaceDisplay.h"
+#include "face/FaceExpressions.h"
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 #include <Wire.h>
 #include <math.h>
 
-
 static inline int minI(int a, int b) { return a < b ? a : b; }
 static inline int maxI(int a, int b) { return a > b ? a : b; }
+static inline float clampf(float v, float lo, float hi) {
+  return v < lo ? lo : (v > hi ? hi : v);
+}
 
 // Precomputed 32-point unit squircle table (n = 4 superellipse: |cos t|^(1/2), |sin t|^(1/2))
 static float squircleUnitX[32];
@@ -154,26 +157,34 @@ void drawEye(int cx, int cy, int w, int h, int r, int lidIn, int lidOut,
     display.fillRoundRect(x0, bot - rBottom * 2, w, rBottom * 2, rBottom,
                           SSD1306_WHITE);
 
-    // Dynamic pupil cutout (proportional to eye size and reacting to gaze)
-    int pw = (int)(w * 0.44f);
-    if (pw < 6)
-      pw = 6;
-    int ph = (int)(h * 0.58f);
+    // Dynamic pupil cutout (scales with emotional dilation and moves with 3D parallax)
+    float pScale = clampf(faceNow.pupilScale, 0.65f, 1.45f);
+    int pw = (int)lroundf(w * 0.44f * pScale);
+    if (pw < 5)
+      pw = 5;
+    if (pw > w - 4)
+      pw = w - 4;
+    int ph = (int)lroundf(h * 0.58f * pScale);
     if (ph < 4)
       ph = 4;
+    if (ph > h - 2)
+      ph = h - 2;
     int pr = minI(4, maxI(2, pw / 4));
 
-    int pupilShift = (int)lroundf(gazeX * 0.45f);
-    int px = cx + pupilShift - pw / 2;
-    if (px < x0 + 3)
-      px = x0 + 3;
-    if (px + pw > x1 - 3)
-      px = x1 - 3 - pw;
+    // 3D Parallax shift: pupil moves faster than sclera for 3D depth illusion
+    int pupilShiftX = (int)lroundf(gazeX * 0.85f);
+    int px = cx + pupilShiftX - pw / 2;
+    if (px < x0 + 2)
+      px = x0 + 2;
+    if (px + pw > x1 - 2)
+      px = x1 - 2 - pw;
 
-    int py = top;
-    if (gazeY > 1.5f && h > 16) {
-      py += minI(4, (int)(gazeY * 0.4f));
-    }
+    int pupilShiftY = (int)lroundf(gazeY * 0.75f);
+    int py = top + pupilShiftY;
+    if (py < top)
+      py = top;
+    if (py + ph > bot - 2)
+      py = bot - 2 - ph;
 
     display.fillRect(px, py, pw, ph - pr, SSD1306_BLACK);
     display.fillRoundRect(px, py + ph - pr * 2, pw, pr * 2, pr, SSD1306_BLACK);
@@ -184,7 +195,7 @@ void drawEye(int cx, int cy, int w, int h, int r, int lidIn, int lidOut,
     int dotY = py + 2;
     if (h > 12) {
       display.fillRect(dotX, dotY, dotSize, dotSize, SSD1306_WHITE);
-      if (glint && dotSize >= 3) {
+      if ((glint || pScale > 1.20f) && dotSize >= 3) {
         display.drawPixel(dotX - 1, dotY + dotSize, SSD1306_WHITE);
       }
     }
@@ -200,7 +211,9 @@ void drawEye(int cx, int cy, int w, int h, int r, int lidIn, int lidOut,
     maskLids(x0, x1, top, lidIn, lidOut, isLeft);
     maskCheek(cx, bot, w, cheek);
     if (glint && h > 20) {
-      display.fillRect(x0 + w / 5, top + h / 5, 4, 4, SSD1306_BLACK);
+      int shiftX = (int)lroundf(gazeX * 0.70f);
+      int shiftY = (int)lroundf(gazeY * 0.70f);
+      display.fillRect(x0 + w / 5 + shiftX, top + h / 5 + shiftY, 4, 4, SSD1306_BLACK);
     }
     return;
   }
@@ -233,21 +246,22 @@ void drawEye(int cx, int cy, int w, int h, int r, int lidIn, int lidOut,
     if (innerW > 0 && innerH > 0) {
       display.fillRoundRect(x0 + borderThick, top + borderThick, innerW, innerH, innerR, SSD1306_BLACK);
 
-      // Inner upper glint block (solid white square/rect pupil as seen in user image)
+      // Inner upper glint block with dynamic pupil dilation & 3D parallax
       if (innerH >= 6) {
-        int gw = maxI(3, (int)(innerW * 0.40f));
-        int gh = maxI(4, (int)(innerH * 0.32f));
+        float pScale = clampf(faceNow.pupilScale, 0.65f, 1.45f);
+        int gw = maxI(3, (int)lroundf(innerW * 0.40f * pScale));
+        int gh = maxI(3, (int)lroundf(innerH * 0.32f * pScale));
         int gr = 1;
 
         // Base anchor: top-right inside cavity
         int gxBase = (x0 + borderThick + innerW) - gw - 1;
         int gyBase = top + borderThick + maxI(2, innerH / 6);
 
-        // Gaze shift
+        // 3D Parallax shift
         int maxShiftX = maxI(0, (innerW - gw) / 2);
         int maxShiftY = maxI(0, (innerH - gh) / 3);
-        int shiftX = (int)lroundf(gazeX * 0.35f);
-        int shiftY = (int)lroundf(gazeY * 0.35f);
+        int shiftX = (int)lroundf(gazeX * 0.80f);
+        int shiftY = (int)lroundf(gazeY * 0.75f);
         if (shiftX < -maxShiftX) shiftX = -maxShiftX;
         if (shiftX > maxShiftX) shiftX = maxShiftX;
         if (shiftY < -maxShiftY) shiftY = -maxShiftY;
@@ -302,14 +316,17 @@ void drawEye(int cx, int cy, int w, int h, int r, int lidIn, int lidOut,
 
     fillSquircle(x0, top, w, h, cx, cy);
 
-    // Black square pupil: side = min(w, h) * 0.38
-    int pupilSide = (int)lroundf(minI(w, h) * 0.38f);
+    // Black square pupil: dynamic scaling + 3D parallax
+    float pScale = clampf(faceNow.pupilScale, 0.65f, 1.45f);
+    int pupilSide = (int)lroundf(minI(w, h) * 0.38f * pScale);
     if (pupilSide < 3)
       pupilSide = 3;
+    if (pupilSide > minI(w, h) - 4)
+      pupilSide = minI(w, h) - 4;
     int maxOffX = maxI(0, (w - pupilSide) / 2 - 2);
     int maxOffY = maxI(0, (h - pupilSide) / 2 - 2);
-    int shiftX = (int)lroundf(gazeX * 0.45f);
-    int shiftY = (int)lroundf(gazeY * 0.45f);
+    int shiftX = (int)lroundf(gazeX * 0.85f);
+    int shiftY = (int)lroundf(gazeY * 0.80f);
     if (shiftX < -maxOffX) shiftX = -maxOffX;
     if (shiftX > maxOffX) shiftX = maxOffX;
     if (shiftY < -maxOffY) shiftY = -maxOffY;
@@ -339,14 +356,17 @@ void drawEye(int cx, int cy, int w, int h, int r, int lidIn, int lidOut,
 
     drawSquircleOutline(x0, top, w, h, cx, cy);
 
-    // Solid white circular pupil: radius = min(w, h) * 0.18
-    int pupilR = (int)lroundf(minI(w, h) * 0.18f);
+    // Solid white circular pupil: dynamic scaling + 3D parallax
+    float pScale = clampf(faceNow.pupilScale, 0.65f, 1.45f);
+    int pupilR = (int)lroundf(minI(w, h) * 0.18f * pScale);
     if (pupilR < 1)
       pupilR = 1;
+    if (pupilR > minI(w, h) / 2 - 3)
+      pupilR = minI(w, h) / 2 - 3;
     int maxOffX = maxI(0, w / 2 - pupilR - 2);
     int maxOffY = maxI(0, h / 2 - pupilR - 2);
-    int shiftX = (int)lroundf(gazeX * 0.45f);
-    int shiftY = (int)lroundf(gazeY * 0.45f);
+    int shiftX = (int)lroundf(gazeX * 0.85f);
+    int shiftY = (int)lroundf(gazeY * 0.80f);
     if (shiftX < -maxOffX) shiftX = -maxOffX;
     if (shiftX > maxOffX) shiftX = maxOffX;
     if (shiftY < -maxOffY) shiftY = -maxOffY;
@@ -381,14 +401,17 @@ void drawEye(int cx, int cy, int w, int h, int r, int lidIn, int lidOut,
 
     fillSquircle(x0, top, w, h, cx, cy);
 
-    // Black square pupil: side = min(w, h) * 0.38
-    int pupilSide = (int)lroundf(minI(w, h) * 0.38f);
+    // Black square pupil: dynamic scaling + 3D parallax
+    float pScale = clampf(faceNow.pupilScale, 0.65f, 1.45f);
+    int pupilSide = (int)lroundf(minI(w, h) * 0.38f * pScale);
     if (pupilSide < 3)
       pupilSide = 3;
+    if (pupilSide > minI(w, h) - 4)
+      pupilSide = minI(w, h) - 4;
     int maxOffX = maxI(0, (w - pupilSide) / 2 - 2);
     int maxOffY = maxI(0, (h - pupilSide) / 2 - 2);
-    int shiftX = (int)lroundf(gazeX * 0.45f);
-    int shiftY = (int)lroundf(gazeY * 0.45f);
+    int shiftX = (int)lroundf(gazeX * 0.85f);
+    int shiftY = (int)lroundf(gazeY * 0.80f);
     if (shiftX < -maxOffX) shiftX = -maxOffX;
     if (shiftX > maxOffX) shiftX = maxOffX;
     if (shiftY < -maxOffY) shiftY = -maxOffY;
@@ -427,15 +450,22 @@ void drawEye(int cx, int cy, int w, int h, int r, int lidIn, int lidOut,
     rBottom = h / 2;
   display.fillRect(x0, top, w, h - rBottom, SSD1306_WHITE);
   display.fillRoundRect(x0, bot - rBottom * 2, w, rBottom * 2, rBottom, SSD1306_WHITE);
-  int pw = (int)(w * 0.44f);
+  float pScale = clampf(faceNow.pupilScale, 0.65f, 1.45f);
+  int pw = (int)lroundf(w * 0.44f * pScale);
   if (pw < 6) pw = 6;
-  int ph = (int)(h * 0.58f);
+  if (pw > w - 4) pw = w - 4;
+  int ph = (int)lroundf(h * 0.58f * pScale);
   if (ph < 4) ph = 4;
+  if (ph > h - 2) ph = h - 2;
   int pr = minI(4, maxI(2, pw / 4));
-  int px = cx - pw / 2;
-  if (px < x0 + 3) px = x0 + 3;
-  if (px + pw > x1 - 3) px = x1 - 3 - pw;
-  int py = top;
+  int pupilShiftX = (int)lroundf(gazeX * 0.85f);
+  int px = cx + pupilShiftX - pw / 2;
+  if (px < x0 + 2) px = x0 + 2;
+  if (px + pw > x1 - 2) px = x1 - 2 - pw;
+  int pupilShiftY = (int)lroundf(gazeY * 0.75f);
+  int py = top + pupilShiftY;
+  if (py < top) py = top;
+  if (py + ph > bot - 2) py = bot - 2 - ph;
   display.fillRect(px, py, pw, ph - pr, SSD1306_BLACK);
   display.fillRoundRect(px, py + ph - pr * 2, pw, pr * 2, pr, SSD1306_BLACK);
   int dotSize = (pw >= 12 && ph >= 12) ? 3 : 2;

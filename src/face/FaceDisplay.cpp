@@ -66,6 +66,18 @@ static uint32_t powerSentAt = 0;
 static uint32_t lastFrameHash = 0;
 static bool frameHashValid = false;
 static uint32_t lastPresentAt = 0;
+static SemaphoreHandle_t s_displayMutex = NULL;
+
+bool displayLock(uint32_t waitMs) {
+  if (!s_displayMutex)
+    return true;
+  return xSemaphoreTake(s_displayMutex, pdMS_TO_TICKS(waitMs)) == pdTRUE;
+}
+
+void displayUnlock() {
+  if (s_displayMutex)
+    xSemaphoreGive(s_displayMutex);
+}
 
 // ---- Frame presentation ----------------------------------------------------
 
@@ -203,6 +215,9 @@ void updateDisplayBrightnessMode() {
 // ---- Initialization --------------------------------------------------------
 
 bool initDisplay() {
+  if (!s_displayMutex) {
+    s_displayMutex = xSemaphoreCreateMutex();
+  }
   Wire.begin(PIN_OLED_SDA, PIN_OLED_SCL);
   uint32_t targetClock = FACE_I2C_CLK_DURING;
   Wire.setClock(targetClock);

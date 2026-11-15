@@ -19,6 +19,7 @@
 #include <Update.h>
 #include <WebServer.h>
 #include <WiFi.h>
+#include <esp_mac.h>
 #include <time.h>
 
 
@@ -80,7 +81,9 @@ static const wifi_power_t WIFI_TX = WIFI_POWER_8_5dBm;
 
 void createAPName() {
   uint8_t mac[6];
-  WiFi.macAddress(mac);
+  if (esp_read_mac(mac, ESP_MAC_WIFI_STA) != ESP_OK) {
+    WiFi.macAddress(mac);
+  }
   char s[5];
   snprintf(s, sizeof(s), "%02X%02X", mac[4], mac[5]);
   apSSID = "MyRobot-" + String(s);

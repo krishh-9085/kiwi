@@ -25,10 +25,17 @@ static uint32_t activeNextWink = 0;
 uint32_t activeWinkEnd = 0;
 bool activeWinkLeft = false;
 
-// Blink timings (ms). Closing is fast, opening is slower - like a real eyelid.
-static const uint32_t BLINK_CLOSE = 75;
-static const uint32_t BLINK_HOLD = 25;
-static const uint32_t BLINK_OPEN = 120;
+// Asymmetric biological snap-blink timings (ms)
+// Rapid downward eyelid snap (~45ms), hold at closure (~20ms), smooth organic ease-out (~160ms)
+static const uint32_t BLINK_CLOSE = 45;
+static const uint32_t BLINK_HOLD = 20;
+static const uint32_t BLINK_OPEN = 160;
+
+float idleSighY = 0.0f;
+float idleSighLid = 0.0f;
+static uint32_t nextDeskSighAt = 0;
+static uint32_t deskSighStartAt = 0;
+static const uint32_t SIGH_DURATION = 2600; // 2.6s complete sigh cycle
 
 static void scheduleNextBlink(uint32_t now) {
   if (eyeDoubleBlinkPending) {
@@ -68,14 +75,21 @@ void eyesUpdateAnim(uint32_t now) {
     uint32_t t = now - eyeBlinkT0;
     float a;
     if (t < BLINK_CLOSE) {
-      float p = (float)t / (float)BLINK_CLOSE; // ease-in while closing
-      a = 1.0f - p * p;
+      // Rapid downward eyelid snap (~45ms): cubic acceleration
+      float p = (float)t / (float)BLINK_CLOSE;
+      a = 1.0f - p * p * p;
     } else if (t < BLINK_CLOSE + BLINK_HOLD) {
       a = 0.0f;
     } else if (t < BLINK_CLOSE + BLINK_HOLD + BLINK_OPEN) {
+      // Smooth biological ease-out (~160ms) with gentle elastic overshoot
       float p = (float)(t - BLINK_CLOSE - BLINK_HOLD) / (float)BLINK_OPEN;
-      float q = 1.0f - p; // ease-out while opening
-      a = 1.0f - q * q;
+      float q = 1.0f - p;
+      a = 1.0f - q * q * q;
+      // Gentle micro-bounce at 75-95% opening
+      if (p > 0.75f && p < 0.96f) {
+        a += 0.025f * sinf((p - 0.75f) / 0.21f * 3.14159f);
+      }
+      if (a > 1.0f) a = 1.0f;
     } else {
       a = 1.0f;
       eyeBlinking = false;
@@ -473,8 +487,11 @@ static uint32_t nextIdleSqueezeAt = 0;
 
 void updateIdleVariety() {
   if (currentEmotion != EMOTION_IDLE) {
-    // Forget any half-finished squeeze so it can't leak into the next idle
+    // Forget any half-finished squeeze or sigh so it can't leak into the next idle
     idleSqueezeEnd = 0;
+    deskSighStartAt = 0;
+    idleSighY = 0.0f;
+    idleSighLid = 0.0f;
     return;
   }
   if (busyProcessing || inCircadianSleep || showWeatherScreen)
@@ -549,5 +566,47 @@ void updateIdleVariety() {
     // Large gaze jumps are often masked by a quick blink (like a real eye)
     if (!eyeBlinking && fabsf(gazeTgtX - oldX) >= 9.0f && random(0, 100) < 35)
       triggerTouchBlink(now);
+  }
+
+  // 3. Organic Desk Sigh Cycle (every 22 - 32 seconds of idle desk companionship)
+  if (nextDeskSighAt == 0) {
+    nextDeskSighAt = now + 15000 + random(0, 10000);
+  }
+
+  if (deskSighStartAt == 0 && now >= nextDeskSighAt && !eyeBlinking && idleSqueezeEnd == 0) {
+    deskSighStartAt = now;
+    nextDeskSighAt = now + 22000 + random(0, 10000);
+  }
+
+  if (deskSighStartAt > 0) {
+    uint32_t st = now - deskSighStartAt;
+    if (st < SIGH_DURATION) {
+      float sp = (float)st / (float)SIGH_DURATION;
+      if (sp < 0.38f) {
+        // Phase 1 (0..38%): Gentle deep inhale lift (+1.0px up, eyelids open slightly)
+        float inP = sp / 0.38f;
+        float easeIn = sinf(inP * 1.5707963f);
+        idleSighY = -1.2f * easeIn;
+        idleSighLid = -1.0f * easeIn;
+      } else if (sp < 0.82f) {
+        // Phase 2 (38..82%): Relaxed long exhale sink (face sinks down -1.4px, eyelids droop by ~18%)
+        float exP = (sp - 0.38f) / 0.44f;
+        float easeEx = 0.5f - 0.5f * cosf(exP * 3.1415927f);
+        idleSighY = -1.2f + 2.6f * easeEx; // sinks down to +1.4px
+        idleSighLid = -1.0f + 3.8f * easeEx; // droop up to +2.8px
+      } else {
+        // Phase 3 (82..100%): Gentle relaxed settle back to resting neutral
+        float retP = (sp - 0.82f) / 0.18f;
+        idleSighY = 1.4f * (1.0f - retP);
+        idleSighLid = 2.8f * (1.0f - retP);
+      }
+    } else {
+      deskSighStartAt = 0;
+      idleSighY = 0.0f;
+      idleSighLid = 0.0f;
+    }
+  } else {
+    idleSighY = 0.0f;
+    idleSighLid = 0.0f;
   }
 }

@@ -131,8 +131,16 @@ bool kiwiIsOutputting() {
 }
 
 void updateTonePlayer() {
-  if (!tonePlaying || !txHandle || spkOwner != SPK_TONE)
+  if (!tonePlaying)
     return;
+
+  // Auto-recover if speaker owner changed or hardware was detached
+  if (!txHandle || spkOwner != SPK_TONE) {
+    tonePlaying = false;
+    toneCount = 0;
+    toneIndex = 0;
+    return;
+  }
 
   uint32_t now = millis();
 
@@ -611,6 +619,8 @@ bool spkWriteAll(const void *data, size_t bytes) {
   int stalls = 0;
 
   while (off < bytes) {
+    if (cancelRequest)
+      return false;
     size_t w = 0;
     esp_err_t e = i2s_channel_write(txHandle, p + off, bytes - off, &w, 50);
     if (e != ESP_OK && e != ESP_ERR_TIMEOUT)
@@ -638,10 +648,39 @@ void spkBeginSpeech() {
   }
 }
 
+void toneStop() {
+  tonePlaying = false;
+  toneCount = 0;
+  toneIndex = 0;
+  if (spkOwner == SPK_TONE) {
+    spkOwner = SPK_NONE;
+  }
+}
+
+// Live speech envelope follower for real-time lip sync & speaking gestures
+static volatile float s_speechAmplitude = 0.0f;
+
+float getSpeechAmplitude() {
+  return s_speechAmplitude;
+}
+
 // Call when a speech stream ends. Flushes remaining samples and releases
 // the speaker so tones can play again.
 void spkEndSpeech() {
   spkFlush();
+  s_speechAmplitude = 0.0f;
+  if (spkOwner == SPK_SPEECH) {
+    spkOwner = SPK_NONE;
+  }
+}
+
+// Instantly cuts off speech without flushing remaining buffer (for barge-in & fast cancel)
+void spkAbortSpeech() {
+  txPos = 0;
+  tonePlaying = false;
+  toneCount = 0;
+  toneIndex = 0;
+  s_speechAmplitude = 0.0f;
   spkOwner = SPK_NONE;
 }
 
@@ -652,6 +691,7 @@ void audioSleepPrepare() {
   tonePlaying = false;
   toneCount = 0;
   toneIndex = 0;
+  s_speechAmplitude = 0.0f;
   spkOwner = SPK_NONE;
   cancelRequest = false;
   if (txHandle) {
@@ -673,8 +713,18 @@ void audioSleepWake() {
 }
 
 void spkPushSample(int16_t s) {
+  if (cancelRequest)
+    return;
   if (spkOwner != SPK_SPEECH)
     spkBeginSpeech();
+
+  // Fast-attack, smooth-decay envelope tracking for live lip sync
+  float absSample = fabsf((float)s) / 32768.0f;
+  if (absSample > s_speechAmplitude) {
+    s_speechAmplitude = s_speechAmplitude * 0.70f + absSample * 0.30f;
+  } else {
+    s_speechAmplitude *= 0.9994f; // ~45ms leaky decay
+  }
 
   int32_t v = toFrame32((float)s * volumeGain());
   txBuf[txPos * 2] = v;

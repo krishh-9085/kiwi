@@ -412,7 +412,9 @@ void drawConnectedNotice(const char *title, uint32_t holdMs) {
 }
 
 void showStatus(const char *l1, const char *l2, uint32_t ms) {
+  displayLock(100);
   drawMessage(l1, l2);
+  displayUnlock();
   soundError();
   uint32_t t0 = millis();
   uint32_t lastTick = 0;
@@ -481,10 +483,10 @@ void showBootInfo(uint32_t holdMs) {
     display.print("AP:  " + ap);
 
     display.setCursor(6, 27);
-    display.print("IP:  " + WiFi.softAPIP().toString());
+    display.print("PW:  " + String(AP_PASSWORD));
 
     display.setCursor(6, 37);
-    display.print("CFG: 192.168.4.1");
+    display.print("IP:  192.168.4.1");
   }
 
   // Bottom Status Footer Rail (y=51 to 63)

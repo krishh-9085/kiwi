@@ -35,6 +35,7 @@ struct FaceState {
   float lidIn = 0, lidOut = 0;
   float cheek = 0, cheekR = 0;
   float hR = 1.0f;
+  float wR = 1.0f;
   float glint = 0;
   float blush = 0;
   bool gazeLock = false;
@@ -43,6 +44,7 @@ struct FaceState {
   float mouthH = 2;
   float mouthCurve = 0.4f;
   float mouthY = 0;
+  float pupilScale = 1.0f;
 };
 
 struct TouchSensor {

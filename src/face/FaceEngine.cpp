@@ -64,17 +64,25 @@ void updateFaceFrameRate() {
 #endif
 }
 
+#include "hardware/RgbLed.h"
+
 void tickFace() {
-    if (!oledOK || otaInProgress)
-      return;
+  if (!oledOK || otaInProgress)
+    return;
+  if (!displayLock(0))
+    return;
+
   updateFaceFrameRate();
   if (!bootWakeDone() && bootWakeTick()) {
+    displayUnlock();
     return;
   }
   uint32_t now = millis();
   if (bootInfoUntil) {
-    if (now < bootInfoUntil)
+    if (now < bootInfoUntil) {
+      displayUnlock();
       return;
+    }
     bootInfoUntil = 0;
     markDisplayDirty();
   }
@@ -83,41 +91,92 @@ void tickFace() {
     // face/screen frame is always pushed afterwards.
     markDisplayDirty();
     tickAnimation(now);
+    displayUnlock();
     return;
   }
   if (bannerActive) {
-    if (now - lastFaceDrawAt < 33)
+    if (now - lastFaceDrawAt < 33) {
+      displayUnlock();
       return;
+    }
     lastFaceDrawAt = now;
     drawBannerScreen();
+    displayUnlock();
     return;
   }
   if (showClockScreen) {
-    if (now - lastFaceDrawAt < 200)
+    if (now - lastFaceDrawAt < 200) {
+      displayUnlock();
       return;
+    }
     lastFaceDrawAt = now;
     drawClockScreen();
+    displayUnlock();
     return;
   }
   if (showWeatherScreen) {
-    if (now - lastFaceDrawAt < 100)
+    if (now - lastFaceDrawAt < 100) {
+      displayUnlock();
       return;
+    }
     lastFaceDrawAt = now;
     drawWeatherScreen();
+    displayUnlock();
     return;
   }
-  if (now - lastFaceDrawAt < gFaceFrameMs)
+  if (now - lastFaceDrawAt < gFaceFrameMs) {
+    displayUnlock();
     return;
+  }
   lastFaceDrawAt = now;
   if (sleepyWakeIsActive()) {
     sleepyWakeDraw(display, now);
+    displayUnlock();
     return;
   }
   if (sleepyFallAsleepIsActive()) {
     sleepyFallAsleepDraw(display, now);
+    displayUnlock();
     return;
   }
   float sndLevel = soundLevelGet();
   eyesUpdateAnim(now);
   drawFace(sndLevel);
+  displayUnlock();
+}
+
+static TaskHandle_t s_uiTaskHandle = NULL;
+
+static void uiDisplayTask(void *params) {
+  Serial.println("[UI_TASK] Dedicated Display & NeoPixel worker running on Core " + String(xPortGetCoreID()));
+  TickType_t xLastWakeTime = xTaskGetTickCount();
+  const TickType_t xFrequency = pdMS_TO_TICKS(25); // 40 FPS
+
+  for (;;) {
+    if (bootCompleted) {
+      rgbLedUpdate();
+      tickFace();
+    }
+    vTaskDelayUntil(&xLastWakeTime, xFrequency);
+  }
+}
+
+void startUiDisplayTask() {
+  if (s_uiTaskHandle != NULL)
+    return;
+  BaseType_t res = xTaskCreatePinnedToCore(
+      uiDisplayTask,
+      "ui_disp_task",
+      4096, // 4KB stack
+      NULL,
+      1,    // Priority 1
+      &s_uiTaskHandle,
+      0     // Core 0 (offloads display I2C completely from Core 1!)
+  );
+  if (res == pdPASS) {
+    uiTaskRunning = true;
+    Serial.println("[UI_TASK] Offloaded Display & LED to Core 0 (40 FPS)!");
+  } else {
+    Serial.println("[UI_TASK] Failed to create UI task, fallback to loop()");
+  }
 }

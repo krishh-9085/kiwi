@@ -24,17 +24,18 @@ extern uint32_t bootSetupEnterAt;
 #endif
 
 // ============================================================
-// HARDWARE PIN MAP (ESP32-C3 Super Mini)
+// HARDWARE PIN MAP (ESP32-S3 Super Mini)
 // ============================================================
-#define PIN_TOUCH_LEFT 10
-#define PIN_TOUCH_RIGHT 20
-#define PIN_TOUCH_TOP 3
-#define PIN_MIC_SD 4
-#define PIN_I2S_BCLK 5
-#define PIN_I2S_WS 6
-#define PIN_AMP_DIN 7
-#define PIN_OLED_SDA 8
-#define PIN_OLED_SCL 9
+#define PIN_TOUCH_LEFT 4   // Old C3: 10 -> S3 Pin: 4
+#define PIN_TOUCH_RIGHT 5  // Old C3: 20 -> S3 Pin: 5
+#define PIN_TOUCH_TOP 12   // Old C3: 3  -> S3 Pin: 12 (RTC GPIO, deep sleep wakeup)
+#define PIN_MIC_SD 13      // Old C3: 4  -> S3 Pin: 13
+#define PIN_I2S_BCLK 43    // Old C3: 5  -> S3 TX (GPIO 43)
+#define PIN_I2S_WS 44      // Old C3: 6  -> S3 RX (GPIO 44)
+#define PIN_AMP_DIN 1      // Old C3: 7  -> S3 Pin: 1
+#define PIN_OLED_SDA 2     // Old C3: 8  -> S3 Pin: 2
+#define PIN_OLED_SCL 3     // Old C3: 9  -> S3 Pin: 3
+#define PIN_RGB_LED 48     // Built-in WS2812 RGB LED on ESP32-S3
 
 // ---------- Audio Amplifier Limit ----------
 #ifndef SPEAKER_MAX_GAIN
@@ -64,7 +65,7 @@ extern const char *NTP_SERVER_2;
 #define RECORD_SECONDS 6
 #define AUDIO_FRAMES 256
 #define MIC_SLOT_OFFSET 0
-#define MIC_GAIN 3.2f
+#define MIC_GAIN 4.5f
 #define UPLOAD_BATCH 1024
 #define LLM_MAX_TOKENS 300
 #define TTS_MAX_CHARS 600
@@ -77,7 +78,7 @@ extern const char *NTP_SERVER_2;
 #define LLM_STREAM_TTS 1
 #endif
 #ifndef STREAM_TTS_MIN_MAX_ALLOC
-#define STREAM_TTS_MIN_MAX_ALLOC 45000 // tune on device; bytes
+#define STREAM_TTS_MIN_MAX_ALLOC 16000 // ESP32-S3 dual-core optimized (was 45000)
 #endif
 
 // ============================================================
@@ -208,8 +209,20 @@ extern int nightMode;       // 0: Same as day, 1: Dim, 2: Screen off (default 1)
 extern int nightBrightness; // Night display brightness (0-100%, default 10)
 extern bool circadianSleepEnabled;
 extern bool greetingsEnabled;
+extern bool hungerEnabled;         // NVS: hunger_en (default true)
 extern bool soundReactiveEnabled; // NVS: snd_react
+enum WakeWordModelType : uint8_t {
+    WAKE_WORD_HEY_JARVIS = 0,
+    WAKE_WORD_HEY_EDITH  = 1,
+    WAKE_WORD_ALEXA      = 2
+};
+extern bool wakeWordEnabled;      // NVS: ww_en (default true)
+extern float wakeWordCutoff;      // NVS: ww_cutoff (default model-specific)
+extern uint8_t wakeWordModel;     // NVS: ww_model (0=Hey Jarvis, 1=Hey Edith, 2=Alexa)
+extern bool rgbLedEnabled;        // NVS: rgb_en (default true)
+extern uint8_t rgbLedBrightness;  // NVS: rgb_bright (0-255, default 160)
 extern bool bootCompleted;
+extern volatile bool uiTaskRunning; // True when display & LED are offloaded to dedicated Core 0 task
 extern int circadianSleepStart;
 extern int circadianSleepEnd;
 extern bool inCircadianSleep;
@@ -234,11 +247,12 @@ extern bool showClockScreen;
 extern bool timeSynced;
 extern uint32_t lastNtpTryAt;
 
-// Single-core ESP32-C3 safe; upgrade to std::atomic<bool> if dispatched across
+// ESP32-S3 safe; upgrade to std::atomic<bool> if dispatched across
 // FreeRTOS tasks
 extern volatile bool startRecording;
 extern volatile bool busyProcessing;
 extern volatile bool cancelRequest;
+extern volatile bool bargeInTriggered; // True when user interrupts Kiwi mid-speech
 extern volatile uint32_t lastProgressAt;
 
 extern int micSlot;

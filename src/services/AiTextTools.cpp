@@ -224,6 +224,18 @@ String cleanForSpeech(const String &in) {
   // For Fish Audio: keep vocal emotion tags, remove internal robot tags & normalize tags
   if (ttsProvider == "fish" || ttsProvider == "fishaudio") {
     s = stripRobotTags(s);
+    static const char *unwantedTags[] = {
+        "[laugh]", "[laughs]", "[laughing]",
+        "[chuckle]", "[chuckles]", "[chuckling]",
+        "[giggle]", "[giggles]", "[giggling]",
+        "(laugh)", "(laughs)", "(laughing)",
+        "(chuckle)", "(chuckles)", "(chuckling)",
+        "(giggle)", "(giggles)", "(giggling)",
+        "[happy]", "(happy)", "[joy]", "(joy)",
+        nullptr};
+    for (int k = 0; unwantedTags[k] != nullptr; k++) {
+      s.replace(String(unwantedTags[k]), "");
+    }
     s = normalizeFishAudioTags(s);
   } else {
     // For other TTS: strip all vocal emotion cues and internal robot tags

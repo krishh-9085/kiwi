@@ -26,6 +26,7 @@ void setFace(float w, float h, float gap, float y, float r, float lidIn,
   faceTgt.cheekR = cheek;
   faceTgt.blush = blush;
   faceTgt.hR = 1.0f;
+  faceTgt.wR = 1.0f;
   faceTgt.glint = 0;
   faceTgt.gazeLock = false;
   faceTgt.lockX = 0;
@@ -34,6 +35,7 @@ void setFace(float w, float h, float gap, float y, float r, float lidIn,
   faceTgt.mouthH = 2;
   faceTgt.mouthCurve = 0.4f;
   faceTgt.mouthY = 0;
+  faceTgt.pupilScale = 1.0f;
 }
 
 // Emotions whose entrance should "pop" instead of being hidden by a blink
@@ -81,18 +83,23 @@ void faceTargetsForEmotion(Emotion e, PetMood pm) {
     faceTgt.mouthCurve = 0.4f;
     break;
   case EMOTION_LISTENING:
-    // Natural, focused eyes with glowing glint and clear mouth area for the voice dots
-    setFace(34, 30, 30, 28, 6);
+    // Attentive focused eyes with subtle listening squint and clear mouth area for voice dots
+    setFace(34, 27, 30, 27, 6, 2, 2);
     faceTgt.glint = 1;
     faceTgt.blush = 0.0f;
     faceTgt.mouthW = 0;
     break;
   case EMOTION_THINKING:
-    setFace(34, 30, 30, 28, 6, 6, 6);
-    faceTgt.mouthW = 16;
+    // Pensive, quizzical look: Left eye wide & alert, Right eye narrowed & relaxed
+    setFace(34, 32, 28, 28, 6, 3, 1);
+    faceTgt.wR = 0.82f;         // Right eye 18% narrower (one eye big, 2nd eye smaller)
+    faceTgt.hR = 0.58f;         // Right eye 42% shorter (relaxed half-closed squint)
+    faceTgt.cheekR = 2.0f;      // Soft relaxed lower eyelid tuck on right eye
+    faceTgt.mouthW = 12;
     faceTgt.mouthH = 2;
-    faceTgt.mouthCurve = 0.1f;
-    faceTgt.mouthY = 2;
+    faceTgt.mouthCurve = 0.15f; // Gentle thoughtful smirk/quirk
+    faceTgt.mouthY = 1;
+    faceTgt.pupilScale = 0.92f; // Calm, focused pupil
     break;
   case EMOTION_SPEAKING:
     setFace(34, 30, 30, 24, 6);
@@ -100,10 +107,10 @@ void faceTargetsForEmotion(Emotion e, PetMood pm) {
     faceTgt.mouthW = 0;
     break;
   case EMOTION_HAPPY:
-    setFace(34, 30, 30, 28, 7, 0, 0, 14, 0.3f);
-    faceTgt.mouthW = 26;
+    setFace(34, 30, 30, 28, 6, 0, 0, 0, 0.2f);
+    faceTgt.mouthW = 24;
     faceTgt.mouthH = 3;
-    faceTgt.mouthCurve = 0.9f;
+    faceTgt.mouthCurve = 0.5f;
     break;
   case EMOTION_EXCITED:
     setFace(38, 38, 31, 28, 7);
@@ -132,6 +139,7 @@ void faceTargetsForEmotion(Emotion e, PetMood pm) {
     faceTgt.mouthW = 22;
     faceTgt.mouthH = 2;
     faceTgt.mouthCurve = -0.9f;
+    faceTgt.pupilScale = 0.72f;
     break;
   case EMOTION_SLEEPING:
     setFace(30, 3, 30, 34, 1);
@@ -139,12 +147,14 @@ void faceTargetsForEmotion(Emotion e, PetMood pm) {
     faceTgt.mouthW = 0;
     faceTgt.mouthH = 0;
     faceTgt.mouthCurve = 0.0f;
+    faceTgt.pupilScale = 0.6f;
     break;
   case EMOTION_ERROR:
     setFace(30, 26, 32, 30, 4, 0, 8);
     faceTgt.mouthW = 16;
     faceTgt.mouthH = 2;
     faceTgt.mouthCurve = -0.5f;
+    faceTgt.pupilScale = 0.80f;
     break;
   case EMOTION_SURPRISED:
     setFace(40, 42, 32, 26, 8);
@@ -152,6 +162,7 @@ void faceTargetsForEmotion(Emotion e, PetMood pm) {
     faceTgt.mouthW = 10;
     faceTgt.mouthH = 8;
     faceTgt.mouthCurve = 0.0f;
+    faceTgt.pupilScale = 1.25f;
     break;
   case EMOTION_WINK:
     setFace(34, 32, 30, 29, 6);
@@ -159,6 +170,7 @@ void faceTargetsForEmotion(Emotion e, PetMood pm) {
     faceTgt.mouthW = 22;
     faceTgt.mouthH = 2;
     faceTgt.mouthCurve = 0.6f;
+    faceTgt.pupilScale = 1.10f;
     break;
   case EMOTION_SMUG:
     setFace(34, 28, 30, 30, 6, 8, 4);
@@ -167,6 +179,7 @@ void faceTargetsForEmotion(Emotion e, PetMood pm) {
     faceTgt.mouthH = 2;
     faceTgt.mouthCurve = 0.5f;
     faceTgt.mouthY = 1;
+    faceTgt.pupilScale = 0.82f;
     break;
   case EMOTION_CURIOUS:
     setFace(34, 34, 30, 28, 6);
@@ -174,48 +187,56 @@ void faceTargetsForEmotion(Emotion e, PetMood pm) {
     faceTgt.mouthW = 16;
     faceTgt.mouthH = 2;
     faceTgt.mouthCurve = 0.3f;
+    faceTgt.pupilScale = 1.30f;
     break;
   case EMOTION_BORED:
     setFace(34, 30, 30, 30, 6, 11, 11);
     faceTgt.mouthW = 20;
     faceTgt.mouthH = 1;
     faceTgt.mouthCurve = 0.0f;
+    faceTgt.pupilScale = 0.90f;
     break;
   case EMOTION_LAUGHING:
-    setFace(34, 30, 30, 28, 7, 0, 0, 18, 0.5f);
-    faceTgt.mouthW = 28;
-    faceTgt.mouthH = 7;
-    faceTgt.mouthCurve = 0.9f;
+    setFace(34, 30, 30, 28, 6, 0, 0, 0, 0.2f);
+    faceTgt.mouthW = 26;
+    faceTgt.mouthH = 4;
+    faceTgt.mouthCurve = 0.6f;
+    faceTgt.pupilScale = 1.15f;
     break;
   case EMOTION_SCARED:
     setFace(38, 42, 32, 27, 8);
     faceTgt.mouthW = 12;
     faceTgt.mouthH = 6;
     faceTgt.mouthCurve = -0.3f;
+    faceTgt.pupilScale = 1.28f;
     break;
   case EMOTION_SUSPICIOUS:
     setFace(36, 14, 30, 30, 5, 4, 4);
     faceTgt.mouthW = 18;
     faceTgt.mouthH = 1;
     faceTgt.mouthCurve = 0.0f;
+    faceTgt.pupilScale = 0.78f;
     break;
   case EMOTION_RELIEVED:
     setFace(34, 26, 30, 30, 6, 0, 0, 8, 0.2f);
     faceTgt.mouthW = 22;
     faceTgt.mouthH = 2;
     faceTgt.mouthCurve = 0.5f;
+    faceTgt.pupilScale = 1.05f;
     break;
   case EMOTION_PROUD:
     setFace(34, 24, 30, 26, 6, 0, 0, 6);
     faceTgt.mouthW = 24;
     faceTgt.mouthH = 2;
     faceTgt.mouthCurve = 0.5f;
+    faceTgt.pupilScale = 0.95f;
     break;
   case EMOTION_DIZZY:
     setFace(34, 32, 30, 29, 6);
     faceTgt.mouthW = 18;
     faceTgt.mouthH = 2;
     faceTgt.mouthCurve = -0.3f;
+    faceTgt.pupilScale = 1.10f;
     break;
   case EMOTION_LOVESTRUCK:
     setFace(36, 36, 31, 28, 7);
@@ -224,6 +245,7 @@ void faceTargetsForEmotion(Emotion e, PetMood pm) {
     faceTgt.mouthW = 22;
     faceTgt.mouthH = 3;
     faceTgt.mouthCurve = 0.8f;
+    faceTgt.pupilScale = 1.30f;
     break;
   case EMOTION_EVIL:
     setFace(34, 28, 30, 29, 6, 12, 1);
@@ -231,6 +253,7 @@ void faceTargetsForEmotion(Emotion e, PetMood pm) {
     faceTgt.mouthH = 3;
     faceTgt.mouthCurve = 0.85f;
     faceTgt.mouthY = 1;
+    faceTgt.pupilScale = 0.75f;
     break;
   case EMOTION_CRYING:
     setFace(34, 28, 30, 31, 6, 1, 10);
@@ -239,6 +262,7 @@ void faceTargetsForEmotion(Emotion e, PetMood pm) {
     faceTgt.mouthW = 22;
     faceTgt.mouthH = 4;
     faceTgt.mouthCurve = -0.9f;
+    faceTgt.pupilScale = 1.15f;
     break;
   case EMOTION_HEARTS:
     setFace(38, 38, 31, 28, 8);
@@ -247,6 +271,7 @@ void faceTargetsForEmotion(Emotion e, PetMood pm) {
     faceTgt.mouthW = 26;
     faceTgt.mouthH = 4;
     faceTgt.mouthCurve = 0.9f;
+    faceTgt.pupilScale = 1.32f;
     break;
   case EMOTION_DEAD:
     setFace(34, 18, 30, 30, 4);
@@ -295,6 +320,7 @@ void faceTargetsForEmotion(Emotion e, PetMood pm) {
     faceTgt.mouthW = 14;
     faceTgt.mouthH = 2;
     faceTgt.mouthCurve = 0.5f;
+    faceTgt.pupilScale = 1.35f;
     break;
   case EMOTION_PETTED:
     switch (pm) {
@@ -303,12 +329,14 @@ void faceTargetsForEmotion(Emotion e, PetMood pm) {
       faceTgt.mouthW = 24;
       faceTgt.mouthH = 3;
       faceTgt.mouthCurve = 0.85f;
+      faceTgt.pupilScale = 1.32f;
       break;
     case PET_GIGGLE:
       setFace(34, 30, 30, 29, 7, 0, 0, 13, 0.5f);
       faceTgt.mouthW = 26;
       faceTgt.mouthH = 5;
       faceTgt.mouthCurve = 0.7f;
+      faceTgt.pupilScale = 1.15f;
       break;
     case PET_SHY:
       setFace(32, 26, 30, 32, 6, 0, 5, 0, 1.0f);
@@ -318,6 +346,7 @@ void faceTargetsForEmotion(Emotion e, PetMood pm) {
       faceTgt.mouthW = 12;
       faceTgt.mouthH = 2;
       faceTgt.mouthCurve = 0.3f;
+      faceTgt.pupilScale = 1.20f;
       break;
     case PET_SPARKLE:
       setFace(38, 38, 32, 28, 7);
@@ -325,6 +354,7 @@ void faceTargetsForEmotion(Emotion e, PetMood pm) {
       faceTgt.mouthW = 24;
       faceTgt.mouthH = 6;
       faceTgt.mouthCurve = 0.85f;
+      faceTgt.pupilScale = 1.25f;
       break;
     case PET_KISS:
       setFace(34, 32, 30, 29, 6, 0, 0, 0, 0.7f);

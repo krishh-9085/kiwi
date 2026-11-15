@@ -65,6 +65,7 @@ static void springStep(float &x, float &v, float tgt, float omega, float zeta,
 // ---------------------------------------------------------------------------
 static uint32_t lastRenderAt = 0;
 static float velW = 0, velH = 0, velGap = 0, velY = 0;
+static float velGazeX = 0, velGazeY = 0;
 static float speakW = 16, speakH = 3;
 
 static void stepFace(float dt) {
@@ -86,12 +87,14 @@ static void stepFace(float dt) {
   faceNow.cheek = approach(faceNow.cheek, faceTgt.cheek, R, dt);
   faceNow.cheekR = approach(faceNow.cheekR, faceTgt.cheekR, R, dt);
   faceNow.hR = approach(faceNow.hR, faceTgt.hR, R, dt);
+  faceNow.wR = approach(faceNow.wR, faceTgt.wR, R, dt);
   faceNow.glint = approach(faceNow.glint, faceTgt.glint, 13.0f, dt);
   faceNow.blush = approach(faceNow.blush, faceTgt.blush, 5.5f, dt);
   faceNow.mouthW = approach(faceNow.mouthW, faceTgt.mouthW, R, dt);
   faceNow.mouthH = approach(faceNow.mouthH, faceTgt.mouthH, R, dt);
   faceNow.mouthCurve = approach(faceNow.mouthCurve, faceTgt.mouthCurve, R, dt);
   faceNow.mouthY = approach(faceNow.mouthY, faceTgt.mouthY, R, dt);
+  faceNow.pupilScale = approach(faceNow.pupilScale, faceTgt.pupilScale, 9.0f, dt);
 }
 
 // ---------------------------------------------------------------------------
@@ -413,42 +416,52 @@ void drawFace(float soundLevel) {
   }
   switch (currentEmotion) {
   case EMOTION_THINKING: {
-    // Looking UP while pondering with a gentle left/right scan
-    tx = swing(now, 750.0f) * 5.5f + cwing(now, 416.0f) * 1.6f;
-    ty = -6.5f + swing(now, 577.0f) * 1.2f;
+    // Calm, pensive upward-corner gaze: steady & relaxed (no rapid left/right oscillation)
+    tx = 2.2f + swing(now, 2600.0f) * 0.4f;
+    ty = -3.8f + swing(now, 2000.0f) * 0.3f;
     break;
   }
   case EMOTION_LISTENING:
-    tx = swing(now, 500.0f) * 2.0f;
-    ty = -3.0f;
+    // Attentive listening gaze: looking slightly up towards user's face
+    tx = swing(now, 500.0f) * 1.5f;
+    ty = -4.5f;
     break;
   case EMOTION_SPEAKING: {
     // Engaged with the user, fluidly glancing left/right while speaking
-    tx = swing(now, 580.0f) * 6.2f + swing(now, 276.0f) * 2.0f;
-    ty = swing(now, 414.0f) * 1.6f;
+    tx = swing(now, 580.0f) * 5.0f + swing(now, 276.0f) * 1.5f;
+    ty = swing(now, 414.0f) * 1.2f;
     break;
   }
   default:
     break;
   }
-  // Fast, saccade-like gaze motion (tau ~70 ms)
-  gazeX = approach(gazeX, tx, 14.0f, dt);
-  gazeY = approach(gazeY, ty, 14.0f, dt);
+  // Ballistic biological saccade spring (omega ~32 rad/s, zeta ~0.68)
+  // Rapid acceleration, crisp ~5% micro-overshoot and elastic settle!
+  const float SACCADE_OMEGA = 32.0f;
+  const float SACCADE_ZETA  = 0.68f;
+  springStep(gazeX, velGazeX, tx, SACCADE_OMEGA, SACCADE_ZETA, dt);
+  springStep(gazeY, velGazeY, ty, SACCADE_OMEGA, SACCADE_ZETA, dt);
 
   // ---- Per-emotion body motion -----------------------------------------
   float offX = 0, offY = 0, sc = 1.0f;
   switch (currentEmotion) {
-  case EMOTION_IDLE:
-    sc = 1.0f + 0.03f * swing(now, 900.0f);
+  case EMOTION_IDLE: {
+    // Continuous respiratory breath cycle (~3.2s period) + organic desk sigh offset
+    float breath = swing(now, 510.0f);
+    offY = breath * 0.70f + idleSighY;
+    sc = 1.0f + 0.02f * breath;
     break;
+  }
   case EMOTION_LISTENING:
     sc = 1.0f + 0.035f * swing(now, 160.0f);
     break;
-  case EMOTION_SPEAKING:
-    // Subtle conversational speech cadence and head bounce
-    offY = swing(now, 150.0f) * 1.2f;
-    sc = 1.0f + 0.025f * swing(now, 210.0f);
+  case EMOTION_SPEAKING: {
+    // Natural conversational speech cadence & head bounce tied to live speech energy!
+    float spk = getSpeechAmplitude();
+    offY = (swing(now, 160.0f) * 0.8f + spk * 3.5f);
+    sc = 1.0f + 0.02f * swing(now, 220.0f) + spk * 0.045f;
     break;
+  }
   case EMOTION_EXCITED:
     offY = swing(now, 110.0f) * 2.0f;
     break;
@@ -563,23 +576,45 @@ void drawFace(float soundLevel) {
     break;
   }
 
-  if (currentEmotion != EMOTION_IDLE) {
+  if (currentEmotion != EMOTION_IDLE && currentEmotion != EMOTION_THINKING) {
     offY += swing(now, 480.0f) * 1.5f;
   }
 
   // ---- Eye geometry -----------------------------------------------------
   float open = clampf(eyeOpenAmt, 0.0f, 1.0f);
-  // Eyes bulge a hair wider as the lids close (squash & stretch)
-  int w = iround(faceNow.w * sc * (1.0f + 0.05f * (1.0f - open)));
+  // Elastic Squash & Stretch: width expands up to +7.5% at closure and springs back!
+  float squash = 1.0f + 0.075f * (1.0f - open) * (1.0f - open);
+  int w = iround(faceNow.w * sc * squash);
+  int wL = w;
+  int wR = iround(w * faceNow.wR);
+
+  // Eyelid-Gaze Coupling: Looking UP widens eye (+2.5px); Looking DOWN droops upper lid (-2.5px)
+  float couplingH = 0.0f;
+  float couplingLid = 0.0f;
+  if (gazeY < 0.0f) {
+    // Looking up: attentive & curious opening
+    couplingH = -gazeY * 0.38f;
+    if (couplingH > 2.5f) couplingH = 2.5f;
+  } else if (gazeY > 0.0f) {
+    // Looking down: relaxed desk posture, upper eyelids follow gaze downward
+    couplingH = -gazeY * 0.45f;
+    if (couplingH < -2.5f) couplingH = -2.5f;
+    couplingLid = gazeY * 0.35f;
+  }
+
   float hBase = faceNow.h * sc;
-  float hBaseReact = hBase - eyeOffset;
+  float hBaseReact = hBase - eyeOffset + couplingH;
   if (hBaseReact < 4.0f)
     hBaseReact = 4.0f;
   int r = iround(faceNow.r);
   int gap = iround(faceNow.gap);
-  int cy = iround(faceNow.y + gazeY + offY);
-  int cxL = 64 - gap + iround(gazeX + offX);
-  int cxR = 64 + gap + iround(gazeX + offX);
+
+  // 3D Spherical Parallax: Outer eye socket / sclera shifts at 0.45x gaze speed
+  int scleraShiftX = iround((gazeX + offX) * 0.45f);
+  int scleraShiftY = iround((gazeY + offY) * 0.45f);
+  int cy = iround(faceNow.y + scleraShiftY);
+  int cxL = 64 - gap + scleraShiftX;
+  int cxR = 64 + gap + scleraShiftX;
 
   float hLf = hBaseReact * open;
   float hRf = hBaseReact * faceNow.hR * open;
@@ -603,20 +638,21 @@ void drawFace(float soundLevel) {
       cheekL *= (1.0f - wink);
     } else {
       hRf += (3.0f - hRf) * wink;
-      cheekR *= (1.0f - wink);
     }
   }
 
   int h = iround(hBase);
   int hL = iround(hLf);
   int hR = iround(hRf);
-  int lidIn = iround(faceNow.lidIn);
-  int lidOut = iround(faceNow.lidOut);
+  int lidIn = iround(faceNow.lidIn + couplingLid + idleSighLid);
+  int lidOut = iround(faceNow.lidOut + couplingLid + idleSighLid);
+  if (lidIn < 0) lidIn = 0;
+  if (lidOut < 0) lidOut = 0;
 
   display.clearDisplay();
   bool gl = faceNow.glint > 0.5f;
-  drawEye(cxL, cy, w, hL, r, lidIn, lidOut, iround(cheekL), true, gl);
-  drawEye(cxR, cy, w, hR, r, lidIn, lidOut, iround(cheekR), false, gl);
+  drawEye(cxL, cy, wL, hL, r, lidIn, lidOut, iround(cheekL), true, gl);
+  drawEye(cxR, cy, wR, hR, r, lidIn, lidOut, iround(cheekR), false, gl);
 
   // ---- Custom skin accents (cat ears, HUD frames, horns ...) -----------
   drawSkinAccents(now, cxL, cxR, cy, w, h, lidIn, lidOut);
@@ -631,26 +667,25 @@ void drawFace(float soundLevel) {
   int myBase = 52 + iround(offY * 0.6f + gazeY * 0.25f);
 
   if (currentEmotion == EMOTION_SPEAKING || isSpeechPlaying()) {
-    if (!isSpeechPlaying()) {
-      // Voice has stopped playing: smoothly snap lips to resting closed line
-      // (no silent flapping)
-      speakW = approach(speakW, 16.0f, 35.0f, dt);
+    float spk = getSpeechAmplitude();
+    if (!isSpeechPlaying() || spk < 0.025f) {
+      // Voice has stopped playing OR speech is in a natural pause between words:
+      // smoothly snap lips to resting closed slit (no ghost flapping!)
+      speakW = approach(speakW, 14.0f, 35.0f, dt);
       speakH = approach(speakH, 2.0f, 35.0f, dt);
       int mw = iround(speakW);
       int rx = mx - mw / 2;
       display.fillRoundRect(rx, myBase - 1, mw, 2, 1, SSD1306_WHITE);
     } else {
-      // Syllable-like envelope from incommensurate sines, then smoothed so the
-      // mouth flows instead of flickering.
+      // Real audio-driven lip sync tracking live speech envelope!
+      float normSpk = clampf((spk - 0.025f) * 3.4f, 0.0f, 1.0f);
       float t = (float)(now % 600000UL) / 1000.0f;
-      float env =
-          fabsf(sinf(t * 12.4f)) * (0.55f + 0.45f * sinf(t * 3.3f + 1.0f));
-      float env2 = 0.5f + 0.5f * sinf(t * 19.1f + 0.7f);
-      float o = clampf(env * 0.8f + env2 * 0.25f, 0.0f, 1.0f);
-      float tw = 20.0f - 5.0f * o; // narrower when the mouth opens ("oo")
-      float th = 3.0f + 8.5f * o;
-      speakW = approach(speakW, tw, 28.0f, dt);
-      speakH = approach(speakH, th, 28.0f, dt);
+      float nuance = 0.85f + 0.15f * sinf(t * 14.5f);
+
+      float tw = 14.0f + 7.0f * normSpk * nuance;
+      float th = 3.0f + 11.5f * normSpk;
+      speakW = approach(speakW, tw, 30.0f, dt);
+      speakH = approach(speakH, th, 36.0f, dt);
       int mw = iround(speakW);
       int mh = iround(speakH);
       int rx = mx - mw / 2;

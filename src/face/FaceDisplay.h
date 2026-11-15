@@ -21,5 +21,8 @@ bool presentDisplay(bool force = false);
 // (e.g. the animation engine) so the next frame is always sent.
 void markDisplayDirty();
 
+bool displayLock(uint32_t waitMs = 50);
+void displayUnlock();
+
 extern bool displayPowerState;
 extern uint8_t currentAppliedBrightness;

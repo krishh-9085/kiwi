@@ -43,7 +43,7 @@ bool speakText(const String &text) {
     res = ttsSarvam(toSpeak);
 
   spkEndSpeech();
-  if (currentEmotion == EMOTION_SPEAKING) {
+  if (!bargeInTriggered && (currentEmotion == EMOTION_SPEAKING || currentEmotion == EMOTION_HAPPY)) {
     setEmotion(EMOTION_IDLE);
   }
   Serial.printf("[TTS] speakText() returned %d\n", res);
@@ -70,9 +70,10 @@ int ttsSarvam(const String &text) {
   }
   Serial.printf("[TTS/Sarvam] Free heap before: %u\n", (unsigned)ESP.getFreeHeap());
   bool apWasUp = suspendLocalNet();
-  if (ESP.getMaxAllocHeap() < 35000) {
-    Serial.printf("[TTS/Sarvam] Low max alloc heap: %u < 35000\n", (unsigned)ESP.getMaxAllocHeap());
-    addTerminalLog("[TTS] Low heap max alloc (" + String(ESP.getMaxAllocHeap()) + " < 35000)");
+  if (ESP.getFreeHeap() < 38000 || ESP.getMaxAllocHeap() < 18000) {
+    Serial.printf("[TTS/Sarvam] Low heap: free=%u (<38000) or maxblk=%u (<18000)\n",
+                  (unsigned)ESP.getFreeHeap(), (unsigned)ESP.getMaxAllocHeap());
+    addTerminalLog("[TTS] Low heap (free: " + String(ESP.getFreeHeap()) + ", maxblk: " + String(ESP.getMaxAllocHeap()) + ")");
     restoreWebAndAP(apWasUp);
     return 0;
   }
@@ -418,9 +419,10 @@ int ttsPcmOpenAI(const String &text) {
   }
 
   bool apWasUp = suspendLocalNet();
-  if (ESP.getMaxAllocHeap() < 35000) {
-    Serial.printf("[TTS/OpenAI] Low max alloc heap (%u < 35000)\n", (unsigned)ESP.getMaxAllocHeap());
-    addTerminalLog("[TTS/OpenAI] Low heap max alloc (" + String(ESP.getMaxAllocHeap()) + " < 35000)");
+  if (ESP.getFreeHeap() < 38000 || ESP.getMaxAllocHeap() < 18000) {
+    Serial.printf("[TTS/OpenAI] Low heap: free=%u (<38000) or maxblk=%u (<18000)\n",
+                  (unsigned)ESP.getFreeHeap(), (unsigned)ESP.getMaxAllocHeap());
+    addTerminalLog("[TTS/OpenAI] Low heap (free: " + String(ESP.getFreeHeap()) + ", maxblk: " + String(ESP.getMaxAllocHeap()) + ")");
     restoreWebAndAP(apWasUp);
     return 0;
   }
@@ -617,7 +619,10 @@ int ttsPcmEleven(const String &text) {
   String path = basePath + elevenVoice + "?output_format=pcm_16000";
 
   bool apWasUp = suspendLocalNet();
-  if (ESP.getMaxAllocHeap() < 35000) {
+  if (ESP.getFreeHeap() < 38000 || ESP.getMaxAllocHeap() < 18000) {
+    Serial.printf("[TTS/Eleven] Low heap: free=%u (<38000) or maxblk=%u (<18000)\n",
+                  (unsigned)ESP.getFreeHeap(), (unsigned)ESP.getMaxAllocHeap());
+    addTerminalLog("[TTS/Eleven] Low heap (free: " + String(ESP.getFreeHeap()) + ", maxblk: " + String(ESP.getMaxAllocHeap()) + ")");
     restoreWebAndAP(apWasUp);
     return 0;
   }
@@ -773,7 +778,10 @@ int ttsFishAudio(const String &text) {
     return 0;
 
   bool apWasUp = suspendLocalNet();
-  if (ESP.getMaxAllocHeap() < 35000) {
+  if (ESP.getFreeHeap() < 38000 || ESP.getMaxAllocHeap() < 18000) {
+    Serial.printf("[TTS/FishAudio] Low heap: free=%u (<38000) or maxblk=%u (<18000)\n",
+                  (unsigned)ESP.getFreeHeap(), (unsigned)ESP.getMaxAllocHeap());
+    addTerminalLog("[TTS/FishAudio] Low heap (free: " + String(ESP.getFreeHeap()) + ", maxblk: " + String(ESP.getMaxAllocHeap()) + ")");
     restoreWebAndAP(apWasUp);
     return 0;
   }

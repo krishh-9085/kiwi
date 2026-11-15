@@ -15,6 +15,8 @@ extern uint32_t activeWinkEnd;
 extern bool activeWinkLeft;
 extern float gazeMicroX; // tiny involuntary eye drift (micro-saccades)
 extern float gazeMicroY;
+extern float idleSighY;   // Organic desk sigh vertical offset
+extern float idleSighLid; // Organic desk sigh eyelid droop
 
 void eyesInit(uint32_t now);
 void eyesUpdateAnim(uint32_t now);

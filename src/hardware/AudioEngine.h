@@ -10,6 +10,10 @@ extern i2s_chan_handle_t txHandle;
 bool startAudio();
 void drainMic();
 void detectMicSlot();
+bool setMicSlot(int slot, bool persist = false, bool force = false);
+int getMicSlot();
+bool isMicSlotLocked();
+void setMicSlotLocked(bool locked);
 
 // ---------- Speaker Output & DSP ----------
 bool spkWriteAll(const void *data, size_t bytes);
@@ -56,3 +60,5 @@ void soundLaser();
 void soundFanfare();
 void soundCoin();
 void soundSadViolin();
+void soundCrying();
+void soundLaughing();

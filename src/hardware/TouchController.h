@@ -9,4 +9,5 @@ extern TouchSensor touchT;
 void initTouch();
 void resyncTouch();
 void updateTouch();
+bool isTickleActive();
 extern uint32_t lastTickleTriggeredAt;

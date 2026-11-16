@@ -320,15 +320,15 @@ static String processSseStream(HTTPClient &http, WiFiClient *stream, SentenceCal
 
   String fullAnswer;
 
-  fullAnswer.reserve(512);
+  fullAnswer.reserve(1024);
 
   String currentSentence;
 
-  currentSentence.reserve(128);
+  currentSentence.reserve(256);
 
   String line;
 
-  line.reserve(256);
+  line.reserve(1024);
 
   bool inThink = false;
 
@@ -427,7 +427,7 @@ static String processSseStream(HTTPClient &http, WiFiClient *stream, SentenceCal
         line = "";
 
       } else if (ch != '\r') {
-        if (line.length() < 512)
+        if (line.length() < 2048)
           line += ch;
       }
       lastProgressAt = millis();
@@ -543,6 +543,8 @@ String askGemini(const String &question, SentenceCallback onSentence) {
 
   }
 
+  bool isGeminiThinkingModel = (llmModel.indexOf("2.5") >= 0 || llmModel.indexOf("2.0") >= 0 || llmModel.indexOf("thinking") >= 0);
+
   body += "{\"role\":\"user\",\"parts\":[{\"text\":\"" + jsonEscape(question) +
 
           "\"}]}],"
@@ -555,7 +557,9 @@ String askGemini(const String &question, SentenceCallback onSentence) {
 
           "\"generationConfig\":{\"maxOutputTokens\":" +
 
-          String(LLM_MAX_TOKENS) + ",\"temperature\":0.85}}";
+          String(LLM_MAX_TOKENS) + ",\"temperature\":0.85" +
+          (isGeminiThinkingModel ? ",\"thinkingConfig\":{\"thinkingBudget\":0}" : "") +
+          "}}";
 
 
 
@@ -1008,7 +1012,7 @@ String askOpenAI(const String &question, SentenceCallback onSentence) {
 
 
 
-String askLLM(const String &question, SentenceCallback onSentence) {
+String askLLM(const String &question, SentenceCallback onSentence, bool saveChatHistory) {
 
   checkChatHistoryTimeout();
 
@@ -1051,7 +1055,9 @@ String askLLM(const String &question, SentenceCallback onSentence) {
     // fire after the first sentence (and any streaming sentences) has already been spoken.
     parseAndExecuteActions(ans);
     parseAndSaveMemoriesFromLlm(ans);
-    addChatHistory(question, ans);
+    if (saveChatHistory) {
+      addChatHistory(question, ans);
+    }
 
   }
 

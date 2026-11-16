@@ -379,10 +379,34 @@ class DevPortalHandler(BaseHTTPRequestHandler):
                     icon_data = f.read()
                 self.send_response(200)
                 self.send_header("Content-Type", "image/png")
-                self.send_header("Cache-Control", "public, max-age=86400")
+                self.send_header("Cache-Control", "no-cache, no-store, must-revalidate")
+                self.send_header("Pragma", "no-cache")
+                self.send_header("Expires", "0")
                 self.end_headers()
                 self.wfile.write(icon_data)
                 return
+
+        if path == "/manifest.json":
+            self.send_response(200)
+            self.send_header("Content-Type", "application/manifest+json")
+            self.send_header("Cache-Control", "no-cache")
+            self.end_headers()
+            manifest = {
+                "name": "Kiwi Robot",
+                "short_name": "Kiwi",
+                "start_url": "/",
+                "display": "standalone",
+                "background_color": "#0e1015",
+                "theme_color": "#0e1015",
+                "icons": [{
+                    "src": "/apple-touch-icon.png?v=white",
+                    "sizes": "180x180",
+                    "type": "image/png",
+                    "purpose": "any maskable"
+                }]
+            }
+            self.wfile.write(json.dumps(manifest).encode("utf-8"))
+            return
 
         # Dev endpoints
         if path == "/api/dev/status":
@@ -482,8 +506,8 @@ class DevPortalHandler(BaseHTTPRequestHandler):
                 "wakeWord": {
                     "enabled": cfg_curr.get("wakeWordEnabled", True),
                     "model": cfg_curr.get("wakeWordModel", 0),
-                    "name": "Alexa" if cfg_curr.get("wakeWordModel", 0) == 2 else ("Hey Edith" if cfg_curr.get("wakeWordModel", 0) == 1 else "Hey Jarvis"),
-                    "cutoff": 0.82 if cfg_curr.get("wakeWordModel", 0) == 2 else (0.30 if cfg_curr.get("wakeWordModel", 0) == 1 else 0.26),
+                    "name": "Kiwi" if cfg_curr.get("wakeWordModel", 0) == 2 else ("Alexa" if cfg_curr.get("wakeWordModel", 0) == 1 else "Hey Jarvis"),
+                    "cutoff": 0.40 if cfg_curr.get("wakeWordModel", 0) == 2 else (0.90 if cfg_curr.get("wakeWordModel", 0) == 1 else 0.36),
                     "listening": True
                 },
                 "state": ("Sleeping" if cfg_curr.get("sleeping", False) else "Idle & Happy"),

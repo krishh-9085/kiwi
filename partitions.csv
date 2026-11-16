@@ -1,4 +1,4 @@
-# ESP32-C3 4MB Flash Partition Scheme (1.9MB Dual OTA + Preferences)
+# ESP32-S3 4MB Flash Partition Scheme (1.9MB Dual OTA + SPIFFS + Preferences)
 # Name,   Type, SubType, Offset,  Size, Flags
 nvs,      data, nvs,     0x9000,  0x5000,
 otadata,  data, ota,     0xe000,  0x2000,

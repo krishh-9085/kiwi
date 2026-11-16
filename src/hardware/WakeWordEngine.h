@@ -35,3 +35,19 @@ bool wakeWordIsListening();
 // Reset audio priming & probability buffers
 void wakeWordReset();
 
+// A/B Input Gain Tuning (default: 8.0f; bypass soft-knee when 1.0f)
+void wakeWordSetGain(float gain);
+float wakeWordGetGain();
+
+// Secondary voice spike trigger clause (default: false / pure average)
+void wakeWordSetSpikeTrigger(bool en);
+bool wakeWordGetSpikeTrigger();
+
+// Barge-in sensitivity bump added during Kiwi speech (default: 0.08f)
+void wakeWordSetBargeInBump(float bump);
+float wakeWordGetBargeInBump();
+
+// Diagnostics & Serial Console Tuning
+void wakeWordPrintStatus();
+void wakeWordProcessSerialCommand(const String &cmd);
+

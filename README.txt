@@ -32,7 +32,7 @@ Open hey_edith.json and edit the "micro" section:
   probability_cutoff           Lower = more sensitive (more false
                                accepts). Higher = stricter (may miss
                                real triggers). Current: 0.41.
-                               Try values in the 0.90–0.99 range.
+                               Recommended range: 0.25–0.60.
 
   sliding_window_size          Frames averaged before deciding.
                                Bigger = smoother but slower to react.

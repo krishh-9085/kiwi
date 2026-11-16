@@ -67,7 +67,7 @@ extern const char *NTP_SERVER_2;
 #define MIC_SLOT_OFFSET 0
 #define MIC_GAIN 4.5f
 #define UPLOAD_BATCH 1024
-#define LLM_MAX_TOKENS 300
+#define LLM_MAX_TOKENS 800
 #define TTS_MAX_CHARS 600
 #define NOISE_GATE_THRESHOLD 60
 #define SOUND_REACT_GAIN 1.0f
@@ -213,12 +213,15 @@ extern bool hungerEnabled;         // NVS: hunger_en (default true)
 extern bool soundReactiveEnabled; // NVS: snd_react
 enum WakeWordModelType : uint8_t {
     WAKE_WORD_HEY_JARVIS = 0,
-    WAKE_WORD_HEY_EDITH  = 1,
-    WAKE_WORD_ALEXA      = 2
+    WAKE_WORD_ALEXA      = 1,
+    WAKE_WORD_KIWI       = 2
 };
 extern bool wakeWordEnabled;      // NVS: ww_en (default true)
-extern float wakeWordCutoff;      // NVS: ww_cutoff (default model-specific)
-extern uint8_t wakeWordModel;     // NVS: ww_model (0=Hey Jarvis, 1=Hey Edith, 2=Alexa)
+extern float wakeWordCutoff;      // NVS: ww_cutoff (default model-specific: Jarvis 0.36, Alexa 0.90, Kiwi 0.40)
+extern uint8_t wakeWordModel;     // NVS: ww_model (0=Hey Jarvis, 1=Alexa, 2=Kiwi)
+extern float wakeWordGain;        // NVS: ww_gain (default 8.0f)
+extern bool wakeWordSpikeTrigger; // NVS: ww_spike (default false)
+extern float wakeWordBargeInBump; // NVS: ww_bargein_bump (default 0.08f)
 extern bool rgbLedEnabled;        // NVS: rgb_en (default true)
 extern uint8_t rgbLedBrightness;  // NVS: rgb_bright (0-255, default 160)
 extern bool bootCompleted;

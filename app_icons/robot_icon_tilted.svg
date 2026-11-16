@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <defs>
+    <!-- Background Gradient: Deep Slate to Obsidian Black -->
+    <linearGradient id="bgGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#191c23"/>
+      <stop offset="50%" stop-color="#121318"/>
+      <stop offset="100%" stop-color="#0a0b0e"/>
+    </linearGradient>
+
+    <!-- Bezel Gradient: Polished Graphite Rim -->
+    <linearGradient id="bezelGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#707685" stop-opacity="0.7"/>
+      <stop offset="40%" stop-color="#30333b" stop-opacity="0.4"/>
+      <stop offset="100%" stop-color="#1a1b20" stop-opacity="0.8"/>
+    </linearGradient>
+
+    <!-- Soft Screen Reflection -->
+    <linearGradient id="screenReflection" x1="50%" y1="0%" x2="50%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.07"/>
+      <stop offset="45%" stop-color="#ffffff" stop-opacity="0.01"/>
+      <stop offset="100%" stop-color="#000000" stop-opacity="0.0"/>
+    </linearGradient>
+
+    <!-- Luminous Eye Glow -->
+    <filter id="glow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="8" result="blur1"/>
+      <feGaussianBlur stdDeviation="3" result="blur2"/>
+      <feMerge>
+        <feMergeNode in="blur1"/>
+        <feMergeNode in="blur2"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Squircle Base -->
+  <rect x="8" y="8" width="496" height="496" rx="112" fill="url(#bgGradient)"/>
+
+  <!-- Screen Highlight -->
+  <rect x="8" y="8" width="496" height="496" rx="112" fill="url(#screenReflection)"/>
+
+  <!-- Subtle Hardware Bezel Stroke -->
+  <rect x="8" y="8" width="496" height="496" rx="112" fill="none" stroke="url(#bezelGradient)" stroke-width="6"/>
+
+  <!-- Inner Rim Highlight -->
+  <rect x="13" y="13" width="486" height="486" rx="107" fill="none" stroke="#ffffff" stroke-opacity="0.08" stroke-width="1.5"/>
+
+  <!-- Eyes Group (Tilted 8.1° Clockwise matching original robot face) -->
+  <g filter="url(#glow)">
+    <!-- Left Capsule Eye -->
+    <rect x="165" y="176" width="80" height="160" rx="40" fill="#ffffff" transform="rotate(8.1 205 256)"/>
+    <!-- Right Capsule Eye -->
+    <rect x="267" y="176" width="80" height="160" rx="40" fill="#ffffff" transform="rotate(8.1 307 256)"/>
+  </g>
+</svg>

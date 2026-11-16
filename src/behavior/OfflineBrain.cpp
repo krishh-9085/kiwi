@@ -83,7 +83,7 @@ void handleOfflineBuddyTap() {
     // Musical Giggle & Laugh
     setEmotion(EMOTION_LAUGHING);
     flourish = FL_NOTE;
-    soundPetGiggle();
+    soundLaughing();
     break;
 
   case 3:

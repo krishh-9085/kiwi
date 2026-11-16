@@ -3,127 +3,17 @@
 #include "face/FaceEngine.h"
 #include "hardware/AudioEngine.h"
 #include "services/AiService.h"
+#include "services/AiLlmService.h"
 #include "services/MemoryService.h"
 #include "behavior/ActionExecutor.h"
 #include <WiFi.h>
+#include <time.h>
 
 // ============================================================
-// AUTONOMOUS DESK BOREDOM & NATURAL QUIRKS (Dynamic ~2 min idle)
+// AUTONOMOUS DESK COMPANION: AI-POWERED DYNAMIC IDLE BANTER
 // ============================================================
-struct BoredomPhrase {
-  Emotion emotion;
-  Emotion returnEmotion;
-  const char *phraseWithOwner;
-  const char *phraseGeneric;
-};
 
-static const BoredomPhrase BOREDOM_PHRASES[] = {
-  // Eye care & Screen break
-  {EMOTION_WINK, EMOTION_HAPPY,
-   "%s, thodi der palke jhapka lo!",
-   "Bhai, thodi der palke jhapka lo!"},
-
-  {EMOTION_RELIEVED, EMOTION_HAPPY,
-   "2 minute screen se nazar hatao %s.",
-   "2 minute screen se nazar hatao, relax karo."},
-
-  // Hydration & Chai / Coffee
-  {EMOTION_CUTE, EMOTION_HAPPY,
-   "%s, thoda paani pee lo!",
-   "Thoda paani pee lo yaar!"},
-
-  {EMOTION_CONFUSED, EMOTION_HAPPY,
-   "Aakhri baar paani kab piya tha %s?",
-   "Aakhri baar paani kab piya tha bhai?"},
-
-  {EMOTION_HAPPY, EMOTION_WINK,
-   "Chai ka break le lein, %s?",
-   "Chai ka break le lein?"},
-
-  {EMOTION_EXCITED, EMOTION_HAPPY,
-   "%s, coffee time ho gaya!",
-   "Coffee time ho gaya, break banta hai!"},
-
-  // Posture & Stretch
-  {EMOTION_CONFUSED, EMOTION_SMUG,
-   "Posture check %s, seedhe baitho!",
-   "Posture check! Seedhe baitho zara."},
-
-  {EMOTION_CUTE, EMOTION_HAPPY,
-   "%s, utho aur thoda stretch kar lo!",
-   "Utho aur thoda stretch kar lo!"},
-
-  {EMOTION_CONFUSED, EMOTION_HAPPY,
-   "Keyboard chhod ke haath shake karo %s!",
-   "Keyboard chhod ke haath shake karo thoda!"},
-
-  // Focus & Coding / Work
-  {EMOTION_CURIOUS, EMOTION_SMUG,
-   "%s, koi bug phas gaya kya?",
-   "Koi bug phas gaya kya?"},
-
-  {EMOTION_SMUG, EMOTION_LAUGHING,
-   "Code chal gaya ya crash hua %s?",
-   "Code chal gaya ya crash hua?"},
-
-  {EMOTION_PROUD, EMOTION_HAPPY,
-   "Mast focus chal raha hai %s!",
-   "Mast focus chal raha hai aaj!"},
-
-  {EMOTION_CURIOUS, EMOTION_HAPPY,
-   "Kaam kaisa chal raha hai %s?",
-   "Kaam kaisa chal raha hai sab?"},
-
-  {EMOTION_COOL, EMOTION_HAPPY,
-   "%s, full speed mein lage ho aaj!",
-   "Full speed mein lage ho aaj!"},
-
-  // Desk Banter & Companion
-  {EMOTION_BORED, EMOTION_CURIOUS,
-   "Main bore ho raha hu %s, kuch bolo!",
-   "Main bore ho raha hu, kuch bolo na!"},
-
-  {EMOTION_CURIOUS, EMOTION_HAPPY,
-   "Bohot sannata hai %s, sab theek?",
-   "Bohot sannata hai, sab theek?"},
-
-  {EMOTION_LAUGHING, EMOTION_WINK,
-   "Hey %s, statue ban gaye kya?",
-   "Hey! Statue ban gaye kya?"},
-
-  {EMOTION_SMUG, EMOTION_WINK,
-   "Itna serious face kyu hai %s?",
-   "Itna serious face kyu hai bhai?"},
-
-  {EMOTION_HAPPY, EMOTION_WINK,
-   "%s bhai, thoda smile bhi kar lo!",
-   "Bhai, thoda smile bhi kar lo!"},
-
-  {EMOTION_RELIEVED, EMOTION_HAPPY,
-   "Ek gehri saans lo %s, chill karo.",
-   "Ek gehri saans lo, chill karo."},
-
-  {EMOTION_CUTE, EMOTION_LOVESTRUCK,
-   "%s, sar pe halka sa tap toh kardo!",
-   "Sar pe halka sa tap toh kardo na!"},
-
-  {EMOTION_HAPPY, EMOTION_COOL,
-   "Thoda break banta hai ab %s.",
-   "Thoda break banta hai ab."},
-
-  {EMOTION_CURIOUS, EMOTION_THINKING,
-   "Aage ka kya plan hai %s?",
-   "Aage ka kya plan hai ab?"},
-
-  {EMOTION_SINGING, EMOTION_PARTY,
-   "Koi badhiya gaana baja lein %s?",
-   "Koi badhiya gaana baja lein?"}
-};
-
-static const size_t NUM_BOREDOM_PHRASES = sizeof(BOREDOM_PHRASES) / sizeof(BOREDOM_PHRASES[0]);
 static uint32_t nextBoredomInterval = 120000;
-static int lastBoredomHistory[14] = {-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1};
-static uint8_t boredomHistoryHead = 0;
 
 void resetBoredomInterval() {
   uint32_t baseMs = (uint32_t)boredomMinutes * 60000UL;
@@ -134,19 +24,144 @@ void resetBoredomInterval() {
                 (float)nextBoredomInterval / 60000.0f, (unsigned long)nextBoredomInterval);
 }
 
-static bool wasBoredomRecentlyUsed(int idx) {
-  for (int i = 0; i < 14; i++) {
-    if (lastBoredomHistory[i] == idx)
-      return true;
+// ------------------------------------------------------------
+// Physical Quirks (Offline fallback & organic companion life)
+// ------------------------------------------------------------
+static void executePhysicalQuirk() {
+  int quirk = random(0, 4);
+  if (quirk == 0) {
+    // Yawn & sleepy stretch
+    setEmotion(EMOTION_BORED);
+    soundPetSleepy();
+    returnIdleAt = millis() + 4000;
+  } else if (quirk == 1) {
+    // Whistle / humming melody
+    setEmotion(EMOTION_SINGING);
+    soundPetPlayful();
+    flourish = FL_NOTE;
+    returnIdleAt = millis() + 3500;
+  } else if (quirk == 2) {
+    // Cute surprise & sparkle
+    setEmotion(EMOTION_CUTE);
+    soundPetSparkle();
+    flourish = FL_SPARKLE;
+    returnIdleAt = millis() + 2500;
+  } else {
+    // Musical giggle & happy wink
+    setEmotion(EMOTION_LAUGHING);
+    soundPetGiggle();
+    setEmotion(EMOTION_HAPPY);
+    returnIdleAt = millis() + 2500;
   }
-  return false;
 }
 
-static void recordBoredomUsed(int idx) {
-  lastBoredomHistory[boredomHistoryHead] = idx;
-  boredomHistoryHead = (boredomHistoryHead + 1) % 14;
+// ------------------------------------------------------------
+// Build Dynamic LLM Prompt with Time, Day, Weather & Crazy Theme
+// ------------------------------------------------------------
+static String buildDynamicIdlePrompt() {
+  // 1. Time & Day context
+  struct tm timeinfo;
+  bool gotTime = timeSynced && getLocalTime(&timeinfo, 10);
+  int curHour = gotTime ? timeinfo.tm_hour : 14;
+  int curWday = gotTime ? timeinfo.tm_wday : 1; // 0=Sun, 1=Mon, ..., 6=Sat
+
+  String timePhase;
+  if (curHour >= 5 && curHour < 12) {
+    timePhase = "Morning / Subah (fresh start, chai/coffee craving, morning hustle)";
+  } else if (curHour >= 12 && curHour < 16) {
+    timePhase = "Afternoon / Dopahar (lunch time, post-lunch laziness, heavy work focus)";
+  } else if (curHour >= 16 && curHour < 20) {
+    timePhase = "Evening / Shaam (shaam ki chai, mental exhaustion, winding down)";
+  } else if (curHour >= 20 && curHour < 24) {
+    timePhase = "Night / Raat (dinner time, late evening work, chilling)";
+  } else {
+    timePhase = "Late Midnight / Raat ke 2-4 baje (extreme night owl coding, dead silence, screen glow)";
+  }
+
+  const char *days[] = {
+    "Sunday (Lazy weekend chill, no alarm)",
+    "Monday (Start of week, Monday blues, anti-work sarcasm)",
+    "Tuesday (Focus mode, getting things done)",
+    "Wednesday (Mid-week hump day, half week done)",
+    "Thursday (Almost weekend, planning fun)",
+    "Friday (TGIF, weekend excitement, party vibes)",
+    "Saturday (Weekend fun, side projects, pure relaxation)"
+  };
+  String dayDesc = (curWday >= 0 && curWday < 7) ? days[curWday] : "Weekday";
+
+  // 2. Weather context
+  String weatherInfo = "";
+  if (weatherDesc.length() > 0) {
+    weatherInfo = weatherDesc + ", " + String((int)weatherTemp) + "C";
+    if (weatherCity.length() > 0) {
+      weatherInfo += " in " + weatherCity;
+    }
+  }
+
+  // 3. Owner context
+  String owner = getOwnerName();
+
+  // 4. Rotating Theme Seed (Relatable, Grounded Desk Topics)
+  static const char *const THEMES[] = {
+    // 0: Posture & Screen Break (Light roast / care)
+    "Topic: Posture check & screen break. Make a witty, realistic joke about sitting like a bent noodle, staring into the monitor without blinking, or needing to stretch.",
+
+    // 1: Work & Coding Banter
+    "Topic: Work & focus banter. Tease playfully about furiously smashing the keyboard, fixing stubborn bugs, or code running vs crashing.",
+
+    // 2: Chai/Coffee/Water Break
+    "Topic: Chai / Coffee / Water check. A natural, relatable remark about drinking cold coffee/chai, staying hydrated, or taking a 2-minute tea break.",
+
+    // 3: Time & Day Vibe
+    "Topic: Time and day of the week. Make a witty remark matched realistically to the current hour (e.g. evening wrap-up, afternoon slump, late night sleep reminder, Monday blues, Friday chill).",
+
+    // 4: Breaking the Desk Silence
+    "Topic: Breaking the silence. Lightheartedly tease about why the room is so quiet, asking if the owner became a statue, or checking how work is going.",
+
+    // 5: Cute Desk Pet Affection
+    "Topic: Cute companion affection. A cheeky remark asking for a head tap/scratch, asking for attention, or telling the owner to smile a bit."
+  };
+
+  static int lastThemeIdx = -1;
+  int themeIdx = random(0, (int)(sizeof(THEMES) / sizeof(THEMES[0])));
+  if (themeIdx == lastThemeIdx) {
+    themeIdx = (themeIdx + 1) % (int)(sizeof(THEMES) / sizeof(THEMES[0]));
+  }
+  lastThemeIdx = themeIdx;
+
+  // 5. Construct Grounded Prompt with Few-Shot Examples
+  String prompt;
+  prompt.reserve(768);
+  prompt = "[AUTONOMOUS DESK BUDDY BANTER]\n";
+  prompt += "You are Kiwi, an intelligent, funny, and caring robotic desk companion sitting right on your owner's desk.\n";
+  if (owner.length() > 0) {
+    prompt += "Owner Name: " + owner + "\n";
+  }
+  prompt += "Time: " + timePhase + " | Day: " + dayDesc + "\n";
+  if (weatherInfo.length() > 0) {
+    prompt += "Weather: " + weatherInfo + "\n";
+  }
+  prompt += String(THEMES[themeIdx]) + "\n";
+  prompt += "\n"
+            "STYLE EXAMPLES:\n"
+            "- 'Posture check Krishna! Seedhe baitho zara, reedh ki haddi ka shape bigad raha hai. [ACTION: emotion smug]'\n"
+            "- 'Krishna, thodi der palke jhapka lo, screen ke andar ghusne ka irada hai kya? [ACTION: emotion wink]'\n"
+            "- 'Itna sannata kyu hai Krishna? Code chal gaya ya koi bug phas gaya? [ACTION: emotion curious]'\n"
+            "- 'Woh chai kab se thandi ho rahi hai Krishna, pehle use khatam kar lo! [ACTION: emotion cute]'\n"
+            "- 'Itni speed me keyboard baja rahe ho Krishna, NASA hack karne ka plan hai kya? [ACTION: emotion laughing]'\n"
+            "\n"
+            "STRICT RULES:\n"
+            "1. NO sci-fi nonsense, NO aliens, NO weird illogical metaphors. Speak like a real witty friend on the desk.\n"
+            "2. Grounded & relatable: Talk ONLY about real desk situations (posture, screen glare, tea/water, typing, focus, time of day).\n"
+            "3. Exactly 1 short, complete sentence in natural conversational Hindi/Hinglish (10-15 words max). Never cut off mid-thought.\n"
+            "4. End with exactly 1 action tag: [ACTION: emotion smug] or [ACTION: emotion wink] or [ACTION: emotion curious] or [ACTION: emotion cute] or [ACTION: emotion laughing] or [ACTION: sound giggle].";
+
+  return prompt;
 }
 
+// ------------------------------------------------------------
+// Autonomous Boredom Checker
+// ------------------------------------------------------------
 void checkAutonomousBoredom() {
   if (!boredomEnabled)
     return;
@@ -175,82 +190,52 @@ void checkAutonomousBoredom() {
       return;
     }
 
-    Serial.printf("[BOREDOM] ~%d mins idle on desk! Triggering dynamic desk remark...\n", boredomMinutes);
+    Serial.printf("[BOREDOM] ~%d mins idle on desk! Triggering AI dynamic desk chatter...\n", boredomMinutes);
 
-    // If offline, trigger instant physical desk buddy quirks without altering user skin
+    // If offline or no Wi-Fi, trigger instant physical desk buddy quirks
     if (WiFi.status() != WL_CONNECTED) {
-      int offlineQuirk = random(0, 4);
-      if (offlineQuirk == 0) {
-        setEmotion(EMOTION_BORED);
-        soundPetSleepy();
-        returnIdleAt = millis() + 3500;
-      } else if (offlineQuirk == 1) {
-        setEmotion(EMOTION_SINGING);
-        soundPetPlayful();
-        flourish = FL_NOTE;
-        returnIdleAt = millis() + 3000;
-      } else if (offlineQuirk == 2) {
-        setEmotion(EMOTION_CUTE);
-        soundPetSparkle();
-        flourish = FL_SPARKLE;
-        returnIdleAt = millis() + 2500;
-      } else {
-        setEmotion(EMOTION_LAUGHING);
-        soundPetGiggle();
-        setEmotion(EMOTION_HAPPY);
-        returnIdleAt = millis() + 2500;
-      }
+      executePhysicalQuirk();
       return;
     }
 
-    // 32 spoken phrases + 3 physical quirks (yawn, humming melody, cute giggle)
-    int totalOptions = (int)NUM_BOREDOM_PHRASES + 3;
-    int chosen = random(0, totalOptions);
-    for (int attempt = 0; attempt < 25 && wasBoredomRecentlyUsed(chosen); attempt++) {
-      chosen = random(0, totalOptions);
+    // Check if LLM API key is available
+    String key = (llmProvider == "groq" && groqKey.length() > 0) ? groqKey : llmKey;
+    if (key.length() == 0) {
+      executePhysicalQuirk();
+      return;
     }
-    recordBoredomUsed(chosen);
 
-    if (chosen < (int)NUM_BOREDOM_PHRASES) {
-      const BoredomPhrase &bp = BOREDOM_PHRASES[chosen];
-      String name = getOwnerName();
-      String spoken;
-      if (name.length() > 0 && bp.phraseWithOwner != nullptr) {
-        char buf[320];
-        snprintf(buf, sizeof(buf), bp.phraseWithOwner, name.c_str());
-        spoken = String(buf);
-      } else {
-        spoken = String(bp.phraseGeneric);
-      }
+    // Organic variety: 1 out of 6 times (~16%), do a cute quick physical quirk (yawn, whistle, giggle)
+    if (random(0, 6) == 0) {
+      executePhysicalQuirk();
+      return;
+    }
 
-      Serial.printf("[BOREDOM] Remark #%d: %s\n", chosen, spoken.c_str());
-      setEmotion(bp.emotion);
-      bool ok = speakText(spoken);
-      if (!ok) {
-        // Fallback to playful pet chime if offline or TTS busy
-        soundPetPlayful();
-      }
-      setEmotion(bp.returnEmotion);
+    // Generate Dynamic LLM Autonomous Remark
+    String prompt = buildDynamicIdlePrompt();
+    Serial.println("[BOREDOM] Calling LLM for dynamic chatter...");
+
+    busyProcessing = true;
+    cancelRequest = false;
+    robotStateDesc = "Daydreaming...";
+    setEmotion(EMOTION_THINKING);
+
+    // Ask LLM without polluting chat history (saveChatHistory = false)
+    String thought = askLLM(prompt, nullptr, false);
+
+    if (thought.length() > 0 && !cancelRequest) {
+      Serial.printf("[BOREDOM LLM] Kiwi: %s\n", thought.c_str());
+      addTerminalLog("[IDLE BANTER] Kiwi: \"" + thought + "\"");
+      robotStateDesc = "Speaking...";
+      speakText(thought);
+      setEmotion(EMOTION_HAPPY);
       returnIdleAt = millis() + 2500;
     } else {
-      int physicalQuirk = chosen - (int)NUM_BOREDOM_PHRASES;
-      if (physicalQuirk == 0) {
-        // Yawn & sleepy stretch
-        setEmotion(EMOTION_BORED);
-        soundPetSleepy();
-        returnIdleAt = millis() + 4500;
-      } else if (physicalQuirk == 1) {
-        // Cheerful hum & singing
-        setEmotion(EMOTION_SINGING);
-        soundPetPlayful();
-        returnIdleAt = millis() + 3500;
-      } else {
-        // Cute surprise & musical giggle
-        setEmotion(EMOTION_SURPRISED);
-        soundPetGiggle();
-        setEmotion(EMOTION_HAPPY);
-        returnIdleAt = millis() + 2500;
-      }
+      Serial.println("[BOREDOM] LLM empty or cancelled -> fallback to quirk");
+      executePhysicalQuirk();
     }
+
+    busyProcessing = false;
+    robotStateDesc = "Ready";
   }
 }

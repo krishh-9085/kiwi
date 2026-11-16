@@ -153,9 +153,9 @@ void setup() {
     detectMicSlot();
     playBootChime();
     Serial.printf("[I2S] Audio OK, heap=%u\n", (unsigned)ESP.getFreeHeap());
-    if (wakeWordEnabled) {
-      wakeWordSetSensitivity(wakeWordCutoff);
-      wakeWordInit();
+    // P2: Always initialize wake word engine at boot so it can be enabled/disabled at runtime
+    if (!wakeWordInit()) {
+      Serial.println("[WAKEWORD] Engine initialization FAILED at boot!");
     }
   }
 #if BOOT_TIMING_LOG
@@ -573,6 +573,21 @@ void loop() {
       }
     } else {
       lowMemWarned = false;
+    }
+  }
+
+  // Serial console commands for live wake word tuning & diagnostics
+  while (Serial.available()) {
+    static String s_serialCmdBuf = "";
+    char c = (char)Serial.read();
+    if (c == '\n' || c == '\r') {
+      s_serialCmdBuf.trim();
+      if (s_serialCmdBuf.length() > 0) {
+        wakeWordProcessSerialCommand(s_serialCmdBuf);
+        s_serialCmdBuf = "";
+      }
+    } else if (s_serialCmdBuf.length() < 128) {
+      s_serialCmdBuf += c;
     }
   }
 

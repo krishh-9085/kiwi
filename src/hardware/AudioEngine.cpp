@@ -481,6 +481,75 @@ void soundSadViolin() {
   playToneQueue(t, 4);
 }
 
+// Infant / Baby Crying Vocalization (sobbing wails & sniffles)
+void soundCrying() {
+  Tone t[] = {
+    // Phase 1: Breath intake & initial wail ("Ah-Waaaah...")
+    {480, 80, 680, SHAPE_WARM_VOCAL, 0, 0},
+    {720, 360, 560, SHAPE_WARM_VOCAL, 35, 13},
+    {0, 35, 0, SHAPE_SINE, 0, 0},
+
+    // Phase 2: Desperate high infant wail ("WAAAAAHH!!")
+    {780, 440, 580, SHAPE_WARM_VOCAL, 45, 14},
+    {0, 40, 0, SHAPE_SINE, 0, 0},
+
+    // Phase 3: Trembling sob ("Uwaaah...")
+    {680, 320, 480, SHAPE_WARM_VOCAL, 32, 12},
+    {0, 40, 0, SHAPE_SINE, 0, 0},
+
+    // Phase 4: Sniffling hiccups ("uh... uh... uh...")
+    {540, 110, 420, SHAPE_WARM_VOCAL, 20, 10},
+    {0, 40, 0, SHAPE_SINE, 0, 0},
+    {480, 120, 380, SHAPE_WARM_VOCAL, 18, 9},
+    {0, 40, 0, SHAPE_SINE, 0, 0},
+    {420, 160, 320, SHAPE_WARM_VOCAL, 15, 8},
+    {0, 60, 0, SHAPE_SINE, 0, 0},
+
+    // Phase 5: Second crying wave ("Waaah... waah...")
+    {750, 380, 520, SHAPE_WARM_VOCAL, 40, 13},
+    {0, 40, 0, SHAPE_SINE, 0, 0},
+    {620, 280, 440, SHAPE_WARM_VOCAL, 28, 11},
+    {0, 35, 0, SHAPE_SINE, 0, 0},
+    {460, 180, 330, SHAPE_WARM_VOCAL, 20, 9}
+  };
+  playToneQueue(t, 18);
+}
+
+// Joyful Baby / Robot Giggle & Belly Laughter ("Hehe-haha-hahahaha-heee!")
+void soundLaughing() {
+  Tone t[] = {
+    // Phase 1: Rising staccato giggles ("He-he-he-he!")
+    {600, 35, 750, SHAPE_WARM_VOCAL, 0, 0},
+    {0, 15, 0, SHAPE_SINE, 0, 0},
+    {680, 38, 840, SHAPE_WARM_VOCAL, 0, 0},
+    {0, 15, 0, SHAPE_SINE, 0, 0},
+    {760, 42, 940, SHAPE_WARM_VOCAL, 0, 0},
+    {0, 15, 0, SHAPE_SINE, 0, 0},
+    {860, 45, 1060, SHAPE_WARM_VOCAL, 0, 0},
+    {0, 18, 0, SHAPE_SINE, 0, 0},
+
+    // Phase 2: Big melodic laugh burst ("Haaahaahaa!")
+    {1120, 220, 920, SHAPE_WARM_VOCAL, 32, 16},
+    {0, 25, 0, SHAPE_SINE, 0, 0},
+
+    // Phase 3: Second chuckle roll ("He-he-he-hee!")
+    {820, 40, 980, SHAPE_WARM_VOCAL, 0, 0},
+    {0, 15, 0, SHAPE_SINE, 0, 0},
+    {940, 42, 1120, SHAPE_WARM_VOCAL, 0, 0},
+    {0, 15, 0, SHAPE_SINE, 0, 0},
+    {1080, 50, 1280, SHAPE_WARM_VOCAL, 0, 0},
+    {0, 20, 0, SHAPE_SINE, 0, 0},
+
+    // Phase 4: Big joyful squeal & chuckles ("Heeeee-chuckle!")
+    {1220, 240, 860, SHAPE_WARM_VOCAL, 35, 15},
+    {0, 25, 0, SHAPE_SINE, 0, 0},
+    {740, 60, 880, SHAPE_WARM_VOCAL, 0, 0},
+    {0, 20, 0, SHAPE_SINE, 0, 0},
+    {840, 85, 960, SHAPE_WARM_VOCAL, 20, 12}
+  };
+  playToneQueue(t, 21);
+}
+
 // ============================================================
 // I2S DRIVER INITIALIZATION
 // ============================================================
@@ -536,11 +605,52 @@ void drainMic() {
   }
 }
 
+static portMUX_TYPE s_micMux = portMUX_INITIALIZER_UNLOCKED;
+
 static void saveMicSlot(int slot) {
   Preferences p;
   p.begin("myrobot", false);
   p.putInt("micslot", slot);
   p.end();
+}
+
+bool setMicSlot(int slot, bool persist, bool force) {
+  if (slot != 0 && slot != 1) {
+    slot = 0;
+  }
+  portENTER_CRITICAL(&s_micMux);
+  if (micSlotLocked && !force && !persist) {
+    portEXIT_CRITICAL(&s_micMux);
+    return false;
+  }
+  int oldSlot = micSlot;
+  micSlot = slot;
+  if (persist) {
+    micSlotLocked = true;
+  }
+  portEXIT_CRITICAL(&s_micMux);
+
+  if (persist) {
+    saveMicSlot(slot);
+    Serial.printf("[MIC] Slot locked to %d (saved to NVS)\n", slot);
+  } else if (oldSlot != slot) {
+    Serial.printf("[MIC] Auto-detected slot changed: %d -> %d (unlocked, not saved to NVS)\n", oldSlot, slot);
+  }
+  return true;
+}
+
+int getMicSlot() {
+  return micSlot;
+}
+
+bool isMicSlotLocked() {
+  return micSlotLocked;
+}
+
+void setMicSlotLocked(bool locked) {
+  portENTER_CRITICAL(&s_micMux);
+  micSlotLocked = locked;
+  portEXIT_CRITICAL(&s_micMux);
 }
 
 void detectMicSlot() {
@@ -588,18 +698,14 @@ void detectMicSlot() {
   Serial.printf("[MIC] slot energy L=%.1f R=%.1f\n", aL, aR);
 
   if (aL > 1.2f && aL > 1.5f * aR) {
-    micSlot = 0;
-    micSlotLocked = true;
-    saveMicSlot(0);
+    setMicSlot(0, true, true);
     Serial.println("[MIC] Using LEFT slot 0 (locked & saved to NVS)");
   } else if (aR > 5.0f && aR > 2.5f * aL) {
-    micSlot = 1;
-    micSlotLocked = true;
-    saveMicSlot(1);
+    setMicSlot(1, true, true);
     Serial.println("[MIC] Using RIGHT slot 1 (locked & saved to NVS)");
   } else {
     // INMP441 standard is GND -> Left channel (slot 0)
-    micSlot = 0;
+    setMicSlot(0, false, true);
     Serial.println("[MIC] Ambiguous slot, defaulting to LEFT slot 0 (standard INMP441 GND)");
   }
 }

@@ -320,12 +320,21 @@ void startWeb() {
       server.sendHeader("Access-Control-Allow-Origin", "*");
       server.sendHeader("Connection", "close");
       server.sendHeader("Content-Type", "image/png");
-      server.sendHeader("Cache-Control", "public, max-age=86400");
+      server.sendHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+      server.sendHeader("Pragma", "no-cache");
+      server.sendHeader("Expires", "0");
       server.send_P(200, "image/png", (const char *)APPLE_ICON, APPLE_ICON_LEN);
     };
     server.on("/apple-touch-icon.png", HTTP_GET, handleAppleIcon);
     server.on("/apple-touch-icon-precomposed.png", HTTP_GET, handleAppleIcon);
     server.on("/favicon.ico", HTTP_GET, handleAppleIcon);
+    server.on("/manifest.json", HTTP_GET, []() {
+      notifyWebRequest();
+      server.sendHeader("Access-Control-Allow-Origin", "*");
+      server.sendHeader("Cache-Control", "no-cache");
+      server.send(200, "application/manifest+json",
+        "{\"name\":\"Kiwi Robot\",\"short_name\":\"Kiwi\",\"start_url\":\"/\",\"display\":\"standalone\",\"background_color\":\"#0e1015\",\"theme_color\":\"#0e1015\",\"icons\":[{\"src\":\"/apple-touch-icon.png?v=white\",\"sizes\":\"180x180\",\"type\":\"image/png\",\"purpose\":\"any maskable\"}]}");
+    });
 
     server.on("/", HTTP_GET, handleRoot);
 

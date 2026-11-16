@@ -283,9 +283,9 @@ String recordAndTranscribe(uint32_t recordSeconds) {
         if (noiseSamples == SAMPLE_RATE / 4) {
           if (!micSlotLocked) {
             if (calibSumL > 2.2f * calibSumR && calibSumL > 10.0f) {
-              micSlot = 0;
+              setMicSlot(0, false);
             } else if (calibSumR > 2.2f * calibSumL && calibSumR > 10.0f) {
-              micSlot = 1;
+              setMicSlot(1, false);
             }
             Serial.printf("[STT] Auto-calibrated Mic Slot: %d (L=%.1f, R=%.1f)\n",
                           micSlot, calibSumL / noiseSamples, calibSumR / noiseSamples);

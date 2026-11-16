@@ -186,8 +186,11 @@ bool greetingsEnabled = false;
 bool hungerEnabled = true;         // NVS: hunger_en (default true)
 bool soundReactiveEnabled = false; // NVS: snd_react
 bool wakeWordEnabled = true;       // NVS: ww_en (default true)
-float wakeWordCutoff = 0.26f;      // NVS: ww_cutoff (tuned for far-field responsiveness)
-uint8_t wakeWordModel = 0;         // NVS: ww_model (0=Hey Jarvis, 1=Hey Edith, 2=Alexa)
+float wakeWordCutoff = 0.36f;      // NVS: ww_cutoff (shipped manifest default: 0.36)
+uint8_t wakeWordModel = 0;         // NVS: ww_model (0=Hey Jarvis, 1=Alexa, 2=Kiwi)
+float wakeWordGain = 8.0f;         // NVS: ww_gain (default 8.0f)
+bool wakeWordSpikeTrigger = false; // NVS: ww_spike (default false)
+float wakeWordBargeInBump = 0.08f; // NVS: ww_bargein_bump (default 0.08f)
 bool rgbLedEnabled = true;         // NVS: rgb_en (default true)
 uint8_t rgbLedBrightness = 160;     // NVS: rgb_bright (0-255, default 160 ~63%)
 bool bootCompleted = false;

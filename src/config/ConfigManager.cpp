@@ -317,16 +317,26 @@ void loadConfig() {
   wakeWordModel = prefs.getUChar("ww_model", 0);
   if (wakeWordModel > 2) wakeWordModel = 0;
 
-  float defCutoff = (wakeWordModel == 2) ? 0.82f : ((wakeWordModel == 1) ? 0.30f : 0.26f);
+  float defCutoff = (wakeWordModel == 1) ? 0.90f : ((wakeWordModel == 2) ? 0.40f : 0.36f);
   wakeWordCutoff = prefs.getFloat("ww_cutoff", defCutoff);
   rgbLedEnabled = prefs.getBool("rgb_en", true);
   rgbLedBrightness = prefs.getUChar("rgb_bright", 160);
   rgbLedSetBrightness(rgbLedBrightness);
-  if (wakeWordModel == 0 && wakeWordCutoff > 0.34f) {
-    // Automatically migrate old strict cutoff down to far-field sensitive 0.26
-    wakeWordCutoff = 0.26f;
-    prefs.putFloat("ww_cutoff", 0.26f);
+
+  // Migrate old hardcoded defaults to official manifest values
+  if (wakeWordModel == 0 && (fabsf(wakeWordCutoff - 0.26f) < 0.005f)) {
+    wakeWordCutoff = 0.36f;
+    prefs.putFloat("ww_cutoff", 0.36f);
+    Serial.println("[CONFIG] Migrated Jarvis cutoff from old 0.26 to manifest default 0.36");
+  } else if (wakeWordModel == 1 && (fabsf(wakeWordCutoff - 0.82f) < 0.005f)) {
+    wakeWordCutoff = 0.90f;
+    prefs.putFloat("ww_cutoff", 0.90f);
+    Serial.println("[CONFIG] Migrated Alexa cutoff from old 0.82 to manifest default 0.90");
   }
+
+  wakeWordGain = prefs.getFloat("ww_gain", 8.0f);
+  wakeWordSpikeTrigger = prefs.getBool("ww_spike", false);
+  wakeWordBargeInBump = prefs.getFloat("ww_bargein_bump", 0.08f);
 
   circadianSleepStart = prefs.getInt("circ_start", 23);
 
@@ -406,9 +416,12 @@ void loadConfig() {
 
   int savedMic = prefs.getInt("micslot", -1);
   if (savedMic == 0 || savedMic == 1) {
-    micSlot = savedMic;
-    micSlotLocked = true;
-    Serial.printf("[MIC] Slot %d cached from NVS\n", micSlot);
+    setMicSlot(savedMic, false, true);
+    setMicSlotLocked(true);
+    Serial.printf("[MIC] Slot %d cached from NVS (locked)\n", micSlot);
+  } else {
+    setMicSlot(0, false, true);
+    setMicSlotLocked(false);
   }
 
   // AP password (default: 25691128)
@@ -540,6 +553,9 @@ void saveConfigImmediate() {
   prefs.putBool("ww_en", wakeWordEnabled);
   prefs.putFloat("ww_cutoff", wakeWordCutoff);
   prefs.putUChar("ww_model", wakeWordModel);
+  prefs.putFloat("ww_gain", wakeWordGain);
+  prefs.putBool("ww_spike", wakeWordSpikeTrigger);
+  prefs.putFloat("ww_bargein_bump", wakeWordBargeInBump);
   prefs.putBool("rgb_en", rgbLedEnabled);
   prefs.putUChar("rgb_bright", rgbLedBrightness);
 

@@ -29,11 +29,20 @@ bool syncTimeFromNTP();
 static uint32_t lastCheekTouchAt = 0;
 static uint8_t cheekTapCount = 0;
 uint32_t lastTickleTriggeredAt = 0;
+static volatile bool s_inTickleSpeech = false;
+
+bool isTickleActive() {
+  return s_inTickleSpeech;
+}
 
 void triggerTickleMode() {
-  if (busyProcessing)
+  if (busyProcessing || s_inTickleSpeech)
     return;
   busyProcessing = true;
+  s_inTickleSpeech = true;
+  cancelRequest = false;
+  bargeInTriggered = false;
+  startRecording = false;
   lastTickleTriggeredAt = millis();
   lastUserInteractionAt = millis();
   cheekTapCount = 0;
@@ -50,6 +59,7 @@ void triggerTickleMode() {
   setEmotion(EMOTION_IDLE);
   returnIdleAt = 0;
   resyncTouch();
+  s_inTickleSpeech = false;
   busyProcessing = false;
 }
 
@@ -124,6 +134,15 @@ void executeTouchAction(TouchAction act, uint8_t pin) {
   }
   uint32_t now = millis();
   lastUserInteractionAt = now;
+
+  // Protect ongoing speech and tickle mode from accidental cheek touches:
+  // Cheek taps while Kiwi is speaking or tickling must NEVER cancel or barge-in on speech!
+  if (pin == PIN_TOUCH_LEFT || pin == PIN_TOUCH_RIGHT) {
+    if (s_inTickleSpeech || isSpeechPlaying() || (now - lastTickleTriggeredAt < 4500 && busyProcessing)) {
+      Serial.printf("[TOUCH] Cheek pin %d touched during active speech/tickle -> Absorbed! Speech protected.\n", pin);
+      return;
+    }
+  }
 
   if (isRobotTimerRinging()) {
     Serial.println("[TOUCH] Action -> Dismissing Timer Alarm");
@@ -209,6 +228,10 @@ void executeTouchAction(TouchAction act, uint8_t pin) {
       return; // Never trigger tickle mode or single-tap actions while Kiwi is
               // angry!
     }
+    if (s_inTickleSpeech || isSpeechPlaying() || busyProcessing) {
+      Serial.printf("[TOUCH] Cheek pin %d tap during busy/speech -> Absorbed!\n", pin);
+      return;
+    }
     if (now - lastCheekTouchAt < TICKLE_CHEEK_WINDOW_MS) {
       cheekTapCount++;
     } else {
@@ -243,35 +266,45 @@ void executeTouchAction(TouchAction act, uint8_t pin) {
 
     bool isSpeaking = isSpeechPlaying() || currentEmotion == EMOTION_SPEAKING;
     if (isSpeaking) {
-      // Barge-in: Tapping top button while Kiwi is speaking cuts off speech
+      // Barge-in: ONLY top button tap while Kiwi is speaking cuts off speech
       // and immediately starts listening for the new question!
-      Serial.println("[TOUCH] Barge-in top tap during speech -> Cut off speech & start listening!");
-      cancelRequest = true;
-      bargeInTriggered = true;
-      toneStop();
-      spkAbortSpeech();
-      listenStartedAt = millis();
-      setEmotion(EMOTION_LISTENING);
-      return;
+      if (pin == PIN_TOUCH_TOP) {
+        Serial.println("[TOUCH] Barge-in top tap during speech -> Cut off speech & start listening!");
+        cancelRequest = true;
+        bargeInTriggered = true;
+        toneStop();
+        spkAbortSpeech();
+        listenStartedAt = millis();
+        setEmotion(EMOTION_LISTENING);
+        return;
+      } else {
+        Serial.printf("[TOUCH] Cheek pin %d touched during speech -> Ignored barge-in to protect speech\n", pin);
+        return;
+      }
     }
 
     if (busyProcessing || startRecording) {
-      // Debounce cancel: only cancel if listening was initiated > 600ms ago.
-      // This prevents the user's initial touch release / bounce from
-      // immediately cancelling listening!
-      if (millis() - listenStartedAt > 600) {
-        Serial.println(
-            "[TOUCH] Action LISTEN -> Cancel current request / listening");
-        cancelRequest = true;
-        bargeInTriggered = false;
-        startRecording = false;
-        toneStop();
-        spkEndSpeech();
-        setEmotion(EMOTION_IDLE);
+      if (pin == PIN_TOUCH_TOP) {
+        // Debounce cancel: only cancel if listening was initiated > 600ms ago.
+        // This prevents the user's initial touch release / bounce from
+        // immediately cancelling listening!
+        if (millis() - listenStartedAt > 600) {
+          Serial.println(
+              "[TOUCH] Action LISTEN (Top) -> Cancel current request / listening");
+          cancelRequest = true;
+          bargeInTriggered = false;
+          startRecording = false;
+          toneStop();
+          spkEndSpeech();
+          setEmotion(EMOTION_IDLE);
+        } else {
+          Serial.println("[TOUCH] Action LISTEN -> Ignored cancel bounce (<600ms "
+                         "since start)");
+        }
       } else {
-        Serial.println("[TOUCH] Action LISTEN -> Ignored cancel bounce (<600ms "
-                       "since start)");
+        Serial.printf("[TOUCH] Action LISTEN (pin %d) -> Ignored cancel during busyProcessing/startRecording\n", pin);
       }
+      return;
     } else {
       Serial.println("[TOUCH] Action LISTEN -> Enter Listening Mode!");
       listenStartedAt = millis();
@@ -339,6 +372,10 @@ void executeTouchAction(TouchAction act, uint8_t pin) {
     break;
 
   case TOUCH_ACT_DISMISS:
+    if (pin != PIN_TOUCH_TOP && (busyProcessing || isSpeechPlaying() || s_inTickleSpeech)) {
+      Serial.printf("[TOUCH] Cheek pin %d touched during busy/speech -> Dismiss ignored to protect speech\n", pin);
+      return;
+    }
     if (busyProcessing || startRecording) {
       Serial.println(
           "[TOUCH] Action DISMISS -> Cancel current request / listening");
@@ -531,7 +568,7 @@ static void updateOneTouch(TouchSensor &ts, uint32_t now) {
         } else if (isKiwiAngry()) {
           handleAngryFeedAttempt();
           return;
-        } else if (!busyProcessing &&
+        } else if (!busyProcessing && !s_inTickleSpeech &&
                    now - lastTickleTriggeredAt > TICKLE_COOLDOWN_MS &&
                    !inCircadianSleep && !manualSleep) {
           triggerTickleMode();

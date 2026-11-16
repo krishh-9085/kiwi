@@ -270,8 +270,10 @@ void triggerSoundByName(const String &nameIn) {
     playBootChime();
   else if (s == "sparkle" || s == "magic")
     soundPetSparkle();
-  else if (s == "giggle" || s == "laugh")
-    soundPetGiggle();
+  else if (s == "giggle" || s == "laugh" || s == "laughing")
+    soundLaughing();
+  else if (s == "cry" || s == "crying" || s == "sob")
+    soundCrying();
   else if (s == "kiss" || s == "love")
     soundPetKiss();
   else if (s == "playful" || s == "party")

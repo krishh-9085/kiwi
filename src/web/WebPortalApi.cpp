@@ -84,21 +84,28 @@ void handleDoAction() {
   if (server.hasArg("hunger")) {
     String mArg = server.arg("hunger");
     MealType m = MEAL_GENERIC;
-    if (mArg == "breakfast") m = MEAL_BREAKFAST;
-    else if (mArg == "lunch") m = MEAL_LUNCH;
-    else if (mArg == "dinner") m = MEAL_DINNER;
+    if (mArg == "breakfast")
+      m = MEAL_BREAKFAST;
+    else if (mArg == "lunch")
+      m = MEAL_LUNCH;
+    else if (mArg == "dinner")
+      m = MEAL_DINNER;
     triggerHunger(m);
     server.send(200, "application/json", "{\"ok\":true,\"hunger\":true}");
     return;
   }
   if (server.hasArg("feed")) {
     bool ok = feedKiwi();
-    server.send(200, "application/json", ok ? "{\"ok\":true,\"fed\":true}" : "{\"ok\":false,\"reason\":\"not_hungry\"}");
+    server.send(200, "application/json",
+                ok ? "{\"ok\":true,\"fed\":true}"
+                   : "{\"ok\":false,\"reason\":\"not_hungry\"}");
     return;
   }
   if (server.hasArg("apologize") || server.hasArg("reconcile")) {
     bool ok = reconcileKiwi();
-    server.send(200, "application/json", ok ? "{\"ok\":true,\"reconciled\":true}" : "{\"ok\":false,\"reason\":\"not_angry\"}");
+    server.send(200, "application/json",
+                ok ? "{\"ok\":true,\"reconciled\":true}"
+                   : "{\"ok\":false,\"reason\":\"not_angry\"}");
     return;
   }
 
@@ -224,11 +231,14 @@ void handleDoAction() {
   if (server.hasArg("skin")) {
     String s = server.arg("skin");
     s.toLowerCase();
-    if (s == "kiwi" || s == "deskbuddy" || s == "buddy" || s == "cute" || s == "relaxed" || s == "bored")
+    if (s == "kiwi" || s == "deskbuddy" || s == "buddy" || s == "cute" ||
+        s == "relaxed" || s == "bored")
       currentEyeSkin = SKIN_KIWI;
-    else if (s == "vector" || s == "anki" || s == "default" || s == "normal" || s == "clean")
+    else if (s == "vector" || s == "anki" || s == "default" || s == "normal" ||
+             s == "clean")
       currentEyeSkin = SKIN_VECTOR;
-    else if (s == "capsule" || s == "neon_capsule" || s == "pill" || s == "stadium" || s == "oval")
+    else if (s == "capsule" || s == "neon_capsule" || s == "pill" ||
+             s == "stadium" || s == "oval")
       currentEyeSkin = SKIN_CAPSULE;
     else if (s == "pixel" || s == "8bit" || s == "retro" || s == "retro8bit")
       currentEyeSkin = SKIN_PIXEL;
@@ -236,7 +246,8 @@ void handleDoAction() {
       currentEyeSkin = SKIN_SQUIRCLE_BOLD;
     else if (s == "squircle_outline" || s == "neon_frame" || s == "outline")
       currentEyeSkin = SKIN_NEON_FRAME;
-    else if (s == "squircle_glint" || s == "lumina_spark" || s == "spark" || s == "glint")
+    else if (s == "squircle_glint" || s == "lumina_spark" || s == "spark" ||
+             s == "glint")
       currentEyeSkin = SKIN_LUMINA_SPARK;
     else
       currentEyeSkin = SKIN_KIWI;
@@ -394,30 +405,107 @@ void handleDoAction() {
     p.end();
     Serial.printf("[PORTAL] Wake-word cutoff set to: %.2f\n", wakeWordCutoff);
     server.send(200, "application/json",
-                "{\"ok\":true,\"ww_cutoff\":" + String(wakeWordCutoff, 2) + "}");
+                "{\"ok\":true,\"ww_cutoff\":" + String(wakeWordCutoff, 2) +
+                    "}");
     return;
   }
 
-  // Live Wake-Word Model Switch (0=Hey Jarvis, 1=Hey Edith, 2=Alexa)
+  // Live Wake-Word Model Switch (0=Hey Jarvis, 1=Alexa, 2=Kiwi)
   if (server.hasArg("ww_model")) {
     String wm = server.arg("ww_model");
     uint8_t mIdx = 0;
-    if (wm == "1" || wm == "hey_edith" || wm == "edith") mIdx = 1;
-    else if (wm == "2" || wm == "alexa") mIdx = 2;
-    else mIdx = 0;
+    if (wm == "1" || wm == "alexa")
+      mIdx = 1;
+    else if (wm == "2" || wm == "kiwi")
+      mIdx = 2;
+    else
+      mIdx = 0;
 
     wakeWordSetModel(mIdx);
+    bool ok = wakeWordSetModel(mIdx);
+    if (!ok) {
+      server.send(200, "application/json",
+                  "{\"ok\":false,\"error\":\"Model switch failed\"}");
+      return;
+    }
     Preferences p;
     p.begin("myrobot", false);
     p.putUChar("ww_model", wakeWordModel);
     p.putFloat("ww_cutoff", wakeWordCutoff);
     p.end();
-    Serial.printf("[PORTAL] Wake-word model switched to: %d (%s), cutoff: %.2f\n",
-                  wakeWordModel, wakeWordGetModelName(), wakeWordCutoff);
+    Serial.printf(
+        "[PORTAL] Wake-word model switched to: %d (%s), cutoff: %.2f\n",
+        wakeWordModel, wakeWordGetModelName(), wakeWordCutoff);
     server.send(200, "application/json",
                 "{\"ok\":true,\"ww_model\":" + String(wakeWordModel) +
                     ",\"name\":\"" + String(wakeWordGetModelName()) +
                     "\",\"cutoff\":" + String(wakeWordCutoff, 2) + "}");
+    return;
+  }
+
+  // Live Wake-Word Gain Tuning (0.5 to 20.0, default 8.0)
+  if (server.hasArg("ww_gain")) {
+    float g = server.arg("ww_gain").toFloat();
+    wakeWordSetGain(g);
+    Preferences p;
+    p.begin("myrobot", false);
+    p.putFloat("ww_gain", wakeWordGain);
+    p.end();
+    server.send(200, "application/json",
+                "{\"ok\":true,\"ww_gain\":" + String(wakeWordGain, 2) + "}");
+    return;
+  }
+
+  // Live Wake-Word Secondary Spike Clause Toggle (default false)
+  if (server.hasArg("ww_spike")) {
+    String spStr = server.arg("ww_spike");
+    bool sp = (spStr == "1" || spStr == "true" || spStr == "on");
+    wakeWordSetSpikeTrigger(sp);
+    Preferences p;
+    p.begin("myrobot", false);
+    p.putBool("ww_spike", wakeWordSpikeTrigger);
+    p.end();
+    server.send(200, "application/json",
+                "{\"ok\":true,\"ww_spike\":" +
+                    String(wakeWordSpikeTrigger ? "true" : "false") + "}");
+    return;
+  }
+
+  // Live Wake-Word Barge-In Bump Tuning (default 0.08)
+  if (server.hasArg("ww_bump")) {
+    float b = server.arg("ww_bump").toFloat();
+    wakeWordSetBargeInBump(b);
+    Preferences p;
+    p.begin("myrobot", false);
+    p.putFloat("ww_bargein_bump", wakeWordBargeInBump);
+    p.end();
+    server.send(200, "application/json",
+                "{\"ok\":true,\"ww_bump\":" + String(wakeWordBargeInBump, 2) +
+                    "}");
+    return;
+  }
+
+  // Live Microphone Slot Selection (0=Left, 1=Right)
+  if (server.hasArg("micslot")) {
+    int s = server.arg("micslot").toInt();
+    setMicSlot(s, true, true);
+    server.send(200, "application/json",
+                "{\"ok\":true,\"micslot\":" + String(getMicSlot()) + "}");
+    return;
+  }
+
+  // Live Microphone Slot Lock Toggle
+  if (server.hasArg("micslot_lock")) {
+    String lkStr = server.arg("micslot_lock");
+    bool lk = (lkStr == "1" || lkStr == "true" || lkStr == "on");
+    setMicSlotLocked(lk);
+    Preferences p;
+    p.begin("myrobot", false);
+    p.putBool("micslot_lock", lk);
+    p.end();
+    server.send(200, "application/json",
+                "{\"ok\":true,\"micslot_lock\":" +
+                    String(isMicSlotLocked() ? "true" : "false") + "}");
     return;
   }
 
@@ -440,15 +528,18 @@ void handleDoAction() {
   // Live RGB LED (Pin 48) Brightness (0-100%)
   if (server.hasArg("rgb_bright")) {
     int bPct = server.arg("rgb_bright").toInt();
-    if (bPct < 0) bPct = 0;
-    if (bPct > 100) bPct = 100;
+    if (bPct < 0)
+      bPct = 0;
+    if (bPct > 100)
+      bPct = 100;
     rgbLedBrightness = (uint8_t)((bPct * 255) / 100);
     rgbLedSetBrightness(rgbLedBrightness);
     Preferences p;
     p.begin("myrobot", false);
     p.putUChar("rgb_bright", rgbLedBrightness);
     p.end();
-    Serial.printf("[PORTAL] Pin 48 RGB LED brightness set to: %d%% (%d/255)\n", bPct, rgbLedBrightness);
+    Serial.printf("[PORTAL] Pin 48 RGB LED brightness set to: %d%% (%d/255)\n",
+                  bPct, rgbLedBrightness);
     server.send(200, "application/json",
                 "{\"ok\":true,\"rgb_bright\":" + String(bPct) + "}");
     return;
@@ -675,13 +766,8 @@ void handleStatus() {
   j += (inCircadianSleep || manualSleep) ? "true," : "false,";
   j += "\"history\":" + String(getConversationHistoryCount());
   const char *skinNames[SKIN_COUNT] = {
-      "kiwi",
-      "vector",
-      "capsule",
-      "pixel",
-      "squircle_solid",
-      "squircle_outline",
-      "squircle_glint"};
+      "kiwi",           "vector",           "capsule",       "pixel",
+      "squircle_solid", "squircle_outline", "squircle_glint"};
   int skIdx = (int)currentEyeSkin;
   if (skIdx < 0 || skIdx >= SKIN_COUNT)
     skIdx = 0;
@@ -692,17 +778,22 @@ void handleStatus() {
   // Status JSON: soundReactive (snd_react)
   j += ",\"soundReactive\":{\"enabled\":" +
        String(soundReactiveEnabled ? "true" : "false") + "}";
-  j += ",\"wakeWord\":{\"enabled\":" + String(wakeWordEnabled ? "true" : "false") +
-       ",\"model\":" + String(wakeWordModel) +
-       ",\"name\":\"" + String(wakeWordGetModelName()) + "\"" +
+  j += ",\"wakeWord\":{\"enabled\":" +
+       String(wakeWordEnabled ? "true" : "false") +
+       ",\"model\":" + String(wakeWordModel) + ",\"name\":\"" +
+       String(wakeWordGetModelName()) + "\"" +
        ",\"cutoff\":" + String(wakeWordCutoff, 2) +
-       ",\"listening\":" + String(wakeWordIsListening() ? "true" : "false") + "}";
+       ",\"listening\":" + String(wakeWordIsListening() ? "true" : "false") +
+       "}";
   j += ",\"rgbLed\":{\"enabled\":" + String(rgbLedEnabled ? "true" : "false") +
        ",\"brightness\":" + String((int)((rgbLedBrightness * 100) / 255)) + "}";
   j += ",\"timer_active\":" + String(isRobotTimerActive() ? "true" : "false");
   j += ",\"timer_ringing\":" + String(isRobotTimerRinging() ? "true" : "false");
   j += ",\"timer_remaining\":" + String(getRobotTimerRemainingSec());
-  j += ",\"hunger\":\"" + String(isKiwiAngry() ? "angry" : (isKiwiHungry() ? "hungry" : "satisfied")) + "\"";
+  j += ",\"hunger\":\"" +
+       String(isKiwiAngry() ? "angry"
+                            : (isKiwiHungry() ? "hungry" : "satisfied")) +
+       "\"";
   j += ",\"hunger_sec\":" + String(getHungerRemainingSec());
   j += ",\"meal\":\"" + String(getCurrentMealName()) + "\"";
   j += ",\"state\":\"" + escJson(robotStateDesc) + "\"";
@@ -773,13 +864,14 @@ void handleConfigApi() {
        ",\"end\":" + String(circadianSleepEnd) + "},";
   j += "\"greetings\":{\"enabled\":" +
        String(greetingsEnabled ? "true" : "false") + "},";
-  j += "\"hunger\":{\"enabled\":" +
-       String(hungerEnabled ? "true" : "false") + "},";
+  j += "\"hunger\":{\"enabled\":" + String(hungerEnabled ? "true" : "false") +
+       "},";
   j += "\"soundReactive\":{\"enabled\":" +
        String(soundReactiveEnabled ? "true" : "false") + "},";
-  j += "\"wakeWord\":{\"enabled\":" + String(wakeWordEnabled ? "true" : "false") +
-       ",\"model\":" + String(wakeWordModel) +
-       ",\"name\":\"" + String(wakeWordGetModelName()) + "\"" +
+  j += "\"wakeWord\":{\"enabled\":" +
+       String(wakeWordEnabled ? "true" : "false") +
+       ",\"model\":" + String(wakeWordModel) + ",\"name\":\"" +
+       String(wakeWordGetModelName()) + "\"" +
        ",\"cutoff\":" + String(wakeWordCutoff, 2) + "},";
   j += "\"rgbLed\":{\"enabled\":" + String(rgbLedEnabled ? "true" : "false") +
        ",\"brightness\":" + String((int)((rgbLedBrightness * 100) / 255)) +
@@ -805,13 +897,8 @@ void handleConfigApi() {
        "\",\"sound\":" + String(touchFeedbackSound ? "true" : "false") +
        ",\"deb\":" + String(touchDebounceMs) + "},";
   const char *skinNames[SKIN_COUNT] = {
-      "kiwi",
-      "vector",
-      "capsule",
-      "pixel",
-      "squircle_solid",
-      "squircle_outline",
-      "squircle_glint"};
+      "kiwi",           "vector",           "capsule",       "pixel",
+      "squircle_solid", "squircle_outline", "squircle_glint"};
   int skinIndex = (int)currentEyeSkin;
   if (skinIndex < 0 || skinIndex >= SKIN_COUNT)
     skinIndex = 0;
@@ -1052,11 +1139,39 @@ void handleSave() {
     wakeWordCutoff = server.arg("ww_cutoff").toFloat();
     wakeWordSetSensitivity(wakeWordCutoff);
   }
+  // P3: Apply ww_model BEFORE ww_cutoff
   if (server.hasArg("ww_model")) {
     uint8_t m = server.arg("ww_model").toInt();
-    if (m > 2) m = 0;
+    if (m > 2)
+      m = 0;
     wakeWordModel = m;
     wakeWordSetModel(wakeWordModel);
+  }
+  if (server.hasArg("ww_cutoff")) {
+    wakeWordCutoff = server.arg("ww_cutoff").toFloat();
+    wakeWordSetSensitivity(wakeWordCutoff);
+  }
+  if (server.hasArg("ww_gain")) {
+    wakeWordGain = server.arg("ww_gain").toFloat();
+    wakeWordSetGain(wakeWordGain);
+  }
+  if (server.hasArg("ww_spike")) {
+    String spStr = server.arg("ww_spike");
+    wakeWordSpikeTrigger = (spStr == "1" || spStr == "true" || spStr == "on");
+    wakeWordSetSpikeTrigger(wakeWordSpikeTrigger);
+  }
+  if (server.hasArg("ww_bump")) {
+    wakeWordBargeInBump = server.arg("ww_bump").toFloat();
+    wakeWordSetBargeInBump(wakeWordBargeInBump);
+  }
+  if (server.hasArg("micslot")) {
+    int s = server.arg("micslot").toInt();
+    setMicSlot(s, true, true);
+  }
+  if (server.hasArg("micslot_lock")) {
+    String lkStr = server.arg("micslot_lock");
+    bool lk = (lkStr == "1" || lkStr == "true" || lkStr == "on");
+    setMicSlotLocked(lk);
   }
   if (server.hasArg("rgb_en")) {
     String re = server.arg("rgb_en");
@@ -1065,8 +1180,10 @@ void handleSave() {
   }
   if (server.hasArg("rgb_bright")) {
     int bPct = server.arg("rgb_bright").toInt();
-    if (bPct < 0) bPct = 0;
-    if (bPct > 100) bPct = 100;
+    if (bPct < 0)
+      bPct = 0;
+    if (bPct > 100)
+      bPct = 100;
     rgbLedBrightness = (uint8_t)((bPct * 255) / 100);
     rgbLedSetBrightness(rgbLedBrightness);
   }
@@ -1127,11 +1244,14 @@ void handleSave() {
   if (server.hasArg("skin")) {
     String s = server.arg("skin");
     s.toLowerCase();
-    if (s == "kiwi" || s == "deskbuddy" || s == "buddy" || s == "cute" || s == "relaxed" || s == "bored")
+    if (s == "kiwi" || s == "deskbuddy" || s == "buddy" || s == "cute" ||
+        s == "relaxed" || s == "bored")
       currentEyeSkin = SKIN_KIWI;
-    else if (s == "vector" || s == "anki" || s == "default" || s == "normal" || s == "clean")
+    else if (s == "vector" || s == "anki" || s == "default" || s == "normal" ||
+             s == "clean")
       currentEyeSkin = SKIN_VECTOR;
-    else if (s == "capsule" || s == "neon_capsule" || s == "pill" || s == "stadium" || s == "oval")
+    else if (s == "capsule" || s == "neon_capsule" || s == "pill" ||
+             s == "stadium" || s == "oval")
       currentEyeSkin = SKIN_CAPSULE;
     else if (s == "pixel" || s == "8bit" || s == "retro" || s == "retro8bit")
       currentEyeSkin = SKIN_PIXEL;
@@ -1139,7 +1259,8 @@ void handleSave() {
       currentEyeSkin = SKIN_SQUIRCLE_BOLD;
     else if (s == "squircle_outline" || s == "neon_frame" || s == "outline")
       currentEyeSkin = SKIN_NEON_FRAME;
-    else if (s == "squircle_glint" || s == "lumina_spark" || s == "spark" || s == "glint")
+    else if (s == "squircle_glint" || s == "lumina_spark" || s == "spark" ||
+             s == "glint")
       currentEyeSkin = SKIN_LUMINA_SPARK;
     else
       currentEyeSkin = SKIN_KIWI;

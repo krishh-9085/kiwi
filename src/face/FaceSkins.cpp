@@ -94,23 +94,6 @@ static void fillSquircle(int x0, int top, int w, int h, int cx, int cy) {
   }
 }
 
-static void drawSquircleOutline(int x0, int top, int w, int h, int cx, int cy) {
-  if (w < 12 || h < 10) {
-    int rad = minI(w, h) / 3;
-    if (rad < 1) rad = 1;
-    display.drawRoundRect(x0, top, w, h, rad, SSD1306_WHITE);
-    return;
-  }
-  int ptsX[32];
-  int ptsY[32];
-  computeSquirclePoints(cx, cy, w, h, ptsX, ptsY);
-
-  for (int i = 0; i < 32; i++) {
-    int j = (i + 1) % 32;
-    display.drawLine(ptsX[i], ptsY[i], ptsX[j], ptsY[j], SSD1306_WHITE);
-  }
-}
-
 // Slanted eyelid mask (angry / sad / sleepy / thinking). Two black triangles
 // form a quad that slopes from the left lid height to the right lid height.
 static inline void maskLids(int x0, int x1, int top, int lidIn, int lidOut,
@@ -218,78 +201,7 @@ void drawEye(int cx, int cy, int w, int h, int r, int lidIn, int lidOut,
     return;
   }
 
-  // 3. NEON CAPSULE (User requested LED stadium pill with inner glint block)
-  if (currentEyeSkin == SKIN_CAPSULE) {
-    if (h <= 3) {
-      display.fillRoundRect(x0, cy - 1, w, maxI(2, h), 1, SSD1306_WHITE);
-      return;
-    }
-
-    int cornerR = w / 2;
-    if (cornerR * 2 > h)
-      cornerR = h / 2;
-    if (cornerR < 2)
-      cornerR = 2;
-
-    int borderThick = 3;
-    if (w < 14 || h < 14)
-      borderThick = 2;
-
-    // Outer filled stadium pill
-    display.fillRoundRect(x0, top, w, h, cornerR, SSD1306_WHITE);
-
-    // Inner hollow black cavity
-    int innerW = w - borderThick * 2;
-    int innerH = h - borderThick * 2;
-    int innerR = cornerR - borderThick;
-    if (innerR < 1) innerR = 1;
-    if (innerW > 0 && innerH > 0) {
-      display.fillRoundRect(x0 + borderThick, top + borderThick, innerW, innerH, innerR, SSD1306_BLACK);
-
-      // Inner upper glint block with dynamic pupil dilation & 3D parallax
-      if (innerH >= 6) {
-        float pScale = clampf(faceNow.pupilScale, 0.65f, 1.45f);
-        int gw = maxI(3, (int)lroundf(innerW * 0.40f * pScale));
-        int gh = maxI(3, (int)lroundf(innerH * 0.32f * pScale));
-        int gr = 1;
-
-        // Base anchor: top-right inside cavity
-        int gxBase = (x0 + borderThick + innerW) - gw - 1;
-        int gyBase = top + borderThick + maxI(2, innerH / 6);
-
-        // 3D Parallax shift
-        int maxShiftX = maxI(0, (innerW - gw) / 2);
-        int maxShiftY = maxI(0, (innerH - gh) / 3);
-        int shiftX = (int)lroundf(gazeX * 0.80f);
-        int shiftY = (int)lroundf(gazeY * 0.75f);
-        if (shiftX < -maxShiftX) shiftX = -maxShiftX;
-        if (shiftX > maxShiftX) shiftX = maxShiftX;
-        if (shiftY < -maxShiftY) shiftY = -maxShiftY;
-
-        int gx = gxBase + shiftX;
-        int gy = gyBase + shiftY;
-
-        // Keep inside black cavity
-        if (gx < x0 + borderThick + 1) gx = x0 + borderThick + 1;
-        if (gx + gw > x0 + w - borderThick - 1) gx = x0 + w - borderThick - 1 - gw;
-        if (gy < top + borderThick + 1) gy = top + borderThick + 1;
-        if (gy + gh > top + h - borderThick - 1) gy = top + h - borderThick - 1 - gh;
-
-        display.fillRoundRect(gx, gy, gw, gh, gr, SSD1306_WHITE);
-      }
-    }
-
-    maskLids(x0, x1, top, lidIn, lidOut, isLeft);
-    maskCheek(cx, bot, w, cheek);
-    if (lidIn > 0 || lidOut > 0) {
-      int lL = isLeft ? lidOut : lidIn;
-      int lR = isLeft ? lidIn : lidOut;
-      display.drawLine(x0, top + lL, x1, top + lR, SSD1306_WHITE);
-    }
-    return;
-  }
-
-  // 4. PIXEL 8-BIT (Retro 8-Bit Arcade)
+  // 3. PIXEL 8-BIT (Retro 8-Bit Arcade)
   if (currentEyeSkin == SKIN_PIXEL) {
     int step = (w >= 22) ? 4 : 2;
     if (h > step * 2) {
@@ -307,7 +219,7 @@ void drawEye(int cx, int cy, int w, int h, int r, int lidIn, int lidOut,
     return;
   }
 
-  // 5. SQUIRCLE BOLD
+  // 4. SQUIRCLE BOLD
   if (currentEyeSkin == SKIN_SQUIRCLE_BOLD) {
     if (h <= 3) {
       display.fillRoundRect(x0, cy - 1, w, maxI(2, h), 1, SSD1306_WHITE);
@@ -347,52 +259,7 @@ void drawEye(int cx, int cy, int w, int h, int r, int lidIn, int lidOut,
     return;
   }
 
-  // 6. NEON FRAME (Squircle Outline)
-  if (currentEyeSkin == SKIN_NEON_FRAME) {
-    if (h <= 3) {
-      display.drawFastHLine(x0, cy, w, SSD1306_WHITE);
-      return;
-    }
-
-    drawSquircleOutline(x0, top, w, h, cx, cy);
-
-    // Solid white circular pupil: dynamic scaling + 3D parallax
-    float pScale = clampf(faceNow.pupilScale, 0.65f, 1.45f);
-    int pupilR = (int)lroundf(minI(w, h) * 0.18f * pScale);
-    if (pupilR < 1)
-      pupilR = 1;
-    if (pupilR > minI(w, h) / 2 - 3)
-      pupilR = minI(w, h) / 2 - 3;
-    int maxOffX = maxI(0, w / 2 - pupilR - 2);
-    int maxOffY = maxI(0, h / 2 - pupilR - 2);
-    int shiftX = (int)lroundf(gazeX * 0.85f);
-    int shiftY = (int)lroundf(gazeY * 0.80f);
-    if (shiftX < -maxOffX) shiftX = -maxOffX;
-    if (shiftX > maxOffX) shiftX = maxOffX;
-    if (shiftY < -maxOffY) shiftY = -maxOffY;
-
-    int px = cx + shiftX;
-    int py = cy + shiftY;
-    if (px - pupilR < x0 + 2) px = x0 + 2 + pupilR;
-    if (px + pupilR > x1 - 2) px = x1 - 2 - pupilR;
-    if (py - pupilR < top + 2) py = top + 2 + pupilR;
-    if (py + pupilR > bot - 2) py = bot - 2 - pupilR;
-
-    if (h > 6) {
-      display.fillCircle(px, py, pupilR, SSD1306_WHITE);
-    }
-
-    maskLids(x0, x1, top, lidIn, lidOut, isLeft);
-    maskCheek(cx, bot, w, cheek);
-    if (lidIn > 0 || lidOut > 0) {
-      int lL = isLeft ? lidOut : lidIn;
-      int lR = isLeft ? lidIn : lidOut;
-      display.drawLine(x0, top + lL, x1, top + lR, SSD1306_WHITE);
-    }
-    return;
-  }
-
-  // 7. LUMINA SPARK (Squircle Glint)
+  // 5. LUMINA SPARK (Squircle Glint)
   if (currentEyeSkin == SKIN_LUMINA_SPARK) {
     if (h <= 3) {
       display.fillRoundRect(x0, cy - 1, w, maxI(2, h), 1, SSD1306_WHITE);
@@ -432,6 +299,103 @@ void drawEye(int cx, int cy, int w, int h, int r, int lidIn, int lidOut,
         int gx = px + pupilSide - 1 - glintSide;
         int gy = py + 1;
         display.fillRect(gx, gy, glintSide, glintSide, SSD1306_WHITE);
+      }
+    }
+
+    maskLids(x0, x1, top, lidIn, lidOut, isLeft);
+    maskCheek(cx, bot, w, cheek);
+    return;
+  }
+
+  // 6. MECHA: Cirrectangular solid outer eye with floating smooth rounded rectangular pupil,
+  // 3D parallax inertia physics, and specular glint dot inside.
+  if (currentEyeSkin == SKIN_MECHA) {
+    if (h <= 3) {
+      display.fillRoundRect(x0, cy - 1, w, maxI(2, h), 1, SSD1306_WHITE);
+      return;
+    }
+
+    // Outer smooth cirrectangular sclera (balanced rounded rectangle: distinct box with smooth corners, NOT a circle)
+    int cornerR = (minI(w, h) * 26) / 100;
+    if (cornerR < 3) cornerR = 3;
+    if (cornerR * 2 > h) cornerR = h / 2;
+    if (cornerR * 2 > w) cornerR = w / 2;
+
+    display.fillRoundRect(x0, top, w, h, cornerR, SSD1306_WHITE);
+
+    // Inner floating rounded rectangular pupil (scaled with emotional pupil dilation & physics)
+    float pScale = clampf(faceNow.pupilScale, 0.65f, 1.40f);
+    int pw = (int)lroundf(w * 0.46f * pScale);
+    int ph = (int)lroundf(h * 0.52f * pScale);
+    if (pw < 6) pw = 6;
+    if (ph < 6) ph = 6;
+    if (pw > w - 6) pw = w - 6;
+    if (ph > h - 6) ph = h - 6;
+
+    // Smooth micro-rounded pupil corners (distinctly rectangular with soft corners)
+    int pr = (minI(pw, ph) * 20) / 100;
+    if (pr < 2) pr = 2;
+    if (pr * 2 > ph) pr = ph / 2;
+    if (pr * 2 > pw) pr = pw / 2;
+
+    // Realistic 3D Parallax Physics: Pupil glides inside sclera with depth shift
+    int maxShiftX = maxI(0, (w - pw) / 2 - 2);
+    int maxShiftY = maxI(0, (h - ph) / 2 - 2);
+    int shiftX = (int)lroundf(gazeX * 0.95f);
+    int shiftY = (int)lroundf(gazeY * 0.85f);
+    if (shiftX < -maxShiftX) shiftX = -maxShiftX;
+    if (shiftX > maxShiftX) shiftX = maxShiftX;
+    if (shiftY < -maxShiftY) shiftY = -maxShiftY;
+
+    int px = cx + shiftX - pw / 2;
+    int py = cy + shiftY - ph / 2;
+    if (px < x0 + 2) px = x0 + 2;
+    if (px + pw > x1 - 2) px = x1 - 2 - pw;
+    if (py < top + 2) py = top + 2;
+    if (py + ph > bot - 2) py = bot - 2 - ph;
+
+    if (h > 6 && ph > 2 && pw > 2) {
+      display.fillRoundRect(px, py, pw, ph, pr, SSD1306_BLACK);
+
+      // Specular Glint Dot inside the pupil (dynamically shifts with real gaze direction)
+      if (pw >= 8 && ph >= 8) {
+        int dotSize = (pw >= 13 && ph >= 13) ? 3 : 2;
+        int pcx = px + pw / 2;
+        int pcy = py + ph / 2;
+
+        // Base highlight offset: friendly upper-right quadrant
+        int baseOffX = maxI(1, pw / 5);
+        int baseOffY = -maxI(1, ph / 5);
+
+        // Real direction gaze shift: dot moves in the direction the robot looks!
+        int dotGazeShiftX = (int)lroundf(gazeX * 0.45f);
+        int dotGazeShiftY = (int)lroundf(gazeY * 0.40f);
+
+        int dotX = pcx + baseOffX + dotGazeShiftX - dotSize / 2;
+        int dotY = pcy + baseOffY + dotGazeShiftY - dotSize / 2;
+
+        // Safety clamp strictly inside pupil bounds (with 1px margin)
+        int minDotX = px + 1;
+        int maxDotX = px + pw - dotSize - 1;
+        int minDotY = py + 1;
+        int maxDotY = py + ph - dotSize - 1;
+        if (dotX < minDotX) dotX = minDotX;
+        if (dotX > maxDotX) dotX = maxDotX;
+        if (dotY < minDotY) dotY = minDotY;
+        if (dotY > maxDotY) dotY = maxDotY;
+
+        display.fillRect(dotX, dotY, dotSize, dotSize, SSD1306_WHITE);
+
+        // Subtle secondary micro-twinkle when excited or happy (also tracks gaze organically)
+        if ((glint || pScale > 1.15f) && pw >= 12 && ph >= 12) {
+          int secBaseX = pcx - maxI(2, pw / 4);
+          int secBaseY = pcy + maxI(2, ph / 4);
+          int secX = secBaseX + (int)lroundf(gazeX * 0.25f);
+          int secY = secBaseY + (int)lroundf(gazeY * 0.25f);
+          if (secX >= px + 1 && secX <= px + pw - 2 && secY >= py + 1 && secY <= py + ph - 2) {
+            display.drawPixel(secX, secY, SSD1306_WHITE);
+          }
+        }
       }
     }
 

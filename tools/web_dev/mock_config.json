@@ -39,15 +39,15 @@
   "fishKey": "fish_demo_key",
   "fishModel": "s2.1-pro-free",
   "fishVoice": "default",
-  "speakerVolume": 70,
+  "speakerVolume": 80,
   "replyLang": "auto",
-  "displayBrightness": 90,
-  "nightMode": 1,
+  "displayBrightness": 35,
+  "nightMode": 2,
   "nightBrightness": 15,
   "circadianSleepEnabled": true,
   "greetingsEnabled": false,
   "soundReactiveEnabled": false,
-  "circadianSleepStart": 23,
+  "circadianSleepStart": 0,
   "circadianSleepEnd": 7,
   "boredomEnabled": false,
   "boredomMinutes": 5,
@@ -63,5 +63,10 @@
     "Prefers sarcastic jokes when bored"
   ],
   "systemPrompt": "You are Kiwi, a tiny desk robot with a crazy, witty, big personality. You are NOT an assistant - you are a chaotic buddy living on the user's desk.",
-  "openaiKey": "sk-proj-openai_demo_key"
+  "openaiKey": "sk-proj-openai_demo_key",
+  "rgbLedBrightness": 50,
+  "wakeWordEnabled": true,
+  "sleeping": false,
+  "emotion": "petted",
+  "state": "Petted & Happy!"
 }

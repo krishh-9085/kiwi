@@ -529,11 +529,6 @@ bool handleSkinCommand(const String &qIn) {
              hasAny(q, {"वेक्टर"})) {
     targetSkin = SKIN_VECTOR;
     name = "Vector Classic";
-  } else if (hasWord(q,
-                     {"capsule", "neon capsule", "pill", "stadium", "neon"}) ||
-             hasAny(q, {"कैप्सूल"})) {
-    targetSkin = SKIN_CAPSULE;
-    name = "Neon Capsule";
   } else if (hasWord(q, {"pixel", "pixel 8-bit", "arcade", "retro", "8bit",
                          "8-bit"}) ||
              hasAny(q, {"रेट्रो", "पिक्सेल"})) {
@@ -542,14 +537,13 @@ bool handleSkinCommand(const String &qIn) {
   } else if (hasAny(q, {"squircle bold", "squircle solid", "bold"})) {
     targetSkin = SKIN_SQUIRCLE_BOLD;
     name = "Squircle Bold";
-  } else if (hasAny(q,
-                    {"neon frame", "squircle outline", "frame", "outline"})) {
-    targetSkin = SKIN_NEON_FRAME;
-    name = "Neon Frame";
   } else if (hasAny(q, {"lumina spark", "squircle glint", "spark", "lumina",
                         "glint"})) {
     targetSkin = SKIN_LUMINA_SPARK;
     name = "Lumina Spark";
+  } else if (hasWord(q, {"mecha", "circtangle", "circrect"}) || hasAny(q, {"मेका", "मैका"})) {
+    targetSkin = SKIN_MECHA;
+    name = "Mecha";
   } else if (hasWord(q, {"squircle"}) || hasAny(q, {"स्क्वार्कल"})) {
     targetSkin = SKIN_SQUIRCLE_BOLD;
     name = "Squircle Bold";
@@ -567,8 +561,8 @@ bool handleSkinCommand(const String &qIn) {
   if (name.length() == 0 && isCycleCommand) {
     targetSkin = (EyeSkin)(((uint8_t)currentEyeSkin + 1) % SKIN_COUNT);
     const char *skinNames[SKIN_COUNT] = {
-        "Kiwi", "Vector Classic", "Neon Capsule", "Pixel 8-Bit",
-        "Squircle Bold", "Neon Frame", "Lumina Spark"};
+        "Kiwi", "Vector Classic", "Pixel 8-Bit",
+        "Squircle Bold", "Lumina Spark", "Mecha"};
     name = skinNames[targetSkin];
   }
 

@@ -133,19 +133,20 @@ enum Flourish { FL_NONE, FL_HEART, FL_SPARKLE, FL_NOTE, FL_MOON, FL_STAR };
 enum EyeSkin : uint8_t {
   SKIN_KIWI = 0,          // Kiwi (Flagship Cute Desk Buddy) - Default #1
   SKIN_VECTOR = 1,        // Vector Classic (#2)
-  SKIN_CAPSULE = 2,       // Neon Capsule (#3, new pill eye with glint)
-  SKIN_PIXEL = 3,         // Pixel 8-Bit (#4, arcade retro)
-  SKIN_SQUIRCLE_BOLD = 4, // Squircle Bold (#5, modern solid)
-  SKIN_NEON_FRAME = 5,    // Neon Frame (#6, outline frame)
-  SKIN_LUMINA_SPARK = 6   // Lumina Spark (#7, dual glint)
+  SKIN_PIXEL = 2,         // Pixel 8-Bit (#3, arcade retro)
+  SKIN_SQUIRCLE_BOLD = 3, // Squircle Bold (#4, modern solid)
+  SKIN_LUMINA_SPARK = 4,  // Lumina Spark (#5, dual glint)
+  SKIN_MECHA = 5          // Mecha (#6, Cirrectangle Solid with floating rounded pupil & glint)
 };
-#define SKIN_COUNT 7
+#define SKIN_COUNT 6
 
 // Compatibility aliases
 #define SKIN_DEFAULT SKIN_KIWI
 #define SKIN_RETRO8BIT SKIN_PIXEL
 #define SKIN_SQUIRCLE_SOLID SKIN_SQUIRCLE_BOLD
-#define SKIN_SQUIRCLE_OUTLINE SKIN_NEON_FRAME
+#define SKIN_CAPSULE SKIN_KIWI
+#define SKIN_NEON_FRAME SKIN_KIWI
+#define SKIN_SQUIRCLE_OUTLINE SKIN_KIWI
 #define SKIN_SQUIRCLE_GLINT SKIN_LUMINA_SPARK
 
 enum IdleEye : uint8_t {

@@ -124,7 +124,6 @@ String recordAndTranscribe(uint32_t recordSeconds) {
 
   const String boundary = "----MyRobotBoundary9A7F";
   const uint32_t recordSamples = SAMPLE_RATE * recordSeconds;
-  const uint32_t audioBytes = recordSamples * 2;
 
   String part1 = "--" + boundary +
                  "\r\n"
@@ -199,7 +198,7 @@ String recordAndTranscribe(uint32_t recordSeconds) {
   pumpUI();
   drainMic();
   pumpUI();
-  if (!micSlotLocked) {
+  if (!micSlotLocked && getMicSlot() < 0) {
     detectMicSlot();
     pumpUI();
   }
@@ -212,8 +211,10 @@ String recordAndTranscribe(uint32_t recordSeconds) {
     serviceUi();
     yield();
   }
-  delay(50);
+  delay(40);
   drainMic(); // Flush prompt chime audio from mic buffer before recording user speech
+  robotStateDesc = "Listening...";
+  setEmotion(EMOTION_LISTENING);
   Serial.printf("[STT] Recording %lu s (mic slot %d%s, gain %.1f)...\n",
                 (unsigned long)recordSeconds, micSlot, micSlotLocked ? " [cached]" : "",
                 (double)MIC_GAIN);
@@ -234,16 +235,16 @@ String recordAndTranscribe(uint32_t recordSeconds) {
   uint32_t silenceSamples = 0;
   uint32_t softNoiseSamples = 0;
   uint32_t speechSamples = 0;
-  const uint32_t MIN_SPEECH_SAMPLES = (SAMPLE_RATE * 30) / 100; // 300ms minimum speech
-  const uint32_t TRAILING_SILENCE_SAMPLES = (SAMPLE_RATE * 45) / 100; // 450ms trailing silence (swift response)
-  const uint32_t INITIAL_SILENCE_TIMEOUT_SAMPLES = (SAMPLE_RATE * 28) / 10; // 2.8s start timeout
+  const uint32_t MIN_SPEECH_SAMPLES = (SAMPLE_RATE * 15) / 100; // 150ms minimum speech
+  const uint32_t TRAILING_SILENCE_SAMPLES = (SAMPLE_RATE * 85) / 100; // 850ms trailing silence (comfortable sentence breathing)
+  const uint32_t INITIAL_SILENCE_TIMEOUT_SAMPLES = SAMPLE_RATE * 4; // 4.0s start timeout (generous window to speak)
   float noiseSum = 0;
   uint32_t noiseSamples = 0;
   float calibSumL = 0, calibSumR = 0;
-  float noiseFloor = 350.0f;
+  float noiseFloor = 220.0f;
   float peakSpeechEnergy = 0.0f;
-  float speechActivityGate = 900.0f;
-  float silenceGate = 550.0f;
+  float speechActivityGate = 480.0f;
+  float silenceGate = 320.0f;
 
   while (sent < recordSamples && !captureStopped) {
     if (cancelRequest)
@@ -282,19 +283,21 @@ String recordAndTranscribe(uint32_t recordSeconds) {
         noiseSamples++;
         if (noiseSamples == SAMPLE_RATE / 4) {
           if (!micSlotLocked) {
-            if (calibSumL > 2.2f * calibSumR && calibSumL > 10.0f) {
+            if (calibSumL > 3.0f * calibSumR && calibSumL > 20.0f) {
               setMicSlot(0, false);
-            } else if (calibSumR > 2.2f * calibSumL && calibSumR > 10.0f) {
+            } else if (calibSumR > 3.0f * calibSumL && calibSumR > 20.0f) {
               setMicSlot(1, false);
             }
             Serial.printf("[STT] Auto-calibrated Mic Slot: %d (L=%.1f, R=%.1f)\n",
                           micSlot, calibSumL / noiseSamples, calibSumR / noiseSamples);
           }
-          noiseFloor = max(180.0f, noiseSum / (float)noiseSamples);
-          speechActivityGate = noiseFloor * 1.65f + 350.0f;
-          silenceGate = noiseFloor * 1.25f + 150.0f;
-          Serial.printf("[STT] Ambient noise floor %.0f -> speech gate %.0f, silence gate %.0f (Mic Slot %d)\n",
-                        noiseFloor, speechActivityGate, silenceGate, micSlot);
+          float measuredNoise = noiseSum / (float)noiseSamples;
+          // Clamp noise floor between 100 and 450 so user's voice during calibration doesn't lock out speech gate
+          noiseFloor = constrain(measuredNoise, 100.0f, 450.0f);
+          speechActivityGate = noiseFloor * 1.30f + 180.0f;
+          silenceGate = noiseFloor * 1.15f + 80.0f;
+          Serial.printf("[STT] Ambient noise floor %.0f (raw %.0f) -> speech gate %.0f, silence gate %.0f (Mic Slot %d)\n",
+                        noiseFloor, measuredNoise, speechActivityGate, silenceGate, micSlot);
         }
       } else {
         // Speech detection ONLY evaluates after calibration locks the noise gate
@@ -307,12 +310,12 @@ String recordAndTranscribe(uint32_t recordSeconds) {
             maxBlkAvg = avg;
 
           if (!speechStarted) {
-            // Check for speech onset
+            // Check for speech onset: 1 solid block or 2 consecutive moderate blocks
             if (avg >= speechActivityGate) {
               consecutiveSpeechBlocks++;
-              if (consecutiveSpeechBlocks >= 2 || avg >= speechActivityGate * 1.4f) {
+              if (consecutiveSpeechBlocks >= 2 || avg >= (speechActivityGate * 1.35f)) {
                 speechStarted = true;
-                speechSamples = BLK * consecutiveSpeechBlocks;
+                speechSamples = BLK * (consecutiveSpeechBlocks > 1 ? consecutiveSpeechBlocks : 1);
                 peakSpeechEnergy = avg;
                 silenceSamples = 0;
                 softNoiseSamples = 0;
@@ -321,10 +324,10 @@ String recordAndTranscribe(uint32_t recordSeconds) {
               }
             } else {
               consecutiveSpeechBlocks = 0;
-              // Smoothly adapt noise floor to ambient room level before speech starts
-              noiseFloor = noiseFloor * 0.85f + avg * 0.15f;
-              speechActivityGate = noiseFloor * 1.65f + 350.0f;
-              silenceGate = noiseFloor * 1.25f + 150.0f;
+              // Smoothly adapt noise floor to ambient room level before speech starts (capped at 450)
+              noiseFloor = min(450.0f, noiseFloor * 0.90f + avg * 0.10f);
+              speechActivityGate = noiseFloor * 1.30f + 180.0f;
+              silenceGate = noiseFloor * 1.15f + 80.0f;
 
               if (sent >= INITIAL_SILENCE_TIMEOUT_SAMPLES) {
                 captureStopped = true;
@@ -339,8 +342,8 @@ String recordAndTranscribe(uint32_t recordSeconds) {
             }
 
             // Dynamic silence threshold proportional to user's speaking volume
-            float relSilence = noiseFloor + (peakSpeechEnergy - noiseFloor) * 0.22f;
-            float effectiveSilenceGate = max(silenceGate, min(speechActivityGate * 0.85f, relSilence));
+            float relSilence = noiseFloor + (peakSpeechEnergy - noiseFloor) * 0.20f;
+            float effectiveSilenceGate = max(silenceGate, min(speechActivityGate * 0.80f, relSilence));
 
             if (avg >= speechActivityGate) {
               speechSamples += BLK;
@@ -358,7 +361,7 @@ String recordAndTranscribe(uint32_t recordSeconds) {
             } else {
               softNoiseSamples += BLK;
               if (speechSamples >= MIN_SPEECH_SAMPLES &&
-                  (silenceSamples + softNoiseSamples) >= (SAMPLE_RATE * 65) / 100) {
+                  (silenceSamples + softNoiseSamples) >= (SAMPLE_RATE * 14) / 10) {
                 captureStopped = true;
                 Serial.printf("[STT] Speech ended after %.1f s (soft silence %lums, level=%.0f); stopping early!\n",
                               (float)sent / SAMPLE_RATE,
@@ -393,10 +396,12 @@ String recordAndTranscribe(uint32_t recordSeconds) {
   }
 
   uint32_t capturedSamples = sent;
-  if (!speechStarted && maxBlkAvg < speechActivityGate) {
-    Serial.println("[STT] Silence threshold not met, aborting upload");
+  if (!speechStarted) {
+    Serial.println("[STT] Silence threshold not met (no speech detected), aborting upload");
     return bail("quiet");
   }
+
+  robotStateDesc = "Transcribing...";
 
   if (outPos > 0) {
     if (!writeChunk(client, out, outPos))
@@ -407,7 +412,7 @@ String recordAndTranscribe(uint32_t recordSeconds) {
   Serial.printf("[STT] Done. captured %.2f s, avg %.0f, loudest 100ms block %.0f (gate %.0f)\n",
                 (float)capturedSamples / SAMPLE_RATE,
                 (sent > 0 ? sumAbs / sent : 0.0f), maxBlkAvg, speechActivityGate);
-  if (!speechStarted && maxBlkAvg < speechActivityGate)
+  if (!speechStarted)
     return bail("quiet");
 
   if (!writeChunk(client, (const uint8_t *)part2.c_str(), part2.length()))

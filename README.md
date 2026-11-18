@@ -6,6 +6,7 @@ Kiwi is powered by local offline neural wake word detection, dual-core multithre
 
 - **Firmware Version:** `v1.2` (`FIRMWARE_VERSION` in [AppConfig.h](file:///d:/PROJECTS/MyRobot_Modular/src/config/AppConfig.h#L8))
 - **Hardware Platform:** ESP32-S3 (Dual-Core Xtensa LX7 @ 240 MHz, 4 MB Flash)
+- **Web UI Platform:** Modern Single-Page App (React 19 + Vite + TailwindCSS + Framer Motion) embedded in PROGMEM Gzip
 - **Build System:** PlatformIO (`default_envs = esp32s3`)
 
 ---
@@ -15,10 +16,10 @@ Kiwi is powered by local offline neural wake word detection, dual-core multithre
 Please review these items before configuring or flashing:
 
 1. **Microcontroller Platform:** The active firmware is built for **ESP32-S3** (`esp32-s3-devkitc-1` / ESP32-S3 Super Mini), **not** the older ESP32-C3. Pin assignments, I2S clock routing, and dual-core tasks reflect the ESP32-S3 pinout.
-2. **Battery Sensing:** Battery monitoring is a placeholder stub (`batteryPercent()` in [Battery.cpp](file:///d:/PROJECTS/MyRobot_Modular/src/hardware/Battery.cpp#L4) returns `-1`). `showBatteryIcon` defaults to `false`.
-3. **Wiring Blueprint Route:** The `/wiring` endpoint currently redirects (HTTP 302) to the root dashboard `/`.
-4. **Build Path:** PlatformIO is required. The Arduino IDE is **not supported** because the codebase is structured into modular subfolders under `src/`.
-5. **`build_opt.h` Notice:** `build_opt.h` contains a machine-specific path from a legacy setup. It is not referenced by `platformio.ini` and can be safely ignored.
+2. **Flash Chip Size:** 4 MB Flash partition scheme with dual 1.93 MB OTA app partitions (`partitions.csv`).
+3. **Battery Sensing:** Battery monitoring is a placeholder stub (`batteryPercent()` in [Battery.cpp](file:///d:/PROJECTS/MyRobot_Modular/src/hardware/Battery.cpp#L4) returns `-1`). `showBatteryIcon` defaults to `false`.
+4. **Wiring Blueprint Route:** The `/wiring` endpoint currently redirects (HTTP 302) to the root dashboard `/`.
+5. **Build Path:** PlatformIO is required. The Arduino IDE is **not supported** because the codebase is structured into modular subfolders under `src/`.
 6. **Wi-Fi Modem Sleep:** Wi-Fi modem sleep is explicitly deactivated while connected (`WiFi.setSleep(false)`) to maintain instantaneous Web Portal responsiveness and low network latency. Power saving is managed via display dimming, CPU frequency scaling (down to 80 MHz), Light Sleep, and Deep Sleep.
 
 ---
@@ -58,12 +59,10 @@ Configured in [AppConfig.h](file:///d:/PROJECTS/MyRobot_Modular/src/config/AppCo
 
 ### 2. Local Neural Wake Word Engine (MicroWakeWord)
 - **Offline Hotword Detection:** Runs on-device via TensorFlow Lite Micro and ESPMicroSpeechFeatures frontend.
-- **3 Hotword Models Supported:**
-  1. `Hey Jarvis` (default cutoff: `0.36`, window: 5)
-  2. `Alexa` (default cutoff: `0.90`, window: 5)
-  3. `Kiwi` (default cutoff: `0.40`, window: 5)
-- **Barge-In Interruption:** Say the wake word while Kiwi is speaking to immediately cut off speech playback and begin listening for your new command (with configurable barge-in sensitivity bump).
-- **Serial Console CLI:** Tune sensitivity, gains, and models on the fly via the USB serial monitor without reflashing (e.g. `ww cutoff 0.38`, `ww gain 8.0`, `ww model 1`).
+- **Optimized Single Active Model:** Dedicated **`Alexa`** model (probability cutoff: `0.90`, sliding window: 5).
+- **RAM Optimization:** TensorFlow arena size reduced from 36 KB to **20 KB** (`TENSOR_ARENA_SIZE = 20000`), freeing ~16 KB of static internal SRAM for TLS networking and streaming audio buffers.
+- **Barge-In Interruption:** Say the wake word while Kiwi is speaking to immediately cut off speech playback and begin listening for your new command (with configurable barge-in sensitivity bump `0.08`).
+- **Serial Console CLI:** Tune sensitivity, gains, and parameters on the fly via the USB serial monitor without reflashing (e.g. `ww cutoff 0.90`, `ww gain 8.0`, `ww spike 0`).
 
 ### 3. Onboard WS2812 RGB LED (GPIO 48)
 - **Automatic Mood & State Syncing:**
@@ -74,6 +73,7 @@ Configured in [AppConfig.h](file:///d:/PROJECTS/MyRobot_Modular/src/config/AppCo
   - *Sad / Crying:* Deep Blue
   - *Angry:* Fiery Crimson Red
   - *Sleeping:* Ultra-dim Indigo breathing
+- **Live Web Color Override:** Choose any custom static color via the Web Console color picker (`/do?rgb_color=#RRGGBB`) or clear the override to resume autonomous emotion syncing (`/do?rgb_clear=1`).
 - Configurable brightness (0–100%, default 63% / 160) and enable toggle in the web dashboard.
 
 ### 4. Interactive Tamagotchi Pet Hunger System
@@ -85,7 +85,7 @@ Configured in [AppConfig.h](file:///d:/PROJECTS/MyRobot_Modular/src/config/AppCo
 - **Hunger Countdown:** When hungry, Kiwi adopts a pleading cute face, plays a sad violin chime, and starts a 2-minute deadline countdown (`HUNGER_DEADLINE_MS = 120s`) with 45-second reminder whimpers.
 - **How to Feed Kiwi:**
   - Dual-cheek hold: Press and hold both Left & Right cheeks simultaneously for ≥ 300 ms.
-  - Web Portal: Click the **Feed** button on the dashboard.
+  - Web Portal: Click the **Feed Snack** button on the dashboard.
   - Voice Command: Say *"feed kiwi"*, *"khana khao"*, or *"kuch khao"*.
 - **The "Angry" Neglect State:** If not fed within 2 minutes, Kiwi enters `HUNGER_ANGRY`. In this state, Kiwi pouts, refuses to chat, and rejects top head taps (*"Nahi! Main tumse baat nahi karunga! Bohot gussa hoon!"*).
 - **Reconciliation (Manaao):**
@@ -97,14 +97,13 @@ Configured in [AppConfig.h](file:///d:/PROJECTS/MyRobot_Modular/src/config/AppCo
 ### 5. OLED Vector Face & Eye Skins
 - **34 Emotion States:** Idle, Listening, Thinking, Speaking, Happy, Excited, Sad, Confused, Angry, Sleeping, Error, Petted, Surprised, Wink, Smug, Curious, Bored, Laughing, Scared, Suspicious, Relieved, Proud, Dizzy, Lovestruck, Evil, Crying, Hearts, Dead, Cool, Shocked, Singing, Party, Nervous, Cute.
 - **10 Pet Touch Reactions:** Love, Giggle, Shy, Sparkle, Kiss, Cuddle, Playful, Sleepy, Proud, Surprised.
-- **7 Curated Procedural Eye Skins:**
+- **6 Curated Procedural Eye Skins:**
   1. `Kiwi` (*Default Flagship*): Flat top, rounded lower base, U-shaped pupil with 3D parallax shift, and upper specular glint.
   2. `Vector Classic`: Clean round vector eyes with pupil catchlight.
-  3. `Neon Capsule`: Stadium pill contour with hollow interior and glowing glint block.
-  4. `Pixel 8-Bit`: Retro stepped arcade pixels.
-  5. `Squircle Bold`: Mathematical superellipse ($n=4$) solid fill with square pupil.
-  6. `Neon Frame`: Squircle outline frame with solid circular pupil.
-  7. `Lumina Spark`: Solid squircle with dual sparkling glints.
+  3. `Pixel 8-Bit`: Retro stepped arcade pixels.
+  4. `Squircle Bold`: Mathematical superellipse ($n=4$) solid fill with square pupil.
+  5. `Lumina Spark`: Solid squircle with dual sparkling glints.
+  6. `Mecha`: Futuristic robotic circtangle eyes with technical visor aperture.
 - **Physics Simulation:** Damped harmonic spring dynamics ($f_0 = 24\text{ rad/s}, \zeta = 0.62$) with squash-and-stretch settling, procedural eye blinking, and directional gaze tracking.
 - **Auxiliary Screens:** Live Clock screen, Open-Meteo Weather screen, and Marquee text banner.
 
@@ -133,7 +132,7 @@ When the LLM outputs command tags, Kiwi executes the command locally and strips 
 | Action Command | Example Tag | Description |
 | :--- | :--- | :--- |
 | `volume` | `[ACTION: volume 80]` | Adjusts speaker volume (0–100%) |
-| `skin` | `[ACTION: skin capsule]` | Switches eye skin (`kiwi`, `vector`, `capsule`, `pixel`, etc.) |
+| `skin` | `[ACTION: skin mecha]` | Switches eye skin (`kiwi`, `vector`, `pixel`, `squircle_solid`, `squircle_glint`, `mecha`) |
 | `emotion` | `[ACTION: emotion evil]` | Displays any expressive emotion face |
 | `timer` | `[ACTION: timer 300 Tea]` | Sets countdown timer in seconds with optional label |
 | `marquee` | `[ACTION: marquee Hello!]` | Scrolls custom text banner across OLED screen |
@@ -181,39 +180,55 @@ When Wi-Fi is unavailable or drops:
 
 ---
 
-## Web Portal & Local Development Server
+## Modern Web Portal (React 19 SPA)
 
-Kiwi serves an onboard web management portal accessible via `http://kiwi.local` or `http://192.168.4.1` (SoftAP mode).
+Kiwi serves an ultra-modern, zero-latency Web Portal built with **React 19, Vite, TailwindCSS, Lucide Icons, and Motion**. The entire frontend is pre-built, inlined, and compressed into a single Gzip byte array in ESP32 flash memory (`dashboard_html_gz.h`, ~163 KB PROGMEM).
 
-### Web Portal Pages & Endpoints
+Access Kiwi via:
+- `http://kiwi.local` (Local network mDNS)
+- `http://192.168.4.1` (SoftAP setup mode)
 
-| Route | Description |
-| :--- | :--- |
-| `/` | **Main Dashboard:** Live Console, Real-time serial logs, Prompt input, Mic record trigger, Pet Mood & Hunger card, API keys, AI model selectors, Volume, WS2812 slider, Wake Word tuning, Sleep schedule. |
-| `/faces` | **Emotion & Skin Studio:** Interactive studio with live SVG previews for all 7 eye skins, 34 emotions, pet moods, soundboard triggers, and live status pill. |
-| `/update` | **Wireless Firmware OTA:** 1-click online update directly from GitHub releases (`krishh-9085/kiwi`), custom URL install, or local `.bin` file upload. |
-| `/status` | Returns JSON status (emotion, busy, sleeping, skin, hunger state, remaining timer, wake word, logs). |
-| `/config` | Returns active JSON configuration with masked API keys. |
-| `/scan` | Scans and returns nearby 2.4 GHz Wi-Fi networks. |
-| `/do` | Live action endpoint (`record`, `ask`, `clearlog`, `hunger`, `feed`, `apologize`, `timer`, `sound`, `skin`, `sleep`, `ww_cutoff`, `ww_model`, `rgb_en`, `rgb_bright`, etc.). |
-| `/save` | Form POST endpoint to commit updated settings to NVS flash. |
+### Portal Architecture & Features
+- **Live Console View:**
+  - **Live Hardware Vitals:** Real-time on-chip CPU Temperature, SRAM Heap Usage with Free KB & Total KB, and Flash Storage Telemetry (`getSketchSize` vs `getFreeSketchSpace`, app partition vs 4 MB physical chip).
+  - **Link Status Pill:** Dynamic real-time connection badge (`ONLINE` in Emerald Green vs `OFFLINE` in Crimson Red) with tap-to-refresh.
+  - **Tactile Segmented Sliders:** Hardware-matched VU-meter sliders for Speaker Volume (Acid Lime), OLED Brightness (Electric Blue matching blue OLED hardware), and NeoPixel LED (Emerald Green).
+  - **Instant Mic Trigger & Chat:** Quick text prompt input and one-click voice recording trigger.
+  - **Pet Mood & Hunger Deck:** Direct Feed Snack, Make Hungry, Apologize, and Head Pet controls.
+  - **Audio Soundboard:** 1-click sound effects (Wake Chime, Pet Giggle, Sparkle, Joy Laugh, Fanfare, etc.).
+- **Faces & Studio View:**
+  - **Interactive Skin Matrix:** Live SVG silhouettes for all 6 procedural eye skins.
+  - **42 Expression Triggers:** Visual gallery of all facial emotion states.
+  - **Screen Modes:** Interactive 1-click toggles for Clock, Weather, and OLED Marquee text banner.
+- **Settings & AI Configuration:**
+  - **AI Engines:** Select providers and models for STT (Sarvam, Whisper), LLM (Groq, Gemini, OpenAI), and TTS (Sarvam, OpenAI, ElevenLabs, Fish Audio).
+  - **Hardware & Sensing:** Wake word sensitivity, barge-in bump, and 9-gesture capacitive touch remapping.
+  - **Personal Life Diary:** Edit up to 16 persistent memory facts.
+- **Wireless OTA Update View:**
+  - **Local Binary Flasher:** Drag and drop `.bin` files with live progress bar and auto-restart.
+  - **Cloud GitHub OTA:** 1-click install from the latest releases on GitHub.
 
-### High-Performance Pre-Compressed Gzip Web Assets
-All web templates (`dashboard.html`, `faces.html`, `update.html`) are compiled into pre-compressed gzip bytecode headers (`*_html_gz.h`) using `sync_to_cpp.py`. This shrinks the HTTP payload from ~241 KB down to ~49 KB for sub-second page loads.
+### UI Design System
+- **Desktop Layout:** Full-page canvas with precise `0.5cm` border padding and adaptive 3-column grid.
+- **Mobile Experience:** 100% responsive Bento mobile layout with bottom navigation dock and touch gestures.
+- **Toast Notifications:** Apple Dynamic Island / Sonner style frosted glass floating HUD with spring physics.
+- **Zero-Heap Log Footprint:** Terminal string buffer removed from firmware heap, eliminating RAM fragmentation and maximizing ESP32 stability.
 
-### Local UI Development Server (No Flashing Required)
-To develop or style the Web Portal on your computer without flashing the ESP32:
+### Local Frontend Development & Hot Reload
+
+Develop and style the React UI directly on your computer with instantaneous Hot Module Replacement (HMR):
 
 ```bash
-# Windows 1-click:
-start_ui_dev.bat
+# 1. Start the React development server:
+start_react_ui.bat
+# (Or: cd react_ui && npm run dev)
 
-# Or command line:
-python tools/web_dev/server.py
+# 2. Compile and sync React build to ESP32 firmware headers:
+sync_react_to_cpp.bat
+# (Or: python tools/web_dev/sync_react_to_cpp.py)
 ```
-- **Local Mock Mode:** Preview UI changes instantly at `http://localhost:8080/` with simulated robot logs and status.
-- **Live Proxy Mode:** Enter your physical robot's IP in the bottom toolbar to control your actual robot while serving UI templates from your PC disk.
-- **Sync Back to C++:** Click **"Sync to C++"** or run `sync_ui_to_cpp.bat` (`python tools/web_dev/sync_to_cpp.py`) to compress and update the firmware headers.
+
+- **Mock Python Backend:** Run `python tools/web_dev/server.py` to simulate all REST endpoints, status responses, and hardware telemetry on `http://localhost:8080`.
 
 ---
 
@@ -253,6 +268,16 @@ lib_deps =
     adafruit/Adafruit BusIO@^1.15.0
     nickjgniklu/ESP_TF@^2.1.2
     https://github.com/kahrendt/ESPMicroSpeechFeatures.git
+```
+
+### Partition Scheme (`partitions.csv` - 4 MB Flash)
+```csv
+# Name,   Type, SubType, Offset,   Size,     Flags
+nvs,      data, nvs,     0x9000,   0x5000,
+otadata,  data, ota,     0xe000,   0x2000,
+app0,     app,  ota_0,   0x10000,  0x1F0000,
+app1,     app,  ota_1,   0x200000, 0x1F0000,
+coredump, data, coredump,0x3F0000, 0x10000,
 ```
 
 ### Build Commands
@@ -300,14 +325,14 @@ Saved NVS flash settings take precedence over code defaults.
 | Circadian Schedule | `circ_start`, `circ_end`| `23`, `7` | 23:00 (11 PM) to 07:00 (7 AM) |
 | Tamagotchi Hunger | `hunger_en` | `true` | `true` / `false` |
 | Wake Word Enabled | `ww_en` | `true` | `true` / `false` |
-| Wake Word Model | `ww_model` | `0` (Jarvis) | `0` = Hey Jarvis, `1` = Alexa, `2` = Kiwi |
-| Wake Word Cutoff | `ww_cutoff` | Model default | Jarvis: `0.36`, Alexa: `0.90`, Kiwi: `0.40` |
+| Wake Word Model | `ww_model` | `0` (Alexa) | `0` = Alexa |
+| Wake Word Cutoff | `ww_cutoff` | `0.90` | 0.10 to 0.99 |
 | Wake Word Gain | `ww_gain` | `8.0f` | 0.5 to 20.0 |
 | WS2812 RGB LED | `rgb_en` | `true` | `true` / `false` |
 | RGB LED Brightness | `rgb_bright` | `160` (~63%) | 0 – 255 |
 | Sound-Reactive Eyes | `snd_react` | `false` | `true` / `false` |
 | Idle Banter (Boredom)| `boredom`, `boredom_mins`| `false`, `2` | 1 – 60 minutes |
-| Default Eye Skin | `eyeskin` | `0` (`SKIN_KIWI`) | 0 – 6 (7 curated skins) |
+| Default Eye Skin | `eyeskin` | `0` (`SKIN_KIWI`) | 0 – 5 (6 curated skins) |
 | Chat History Turns | `chat_hist` | `4` | 1 – 8 turns |
 | STT Provider | `sttprov` | `sarvam` | `sarvam`, `groq`, `openai` |
 | STT Language | `sttlang` | `hi` | `hi`, `en`, `auto` |
@@ -321,14 +346,14 @@ Saved NVS flash settings take precedence over code defaults.
 
 ## Serial Console Commands (Wake Word CLI)
 
-Type these commands directly into the PlatformIO serial monitor (`115200` baud) for live tuning:
+Type these commands directly into the serial monitor (`115200` baud) for live tuning:
 
 ```text
 ww status          # Print current model, cutoff sensitivity, gain, and detection state
 ww gain 8.0        # Set pre-amplifier software gain (default: 8.0)
-ww cutoff 0.36     # Set probability trigger cutoff (0.10 to 0.99)
-ww model 0         # Switch model: 0 = Hey Jarvis, 1 = Alexa, 2 = Kiwi
-ww spike 1         # Toggle secondary voice spike trigger (0 = off, 1 = on)
+ww cutoff 0.90     # Set probability trigger cutoff (0.10 to 0.99)
+ww model 0         # Active model: 0 = Alexa
+ww spike 0         # Toggle secondary voice spike trigger (0 = off, 1 = on)
 ww bump 0.08       # Set barge-in sensitivity bump applied during speech playback
 ww mic 0           # Set I2S microphone slot (0 = Left, 1 = Right)
 ww lock 1          # Lock microphone slot to prevent automatic channel scan on boot
@@ -341,10 +366,16 @@ ww lock 1          # Lock microphone slot to prevent automatic channel scan on b
 ```
 MyRobot_Modular.ino          Main sketch: setup(), loop(), boot watchdog, boot greeting
 platformio.ini               PlatformIO configuration (ESP32-S3, 240 MHz, partitions, libs)
-partitions.csv               4MB Dual OTA layout (app0 1.9MB, app1 1.9MB, NVS, SPIFFS, coredump)
+partitions.csv               4MB Dual OTA layout (app0 1.9MB, app1 1.9MB, NVS, coredump)
+react_ui/                    Modern React 19 + Vite + Tailwind frontend single-page application
+  src/
+    components/              LiveConsoleView, FacesStudioView, SettingsView, OtaUpdateView, etc.
+    data/                    faceData.js (SVG definitions, skins, emotion matrices)
+start_react_ui.bat           1-click React UI development server launcher (Hot Reload)
+sync_react_to_cpp.bat        1-click React bundle builder & C++ Gzip PROGMEM sync script
 src/
   core/
-    CoreTypes.h              Emotion, EyeSkin, PetMood, TouchAction, Tone enums and structs
+    CoreTypes.h              Emotion, EyeSkin (6 skins), PetMood, TouchAction, Tone enums
     Timing.h                 serviceUi() and waitMs() non-blocking pump helpers
   config/
     AppConfig.h / .cpp       Hardware pinout, constants, defaults, and runtime globals
@@ -352,26 +383,23 @@ src/
   hardware/
     AudioEngine.h / .cpp     I2S standard driver, procedural tone synthesizer, soft-clipper
     Battery.h / .cpp         Battery sensing stub (returns -1)
-    RgbLed.h / .cpp          WS2812 NeoPixel (GPIO 48) state & emotion synchronization
+    RgbLed.h / .cpp          WS2812 NeoPixel (GPIO 48) state, emotion & custom color sync
     SoundLevel.h / .cpp      Microphone amplitude detector for sound-reactive eyes
     TouchController.h / .cpp 3-pad touch debounce, gesture recognition, tickle & apology combo
-    WakeWordEngine.h / .cpp  MicroWakeWord (TFLite Micro) task on Core 0 with barge-in support
-    hey_jarvis_model.h       Trained model weights for "Hey Jarvis"
-    alexa_model.h            Trained model weights for "Alexa"
-    kiwi_model.h             Trained model weights for "Kiwi"
+    WakeWordEngine.h / .cpp  MicroWakeWord (20 KB arena) Alexa task on Core 0 with barge-in
+    alexa_model.h            Official MicroWakeWord Alexa neural network model weights
   face/
     FaceEngine.h / .cpp      OLED refresh loop & Core 0 dedicated 40 FPS task (uiDisplayTask)
     FaceRenderer.h / .cpp    Eye, eyelid, mouth, blush, and flourish rendering with spring physics
     FaceExpressions.h / .cpp 34 facial emotion state definitions and tween easing
     FaceIdle.h / .cpp        Procedural blinking, gaze drift, and idle fidgets
-    FaceSkins.h / .cpp       7 procedural eye skins (Kiwi, Vector, Capsule, Pixel, Squircle, etc.)
+    FaceSkins.h / .cpp       6 procedural eye skins (Kiwi, Vector, Pixel, Squircle, Lumina, Mecha)
     FaceScreens.h / .cpp     Clock, weather forecast, status banner, and toast message renderers
     FaceDisplay.h / .cpp     SSD1306 display hardware driver, contrast, and power control
     BootWakeAnim.h / .cpp    Power-on wake animation routine
     SleepyWakeAnim.h / .cpp  Bedtime fall-asleep and morning wake-up animations
   animation/
-    AnimationEngine.h / .cpp Custom 128x64 OLED frame animation player and SPIFFS upload
-    DogAnimationFrames.h     Built-in bitmap animation frames
+    AnimationEngine.h / .cpp Custom 128x64 OLED frame animation player
   behavior/
     InteractionManager.h/.cpp Voice interaction pipeline, streaming TTS pump, vocal emotion tags
     ActionExecutor.h / .cpp  Execution of [ACTION: ...] tags & countdown timer alert loop
@@ -397,19 +425,13 @@ src/
     WeatherService.h / .cpp  Open-Meteo REST API live weather client
   web/
     WebPortal.h / .cpp       SoftAP captive portal, mDNS, HTTP routing
-    WebPortalApi.cpp         REST API handlers (/status, /config, /do, /save, /scan)
-    WebPortalDashboard.cpp   Pre-compressed gzip dashboard page handler
-    WebPortalFaces.cpp       Pre-compressed gzip emotion studio page handler
-    WebPortalOta.cpp         Pre-compressed gzip firmware update page handler
+    WebPortalApi.cpp         REST API handlers (/status, /config, /do, /save, /scan, telemetry)
+    WebPortalDashboard.cpp   Single-page React app delivery handler from PROGMEM Gzip
     WebPortalOtaEngine.cpp   FreeRTOS background OTA downloader from GitHub or custom URL
     WebPortalWiring.cpp      Redirect handler for /wiring
-    dashboard_html_gz.h      Compiled gzip PROGMEM byte array for dashboard.html
-    faces_html_gz.h          Compiled gzip PROGMEM byte array for faces.html
-    update_html_gz.h         Compiled gzip PROGMEM byte array for update.html
+    dashboard_html_gz.h      Compiled Gzip PROGMEM byte array of the unified React SPA
     icon.h                   Embedded Web Portal apple-touch icon
 tools/web_dev/               Local Python web dev server, mock simulator, and sync scripts
-start_ui_dev.bat             1-click local UI preview server launcher (Windows)
-sync_ui_to_cpp.bat           1-click HTML template-to-C++ gzip compiler (Windows)
 ```
 
 ---
@@ -417,11 +439,11 @@ sync_ui_to_cpp.bat           1-click HTML template-to-C++ gzip compiler (Windows
 ## Troubleshooting
 
 - **Compilation error on Windows ("file name too long"):** Enable long paths in Windows (`New-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem" -Name "LongPathsEnabled" -Value 1 -PropertyType DWORD -Force`).
-- **Wake word not triggering:** Run `ww status` in the serial monitor to verify the engine is listening. Ensure mic slot is detected correctly (`ww mic 0` vs `ww mic 1`). Lower the cutoff slightly if needed (e.g. `ww cutoff 0.30`).
+- **Wake word not triggering:** Run `ww status` in the serial monitor to verify the engine is listening. Ensure mic slot is detected correctly (`ww mic 0` vs `ww mic 1`). Default probability cutoff for Alexa is `0.90`.
 - **Kiwi refuses to chat and displays an angry face:** Kiwi was not fed within 2 minutes of mealtime! Tap **Left → Right → Left → Right** on the cheeks to tickle and reconcile, click **Apologize** in the web portal, or say *"sorry kiwi"*.
 - **No audio from speaker:** Check MAX98357A `DIN` (GPIO 1), `BCLK` (GPIO 43), `WS` (GPIO 44), 5V power, and GND. Test audio output by triggering a sound effect from the Web Portal.
 - **Web Portal unreachable during sleep:** Normal behavior. Kiwi powers down the Wi-Fi radio during deep sleep. Tap the top head pad (GPIO 12) to wake Kiwi.
-- **OTA update failure:** Ensure Kiwi has a stable Wi-Fi connection with internet access. If flashing from a local `.bin`, verify that the binary was built for `esp32s3` with `partitions.csv`.
+- **OTA update failure:** Ensure Kiwi has a stable Wi-Fi connection with internet access. If flashing from a local `.bin`, verify that the binary was built for `esp32s3` with `partitions.csv` (1.93 MB partition limit).
 
 ---
 

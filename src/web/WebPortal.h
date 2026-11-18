@@ -41,6 +41,7 @@ void handleFacesPage();
 void handleWiring();
 void handleDoAction();
 void handleStatus();
+void handleLogs();
 void handleConfigApi();
 void handleScanNetworks();
 void handleOtaPage();

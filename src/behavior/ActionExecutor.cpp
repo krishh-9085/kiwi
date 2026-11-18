@@ -225,34 +225,27 @@ bool setEyeSkinByName(const String &nameIn) {
     currentEyeSkin = SKIN_VECTOR;
     return true;
   }
-  // 3. Neon Capsule (from image)
-  if (n == "capsule" || n == "neon capsule" || n == "pill" || n == "stadium" ||
-      n == "neon" || n == "कैप्सूल") {
-    currentEyeSkin = SKIN_CAPSULE;
-    return true;
-  }
-  // 4. Pixel 8-Bit
+  // 3. Pixel 8-Bit (#3)
   if (n == "pixel" || n == "pixel 8-bit" || n == "arcade" || n == "retro" ||
       n == "8bit" || n == "8-bit" || n == "पिक्सेल") {
     currentEyeSkin = SKIN_PIXEL;
     return true;
   }
-  // 5. Squircle Bold
+  // 4. Squircle Bold (#4)
   if (n == "squircle bold" || n == "squircle solid" || n == "bold" ||
       n == "squircle" || n == "स्क्वार्कल") {
     currentEyeSkin = SKIN_SQUIRCLE_BOLD;
     return true;
   }
-  // 6. Neon Frame
-  if (n == "neon frame" || n == "squircle outline" || n == "frame" ||
-      n == "outline") {
-    currentEyeSkin = SKIN_NEON_FRAME;
-    return true;
-  }
-  // 7. Lumina Spark
+  // 5. Lumina Spark (#5)
   if (n == "lumina spark" || n == "squircle glint" || n == "spark" ||
       n == "lumina" || n == "glint") {
     currentEyeSkin = SKIN_LUMINA_SPARK;
+    return true;
+  }
+  // 6. Mecha (#6)
+  if (n == "mecha" || n == "circtangle" || n == "robot" || n == "मेका") {
+    currentEyeSkin = SKIN_MECHA;
     return true;
   }
 

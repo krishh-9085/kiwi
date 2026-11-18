@@ -1,14 +1,14 @@
+#include "config/AppConfig.h"
+#include "config/ConfigManager.h"
+#include "face/FaceDisplay.h"
+#include "face/FaceScreens.h"
+#include "web/WebPortal.h"
 #include <Arduino.h>
-#include <WiFi.h>
-#include <WiFiClientSecure.h>
 #include <HTTPClient.h>
 #include <Update.h>
 #include <WebServer.h>
-#include "web/WebPortal.h"
-#include "config/AppConfig.h"
-#include "config/ConfigManager.h"
-#include "face/FaceScreens.h"
-#include "face/FaceDisplay.h"
+#include <WiFi.h>
+#include <WiFiClientSecure.h>
 
 enum OtaState {
   OTA_IDLE = 0,
@@ -43,7 +43,8 @@ static void otaDownloadTask(void *param) {
   presentDisplay(true);
 
   WiFiClientSecure client;
-  client.setInsecure(); // GitHub & AWS use public TLS; disable strict cert validation for memory
+  client.setInsecure(); // GitHub & AWS use public TLS; disable strict cert
+                        // validation for memory
   client.setTimeout(25000);
 
   HTTPClient http;
@@ -70,7 +71,8 @@ static void otaDownloadTask(void *param) {
 
   if (httpCode != HTTP_CODE_OK) {
     s_otaState = OTA_ERROR;
-    s_otaError = "HTTP error " + String(httpCode) + ": " + http.errorToString(httpCode);
+    s_otaError =
+        "HTTP error " + String(httpCode) + ": " + http.errorToString(httpCode);
     Serial.printf("[OTA-URL] %s\n", s_otaError.c_str());
     drawMessage("OTA ERROR", ("HTTP " + String(httpCode)).c_str());
     presentDisplay(true);
@@ -86,9 +88,10 @@ static void otaDownloadTask(void *param) {
   s_otaBytesTotal = (totalLen > 0) ? (size_t)totalLen : 0;
   Serial.printf("[OTA-URL] Binary size: %d bytes\n", totalLen);
 
-  if (totalLen > 0x1E0000L) { // Dual OTA app partition limit (1.9MB)
+  if (totalLen > 0x1F0000L) { // Dual OTA app partition limit (1.98MB)
     s_otaState = OTA_ERROR;
-    s_otaError = "Firmware binary too large (" + String(totalLen / 1024) + " KB). Partition limit is 1.9MB.";
+    s_otaError = "Firmware binary too large (" + String(totalLen / 1024) +
+                 " KB). Partition limit is 1.98MB.";
     Serial.printf("[OTA-URL] %s\n", s_otaError.c_str());
     drawMessage("OTA ERROR", "File Too Large");
     presentDisplay(true);
@@ -134,7 +137,8 @@ static void otaDownloadTask(void *param) {
   uint32_t lastDataTime = millis();
   uint32_t lastDisplayUpdate = 0;
 
-  while (http.connected() && (totalLen <= 0 || s_otaBytesRead < (size_t)totalLen)) {
+  while (http.connected() &&
+         (totalLen <= 0 || s_otaBytesRead < (size_t)totalLen)) {
     size_t avail = stream->available();
     if (avail > 0) {
       size_t want = avail > BUFF_SZ ? BUFF_SZ : avail;
@@ -157,7 +161,8 @@ static void otaDownloadTask(void *param) {
         if (millis() - lastDisplayUpdate >= 250) {
           lastDisplayUpdate = millis();
           char line2[32];
-          snprintf(line2, sizeof(line2), "%d%% (%d KB)", s_otaProgress, (int)(s_otaBytesRead / 1024));
+          snprintf(line2, sizeof(line2), "%d%% (%d KB)", s_otaProgress,
+                   (int)(s_otaBytesRead / 1024));
           drawMessage("OTA UPDATING", line2);
           presentDisplay(true);
         }
@@ -183,7 +188,8 @@ static void otaDownloadTask(void *param) {
     presentDisplay(true);
 
     if (Update.end(true)) {
-      Serial.printf("[OTA-URL] Flashed %u bytes successfully!\n", (unsigned)s_otaBytesRead);
+      Serial.printf("[OTA-URL] Flashed %u bytes successfully!\n",
+                    (unsigned)s_otaBytesRead);
       s_otaProgress = 100;
       s_otaState = OTA_SUCCESS;
       drawMessage("OTA COMPLETE", "Rebooting Kiwi...");
@@ -212,12 +218,24 @@ void handleOtaStatus() {
 
   const char *stateStr = "idle";
   switch (s_otaState) {
-    case OTA_STARTING:    stateStr = "starting"; break;
-    case OTA_DOWNLOADING: stateStr = "downloading"; break;
-    case OTA_FLASHING:    stateStr = "flashing"; break;
-    case OTA_SUCCESS:     stateStr = "success"; break;
-    case OTA_ERROR:       stateStr = "error"; break;
-    default:              stateStr = "idle"; break;
+  case OTA_STARTING:
+    stateStr = "starting";
+    break;
+  case OTA_DOWNLOADING:
+    stateStr = "downloading";
+    break;
+  case OTA_FLASHING:
+    stateStr = "flashing";
+    break;
+  case OTA_SUCCESS:
+    stateStr = "success";
+    break;
+  case OTA_ERROR:
+    stateStr = "error";
+    break;
+  default:
+    stateStr = "idle";
+    break;
   }
 
   String json = "{";
@@ -229,7 +247,8 @@ void handleOtaStatus() {
   json += "\"error\":\"";
   for (size_t i = 0; i < s_otaError.length(); i++) {
     char c = s_otaError[i];
-    if (c == '"' || c == '\\') json += '\\';
+    if (c == '"' || c == '\\')
+      json += '\\';
     json += c;
   }
   json += "\"}";
@@ -242,7 +261,9 @@ void handleOtaInstall() {
   server.sendHeader("Access-Control-Allow-Origin", "*");
 
   if (busyProcessing || s_otaTaskActive) {
-    server.send(409, "application/json", "{\"ok\":false,\"error\":\"Robot is currently busy or OTA is already running.\"}");
+    server.send(409, "application/json",
+                "{\"ok\":false,\"error\":\"Robot is currently busy or OTA is "
+                "already running.\"}");
     return;
   }
 
@@ -263,8 +284,13 @@ void handleOtaInstall() {
   }
 
   url.trim();
+  if (url.length() == 0) {
+    url = "https://github.com/krishh-9085/kiwi/releases/latest/download/KIWI_V1.2.bin";
+  }
   if (!url.startsWith("http://") && !url.startsWith("https://")) {
-    server.send(400, "application/json", "{\"ok\":false,\"error\":\"Invalid URL. Must start with http:// or https://\"}");
+    server.send(400, "application/json",
+                "{\"ok\":false,\"error\":\"Invalid URL. Must start with "
+                "http:// or https://\"}");
     return;
   }
 
@@ -275,14 +301,16 @@ void handleOtaInstall() {
   s_otaBytesTotal = 0;
   s_otaError = "";
 
-  BaseType_t res = xTaskCreate(otaDownloadTask, "ota_url_task", 8192, NULL, 1, &s_otaTaskHandle);
+  BaseType_t res = xTaskCreate(otaDownloadTask, "ota_url_task", 8192, NULL, 1,
+                               &s_otaTaskHandle);
   if (res != pdPASS) {
     s_otaState = OTA_ERROR;
     s_otaError = "Failed to create FreeRTOS OTA background task";
-    server.send(500, "application/json", "{\"ok\":false,\"error\":\"Failed to create OTA task\"}");
+    server.send(500, "application/json",
+                "{\"ok\":false,\"error\":\"Failed to create OTA task\"}");
     return;
   }
 
-  server.send(200, "application/json", "{\"ok\":true,\"message\":\"OTA update initiated\"}");
+  server.send(200, "application/json",
+              "{\"ok\":true,\"message\":\"OTA update initiated\"}");
 }
-

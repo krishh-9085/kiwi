@@ -186,8 +186,8 @@ bool greetingsEnabled = false;
 bool hungerEnabled = true;         // NVS: hunger_en (default true)
 bool soundReactiveEnabled = false; // NVS: snd_react
 bool wakeWordEnabled = true;       // NVS: ww_en (default true)
-float wakeWordCutoff = 0.36f;      // NVS: ww_cutoff (shipped manifest default: 0.36)
-uint8_t wakeWordModel = 0;         // NVS: ww_model (0=Hey Jarvis, 1=Alexa, 2=Kiwi)
+float wakeWordCutoff = 0.90f;      // NVS: ww_cutoff (shipped manifest default: 0.90 for Alexa)
+uint8_t wakeWordModel = 0;         // NVS: ww_model (0=Alexa)
 float wakeWordGain = 8.0f;         // NVS: ww_gain (default 8.0f)
 bool wakeWordSpikeTrigger = false; // NVS: ww_spike (default false)
 float wakeWordBargeInBump = 0.08f; // NVS: ww_bargein_bump (default 0.08f)
@@ -264,41 +264,18 @@ int bannerLoops = 0;
 EyeSkin currentEyeSkin = SKIN_KIWI;
 bool showMouth = true;
 
-// ---------- Live AI Interaction & Web Serial Terminal ----------
+// ---------- Live AI Interaction & USB Serial Logging ----------
 String lastTranscribedQuestion = "";
 String lastLlmAnswer = "";
 String robotStateDesc = "Ready";
 String webQueuedQuestion = "";
 
-static const int MAX_TERMINAL_LOGS = 20;
-static String terminalLogs[MAX_TERMINAL_LOGS];
-static int terminalLogCount = 0;
-
 void addTerminalLog(const String &msg) {
   Serial.println(msg);
-  if (terminalLogCount >= MAX_TERMINAL_LOGS) {
-    for (int i = 0; i < MAX_TERMINAL_LOGS - 1; i++) {
-      terminalLogs[i] = terminalLogs[i + 1];
-    }
-    terminalLogCount = MAX_TERMINAL_LOGS - 1;
-  }
-  terminalLogs[terminalLogCount++] = msg;
 }
 
 String getTerminalJson() {
-  String out = "[";
-  for (int i = 0; i < terminalLogCount; i++) {
-    if (i > 0)
-      out += ",";
-    String m = terminalLogs[i];
-    m.replace("\\", "\\\\");
-    m.replace("\"", "\\\"");
-    m.replace("\n", " ");
-    m.replace("\r", "");
-    out += "\"" + m + "\"";
-  }
-  out += "]";
-  return out;
+  return "[]";
 }
 
-void clearTerminalLog() { terminalLogCount = 0; }
+void clearTerminalLog() {}

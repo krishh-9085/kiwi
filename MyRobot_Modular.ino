@@ -472,8 +472,8 @@ void loop() {
       return;
     }
 
-    robotStateDesc = "Transcribing...";
-    addTerminalLog("[STT] Transcribing captured audio with " + sttProvider +
+    robotStateDesc = "Listening...";
+    addTerminalLog("[STT] Listening with " + sttProvider +
                    " (" + cfg.model + ")...");
     String question = recordAndTranscribe(RECORD_SECONDS);
     if (!cancelRequest && question.length()) {
@@ -484,10 +484,14 @@ void loop() {
       robotStateDesc = "STT: " + sttFail;
       addTerminalLog("[STT] Speech not recognized: " + sttFail);
       Serial.printf("[ROBOT] STT failed: %s\n", sttFail.c_str());
-      if (sttFail == "quiet" || sttFail == "empty" || sttFail == "") {
-        // Siri / Alexa style: if user didn't speak, smoothly & silently return to idle!
+      if (sttFail == "quiet") {
+        // Siri / Alexa style: user didn't speak within timeout window, smoothly return to idle
         setEmotion(EMOTION_IDLE);
         robotStateDesc = "Ready";
+      } else if (sttFail == "empty") {
+        setEmotion(EMOTION_CONFUSED);
+        speakText("Maine kuch suna, par samajh nahi aaya. Firse bolo?");
+        returnIdleAt = millis() + 2500;
       } else {
         setEmotion(EMOTION_CONFUSED);
         speakText("Awaaz theek se nahi aayi, ek baar firse try karo!");

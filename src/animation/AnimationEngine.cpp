@@ -1,6 +1,5 @@
 #include "animation/AnimationEngine.h"
 #include "config/AppConfig.h"
-#include "animation/DogAnimationFrames.h"
 #include "face/FaceEngine.h"
 #include "face/FaceDisplay.h"
 #include <Adafruit_SSD1306.h>
@@ -39,33 +38,13 @@ int hexDigitValue(char c) {
   return -1;
 }
 
-constexpr uint8_t BUILTIN_ANIMATION_COUNT = 1;
-
-void drawCentered(const char *text, int16_t y, uint8_t size) {
-  display.setTextSize(size);
-  int16_t x, boundsY;
-  uint16_t width, height;
-  display.getTextBounds(text, 0, y, &x, &boundsY, &width, &height);
-  display.setCursor((SCREEN_WIDTH - width) / 2, y);
-  display.print(text);
-}
-
-void drawBuiltInFrame(uint8_t animation, uint16_t frame) {
+void drawCustomFrame(uint8_t slot) {
   display.clearDisplay();
   display.setTextColor(SSD1306_WHITE);
 
-  switch (animation) {
-  case 0: {
-    display.drawBitmap(0, 0, OLED_MAKER_DOG_FRAME, SCREEN_WIDTH, SCREEN_HEIGHT,
+  if (slot < MAX_CUSTOM_ANIMATIONS && customFrameAvailable[slot]) {
+    display.drawBitmap(0, 0, customFrames[slot], SCREEN_WIDTH, SCREEN_HEIGHT,
                        SSD1306_WHITE);
-    break;
-  }
-  default:
-    if (animation > 0 && animation <= MAX_CUSTOM_ANIMATIONS &&
-        customFrameAvailable[animation - 1])
-      display.drawBitmap(0, 0, customFrames[animation - 1], SCREEN_WIDTH, SCREEN_HEIGHT,
-                         SSD1306_WHITE);
-    break;
   }
   presentDisplay(true);
 }
@@ -99,9 +78,9 @@ bool animationIsActive() {
 }
 
 void playAnimation(uint8_t slot) {
-  if (!oledOK || slot >= BUILTIN_ANIMATION_COUNT + MAX_CUSTOM_ANIMATIONS)
+  if (!oledOK || slot >= MAX_CUSTOM_ANIMATIONS)
     return;
-  if (slot > 0 && !customFrameAvailable[slot - 1])
+  if (!customFrameAvailable[slot])
     return;
   bannerActive = false;
   activeAnimation = slot;
@@ -117,15 +96,13 @@ void stopAnimation() {
 void tickAnimation(uint32_t now) {
   if (!playing || now < nextFrameAt)
     return;
-  drawBuiltInFrame(activeAnimation, animationFrame++);
+  drawCustomFrame(activeAnimation);
   nextFrameAt = now + 90;
 }
 
 String animationListJson() {
   String json = "[";
   bool first = true;
-  json += "{\"slot\":0,\"name\":\"OLED Maker Dog\"}";
-  first = false;
   for (uint8_t i = 0; i < MAX_CUSTOM_ANIMATIONS; i++) {
     if (!customFrameAvailable[i])
       continue;
@@ -135,7 +112,7 @@ String animationListJson() {
     String safeName = customAnimationNames[i];
     safeName.replace("\\", "\\\\");
     safeName.replace("\"", "\\\"");
-    json += "{\"slot\":" + String(i + 1) + ",\"name\":\"" + safeName + "\"}";
+    json += "{\"slot\":" + String(i) + ",\"name\":\"" + safeName + "\"}";
   }
   json += "]";
   return json;

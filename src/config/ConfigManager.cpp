@@ -314,25 +314,19 @@ void loadConfig() {
   hungerEnabled = prefs.getBool("hunger_en", true);
   soundReactiveEnabled = prefs.getBool("snd_react", false);
   wakeWordEnabled = prefs.getBool("ww_en", true);
-  wakeWordModel = prefs.getUChar("ww_model", 0);
-  if (wakeWordModel > 2) wakeWordModel = 0;
+  wakeWordModel = 0; // Alexa only
 
-  float defCutoff = (wakeWordModel == 1) ? 0.90f : ((wakeWordModel == 2) ? 0.40f : 0.36f);
+  float defCutoff = 0.90f;
   wakeWordCutoff = prefs.getFloat("ww_cutoff", defCutoff);
+  if (fabsf(wakeWordCutoff - 0.40f) < 0.05f || fabsf(wakeWordCutoff - 0.82f) < 0.005f) {
+    wakeWordCutoff = 0.90f;
+    prefs.putFloat("ww_cutoff", 0.90f);
+    Serial.println("[CONFIG] Migrated wake-word cutoff to 0.90 (Alexa)");
+  }
+
   rgbLedEnabled = prefs.getBool("rgb_en", true);
   rgbLedBrightness = prefs.getUChar("rgb_bright", 160);
   rgbLedSetBrightness(rgbLedBrightness);
-
-  // Migrate old hardcoded defaults to official manifest values
-  if (wakeWordModel == 0 && (fabsf(wakeWordCutoff - 0.26f) < 0.005f)) {
-    wakeWordCutoff = 0.36f;
-    prefs.putFloat("ww_cutoff", 0.36f);
-    Serial.println("[CONFIG] Migrated Jarvis cutoff from old 0.26 to manifest default 0.36");
-  } else if (wakeWordModel == 1 && (fabsf(wakeWordCutoff - 0.82f) < 0.005f)) {
-    wakeWordCutoff = 0.90f;
-    prefs.putFloat("ww_cutoff", 0.90f);
-    Serial.println("[CONFIG] Migrated Alexa cutoff from old 0.82 to manifest default 0.90");
-  }
 
   wakeWordGain = prefs.getFloat("ww_gain", 8.0f);
   wakeWordSpikeTrigger = prefs.getBool("ww_spike", false);

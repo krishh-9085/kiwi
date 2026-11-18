@@ -1,9 +1,7 @@
 #include "hardware/WakeWordEngine.h"
 #include "hardware/AudioEngine.h"
 #include "hardware/SoundLevel.h"
-#include "hardware/hey_jarvis_model.h"
 #include "hardware/alexa_model.h"
-#include "hardware/kiwi_model.h"
 #include "config/AppConfig.h"
 #include "face/FaceEngine.h"
 #include "power/PowerManager.h"
@@ -33,7 +31,7 @@ static const uint8_t FEATURE_STEP_SIZE_MS = 10;
 static const size_t STEP_SAMPLES = (FEATURE_STEP_SIZE_MS * AUDIO_SAMPLE_FREQUENCY) / 1000; // 160 samples (10ms)
 static const size_t MAX_SLIDING_WINDOW_SIZE = 8;
 static const uint8_t MIN_SLICES_BEFORE_DETECTION = 74; // ~740ms initial priming
-static const size_t TENSOR_ARENA_SIZE = 36000;
+static const size_t TENSOR_ARENA_SIZE = 20000;
 static const size_t VARIABLE_ARENA_SIZE = 1024;
 
 // Multi-Model Definitions with Official Manifest Specifications
@@ -50,9 +48,7 @@ struct WakeWordModelEntry {
 };
 
 static const WakeWordModelEntry WAKE_WORD_MODELS[] = {
-  { "hey_jarvis", "Hey Jarvis", hey_jarvis_model, sizeof(hey_jarvis_model), 0.36f, 0.15f, 0.65f, 5, false },
-  { "alexa",      "Alexa",      alexa_model,      sizeof(alexa_model),      0.90f, 0.60f, 0.98f, 5, true },
-  { "kiwi",       "Kiwi",       kiwi_model,       sizeof(kiwi_model),       0.40f, 0.20f, 0.70f, 5, false }
+  { "alexa",      "Alexa",      alexa_model,      sizeof(alexa_model),      0.90f, 0.60f, 0.98f, 5, true }
 };
 static const size_t NUM_WAKE_WORD_MODELS = sizeof(WAKE_WORD_MODELS) / sizeof(WAKE_WORD_MODELS[0]);
 
@@ -61,7 +57,7 @@ static SemaphoreHandle_t s_wwMutex = nullptr;
 
 static uint8_t s_activeModelIndex = 0;
 static size_t s_sliding_window_size = 5;
-static float s_probability_cutoff = 0.36f;
+static float s_probability_cutoff = 0.90f;
 static float s_gain = 8.0f;
 static bool s_enable_spike_trigger = false;
 static float s_bargeInBump = 0.08f;
@@ -158,7 +154,7 @@ static bool loadModelInternal(uint8_t modelIndex, float preservedCutoff) {
   s_micro_allocator = tflite::MicroAllocator::Create(s_variable_arena, VARIABLE_ARENA_SIZE);
   if (!s_micro_allocator) {
     Serial.println("[WAKEWORD] ERROR: Failed to create MicroAllocator!");
-    if (modelIndex != prevIndex) {
+    if (modelIndex != prevIndex && prevIndex < NUM_WAKE_WORD_MODELS) {
       Serial.printf("[WAKEWORD] Rolling back to '%s'...\n", WAKE_WORD_MODELS[prevIndex].name);
       loadModelInternal(prevIndex, prevCutoff);
     }
@@ -167,7 +163,7 @@ static bool loadModelInternal(uint8_t modelIndex, float preservedCutoff) {
   s_micro_resource_vars = tflite::MicroResourceVariables::Create(s_micro_allocator, 20);
   if (!s_micro_resource_vars) {
     Serial.println("[WAKEWORD] ERROR: Failed to create MicroResourceVariables!");
-    if (modelIndex != prevIndex) {
+    if (modelIndex != prevIndex && prevIndex < NUM_WAKE_WORD_MODELS) {
       Serial.printf("[WAKEWORD] Rolling back to '%s'...\n", WAKE_WORD_MODELS[prevIndex].name);
       loadModelInternal(prevIndex, prevCutoff);
     }
@@ -178,7 +174,7 @@ static bool loadModelInternal(uint8_t modelIndex, float preservedCutoff) {
       model, *s_op_resolver, s_tensor_arena, TENSOR_ARENA_SIZE, s_micro_resource_vars);
   if (!s_interpreter) {
     Serial.println("[WAKEWORD] ERROR: Failed to create MicroInterpreter!");
-    if (modelIndex != prevIndex) {
+    if (modelIndex != prevIndex && prevIndex < NUM_WAKE_WORD_MODELS) {
       Serial.printf("[WAKEWORD] Rolling back to '%s'...\n", WAKE_WORD_MODELS[prevIndex].name);
       loadModelInternal(prevIndex, prevCutoff);
     }
@@ -189,7 +185,7 @@ static bool loadModelInternal(uint8_t modelIndex, float preservedCutoff) {
     Serial.println("[WAKEWORD] ERROR: AllocateTensors() failed!");
     delete s_interpreter;
     s_interpreter = nullptr;
-    if (modelIndex != prevIndex) {
+    if (modelIndex != prevIndex && prevIndex < NUM_WAKE_WORD_MODELS) {
       Serial.printf("[WAKEWORD] Rolling back to '%s'...\n", WAKE_WORD_MODELS[prevIndex].name);
       loadModelInternal(prevIndex, prevCutoff);
     }
@@ -489,12 +485,7 @@ void wakeWordProcessSerialCommand(const String &cmd) {
   }
 
   if (c.startsWith("ww model ") || c.startsWith("ww_model ")) {
-    String mStr = c.substring(c.indexOf(' ', 3) + 1);
-    mStr.trim();
-    uint8_t mIdx = 0;
-    if (mStr == "1" || mStr.equalsIgnoreCase("alexa")) mIdx = 1;
-    else if (mStr == "2" || mStr.equalsIgnoreCase("kiwi")) mIdx = 2;
-    else mIdx = 0;
+    uint8_t mIdx = 0; // Alexa
     if (wakeWordSetModel(mIdx)) {
       Preferences p;
       p.begin("myrobot", false);
@@ -555,7 +546,7 @@ void wakeWordProcessSerialCommand(const String &cmd) {
     Serial.println("  ww status");
     Serial.println("  ww gain <float>       (e.g. ww gain 1.0 or ww gain 8.0)");
     Serial.println("  ww cutoff <float>     (e.g. ww cutoff 0.36)");
-    Serial.println("  ww model <0|1|2>      (0=Jarvis, 1=Alexa, 2=Kiwi)");
+    Serial.println("  ww model <0>          (0=Alexa)");
     Serial.println("  ww spike <0|1>        (0=disable spike trigger, 1=enable)");
     Serial.println("  ww bump <float>       (barge-in bump, e.g. ww bump 0.08)");
     Serial.println("  ww mic <0|1>          (0=Left, 1=Right)");

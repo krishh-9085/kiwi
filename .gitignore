@@ -13,6 +13,13 @@ build-cli-upload/
 
 # Local backups
 *.bak
+*.bak_*
+
+# Node & Frontend dependencies
+node_modules/
+dist/
+.vite/
+temp_chrome_profile/
 
 # Local editor and agent metadata
 .vscode/

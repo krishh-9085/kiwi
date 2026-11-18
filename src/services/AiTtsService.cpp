@@ -803,7 +803,7 @@ int ttsFishAudio(const String &text) {
 
   String body = "{\"text\":\"" + jsonEscape(text) +
                 "\",\"format\":\"pcm\",\"sample_rate\":16000";
-  if (fishVoice.length() > 0) {
+  if (fishVoice.length() > 0 && fishVoice != "default") {
     body += ",\"reference_id\":\"" + jsonEscape(fishVoice) + "\"";
   }
   body += "}";

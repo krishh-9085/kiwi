@@ -22,7 +22,6 @@
 #include <esp_mac.h>
 #include <time.h>
 
-
 WebServer server(80);
 DNSServer dnsServer;
 volatile int8_t pendingSound = -1;
@@ -310,8 +309,8 @@ void restoreWebAndAP(bool apWasUp) {
 
 void startWeb() {
   if (!webRoutesSet) {
-    const char *headers[] = {"Content-Length"};
-    server.collectHeaders(headers, 1);
+    const char *headers[] = {"Content-Length", "If-None-Match"};
+    server.collectHeaders(headers, 2);
 
     // Apple Touch Icon & Favicon (Direct PROGMEM binary delivery, no template
     // processor)
@@ -320,9 +319,7 @@ void startWeb() {
       server.sendHeader("Access-Control-Allow-Origin", "*");
       server.sendHeader("Connection", "close");
       server.sendHeader("Content-Type", "image/png");
-      server.sendHeader("Cache-Control", "no-cache, no-store, must-revalidate");
-      server.sendHeader("Pragma", "no-cache");
-      server.sendHeader("Expires", "0");
+      server.sendHeader("Cache-Control", "public, max-age=86400");
       server.send_P(200, "image/png", (const char *)APPLE_ICON, APPLE_ICON_LEN);
     };
     server.on("/apple-touch-icon.png", HTTP_GET, handleAppleIcon);
@@ -333,7 +330,12 @@ void startWeb() {
       server.sendHeader("Access-Control-Allow-Origin", "*");
       server.sendHeader("Cache-Control", "no-cache");
       server.send(200, "application/manifest+json",
-        "{\"name\":\"Kiwi Robot\",\"short_name\":\"Kiwi\",\"start_url\":\"/\",\"display\":\"standalone\",\"background_color\":\"#0e1015\",\"theme_color\":\"#0e1015\",\"icons\":[{\"src\":\"/apple-touch-icon.png?v=white\",\"sizes\":\"180x180\",\"type\":\"image/png\",\"purpose\":\"any maskable\"}]}");
+                  "{\"name\":\"Kiwi "
+                  "Robot\",\"short_name\":\"Kiwi\",\"start_url\":\"/"
+                  "\",\"display\":\"standalone\",\"background_color\":\"#"
+                  "0e1015\",\"theme_color\":\"#0e1015\",\"icons\":[{\"src\":\"/"
+                  "apple-touch-icon.png?v=white\",\"sizes\":\"180x180\","
+                  "\"type\":\"image/png\",\"purpose\":\"any maskable\"}]}");
     });
 
     server.on("/", HTTP_GET, handleRoot);
@@ -378,6 +380,7 @@ void startWeb() {
         });
 
     server.on("/status", HTTP_GET, handleStatus);
+    server.on("/logs", HTTP_GET, handleLogs);
     server.on("/config", HTTP_GET, handleConfigApi);
     server.on("/scan", HTTP_GET, handleScanNetworks);
 
@@ -419,19 +422,19 @@ void startWeb() {
             otaInProgress = true;
             Serial.printf("[OTA] Update: %s\n", upload.filename.c_str());
             if (server.hasHeader("Content-Length") &&
-                (size_t)server.header("Content-Length").toInt() > 0x1E0000UL) {
+                (size_t)server.header("Content-Length").toInt() > 0x1F0000UL) {
               Serial.println("[OTA] Update rejected: upload size exceeds app "
-                             "partition (1.9MB)");
+                             "partition (1.98MB)");
               otaInProgress = false;
               Update.abort();
               return;
             }
-            if (!Update.begin(0x1E0000UL)) {
+            if (!Update.begin(0x1F0000UL)) {
               otaInProgress = false;
               Update.printError(Serial);
             }
           } else if (upload.status == UPLOAD_FILE_WRITE) {
-            if (upload.totalSize > 0x1E0000UL) {
+            if (upload.totalSize > 0x1F0000UL) {
               Serial.println(
                   "[OTA] Update rejected: written size exceeds app partition");
               otaInProgress = false;

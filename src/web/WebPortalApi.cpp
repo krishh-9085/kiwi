@@ -30,21 +30,63 @@ static String escJson(String s) {
   return s;
 }
 
+static uint32_t lastStatusGen = 0;
+static String cachedStatusJson = "";
+
+static void invalidateStatusCache() {
+  cachedStatusJson = "";
+  lastStatusGen = 0;
+}
+
 void handleDoAction() {
+  server.sendHeader("Access-Control-Allow-Origin", "*");
+  server.sendHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  server.sendHeader("Access-Control-Allow-Headers", "*");
+
+  if (server.method() == HTTP_OPTIONS) {
+    server.send(204);
+    return;
+  }
+
   notifyWebRequest();
   lastUserInteractionAt = millis();
 
   // Web Mic Audio Record Trigger
   if (server.hasArg("record")) {
-    if (busyProcessing) {
+    String rVal = server.arg("record");
+    rVal.trim();
+    if (rVal == "0" || rVal.equalsIgnoreCase("stop") ||
+        rVal.equalsIgnoreCase("cancel")) {
+      startRecording = false;
       cancelRequest = true;
-      // web record cancel
+      busyProcessing = false;
+      setEmotion(EMOTION_IDLE);
+      robotStateDesc = "Ready";
+      toneStop();
+      spkAbortSpeech();
+      spkEndSpeech();
+      invalidateStatusCache();
+      addTerminalLog("[WEB] Mic stop/cancel requested");
+      server.send(200, "application/json", "{\"ok\":true,\"cancelled\":true}");
+      return;
+    }
+    if (busyProcessing) {
+      startRecording = false;
+      cancelRequest = true;
+      busyProcessing = false;
+      setEmotion(EMOTION_IDLE);
+      robotStateDesc = "Ready";
+      toneStop();
+      spkAbortSpeech();
+      spkEndSpeech();
+      invalidateStatusCache();
       addTerminalLog(
           "[WEB] Mic clicked while busy -> Cancel request / Interrupt");
       server.send(200, "application/json", "{\"ok\":true,\"cancelled\":true}");
       return;
     }
     startRecording = true;
+    invalidateStatusCache();
     addTerminalLog("[WEB] Mic record button clicked -> start listening");
     server.send(200, "application/json", "{\"ok\":true,\"recording\":true}");
     return;
@@ -237,18 +279,15 @@ void handleDoAction() {
     else if (s == "vector" || s == "anki" || s == "default" || s == "normal" ||
              s == "clean")
       currentEyeSkin = SKIN_VECTOR;
-    else if (s == "capsule" || s == "neon_capsule" || s == "pill" ||
-             s == "stadium" || s == "oval")
-      currentEyeSkin = SKIN_CAPSULE;
     else if (s == "pixel" || s == "8bit" || s == "retro" || s == "retro8bit")
       currentEyeSkin = SKIN_PIXEL;
     else if (s == "squircle_solid" || s == "squircle_bold" || s == "squircle")
       currentEyeSkin = SKIN_SQUIRCLE_BOLD;
-    else if (s == "squircle_outline" || s == "neon_frame" || s == "outline")
-      currentEyeSkin = SKIN_NEON_FRAME;
     else if (s == "squircle_glint" || s == "lumina_spark" || s == "spark" ||
              s == "glint")
       currentEyeSkin = SKIN_LUMINA_SPARK;
+    else if (s == "mecha" || s == "circtangle" || s == "circrect")
+      currentEyeSkin = SKIN_MECHA;
     else
       currentEyeSkin = SKIN_KIWI;
 
@@ -410,18 +449,9 @@ void handleDoAction() {
     return;
   }
 
-  // Live Wake-Word Model Switch (0=Hey Jarvis, 1=Alexa, 2=Kiwi)
+  // Live Wake-Word Model Switch (0=Alexa)
   if (server.hasArg("ww_model")) {
-    String wm = server.arg("ww_model");
-    uint8_t mIdx = 0;
-    if (wm == "1" || wm == "alexa")
-      mIdx = 1;
-    else if (wm == "2" || wm == "kiwi")
-      mIdx = 2;
-    else
-      mIdx = 0;
-
-    wakeWordSetModel(mIdx);
+    uint8_t mIdx = 0; // Alexa
     bool ok = wakeWordSetModel(mIdx);
     if (!ok) {
       server.send(200, "application/json",
@@ -542,6 +572,30 @@ void handleDoAction() {
                   bPct, rgbLedBrightness);
     server.send(200, "application/json",
                 "{\"ok\":true,\"rgb_bright\":" + String(bPct) + "}");
+    return;
+  }
+
+  // Live RGB LED (Pin 48) Custom Color (Hex "#RRGGBB", "RRGGBB", or "%23RRGGBB")
+  if (server.hasArg("rgb_color")) {
+    String c = server.arg("rgb_color");
+    c.trim();
+    if (c.startsWith("%23")) c = c.substring(3);
+    else if (c.startsWith("#")) c = c.substring(1);
+    long hexVal = strtol(c.c_str(), NULL, 16);
+    uint8_t r = (hexVal >> 16) & 0xFF;
+    uint8_t g = (hexVal >> 8) & 0xFF;
+    uint8_t b = hexVal & 0xFF;
+    rgbLedSetOverride(r, g, b);
+    Serial.printf("[PORTAL] Pin 48 RGB LED color set to: #%06X (R:%d, G:%d, B:%d)\n", (unsigned int)hexVal, r, g, b);
+    server.send(200, "application/json", "{\"ok\":true,\"rgb_color\":\"#" + c + "\"}");
+    return;
+  }
+
+  // Live RGB LED (Pin 48) Clear Custom Override (Restore auto mood sync)
+  if (server.hasArg("rgb_clear")) {
+    rgbLedClearOverride();
+    Serial.println("[PORTAL] Pin 48 RGB LED override cleared (auto mood sync restored)");
+    server.send(200, "application/json", "{\"ok\":true,\"rgb_clear\":true}");
     return;
   }
 
@@ -732,8 +786,6 @@ void handleDoAction() {
 
 void handleStatus() {
   notifyWebRequest();
-  static uint32_t lastStatusGen = 0;
-  static String cachedStatusJson = "";
 
   uint32_t now = millis();
   // Fast throttle cache: if multiple devices (laptop + phone) poll
@@ -758,7 +810,7 @@ void handleStatus() {
   if (idx < 0 || idx > 33)
     idx = 0;
   String j;
-  j.reserve(2048);
+  j.reserve(1024);
   j = "{\"host\":\"" + escJson(mdnsHostname + ".local") + "\",\"emotion\":\"" +
       String(names[idx]) + "\",\"busy\":";
   j += busyProcessing ? "true," : "false,";
@@ -766,8 +818,8 @@ void handleStatus() {
   j += (inCircadianSleep || manualSleep) ? "true," : "false,";
   j += "\"history\":" + String(getConversationHistoryCount());
   const char *skinNames[SKIN_COUNT] = {
-      "kiwi",           "vector",           "capsule",       "pixel",
-      "squircle_solid", "squircle_outline", "squircle_glint"};
+      "kiwi",           "vector",         "pixel",
+      "squircle_solid", "squircle_glint", "mecha"};
   int skIdx = (int)currentEyeSkin;
   if (skIdx < 0 || skIdx >= SKIN_COUNT)
     skIdx = 0;
@@ -775,6 +827,8 @@ void handleStatus() {
   j += ",\"boredom_mins\":" + String(boredomMinutes);
   j += ",\"skin\":\"" + String(skinNames[skIdx]) + "\"";
   j += ",\"mouth\":" + String(showMouth ? "true" : "false");
+  j += ",\"greetings\":{\"enabled\":" +
+       String(greetingsEnabled ? "true" : "false") + "}";
   // Status JSON: soundReactive (snd_react)
   j += ",\"soundReactive\":{\"enabled\":" +
        String(soundReactiveEnabled ? "true" : "false") + "}";
@@ -799,8 +853,38 @@ void handleStatus() {
   j += ",\"state\":\"" + escJson(robotStateDesc) + "\"";
   j += ",\"question\":\"" + escJson(lastTranscribedQuestion) + "\"";
   j += ",\"answer\":\"" + escJson(lastLlmAnswer) + "\"";
-  j += ",\"logs\":" + getTerminalJson();
   j += ",\"version\":\"" + String(FIRMWARE_VER) + "\"";
+
+  // Real-time hardware telemetry: Heap RAM & On-chip CPU Temperature
+  uint32_t freeHeap = ESP.getFreeHeap();
+  uint32_t totalHeap = ESP.getHeapSize();
+  uint32_t usedHeap = totalHeap > freeHeap ? totalHeap - freeHeap : 0;
+  int heapPct = totalHeap > 0 ? (int)((usedHeap * 100) / totalHeap) : 0;
+  float cpuTemp = temperatureRead();
+  j += ",\"heap\":{\"free\":" + String(freeHeap) +
+       ",\"total\":" + String(totalHeap) +
+       ",\"used\":" + String(usedHeap) +
+       ",\"pct\":" + String(heapPct) + "}";
+  j += ",\"temp\":" + String(cpuTemp, 1);
+  if (ESP.getPsramSize() > 0) {
+    j += ",\"psram\":{\"free\":" + String(ESP.getFreePsram()) +
+         ",\"total\":" + String(ESP.getPsramSize()) + "}";
+  }
+  // Real-time flash storage telemetry
+  uint32_t sketchSize = ESP.getSketchSize();
+  uint32_t freeSketch = ESP.getFreeSketchSpace();
+  uint32_t totalSketch = sketchSize + freeSketch;
+  int flashPct = totalSketch > 0 ? (int)(((uint64_t)sketchSize * 100) / totalSketch) : 0;
+  uint32_t flashChip = ESP.getFlashChipSize();
+  j += ",\"flash\":{\"used\":" + String(sketchSize) +
+       ",\"free\":" + String(freeSketch) +
+       ",\"total\":" + String(totalSketch) +
+       ",\"chip\":" + String(flashChip) +
+       ",\"pct\":" + String(flashPct) + "}";
+  String owner = getOwnerName();
+  if (owner.length() > 0) {
+    j += ",\"owner\":\"" + escJson(owner) + "\"";
+  }
   j += "}";
 
   cachedStatusJson = j;
@@ -812,6 +896,16 @@ void handleStatus() {
   server.sendHeader("Pragma", "no-cache");
   server.sendHeader("Expires", "0");
   server.send(200, "application/json", j);
+}
+
+void handleLogs() {
+  notifyWebRequest();
+  server.sendHeader("Access-Control-Allow-Origin", "*");
+  server.sendHeader("Connection", "close");
+  server.sendHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+  server.sendHeader("Pragma", "no-cache");
+  server.sendHeader("Expires", "0");
+  server.send(200, "application/json", "[]");
 }
 
 void handleConfigApi() {
@@ -897,8 +991,8 @@ void handleConfigApi() {
        "\",\"sound\":" + String(touchFeedbackSound ? "true" : "false") +
        ",\"deb\":" + String(touchDebounceMs) + "},";
   const char *skinNames[SKIN_COUNT] = {
-      "kiwi",           "vector",           "capsule",       "pixel",
-      "squircle_solid", "squircle_outline", "squircle_glint"};
+      "kiwi",           "vector",         "pixel",
+      "squircle_solid", "squircle_glint", "mecha"};
   int skinIndex = (int)currentEyeSkin;
   if (skinIndex < 0 || skinIndex >= SKIN_COUNT)
     skinIndex = 0;
@@ -1141,10 +1235,7 @@ void handleSave() {
   }
   // P3: Apply ww_model BEFORE ww_cutoff
   if (server.hasArg("ww_model")) {
-    uint8_t m = server.arg("ww_model").toInt();
-    if (m > 2)
-      m = 0;
-    wakeWordModel = m;
+    wakeWordModel = 0; // Alexa only
     wakeWordSetModel(wakeWordModel);
   }
   if (server.hasArg("ww_cutoff")) {
@@ -1250,18 +1341,15 @@ void handleSave() {
     else if (s == "vector" || s == "anki" || s == "default" || s == "normal" ||
              s == "clean")
       currentEyeSkin = SKIN_VECTOR;
-    else if (s == "capsule" || s == "neon_capsule" || s == "pill" ||
-             s == "stadium" || s == "oval")
-      currentEyeSkin = SKIN_CAPSULE;
     else if (s == "pixel" || s == "8bit" || s == "retro" || s == "retro8bit")
       currentEyeSkin = SKIN_PIXEL;
     else if (s == "squircle_solid" || s == "squircle_bold" || s == "squircle")
       currentEyeSkin = SKIN_SQUIRCLE_BOLD;
-    else if (s == "squircle_outline" || s == "neon_frame" || s == "outline")
-      currentEyeSkin = SKIN_NEON_FRAME;
     else if (s == "squircle_glint" || s == "lumina_spark" || s == "spark" ||
              s == "glint")
       currentEyeSkin = SKIN_LUMINA_SPARK;
+    else if (s == "mecha" || s == "circtangle" || s == "circrect")
+      currentEyeSkin = SKIN_MECHA;
     else
       currentEyeSkin = SKIN_KIWI;
   }

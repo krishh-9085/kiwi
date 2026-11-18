@@ -51,6 +51,7 @@ void rgbLedSetOverride(uint8_t r, uint8_t g, uint8_t b) {
   s_overrideR = r;
   s_overrideG = g;
   s_overrideB = b;
+  rgbLedShow(r, g, b);
 }
 
 void rgbLedClearOverride() {

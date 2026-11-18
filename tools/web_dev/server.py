@@ -10,8 +10,6 @@ if sys.platform == "win32":
         pass
 
 import json
-
-FIRMWARE_VERSION = "v1.0"
 import time
 import urllib.request
 import urllib.parse
@@ -20,11 +18,15 @@ import webbrowser
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import argparse
 
+FIRMWARE_VERSION = "v1.0"
+
 DEV_DIR = os.path.dirname(os.path.abspath(__file__))
 if DEV_DIR not in sys.path:
     sys.path.insert(0, DEV_DIR)
 
-TEMPLATES_DIR = os.path.join(DEV_DIR, "templates")
+WORKSPACE = os.path.abspath(os.path.join(DEV_DIR, "..", ".."))
+REACT_DIR = os.path.join(WORKSPACE, "react_ui")
+DIST_HTML = os.path.join(REACT_DIR, "dist", "index.html")
 CONFIG_PATH = os.path.join(DEV_DIR, "mock_config.json")
 
 # State for local simulation
@@ -67,7 +69,7 @@ DEV_BAR_HTML = """
     ">Proxy</button>
   </div>
   <div style="height:16px;width:1px;background:rgba(255,255,255,0.15)"></div>
-  <button type="button" id="devBtnSyncCpp" title="Export HTML changes back to C++ firmware source" style="
+  <button type="button" id="devBtnSyncCpp" title="Export React bundle to C++ firmware header" style="
     background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.2);color:#38bdf8;
     border-radius:6px;padding:4px 10px;font-size:11px;font-weight:600;cursor:pointer;
   ">💾 Sync to C++</button>
@@ -144,207 +146,50 @@ def save_config(cfg):
     with open(CONFIG_PATH, "w", encoding="utf-8") as f:
         json.dump(cfg, f, indent=2)
 
-def render_dashboard():
-    cfg = load_config()
-    with open(os.path.join(TEMPLATES_DIR, "dashboard.html"), "r", encoding="utf-8") as f:
-        html = f.read()
+def get_react_dashboard_html():
+    if os.path.exists(DIST_HTML):
+        try:
+            with open(DIST_HTML, "r", encoding="utf-8") as f:
+                return f.read()
+        except Exception as e:
+            return f"<h1>Error reading React bundle: {e}</h1>"
 
-    # Placeholders replacement
-    stt_lang = cfg.get("sttLang", "auto")
-    lang_name = "Hindi" if stt_lang == "hi" else ("English" if stt_lang == "en" else "Auto (HI+EN)")
-    llm_prov = cfg.get("llmProvider", "gemini")
-    active_model = cfg.get("groqModel", "openai/gpt-oss-20b") if llm_prov == "groq" else cfg.get("llmModel", "gemini-2.0-flash-lite")
-
-    replacements = {
-        "%AP%": cfg.get("apSSID", "MyRobot-DEV"),
-        "%LLMPROV%": llm_prov,
-        "%ACTIVEMODEL%": active_model,
-        "%STTPROV%": cfg.get("sttProvider", "sarvam"),
-        "%STTLANGNAME%": lang_name,
-        "%TTSPROV%": cfg.get("ttsProvider", "sarvam"),
-        "%SSID%": cfg.get("wifiSSID", "MyWiFi"),
-        "%PASS%": cfg.get("wifiPassword", ""),
-        "%STT_SARVAM_SEL%": "selected" if cfg.get("sttProvider") == "sarvam" else "",
-        "%STT_GROQ_SEL%": "selected" if cfg.get("sttProvider") == "groq" else "",
-        "%STT_OPENAI_SEL%": "selected" if cfg.get("sttProvider") == "openai" else "",
-        "%LANG_AUTO_SEL%": "selected" if stt_lang == "auto" else "",
-        "%LANG_HI_SEL%": "selected" if stt_lang == "hi" else "",
-        "%LANG_EN_SEL%": "selected" if stt_lang == "en" else "",
-        "%STTURL%": cfg.get("sttEndpoint", ""),
-        "%STTKEY%": cfg.get("sttKey", ""),
-        "%STT_SAARAS_SEL%": "selected" if cfg.get("sttModel") == "saaras:v3" else "",
-        "%STT_SAARIKA_SEL%": "selected" if cfg.get("sttModel") == "saarika:v2" else "",
-        "%GROQSTTURL%": cfg.get("groqSttEndpoint", ""),
-        "%GROQSTTKEY%": cfg.get("groqSttKey", ""),
-        "%GW3T_SEL%": "selected" if cfg.get("groqSttModel") == "whisper-large-v3-turbo" else "",
-        "%GW3_SEL%": "selected" if cfg.get("groqSttModel") == "whisper-large-v3" else "",
-        "%GDW_SEL%": "selected" if cfg.get("groqSttModel") == "distil-whisper-large-v3-en" else "",
-        "%OPENAIURL%": cfg.get("openaiSttEndpoint", ""),
-        "%OPENAIKEY%": cfg.get("openaiSttKey", ""),
-        "%OW1_SEL%": "selected" if cfg.get("openaiSttModel") == "whisper-1" else "",
-        "%OG4M_SEL%": "selected" if cfg.get("openaiSttModel") == "gpt-4o-mini-transcribe" else "",
-        "%OG4_SEL%": "selected" if cfg.get("openaiSttModel") == "gpt-4o-transcribe" else "",
-        "%GROQ_SEL%": "selected" if llm_prov == "groq" else "",
-        "%GEMINI_SEL%": "selected" if llm_prov == "gemini" else "",
-        "%OPENAI_SEL%": "selected" if llm_prov == "openai" else "",
-        "%G20B_SEL%": "selected" if cfg.get("groqModel") == "openai/gpt-oss-20b" else "",
-        "%G120B_SEL%": "selected" if cfg.get("groqModel") == "openai/gpt-oss-120b" else "",
-        "%GQ32B_SEL%": "selected" if cfg.get("groqModel") == "qwen/qwen3-32b" else "",
-        "%GL33_SEL%": "selected" if cfg.get("groqModel") == "llama-3.3-70b-versatile" else "",
-        "%GE20L_SEL%": "selected" if "gemini-2.0-flash-lite" in cfg.get("llmModel", "") else "",
-        "%GE25_SEL%": "selected" if cfg.get("llmModel") == "gemini-2.5-flash" else "",
-        "%GE25L_SEL%": "selected" if cfg.get("llmModel") == "gemini-2.5-flash-lite" else "",
-        "%GPT4OM_SEL%": "selected" if cfg.get("llmModel") == "gpt-4o-mini" else "",
-        "%GPT41M_SEL%": "selected" if cfg.get("llmModel") == "gpt-4.1-mini" else "",
-        "%GPT41N_SEL%": "selected" if cfg.get("llmModel") == "gpt-4.1-nano" else "",
-        "%GPT4O_SEL%": "selected" if cfg.get("llmModel") == "gpt-4o" else "",
-        "%LLMURL%": cfg.get("llmEndpoint", ""),
-        "%LLMKEY%": cfg.get("llmKey", ""),
-        "%OPENAI_LLM_URL%": cfg.get("llmEndpoint", ""),
-        "%OPENAI_LLM_KEY%": cfg.get("llmKey", ""),
-        "%GROQURL%": cfg.get("groqEndpoint", ""),
-        "%GROQKEY%": cfg.get("groqKey", ""),
-        "%TTS_SARVAM_SEL%": "selected" if cfg.get("ttsProvider") == "sarvam" else "",
-        "%TTS_OPENAI_SEL%": "selected" if cfg.get("ttsProvider") == "openai" else "",
-        "%TTS_ELEVEN_SEL%": "selected" if cfg.get("ttsProvider") == "elevenlabs" else "",
-        "%TTS_FISH_SEL%": "selected" if cfg.get("ttsProvider") in ["fish", "fishaudio"] else "",
-        "%TTSURL%": cfg.get("ttsEndpoint", ""),
-        "%TTSKEY%": cfg.get("ttsKey", ""),
-        "%SARVAM_V4F_SEL%": "selected" if cfg.get("ttsModel") == "bulbul:v4-flash" else "",
-        "%SARVAM_V3_SEL%": "selected" if cfg.get("ttsModel") == "bulbul:v3" else "",
-        "%SARVAM_V2_SEL%": "selected" if cfg.get("ttsModel") == "bulbul:v2" else "",
-        "%OPENAITTSURL%": cfg.get("openaiTtsEndpoint", ""),
-        "%OPENAITTSKEY%": cfg.get("openaiTtsKey", ""),
-        "%OPENAITTSMODEL%": cfg.get("openaiTtsModel", "gpt-4o-mini-tts"),
-        "%OPENAITTSVOICE%": cfg.get("openaiTtsVoice", "alloy"),
-        "%OA_ALLOY_SEL%": "selected" if cfg.get("openaiTtsVoice") == "alloy" else "",
-        "%OA_ECHO_SEL%": "selected" if cfg.get("openaiTtsVoice") == "echo" else "",
-        "%OA_FABLE_SEL%": "selected" if cfg.get("openaiTtsVoice") == "fable" else "",
-        "%OA_ONYX_SEL%": "selected" if cfg.get("openaiTtsVoice") == "onyx" else "",
-        "%OA_NOVA_SEL%": "selected" if cfg.get("openaiTtsVoice") == "nova" else "",
-        "%OA_SHIMMER_SEL%": "selected" if cfg.get("openaiTtsVoice") == "shimmer" else "",
-        "%ELEVURL%": cfg.get("elevenEndpoint", ""),
-        "%ELEVKEY%": cfg.get("elevenKey", ""),
-        "%ELEVMODEL%": cfg.get("elevenModel", ""),
-        "%ELEVVOICE%": cfg.get("elevenVoice", ""),
-        "%FISHURL%": cfg.get("fishEndpoint", ""),
-        "%FISHKEY%": cfg.get("fishKey", ""),
-        "%FISHMODEL%": cfg.get("fishModel", ""),
-        "%FISHVOICE%": cfg.get("fishVoice", ""),
-        "%VOL%": str(cfg.get("speakerVolume", 85)),
-        "%REPLANG%": cfg.get("replyLang", "auto"),
-        "%BRIGHT%": str(cfg.get("displayBrightness", 90)),
-        "%NIGHT_CHECK_0%": "checked" if cfg.get("nightMode") == 0 else "",
-        "%NIGHT_CHECK_1%": "checked" if cfg.get("nightMode") == 1 else "",
-        "%NIGHT_CHECK_2%": "checked" if cfg.get("nightMode") == 2 else "",
-        "%NIGHT_SEL_0%": "selected" if cfg.get("nightMode") == 0 else "",
-        "%NIGHT_SEL_1%": "selected" if cfg.get("nightMode") == 1 else "",
-        "%NIGHT_SEL_2%": "selected" if cfg.get("nightMode") == 2 else "",
-        "%NIGHT_BRIGHT%": str(cfg.get("nightBrightness", 15)),
-        "%NIGHT_MODE%": str(cfg.get("nightMode", 1)),
-        "%NIGHT_SLIDER_STYLE%": "display:none;" if cfg.get("nightMode") == 0 else "",
-        "%CIRC_EN_CHECKED%": "checked" if cfg.get("circadianSleepEnabled", True) else "",
-        "%CIRC_EN_VAL%": "1" if cfg.get("circadianSleepEnabled", True) else "0",
-        "%GREET_EN_CHECKED%": "checked" if cfg.get("greetingsEnabled", False) else "",
-        "%GREET_EN_VAL%": "1" if cfg.get("greetingsEnabled", False) else "0",
-        "%SND_REACT_CHECKED%": "checked" if cfg.get("soundReactiveEnabled", False) else "",
-        "%SND_REACT_VAL%": "1" if cfg.get("soundReactiveEnabled", False) else "0",
-        "%CIRC_START%": str(cfg.get("circadianSleepStart", 23)),
-        "%CIRC_END%": str(cfg.get("circadianSleepEnd", 7)),
-        "%BOREDOM_CHECKED%": "checked" if cfg.get("boredomEnabled") else "",
-        "%BOREDOM_VAL%": "1" if cfg.get("boredomEnabled") else "0",
-        "%BM_1_SEL%": "selected" if cfg.get("boredomMinutes") == 1 else "",
-        "%BM_2_SEL%": "selected" if cfg.get("boredomMinutes") == 2 else "",
-        "%BM_3_SEL%": "selected" if cfg.get("boredomMinutes") == 3 else "",
-        "%BM_5_SEL%": "selected" if cfg.get("boredomMinutes") == 5 else "",
-        "%BM_10_SEL%": "selected" if cfg.get("boredomMinutes") == 10 else "",
-        "%BM_15_SEL%": "selected" if cfg.get("boredomMinutes") == 15 else "",
-        "%BM_30_SEL%": "selected" if cfg.get("boredomMinutes") == 30 else "",
-        "%WTHR_CITY%": cfg.get("weatherCity", ""),
-        "%WTHR_LAT%": cfg.get("weatherLat", ""),
-        "%WTHR_LON%": cfg.get("weatherLon", ""),
-        "%PROMPT%": cfg.get("systemPrompt", ""),
-        "%MEM_NAME%": cfg.get("ownerName", ""),
-        "%MEM_FRIENDS%": cfg.get("friendsFamily", ""),
-        "%TCH_DEB%": "50",
-        "%TCH_SND_CHECKED%": "checked",
-        "%ACT_TOP_TAP%": "listen",
-        "%ACT_TOP_DBL%": "skin",
-        "%ACT_LT_TAP%": "pet",
-        "%ACT_LT_DBL%": "tickle",
-        "%ACT_LT_HLD%": "vol_dn",
-        "%ACT_RT_TAP%": "clock",
-        "%ACT_RT_DBL%": "weather",
-        "%ACT_RT_HLD%": "vol_up",
-    }
-
-    # Generate Sarvam voices options (all 29 official voices)
-    sarvam_voices = [
-        ("amit", "Amit (Male · Clear & Expressive)"),
-        ("priya", "Priya (Female · Default)"),
-        ("aditya", "Aditya (Male · Dynamic)"),
-        ("ritu", "Ritu (Female · Natural)"),
-        ("ashutosh", "Ashutosh (Male · Deep Voice)"),
-        ("neha", "Neha (Female · Warm)"),
-        ("rahul", "Rahul (Male · Casual)"),
-        ("pooja", "Pooja (Female · Friendly)"),
-        ("rohan", "Rohan (Male · Young)"),
-        ("simran", "Simran (Female · Cheerful)"),
-        ("kabir", "Kabir (Male · Authoritative)"),
-        ("shreya", "Shreya (Female · Sweet)"),
-        ("varun", "Varun (Male · Energetic)"),
-        ("ishita", "Ishita (Female · Professional)"),
-        ("kavya", "Kavya (Female · Soft)"),
-        ("dev", "Dev (Male · Modern)"),
-        ("ratan", "Ratan (Male · Classic)"),
-        ("manan", "Manan (Male)"),
-        ("sumit", "Sumit (Male)"),
-        ("roopa", "Roopa (Female)"),
-        ("aayan", "Aayan (Male)"),
-        ("shubh", "Shubh (Male)"),
-        ("advait", "Advait (Male)"),
-        ("anand", "Anand (Male)"),
-        ("tanya", "Tanya (Female)"),
-        ("tarun", "Tarun (Male)"),
-        ("sunny", "Sunny (Male)"),
-        ("mani", "Mani (Male)"),
-        ("gokul", "Gokul (Male)")
-    ]
-    cur_voice = cfg.get("ttsVoice", "priya")
-    voice_opts = ""
-    for vid, vlabel in sarvam_voices:
-        sel = "selected" if cur_voice == vid else ""
-        voice_opts += f'<option value="{vid}" {sel}>{vlabel}</option>\n'
-    replacements["%SARVAM_VOICE_OPTIONS%"] = voice_opts
-
-    # Hour options
-    def make_hours(sel_h):
-        out = ""
-        for h in range(24):
-            h12 = 12 if (h % 12 == 0) else (h % 12)
-            ampm = "PM" if h >= 12 else "AM"
-            sel = "selected" if h == sel_h else ""
-            out += f'<option value="{h}" {sel}>{h12:02d}:00 {ampm}</option>\n'
-        return out
-    replacements["%CIRC_START_OPTIONS%"] = make_hours(cfg.get("circadianSleepStart", 23))
-    replacements["%CIRC_END_OPTIONS%"] = make_hours(cfg.get("circadianSleepEnd", 7))
-
-    # Memory list HTML
-    mem_html = ""
-    for idx, fact in enumerate(cfg.get("memories", [])):
-        mem_html += f'''
-        <div style="display:flex;align-items:center;justify-content:space-between;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 12px;margin-bottom:6px">
-          <span style="font-size:13px;color:var(--text)">{fact}</span>
-          <button type="button" class="qbtn" style="padding:2px 8px;font-size:11px;color:var(--red);border-color:rgba(255,59,48,0.2)" onclick="this.parentElement.remove()">Delete</button>
-        </div>'''
-    replacements["%MEM_LIST_HTML%"] = mem_html
-
-    for k, v in replacements.items():
-        html = html.replace(k, str(v))
-
-    return html
+    return """<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Kiwi Robot Dev Server</title>
+  <style>
+    body { background: #0b0f19; color: #f8fafc; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; padding: 20px; box-sizing: border-box; text-align: center; }
+    .card { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 20px; padding: 36px; max-width: 480px; box-shadow: 0 20px 40px rgba(0,0,0,0.5); }
+    h1 { color: #38bdf8; font-size: 22px; margin: 0 0 12px; }
+    p { color: #94a3b8; font-size: 14px; margin: 0 0 20px; line-height: 1.6; }
+    code { background: rgba(255,255,255,0.1); padding: 2px 6px; border-radius: 4px; color: #f1f5f9; font-size: 13px; }
+    .actions { display: flex; flex-direction: column; gap: 10px; }
+    a.btn { display: block; background: #0284c7; color: white; padding: 12px 20px; border-radius: 10px; text-decoration: none; font-weight: 600; font-size: 14px; transition: background 0.2s; }
+    a.btn:hover { background: #0369a1; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Kiwi React UI Not Built Yet</h1>
+    <p>The single-file React bundle at <code>react_ui/dist/index.html</code> was not found.<br>Run <code>npm run build</code> inside <code>react_ui</code>, or start the Vite live dev server:</p>
+    <div class="actions">
+      <a class="btn" href="http://localhost:5173" target="_blank">Open Vite Dev Server (Port 5173)</a>
+    </div>
+  </div>
+</body>
+</html>"""
 
 class DevPortalHandler(BaseHTTPRequestHandler):
+    def do_OPTIONS(self):
+        self.send_response(204)
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "*")
+        self.end_headers()
+
     def proxy_to_robot(self, path, method="GET", body=None, headers=None):
         global proxy_robot_ip
         if not proxy_robot_ip:
@@ -369,9 +214,9 @@ class DevPortalHandler(BaseHTTPRequestHandler):
         path = parsed.path
         query = urllib.parse.parse_qs(parsed.query)
 
-                # Apple Touch Icon & Favicon
+        # Apple Touch Icon & Favicon
         if path in ["/apple-touch-icon.png", "/apple-touch-icon-precomposed.png", "/favicon.ico"]:
-            icon_path = os.path.join(os.path.dirname(__file__), "apple-touch-icon.png")
+            icon_path = os.path.join(DEV_DIR, "apple-touch-icon.png")
             if not os.path.exists(icon_path):
                 icon_path = os.path.join(WORKSPACE, "apple-touch-icon.png")
             if os.path.exists(icon_path):
@@ -379,9 +224,8 @@ class DevPortalHandler(BaseHTTPRequestHandler):
                     icon_data = f.read()
                 self.send_response(200)
                 self.send_header("Content-Type", "image/png")
-                self.send_header("Cache-Control", "no-cache, no-store, must-revalidate")
-                self.send_header("Pragma", "no-cache")
-                self.send_header("Expires", "0")
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.send_header("Cache-Control", "public, max-age=86400")
                 self.end_headers()
                 self.wfile.write(icon_data)
                 return
@@ -389,6 +233,7 @@ class DevPortalHandler(BaseHTTPRequestHandler):
         if path == "/manifest.json":
             self.send_response(200)
             self.send_header("Content-Type", "application/manifest+json")
+            self.send_header("Access-Control-Allow-Origin", "*")
             self.send_header("Cache-Control", "no-cache")
             self.end_headers()
             manifest = {
@@ -412,6 +257,7 @@ class DevPortalHandler(BaseHTTPRequestHandler):
         if path == "/api/dev/status":
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
+            self.send_header("Access-Control-Allow-Origin", "*")
             self.end_headers()
             self.wfile.write(json.dumps({
                 "mode": "proxy" if proxy_robot_ip else "mock",
@@ -419,8 +265,8 @@ class DevPortalHandler(BaseHTTPRequestHandler):
             }).encode("utf-8"))
             return
 
-        # If proxying active, forward status, config, scan, animations, and do to robot
-        if proxy_robot_ip and path in ["/status", "/config", "/scan", "/animations", "/do"]:
+        # If proxying active, forward status, logs, config, scan, animations, and do to robot
+        if proxy_robot_ip and path in ["/status", "/logs", "/config", "/scan", "/animations", "/do", "/ota/status"]:
             res = self.proxy_to_robot(self.path, method="GET")
             if res:
                 status, ctype, data = res
@@ -431,47 +277,23 @@ class DevPortalHandler(BaseHTTPRequestHandler):
                 self.wfile.write(data)
                 return
 
-        # Web pages
-        if path == "/" or path == "/index.html":
-            html = render_dashboard()
-            html = html.replace("</body>", DEV_BAR_HTML + "</body>")
+        # Web pages (Unified React SPA)
+        if path in ["/", "/index.html", "/faces", "/wiring", "/update"]:
+            html = get_react_dashboard_html()
+            if "</body>" in html:
+                html = html.replace("</body>", DEV_BAR_HTML + "</body>")
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Access-Control-Allow-Origin", "*")
             self.end_headers()
             self.wfile.write(html.encode("utf-8"))
             return
 
-        if path == "/faces":
-            with open(os.path.join(TEMPLATES_DIR, "faces.html"), "r", encoding="utf-8") as f:
-                html = f.read()
-            html = html.replace("</body>", DEV_BAR_HTML + "</body>")
-            self.send_response(200)
-            self.send_header("Content-Type", "text/html; charset=utf-8")
-            self.end_headers()
-            self.wfile.write(html.encode("utf-8"))
-            return
-
-        if path == "/wiring":
-            self.send_response(302)
-            self.send_header("Location", "/")
-            self.end_headers()
-            return
-
-        if path == "/update":
-            with open(os.path.join(TEMPLATES_DIR, "update.html"), "r", encoding="utf-8") as f:
-                html = f.read()
-            html = html.replace("</body>", DEV_BAR_HTML + "</body>")
-            self.send_response(200)
-            self.send_header("Content-Type", "text/html; charset=utf-8")
-            self.end_headers()
-            self.wfile.write(html.encode("utf-8"))
-            return
-
-        # Mock API: /status
+        # Mock API: /status (Fast Telemetry)
         if path == "/status":
             emotions = ["idle", "happy", "curious", "wink", "excited", "listening"]
             cfg_curr = load_config()
-            sk = cfg_curr.get("currentEyeSkin", "kiwi")
+            sk = cfg_curr.get("currentEyeSkin", cfg_curr.get("skin", "kiwi"))
             show_mouth = cfg_curr.get("showMouth", True)
             log_counter += 1
             if log_counter % 3 == 0:
@@ -480,12 +302,13 @@ class DevPortalHandler(BaseHTTPRequestHandler):
                 simulated_logs.pop(0)
 
             data = {
+                "host": "kiwi.local",
                 "emotion": ("sleeping" if cfg_curr.get("sleeping", False) else emotions[(int(time.time()) // 4) % len(emotions)]),
-                "busy": False,
+                "busy": cfg_curr.get("busy", False),
                 "sleeping": cfg_curr.get("sleeping", False),
                 "history": 4,
-                "boredom": True,
-                "boredom_mins": 5,
+                "boredom": cfg_curr.get("boredomEnabled", True),
+                "boredom_mins": cfg_curr.get("boredomMinutes", 5),
                 "skin": sk,
                 "mouth": show_mouth,
                 "circadian": {
@@ -505,22 +328,54 @@ class DevPortalHandler(BaseHTTPRequestHandler):
                 },
                 "wakeWord": {
                     "enabled": cfg_curr.get("wakeWordEnabled", True),
-                    "model": cfg_curr.get("wakeWordModel", 0),
-                    "name": "Kiwi" if cfg_curr.get("wakeWordModel", 0) == 2 else ("Alexa" if cfg_curr.get("wakeWordModel", 0) == 1 else "Hey Jarvis"),
-                    "cutoff": 0.40 if cfg_curr.get("wakeWordModel", 0) == 2 else (0.90 if cfg_curr.get("wakeWordModel", 0) == 1 else 0.36),
+                    "model": 0,
+                    "name": "Alexa",
+                    "cutoff": 0.90,
                     "listening": True
                 },
-                "state": ("Sleeping" if cfg_curr.get("sleeping", False) else "Idle & Happy"),
-                "question": "What's up Kiwi?",
-                "answer": "Surviving on 3.3V and pure attitude! What are we building today?",
+                "timer_active": False,
+                "timer_ringing": False,
+                "timer_remaining": 0,
+                "hunger": "satisfied",
+                "hunger_sec": 3600,
+                "meal": "Breakfast",
+                "state": ("Sleeping" if cfg_curr.get("sleeping", False) else cfg_curr.get("state", "Ready")),
+                "question": cfg_curr.get("question", "What's up Kiwi?"),
+                "answer": cfg_curr.get("answer", "Surviving on 3.3V and pure attitude! What are we building today?"),
                 "version": FIRMWARE_VERSION,
-                "logs": simulated_logs
+                "heap": {
+                    "free": 178420,
+                    "total": 327680,
+                    "used": 149260,
+                    "pct": 45
+                },
+                "flash": {
+                    "used": 1648200,
+                    "free": 383416,
+                    "total": 2031616,
+                    "chip": 4194304,
+                    "pct": 81
+                },
+                "temp": 48.5,
+                "owner": cfg_curr.get("ownerName") or cfg_curr.get("memory", {}).get("name", "Rohil")
             }
+            if "logs" in query or query.get("logs") == ["1"]:
+                data["logs"] = simulated_logs
+
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.send_header("Access-Control-Allow-Origin", "*")
             self.end_headers()
             self.wfile.write(json.dumps(data).encode("utf-8"))
+            return
+
+        # Mock API: /logs (On-Demand Serial Logs)
+        if path == "/logs":
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+            self.wfile.write(json.dumps(simulated_logs).encode("utf-8"))
             return
 
         # Mock API: /ota/status
@@ -544,6 +399,7 @@ class DevPortalHandler(BaseHTTPRequestHandler):
             cfg = load_config()
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
+            self.send_header("Access-Control-Allow-Origin", "*")
             self.end_headers()
             self.wfile.write(json.dumps(cfg).encode("utf-8"))
             return
@@ -558,6 +414,7 @@ class DevPortalHandler(BaseHTTPRequestHandler):
             ]
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
+            self.send_header("Access-Control-Allow-Origin", "*")
             self.end_headers()
             self.wfile.write(json.dumps(nets).encode("utf-8"))
             return
@@ -570,7 +427,27 @@ class DevPortalHandler(BaseHTTPRequestHandler):
             for k in query:
                 action_desc = f"{k}={query[k][0]}"
                 val = query[k][0]
-                if k in ["vol", "volume"]:
+                if k == "clearlog":
+                    simulated_logs.clear()
+                    action_desc = "Logs cleared"
+                elif k == "record":
+                    if val in ["0", "stop", "cancel"]:
+                        cfg["busy"] = False
+                        cfg["emotion"] = "idle"
+                        cfg["state"] = "Ready"
+                        action_desc = "Mic stopped/cancelled"
+                    else:
+                        cfg["busy"] = True
+                        cfg["emotion"] = "listening"
+                        cfg["state"] = "Listening..."
+                        action_desc = "Mic listening started"
+                    cfg_changed = True
+                elif k == "pat":
+                    cfg["emotion"] = "petted"
+                    cfg["state"] = "Petted & Happy!"
+                    cfg_changed = True
+                    action_desc = "Kiwi head petted"
+                elif k in ["vol", "volume"]:
                     cfg["speakerVolume"] = int(val); cfg_changed = True
                 elif k == "brightness":
                     cfg["displayBrightness"] = int(val); cfg_changed = True
@@ -600,13 +477,20 @@ class DevPortalHandler(BaseHTTPRequestHandler):
                     except ValueError:
                         cfg["rgbLedBrightness"] = 63
                     cfg_changed = True
+                elif k == "rgb_color":
+                    clean_hex = str(val).replace("%23", "").replace("#", "").strip()
+                    cfg["rgbLedColor"] = "#" + clean_hex
+                    cfg["rgbLedOverride"] = True
+                    cfg_changed = True
+                    action_desc = f"RGB LED color override: #{clean_hex}"
+                elif k == "rgb_clear":
+                    cfg["rgbLedOverride"] = False
+                    cfg_changed = True
+                    action_desc = "RGB LED override cleared"
                 elif k == "ww_en":
                     cfg["wakeWordEnabled"] = (val == "1" or val == "true" or val == "on"); cfg_changed = True
                 elif k == "ww_model":
-                    try:
-                        cfg["wakeWordModel"] = int(val)
-                    except ValueError:
-                        cfg["wakeWordModel"] = 0
+                    cfg["wakeWordModel"] = 0
                     cfg_changed = True
                 elif k == "circ_start":
                     cfg["circadianSleepStart"] = int(val); cfg_changed = True
@@ -623,6 +507,7 @@ class DevPortalHandler(BaseHTTPRequestHandler):
             simulated_logs.append(f"[ACTION] Live parameter update: {action_desc}")
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
+            self.send_header("Access-Control-Allow-Origin", "*")
             self.end_headers()
             self.wfile.write(json.dumps({"ok": True, "action": action_desc}).encode("utf-8"))
             return
@@ -637,11 +522,13 @@ class DevPortalHandler(BaseHTTPRequestHandler):
             ]
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
+            self.send_header("Access-Control-Allow-Origin", "*")
             self.end_headers()
             self.wfile.write(json.dumps(anims).encode("utf-8"))
             return
 
         self.send_response(404)
+        self.send_header("Access-Control-Allow-Origin", "*")
         self.end_headers()
         self.wfile.write(b"404 Not Found")
 
@@ -661,10 +548,13 @@ class DevPortalHandler(BaseHTTPRequestHandler):
                 print(f"[DEV] Proxy target set to: {proxy_robot_ip or 'None (Mock Mode)'}")
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json")
+                self.send_header("Access-Control-Allow-Origin", "*")
                 self.end_headers()
                 self.wfile.write(json.dumps({"ok": True, "proxy_robot_ip": proxy_robot_ip}).encode("utf-8"))
             except Exception as e:
                 self.send_response(400)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Access-Control-Allow-Origin", "*")
                 self.end_headers()
                 self.wfile.write(json.dumps({"ok": False, "error": str(e)}).encode("utf-8"))
             return
@@ -672,29 +562,29 @@ class DevPortalHandler(BaseHTTPRequestHandler):
         # Dev sync to C++
         if path == "/api/dev/sync":
             try:
-                import sync_to_cpp
-                sync_to_cpp.sync_dashboard()
-                sync_to_cpp.sync_faces()
-                sync_to_cpp.sync_wiring()
-                sync_to_cpp.sync_ota()
+                import sync_react_to_cpp
+                sync_react_to_cpp.sync_react_to_cpp()
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json")
+                self.send_header("Access-Control-Allow-Origin", "*")
                 self.end_headers()
                 self.wfile.write(json.dumps({"ok": True}).encode("utf-8"))
             except Exception as e:
                 self.send_response(500)
                 self.send_header("Content-Type", "application/json")
+                self.send_header("Access-Control-Allow-Origin", "*")
                 self.end_headers()
                 self.wfile.write(json.dumps({"ok": False, "error": str(e)}).encode("utf-8"))
             return
 
         # Forward POST to robot if in proxy mode
-        if proxy_robot_ip and path in ["/save", "/update", "/animation-upload", "/ota/install", "/do"]:
+        if proxy_robot_ip and path in ["/save", "/update", "/ota/install", "/do"]:
             res = self.proxy_to_robot(self.path, method="POST", body=body, headers=dict(self.headers))
             if res:
                 status, ctype, data = res
                 self.send_response(status)
                 self.send_header("Content-Type", ctype)
+                self.send_header("Access-Control-Allow-Origin", "*")
                 self.end_headers()
                 self.wfile.write(data)
                 return
@@ -712,82 +602,62 @@ class DevPortalHandler(BaseHTTPRequestHandler):
             self.wfile.write(json.dumps({"ok": True, "message": "OTA update initiated (mock mode)"}).encode("utf-8"))
             return
 
-        # Mock /save form handler
+        # Mock /save form/JSON handler
         if path == "/save":
             try:
-                params = urllib.parse.parse_qs(body.decode("utf-8"))
                 cfg = load_config()
-                for k, v in params.items():
-                    val = v[0]
-                    if k == "vol": cfg["speakerVolume"] = int(val)
-                    elif k == "bright": cfg["displayBrightness"] = int(val)
-                    elif k == "night_bright": cfg["nightBrightness"] = int(val)
-                    elif k == "night_mode": cfg["nightMode"] = int(val)
-                    elif k == "prompt": cfg["systemPrompt"] = val
-                    elif k == "owner": cfg["ownerName"] = val
-                    elif k == "ssid": cfg["wifiSSID"] = val
-                    elif k == "pass": cfg["wifiPassword"] = val
-                    elif k == "stt_prov": cfg["sttProvider"] = val
-                    elif k == "stt_lang": cfg["sttLang"] = val
-                    elif k == "llm_prov": cfg["llmProvider"] = val
-                    elif k == "tts_prov" or k == "ttsprovider": cfg["ttsProvider"] = val
-                    elif k == "sttprovider": cfg["sttProvider"] = val
-                    elif k == "llmprovider": cfg["llmProvider"] = val
-                    elif k == "sttlang": cfg["sttLang"] = val
-                    elif k == "llmkey": cfg["llmKey"] = val
-                    elif k == "groqkey":
-                        cfg["groqKey"] = val
-                        cfg["groqSttKey"] = val
-                    elif k == "ttskey":
-                        cfg["ttsKey"] = val
-                        cfg["sttKey"] = val
-                    elif k == "openaikey":
-                        cfg["openaiKey"] = val
-                        cfg["openaiSttKey"] = val
-                        cfg["openaiTtsKey"] = val
-                    elif k == "elevkey": cfg["elevenKey"] = val
-                    elif k == "fishkey": cfg["fishKey"] = val
-                    elif k == "snd_react": cfg["soundReactiveEnabled"] = (val == "1" or val == "true" or val == "on")
-                    elif k == "greet_en": cfg["greetingsEnabled"] = (val == "1" or val == "true" or val == "on")
-                    elif k == "circ_en": cfg["circadianSleepEnabled"] = (val == "1" or val == "true" or val == "on")
+                content_type = self.headers.get("Content-Type", "")
+                if "application/json" in content_type:
+                    params = json.loads(body.decode("utf-8"))
+                    for k, v in params.items():
+                        cfg[k] = v
+                else:
+                    form_params = urllib.parse.parse_qs(body.decode("utf-8"))
+                    for k, v in form_params.items():
+                        val = v[0]
+                        if k == "vol": cfg["speakerVolume"] = int(val)
+                        elif k == "bright": cfg["displayBrightness"] = int(val)
+                        elif k == "night_bright": cfg["nightBrightness"] = int(val)
+                        elif k == "night_mode": cfg["nightMode"] = int(val)
+                        elif k == "prompt": cfg["systemPrompt"] = val
+                        elif k in ["owner", "mem_name"]:
+                            cfg["ownerName"] = val
+                        elif k == "ssid": cfg["wifiSSID"] = val
+                        elif k == "pass": cfg["wifiPassword"] = val
+                        elif k in ["stt_prov", "sttprovider"]: cfg["sttProvider"] = val
+                        elif k in ["stt_lang", "sttlang"]: cfg["sttLang"] = val
+                        elif k in ["llm_prov", "llmprovider"]: cfg["llmProvider"] = val
+                        elif k in ["tts_prov", "ttsprovider"]: cfg["ttsProvider"] = val
+                        elif k == "llmkey": cfg["llmKey"] = val
+                        elif k == "groqkey": cfg["groqKey"] = val; cfg["groqSttKey"] = val
+                        elif k == "ttskey": cfg["ttsKey"] = val; cfg["sttKey"] = val
+                        elif k == "openaikey": cfg["openaiKey"] = val; cfg["openaiSttKey"] = val; cfg["openaiTtsKey"] = val
+                        elif k == "elevkey": cfg["elevenKey"] = val
+                        elif k == "fishkey": cfg["fishKey"] = val
+                        elif k == "snd_react": cfg["soundReactiveEnabled"] = (val in ["1", "true", "on"])
+                        elif k == "greet_en": cfg["greetingsEnabled"] = (val in ["1", "true", "on"])
+                        elif k == "circ_en": cfg["circadianSleepEnabled"] = (val in ["1", "true", "on"])
                 save_config(cfg)
+                simulated_logs.append("[CONFIG] Settings updated and saved to mock_config.json")
             except Exception as e:
-                print(f"[SAVE] Error parsing form: {e}")
+                print(f"[SAVE] Error parsing config form: {e}")
 
-            # Return the exact saved confirmation screen from WebPortalApi.cpp
-            resp_html = """<!doctype html><html><head>
-<meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'>
-<meta http-equiv='refresh' content='4;url=/'>
-<title>Saved · Kiwi</title>
-<style>
-body{background:#0b0f19;color:#f8fafc;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;
-display:flex;align-items:center;justify-content:center;height:100vh;margin:0;padding:20px;box-sizing:border-box;text-align:center;}
-.card{background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:24px;padding:36px;max-width:380px;box-shadow:0 20px 40px rgba(0,0,0,0.5);}
-.spin{display:inline-block;width:44px;height:44px;border:4px solid rgba(255,255,255,0.15);border-top-color:#38bdf8;border-radius:50%;animation:sp 0.8s linear infinite;margin-bottom:18px;}
-@keyframes sp{to{transform:rotate(360deg);}}
-h2{margin:0 0 10px;font-size:22px;color:#38bdf8;} p{color:#94a3b8;font-size:14px;margin:0 0 18px;line-height:1.5;}
-#sec{font-weight:700;color:#f8fafc;}
-</style></head><body>
-<div class='card'>
-<div class='spin'></div>
-<h2>Settings Saved!</h2>
-<p>Kiwi Dev Server: Changes applied!<br>Redirecting to dashboard in <span id='sec'>4</span>s</p>
-<script>var c=4;var iv=setInterval(function(){c--;var el=document.getElementById('sec');if(el)el.innerText=c;if(c<=0){clearInterval(iv);location.href='/';}},1000);</script>
-</div></body></html>"""
             self.send_response(200)
-            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Access-Control-Allow-Origin", "*")
             self.end_headers()
-            self.wfile.write(resp_html.encode("utf-8"))
+            self.wfile.write(json.dumps({"ok": True, "reboot": False, "message": "Settings saved and applied live (mock mode)!"}).encode("utf-8"))
             return
 
         self.send_response(404)
+        self.send_header("Access-Control-Allow-Origin", "*")
         self.end_headers()
 
 def main():
     global proxy_robot_ip
     parser = argparse.ArgumentParser(description="Kiwi Robot UI Local Dev Server")
-    parser.add_argument("--port", type=int, default=8080, help="Port to serve UI (default: 8080)")
-    parser.add_argument("--robot", type=str, default="", help="Robot IP to proxy API requests to")
+    parser.add_argument("--port", type=int, default=8080, help="Port to serve UI & Mock API (default: 8080)")
+    parser.add_argument("--robot", type=str, default="", help="Robot IP to proxy API requests to live ESP32")
     parser.add_argument("--no-open", action="store_true", help="Do not open browser automatically")
     args = parser.parse_args()
 
@@ -801,11 +671,12 @@ def main():
     httpd = HTTPServer(server_address, DevPortalHandler)
     url = f"http://localhost:{args.port}"
     print(f"\n=======================================================")
-    print(f"   KIWI ROBOT UI DEV SERVER IS RUNNING!")
+    print(f"   KIWI ROBOT REACT UI MOCK DEV SERVER RUNNING!")
     print(f"   URL: {url}")
-    print(f"   - Edit files in: tools/web_dev/templates/")
-    print(f"   - Refresh your browser anytime (instant hot reload)")
-    print(f"   - Click '💾 Sync to C++' or run sync_to_cpp.py to export")
+    print(f"   - Mock API & Proxy:   http://localhost:{args.port}")
+    print(f"   - React HMR Dev:      http://localhost:5173 (npm run dev)")
+    print(f"   - React Singlefile:   react_ui/dist/index.html")
+    print(f"   - Click '💾 Sync to C++' to export bundle to firmware")
     print(f"=======================================================\n")
 
     if not args.no_open:

@@ -182,11 +182,11 @@ String getFormattedMemoryPrompt() {
       p += "(" + String(i + 1) + ") " + kiwiMemory.memories[i] + ". ";
     }
   }
-  p += "LEARNING RULES: "
-       "1. If user shares a family member or friend's name (e.g. bua, chacha, mama, dadi, dada, mummy, papa, sister, brother, dost, etc.), reply warmly AND append '[MEM: FAMILY: <relation> <name>]' at the very end so it is added directly to their web dashboard list (e.g. 'dadi raj, bua Sunita')! "
-       "Example: User says 'Meri bua ka naam Sunita hai' -> reply warmly AND append '[MEM: FAMILY: bua Sunita]'. "
-       "2. If user shares their own name, append '[MEM: Name is <Name>]'. "
-       "3. If user shares any other general fact or says 'yaad rakhna', append '[MEM: <concise fact>]'. ";
+  p += "CRITICAL LEARNING & MEMORY RULES: "
+       "1. NEVER save transient requests, jokes, or queries (e.g. NEVER output '[MEM: Story requested]', '[MEM: asked for joke]', etc.). "
+       "2. If user shares a family member or friend's name (e.g. bua, chacha, mama, dadi, dada, mummy, papa, sister, brother, dost, etc.), reply warmly AND append '[MEM: FAMILY: <relation> <name>]' at the very end so it is added to their Friends & Family list (e.g. '[MEM: FAMILY: dadi Raj]'). "
+       "3. If user shares their own name, append '[MEM: Name is <Name>]'. "
+       "4. ONLY save real, meaningful personal life facts (e.g. upcoming exam tomorrow, favorite hobby, pet name, likes black coffee) or when user explicitly says 'yaad rakhna', append '[MEM: <concise fact>]'. ";
   return p;
 }
 
@@ -255,12 +255,22 @@ void parseAndSaveMemoriesFromLlm(String &resp) {
         String rel = fact.substring(col + 1);
         rel.trim();
         addFriendOrFamilyNoSave(rel);
-        addMemoryFactNoSave("Family: " + rel);
         modified = true;
       } else {
         String lowerF = fact;
         lowerF.toLowerCase();
-        if (lowerF.indexOf("bua") >= 0 || lowerF.indexOf("chacha") >= 0 ||
+
+        // Guardrail: Skip temporary transient requests/commands (e.g. story, joke, weather, etc.)
+        if (lowerF.indexOf("requested") >= 0 || lowerF.indexOf("request") >= 0 ||
+            lowerF.indexOf("story") >= 0 || lowerF.indexOf("joke") >= 0 ||
+            lowerF.indexOf("kahani") >= 0 || lowerF.indexOf("weather") >= 0 ||
+            lowerF.indexOf("time") >= 0 || lowerF.indexOf("alarm") >= 0) {
+          // Ignore transient command or request
+          resp.remove(start, (end - start) + 1);
+          continue;
+        }
+
+        bool isFamily = (lowerF.indexOf("bua") >= 0 || lowerF.indexOf("chacha") >= 0 ||
             lowerF.indexOf("mama") >= 0 || lowerF.indexOf("mami") >= 0 ||
             lowerF.indexOf("dadi") >= 0 || lowerF.indexOf("dada") >= 0 ||
             lowerF.indexOf("nana") >= 0 || lowerF.indexOf("nani") >= 0 ||
@@ -268,11 +278,15 @@ void parseAndSaveMemoriesFromLlm(String &resp) {
             lowerF.indexOf("mother") >= 0 || lowerF.indexOf("father") >= 0 ||
             lowerF.indexOf("brother") >= 0 || lowerF.indexOf("sister") >= 0 ||
             lowerF.indexOf("bhai") >= 0 || lowerF.indexOf("behen") >= 0 ||
-            lowerF.indexOf("friend") >= 0 || lowerF.indexOf("dost") >= 0) {
+            lowerF.indexOf("friend") >= 0 || lowerF.indexOf("dost") >= 0);
+
+        if (isFamily) {
           addFriendOrFamilyNoSave(fact);
-        }
-        if (addMemoryFactNoSave(fact)) {
           modified = true;
+        } else {
+          if (addMemoryFactNoSave(fact)) {
+            modified = true;
+          }
         }
       }
     }

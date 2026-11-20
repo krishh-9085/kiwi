@@ -324,8 +324,8 @@ export default function Esp32LedColorPicker({
             }
           : {
               background: bgGradient,
-              borderRadius: '20px',
-              padding: '14px 16px',
+              borderRadius: '22px',
+              padding: '13px 14px',
               color: textColor,
               display: 'flex',
               flexDirection: 'column',
@@ -334,6 +334,7 @@ export default function Esp32LedColorPicker({
               border: `1px solid ${isLightText ? 'rgba(255, 255, 255, 0.18)' : 'rgba(0, 0, 0, 0.12)'}`,
               position: 'relative',
               boxSizing: 'border-box',
+              minHeight: '92px',
               transition: 'background 0.4s ease, box-shadow 0.4s ease, border-color 0.4s ease, color 0.3s ease'
             }),
         ...style

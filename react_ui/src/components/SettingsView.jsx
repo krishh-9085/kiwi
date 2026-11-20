@@ -452,7 +452,7 @@ export default function SettingsView({
         <div className="flux-card-header">
           <span className="flux-card-title">
             <Wifi size={16} />
-            <span>WI-FI &amp; LOCAL NETWORK SETUP</span>
+            <span>Wi-Fi</span>
           </span>
           <Tooltip title="Scan Networks">
             <button
@@ -539,7 +539,7 @@ export default function SettingsView({
         <div className="flux-card-header">
           <span className="flux-card-title">
             <Key size={16} />
-            <span>CLOUD API KEYS &amp; CREDENTIALS</span>
+            <span>API Keys</span>
           </span>
           <label className="flux-toggle">
             <input
@@ -549,14 +549,10 @@ export default function SettingsView({
             />
             <span className="flux-toggle-slider" />
             <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-dark)' }}>
-              Show all 6 provider keys
+              Unhide / Hide
             </span>
           </label>
         </div>
-
-        <p style={{ margin: '0 0 16px', color: 'var(--text-muted)', fontSize: '12px', lineHeight: 1.45 }}>
-          API keys for active AI providers are shown below. Keys are stored locally in ESP32 flash memory.
-        </p>
 
         <div className="flux-grid-autofit">
           <div>
@@ -1073,7 +1069,7 @@ export default function SettingsView({
         <div className="flux-card-header">
           <span className="flux-card-title">
             <Hand size={16} />
-            <span>Capacitive Touch Mapping &amp; Gestures</span>
+            <span>Touch &amp; Gestures</span>
           </span>
           <label className="flux-toggle">
             <input
@@ -1084,7 +1080,7 @@ export default function SettingsView({
             />
             <span className="flux-toggle-slider" />
             <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-dark)', whiteSpace: 'nowrap' }}>
-              Play Tone Sound on Touch
+              Touch Sound
             </span>
           </label>
         </div>

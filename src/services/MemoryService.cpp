@@ -167,8 +167,8 @@ void clearAllMemory() {
 String getFormattedMemoryPrompt() {
   String p = " MEMORY CONTEXT: ";
   if (kiwiMemory.userName.length() > 0) {
-    p += "The user's name is " + kiwiMemory.userName +
-         ". If they ask ('mera naam kya hai', 'who am I'), answer directly: Tumhara naam " + kiwiMemory.userName + " hai. ";
+    p += "User's name is " + kiwiMemory.userName +
+         " (only mention if asked 'who am I' / 'mera naam kya hai'; do NOT repeatedly append their name at the end of answers). ";
   } else {
     p += "You do not know the user's name yet. If they ask ('mera naam kya hai', 'who am I'), politely say you don't know yet and ask their name. ";
   }

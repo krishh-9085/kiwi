@@ -575,26 +575,33 @@ void handleDoAction() {
     return;
   }
 
-  // Live RGB LED (Pin 48) Custom Color (Hex "#RRGGBB", "RRGGBB", or "%23RRGGBB")
+  // Live RGB LED (Pin 48) Custom Color (Hex "#RRGGBB", "RRGGBB", or
+  // "%23RRGGBB")
   if (server.hasArg("rgb_color")) {
     String c = server.arg("rgb_color");
     c.trim();
-    if (c.startsWith("%23")) c = c.substring(3);
-    else if (c.startsWith("#")) c = c.substring(1);
+    if (c.startsWith("%23"))
+      c = c.substring(3);
+    else if (c.startsWith("#"))
+      c = c.substring(1);
     long hexVal = strtol(c.c_str(), NULL, 16);
     uint8_t r = (hexVal >> 16) & 0xFF;
     uint8_t g = (hexVal >> 8) & 0xFF;
     uint8_t b = hexVal & 0xFF;
     rgbLedSetOverride(r, g, b);
-    Serial.printf("[PORTAL] Pin 48 RGB LED color set to: #%06X (R:%d, G:%d, B:%d)\n", (unsigned int)hexVal, r, g, b);
-    server.send(200, "application/json", "{\"ok\":true,\"rgb_color\":\"#" + c + "\"}");
+    Serial.printf(
+        "[PORTAL] Pin 48 RGB LED color set to: #%06X (R:%d, G:%d, B:%d)\n",
+        (unsigned int)hexVal, r, g, b);
+    server.send(200, "application/json",
+                "{\"ok\":true,\"rgb_color\":\"#" + c + "\"}");
     return;
   }
 
   // Live RGB LED (Pin 48) Clear Custom Override (Restore auto mood sync)
   if (server.hasArg("rgb_clear")) {
     rgbLedClearOverride();
-    Serial.println("[PORTAL] Pin 48 RGB LED override cleared (auto mood sync restored)");
+    Serial.println(
+        "[PORTAL] Pin 48 RGB LED override cleared (auto mood sync restored)");
     server.send(200, "application/json", "{\"ok\":true,\"rgb_clear\":true}");
     return;
   }
@@ -818,8 +825,7 @@ void handleStatus() {
   j += (inCircadianSleep || manualSleep) ? "true," : "false,";
   j += "\"history\":" + String(getConversationHistoryCount());
   const char *skinNames[SKIN_COUNT] = {
-      "kiwi",           "vector",         "pixel",
-      "squircle_solid", "squircle_glint", "mecha"};
+      "kiwi", "vector", "pixel", "squircle_solid", "squircle_glint", "mecha"};
   int skIdx = (int)currentEyeSkin;
   if (skIdx < 0 || skIdx >= SKIN_COUNT)
     skIdx = 0;
@@ -862,25 +868,29 @@ void handleStatus() {
   int heapPct = totalHeap > 0 ? (int)((usedHeap * 100) / totalHeap) : 0;
   float cpuTemp = temperatureRead();
   j += ",\"heap\":{\"free\":" + String(freeHeap) +
-       ",\"total\":" + String(totalHeap) +
-       ",\"used\":" + String(usedHeap) +
+       ",\"total\":" + String(totalHeap) + ",\"used\":" + String(usedHeap) +
        ",\"pct\":" + String(heapPct) + "}";
   j += ",\"temp\":" + String(cpuTemp, 1);
   if (ESP.getPsramSize() > 0) {
-    j += ",\"psram\":{\"free\":" + String(ESP.getFreePsram()) +
-         ",\"total\":" + String(ESP.getPsramSize()) + "}";
+    uint32_t freePsram = ESP.getFreePsram();
+    uint32_t totalPsram = ESP.getPsramSize();
+    uint32_t usedPsram = totalPsram > freePsram ? totalPsram - freePsram : 0;
+    int psramPct =
+        totalPsram > 0 ? (int)(((uint64_t)usedPsram * 100) / totalPsram) : 0;
+    j += ",\"psram\":{\"free\":" + String(freePsram) +
+         ",\"total\":" + String(totalPsram) + ",\"used\":" + String(usedPsram) +
+         ",\"pct\":" + String(psramPct) + "}";
   }
   // Real-time flash storage telemetry
   uint32_t sketchSize = ESP.getSketchSize();
   uint32_t freeSketch = ESP.getFreeSketchSpace();
   uint32_t totalSketch = sketchSize + freeSketch;
-  int flashPct = totalSketch > 0 ? (int)(((uint64_t)sketchSize * 100) / totalSketch) : 0;
+  int flashPct =
+      totalSketch > 0 ? (int)(((uint64_t)sketchSize * 100) / totalSketch) : 0;
   uint32_t flashChip = ESP.getFlashChipSize();
   j += ",\"flash\":{\"used\":" + String(sketchSize) +
-       ",\"free\":" + String(freeSketch) +
-       ",\"total\":" + String(totalSketch) +
-       ",\"chip\":" + String(flashChip) +
-       ",\"pct\":" + String(flashPct) + "}";
+       ",\"free\":" + String(freeSketch) + ",\"total\":" + String(totalSketch) +
+       ",\"chip\":" + String(flashChip) + ",\"pct\":" + String(flashPct) + "}";
   String owner = getOwnerName();
   if (owner.length() > 0) {
     j += ",\"owner\":\"" + escJson(owner) + "\"";
@@ -991,8 +1001,7 @@ void handleConfigApi() {
        "\",\"sound\":" + String(touchFeedbackSound ? "true" : "false") +
        ",\"deb\":" + String(touchDebounceMs) + "},";
   const char *skinNames[SKIN_COUNT] = {
-      "kiwi",           "vector",         "pixel",
-      "squircle_solid", "squircle_glint", "mecha"};
+      "kiwi", "vector", "pixel", "squircle_solid", "squircle_glint", "mecha"};
   int skinIndex = (int)currentEyeSkin;
   if (skinIndex < 0 || skinIndex >= SKIN_COUNT)
     skinIndex = 0;

@@ -12,17 +12,18 @@ export default defineConfig({
     },
   },
   server: {
+    host: true,
     port: 5173,
     proxy: {
-      '/status': 'http://localhost:8080',
-      '/logs': 'http://localhost:8080',
-      '/config': 'http://localhost:8080',
-      '/do': 'http://localhost:8080',
-      '/save': 'http://localhost:8080',
-      '/animations': 'http://localhost:8080',
-      '/scan': 'http://localhost:8080',
-      '/ota': 'http://localhost:8080',
-      '/api': 'http://localhost:8080',
+      '/status': { target: 'http://192.168.1.16', changeOrigin: true },
+      '/logs': { target: 'http://192.168.1.16', changeOrigin: true },
+      '/config': { target: 'http://192.168.1.16', changeOrigin: true },
+      '/do': { target: 'http://192.168.1.16', changeOrigin: true },
+      '/save': { target: 'http://192.168.1.16', changeOrigin: true },
+      '/animations': { target: 'http://192.168.1.16', changeOrigin: true },
+      '/scan': { target: 'http://192.168.1.16', changeOrigin: true },
+      '/ota': { target: 'http://192.168.1.16', changeOrigin: true },
+      '/api': { target: 'http://192.168.1.16', changeOrigin: true },
     }
   },
   build: {

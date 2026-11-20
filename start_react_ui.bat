@@ -12,6 +12,9 @@ if not exist "react_ui\node_modules" (
     cd ..
 )
 
+echo Cleaning stale dev server on port 5173 if running...
+for /f "tokens=5" %%a in ('netstat -aon ^| findstr :5173 ^| findstr LISTENING') do taskkill /F /PID %%a >nul 2>&1
+
 echo Starting Vite dev server at http://localhost:5173
 start http://localhost:5173
 cd react_ui

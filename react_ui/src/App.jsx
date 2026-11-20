@@ -66,9 +66,14 @@ export default function App() {
     }
   }, [])
 
-  const [robotHost, setRobotHost] = useState(() =>
-    localStorage.getItem('kiwi_robot_host') || ''
-  )
+  const [robotHost, setRobotHost] = useState(() => {
+    const saved = localStorage.getItem('kiwi_robot_host')
+    if (saved) return saved
+    if (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
+      return 'http://192.168.1.16'
+    }
+    return ''
+  })
   const [activeTab, setActiveTab] = useState('live')
   const [status, setStatus] = useState(null)
   const [config, setConfig] = useState(null)
@@ -118,7 +123,8 @@ export default function App() {
 
   const fetchStatus = useCallback(async () => {
     try {
-      const res = await fetch(`${getBaseUrl()}/status`, { signal: AbortSignal.timeout(2500) })
+      const url = getBaseUrl() ? `${getBaseUrl()}/status` : '/status'
+      const res = await fetch(url, { signal: AbortSignal.timeout(2500) })
       if (!res.ok) throw new Error('status failed')
       const newStatus = await res.json()
       setStatus(prev => ({
@@ -128,29 +134,57 @@ export default function App() {
       }))
       setConnected(true)
     } catch {
+      if (getBaseUrl()) {
+        try {
+          const res2 = await fetch('/status', { signal: AbortSignal.timeout(2000) })
+          if (res2.ok) {
+            const newStatus = await res2.json()
+            setStatus(prev => ({ ...(prev || {}), ...newStatus, logs: newStatus.logs ?? prev?.logs ?? [] }))
+            setConnected(true)
+            return
+          }
+        } catch {}
+      }
       setConnected(false)
     }
   }, [getBaseUrl])
 
   const fetchLogs = useCallback(async () => {
     try {
-      const res = await fetch(`${getBaseUrl()}/logs`, { signal: AbortSignal.timeout(3000) })
+      const url = getBaseUrl() ? `${getBaseUrl()}/logs` : '/logs'
+      const res = await fetch(url, { signal: AbortSignal.timeout(3000) })
       if (!res.ok) return
       const logData = await res.json()
       if (Array.isArray(logData)) {
         setStatus(prev => prev ? { ...prev, logs: logData } : { logs: logData })
       }
     } catch {
-      // background log poll error ignored
+      if (getBaseUrl()) {
+        try {
+          const res2 = await fetch('/logs', { signal: AbortSignal.timeout(2000) })
+          if (res2.ok) {
+            const logData = await res2.json()
+            if (Array.isArray(logData)) {
+              setStatus(prev => prev ? { ...prev, logs: logData } : { logs: logData })
+            }
+          }
+        } catch {}
+      }
     }
   }, [getBaseUrl])
 
   const fetchConfig = useCallback(async () => {
     try {
-      const res = await fetch(`${getBaseUrl()}/config`, { signal: AbortSignal.timeout(3000) })
+      const url = getBaseUrl() ? `${getBaseUrl()}/config` : '/config'
+      const res = await fetch(url, { signal: AbortSignal.timeout(3000) })
       if (res.ok) setConfig(await res.json())
     } catch (err) {
-      console.warn('Failed to load /config:', err)
+      if (getBaseUrl()) {
+        try {
+          const res2 = await fetch('/config', { signal: AbortSignal.timeout(2000) })
+          if (res2.ok) setConfig(await res2.json())
+        } catch {}
+      }
     }
   }, [getBaseUrl])
 

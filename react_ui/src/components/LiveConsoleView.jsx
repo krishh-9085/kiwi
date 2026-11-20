@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react'
+import React, { useState, useEffect, useMemo, useRef } from 'react'
 
 import KiwiEyes from './KiwiEyes'
 import KiwiLogo from './KiwiLogo'
@@ -141,6 +141,19 @@ export default function LiveConsoleView({
 }) {
 
   const [vol, setVol] = useState(70)
+  const lastUnmutedVol = useRef(70)
+
+  const handleToggleMute = () => {
+    if (vol > 0) {
+      lastUnmutedVol.current = vol;
+      setVol(0);
+      onTriggerAction('/do?vol=0');
+    } else {
+      const restoreVol = lastUnmutedVol.current > 0 ? lastUnmutedVol.current : 70;
+      setVol(restoreVol);
+      onTriggerAction(`/do?vol=${restoreVol}`);
+    }
+  };
 
   const [bright, setBright] = useState(90)
 
@@ -469,6 +482,15 @@ export default function LiveConsoleView({
                 const ramUsedPct = status?.heap?.pct ?? (freeKb ? Math.round(((totalKb - freeKb) / totalKb) * 100) : 44);
                 const cpuTemp = status?.temp != null ? Math.round(status.temp) : 46;
 
+                // PSRAM calculations (2MB High-Speed External RAM)
+                const hasPsram = Boolean(status?.psram && status.psram.total > 0);
+                const psramTotalKb = hasPsram ? Math.round(status.psram.total / 1024) : 0;
+                const psramFreeKb = hasPsram ? Math.round(status.psram.free / 1024) : 0;
+                const psramUsedKb = hasPsram ? Math.max(0, psramTotalKb - psramFreeKb) : 0;
+                const psramPct = hasPsram && psramTotalKb > 0 ? Math.round((psramUsedKb / psramTotalKb) * 100) : 0;
+                const psramFreeMb = hasPsram ? (psramFreeKb / 1024).toFixed(2) : '0';
+                const psramTotalMb = hasPsram ? (psramTotalKb / 1024).toFixed(0) : '0';
+
                 // Flash storage calculations
                 const flashUsed = status?.flash?.used ?? 1648200;
                 const flashFree = status?.flash?.free ?? 383416;
@@ -499,30 +521,38 @@ export default function LiveConsoleView({
                       <span style={{
                         fontSize: '9px',
                         fontWeight: 800,
-                        background: 'rgba(255, 255, 255, 0.18)',
+                        background: hasPsram ? 'rgba(52, 211, 153, 0.18)' : 'rgba(255, 255, 255, 0.18)',
+                        color: hasPsram ? '#34D399' : '#FFFFFF',
+                        border: hasPsram ? '1px solid rgba(52, 211, 153, 0.4)' : 'none',
                         padding: '2px 8px',
                         borderRadius: '999px',
                         letterSpacing: '0.04em',
                         whiteSpace: 'nowrap'
                       }}>
-                        ESP32-S3
+                        {hasPsram ? `ESP32-S3 • +${psramTotalMb}MB PSRAM ACTIVE` : 'ESP32-S3'}
                       </span>
                     </div>
 
                     {/* Stats Grid */}
-                    <div style={{ display: 'grid', gridTemplateColumns: '85px 1fr 1fr', gap: '14px', marginTop: '12px', alignItems: 'center' }}>
+                    <div style={{
+                      display: 'grid',
+                      gridTemplateColumns: hasPsram ? '72px 1fr 1fr 1fr' : '85px 1fr 1fr',
+                      gap: '12px',
+                      marginTop: '12px',
+                      alignItems: 'center'
+                    }}>
                       {/* CPU Core Temp */}
                       <div>
                         <span style={{ fontSize: '11px', opacity: 0.8, fontWeight: 600, display: 'block' }}>CPU Temp</span>
-                        <span style={{ fontSize: '24px', fontWeight: 800, letterSpacing: '-0.02em', color: '#FFFFFF' }}>
+                        <span style={{ fontSize: '22px', fontWeight: 800, letterSpacing: '-0.02em', color: '#FFFFFF' }}>
                           {cpuTemp}°<span style={{ fontSize: '13px', fontWeight: 600, opacity: 0.85 }}>C</span>
                         </span>
                       </div>
 
-                      {/* RAM / Heap Usage */}
+                      {/* Internal SRAM Usage */}
                       <div>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '3px' }}>
-                          <span style={{ fontSize: '11px', opacity: 0.8, fontWeight: 600 }}>RAM Usage</span>
+                          <span style={{ fontSize: '11px', opacity: 0.8, fontWeight: 600 }}>SRAM (Heap)</span>
                           <span style={{ fontSize: '11px', fontWeight: 700, color: '#38BDF8' }}>
                             {freeKb} KB <span style={{ opacity: 0.75, fontWeight: 500, color: '#FFFFFF' }}>free</span>
                           </span>
@@ -549,7 +579,39 @@ export default function LiveConsoleView({
                         </div>
                       </div>
 
-                      {/* Flash Storage Usage */}
+                      {/* External PSRAM Usage (2MB High-Speed) */}
+                      {hasPsram && (
+                        <div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '3px' }}>
+                            <span style={{ fontSize: '11px', opacity: 0.8, fontWeight: 600, color: '#34D399' }}>2MB PSRAM</span>
+                            <span style={{ fontSize: '11px', fontWeight: 700, color: '#34D399' }}>
+                              {psramFreeKb >= 1024 ? `${psramFreeMb} MB` : `${psramFreeKb} KB`} <span style={{ opacity: 0.75, fontWeight: 500, color: '#FFFFFF' }}>free</span>
+                            </span>
+                          </div>
+                          {/* Progress Bar */}
+                          <div style={{
+                            width: '100%',
+                            height: '6px',
+                            borderRadius: '3px',
+                            background: 'rgba(255, 255, 255, 0.2)',
+                            overflow: 'hidden'
+                          }}>
+                            <div style={{
+                              height: '100%',
+                              width: `${Math.min(100, Math.max(0, psramPct))}%`,
+                              background: '#34D399',
+                              borderRadius: '3px',
+                              transition: 'width 0.4s ease'
+                            }} />
+                          </div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '3px' }}>
+                            <span style={{ fontSize: '9px', opacity: 0.7 }}>{psramPct}% used ({psramUsedKb} KB)</span>
+                            <span style={{ fontSize: '9px', opacity: 0.7 }}>{psramTotalMb} MB Chip</span>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Flash Storage Space */}
                       <div>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '3px' }}>
                           <span style={{ fontSize: '11px', opacity: 0.8, fontWeight: 600 }}>Flash Storage</span>
@@ -674,55 +736,40 @@ export default function LiveConsoleView({
 
 
             {/* Telemetry Progress Bars */}
-
             <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: '12px', marginTop: '10px' }}>
-
               <div className="flux-progress-row">
-
                 <span className="flux-progress-val">{status?.heap?.pct != null ? `${100 - status.heap.pct}%` : '55%'}</span>
-
                 <div className="flux-progress-track">
-
                   <div className="flux-progress-fill-purple" style={{ width: status?.heap?.pct != null ? `${100 - status.heap.pct}%` : '55%' }} />
-
                 </div>
-
-                <span className="flux-progress-label">Free Heap</span>
-
+                <span className="flux-progress-label">Free Heap ({status?.heap?.free ? Math.round(status.heap.free / 1024) : 178} KB)</span>
               </div>
 
-
+              {status?.psram?.total ? (
+                <div className="flux-progress-row">
+                  <span className="flux-progress-val" style={{ color: '#34d399' }}>{status?.psram?.pct != null ? `${100 - status.psram.pct}%` : '100%'}</span>
+                  <div className="flux-progress-track">
+                    <div style={{ background: '#34d399', height: '100%', borderRadius: '4px', width: status?.psram?.pct != null ? `${100 - status.psram.pct}%` : '100%' }} />
+                  </div>
+                  <span className="flux-progress-label" style={{ color: '#34d399' }}>Free PSRAM ({Math.round(status.psram.free / 1024)} KB / 2MB)</span>
+                </div>
+              ) : null}
 
               <div className="flux-progress-row">
-
                 <span className="flux-progress-val">85%</span>
-
                 <div className="flux-progress-track">
-
                   <div className="flux-progress-fill-dark" style={{ width: '85%' }} />
-
                 </div>
-
                 <span className="flux-progress-label">Wi-Fi Signal</span>
-
               </div>
-
-
 
               <div className="flux-progress-row">
-
                 <span className="flux-progress-val">{vol}%</span>
-
                 <div className="flux-progress-track">
-
                   <div className="flux-progress-fill-lime" style={{ width: `${vol}%` }} />
-
                 </div>
-
                 <span className="flux-progress-label">Volume</span>
-
               </div>
-
             </div>
 
           </div>
@@ -1476,20 +1523,25 @@ export default function LiveConsoleView({
 
 
 
-        {/* Bento 2-Column Grid matching reference image */}
-
+        {/* Bento 2-Column Grid (Top Left: Vitals, Top Right: Online | Bottom Left: Color, Bottom Right: Suggestions) */}
         <div className="mobile-bento-grid">
-
-          {/* Left Column: Vitals (Purple) + Sleep Action (Coral) */}
-
+          {/* Left Column: Vitals (Top) + Color Picker (Bottom) */}
           <div className="mobile-bento-col">
-
             {/* Card 1: Live Hardware Telemetry (RAM, Flash & CPU Temp) */}
             {(() => {
               const freeKb = status?.heap?.free ? Math.round(status.heap.free / 1024) : 178;
               const totalKb = status?.heap?.total ? Math.round(status.heap.total / 1024) : 320;
               const ramUsedPct = status?.heap?.pct ?? (freeKb ? Math.round(((totalKb - freeKb) / totalKb) * 100) : 44);
               const cpuTemp = status?.temp != null ? Math.round(status.temp) : 46;
+
+              // PSRAM calculations (2MB High-Speed External RAM)
+              const hasPsram = Boolean(status?.psram && status.psram.total > 0);
+              const psramTotalKb = hasPsram ? Math.round(status.psram.total / 1024) : 0;
+              const psramFreeKb = hasPsram ? Math.round(status.psram.free / 1024) : 0;
+              const psramUsedKb = hasPsram ? Math.max(0, psramTotalKb - psramFreeKb) : 0;
+              const psramPct = hasPsram && psramTotalKb > 0 ? Math.round((psramUsedKb / psramTotalKb) * 100) : 0;
+              const psramFreeMb = hasPsram ? (psramFreeKb / 1024).toFixed(2) : '0';
+              const psramTotalMb = hasPsram ? (psramTotalKb / 1024).toFixed(0) : '0';
 
               // Flash storage calculations
               const flashUsed = status?.flash?.used ?? 1648200;
@@ -1503,103 +1555,146 @@ export default function LiveConsoleView({
 
               return (
                 <div style={{
-                  background: 'linear-gradient(145deg, #181B24 0%, #101218 100%)',
+                  background: 'var(--card-white)',
+                  border: '1px solid var(--border-light)',
                   borderRadius: '22px',
                   padding: '13px 14px',
-                  color: '#FFFFFF',
-                  border: '1px solid rgba(255, 255, 255, 0.08)',
+                  color: 'var(--text-dark)',
                   display: 'flex',
                   flexDirection: 'column',
+                  justifyContent: 'space-between',
                   gap: '8px',
-                  boxShadow: '0 8px 24px rgba(0, 0, 0, 0.22)',
+                  boxShadow: 'var(--shadow-card)',
                   position: 'relative',
-                  overflow: 'hidden'
+                  boxSizing: 'border-box'
                 }}>
                   {/* Header */}
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
-                    <span style={{ fontSize: '11px', opacity: 0.9, fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+                    <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-dark)', letterSpacing: '0.04em', textTransform: 'uppercase' }}>
                       Vitals
                     </span>
                     <span style={{
                       fontSize: '9px',
                       fontWeight: 800,
-                      background: 'rgba(255, 255, 255, 0.18)',
+                      background: 'rgba(16, 185, 129, 0.14)',
+                      color: '#059669',
+                      border: '1px solid rgba(16, 185, 129, 0.3)',
                       padding: '2px 7px',
                       borderRadius: '999px',
-                      letterSpacing: '0.03em',
+                      letterSpacing: '0.04em',
                       whiteSpace: 'nowrap'
                     }}>
                       ESP32-S3
                     </span>
                   </div>
 
-                  {/* Telemetry Metrics */}
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                    {/* CPU Core Temp */}
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-                      <span style={{ fontSize: '11px', opacity: 0.8, fontWeight: 600 }}>CPU Temp</span>
-                      <span style={{ fontSize: '18px', fontWeight: 800, letterSpacing: '-0.02em', color: '#FFFFFF' }}>
-                        {cpuTemp}°<span style={{ fontSize: '11px', fontWeight: 600, opacity: 0.85 }}>C</span>
-                      </span>
-                    </div>
+                  {/* CPU Core Temp - Sleek Compact Bar */}
+                  <div style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    background: 'var(--card-muted)',
+                    border: '1px solid var(--border-light)',
+                    padding: '3px 8px',
+                    borderRadius: '8px'
+                  }}>
+                    <span style={{ fontSize: '10.5px', color: 'var(--text-muted)', fontWeight: 600 }}>CPU Temp</span>
+                    <span style={{ fontSize: '12px', fontWeight: 800, color: cpuTemp > 75 ? '#EF4444' : 'var(--text-dark)' }}>
+                      {cpuTemp}°C
+                    </span>
+                  </div>
 
-                    {/* RAM / Heap Usage */}
+                  {/* Telemetry Metrics */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}>
+                    {/* SRAM (Heap) Usage */}
                     <div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '3px' }}>
-                        <span style={{ fontSize: '11px', opacity: 0.8, fontWeight: 600 }}>RAM Usage</span>
-                        <span style={{ fontSize: '11px', fontWeight: 700, color: '#38BDF8' }}>
-                          {freeKb} KB <span style={{ opacity: 0.75, fontWeight: 500, color: '#FFFFFF' }}>free</span>
+                        <span style={{ fontSize: '10.5px', color: 'var(--text-dark)', fontWeight: 600 }}>SRAM</span>
+                        <span style={{ fontSize: '10.5px', fontWeight: 700, color: '#0284C7' }}>
+                          {freeKb} KB <span style={{ opacity: 0.65, fontWeight: 500, color: 'var(--text-muted)' }}>free</span>
                         </span>
                       </div>
-                      {/* Progress Bar */}
                       <div style={{
                         width: '100%',
-                        height: '5px',
-                        borderRadius: '3px',
-                        background: 'rgba(255, 255, 255, 0.2)',
+                        height: '4px',
+                        borderRadius: '2px',
+                        background: 'var(--card-muted)',
+                        border: '1px solid var(--border-light)',
                         overflow: 'hidden'
                       }}>
                         <div style={{
                           height: '100%',
                           width: `${Math.min(100, Math.max(0, ramUsedPct))}%`,
-                          background: ramUsedPct > 85 ? '#F43F5E' : '#38BDF8',
-                          borderRadius: '3px',
+                          background: ramUsedPct > 85 ? '#EF4444' : '#0284C7',
+                          borderRadius: '2px',
                           transition: 'width 0.4s ease'
                         }} />
                       </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '3px' }}>
-                        <span style={{ fontSize: '9px', opacity: 0.7 }}>{ramUsedPct}% used</span>
-                        <span style={{ fontSize: '9px', opacity: 0.7 }}>{totalKb} KB total</span>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '2px' }}>
+                        <span style={{ fontSize: '8.5px', color: 'var(--text-muted)' }}>{ramUsedPct}% used</span>
+                        <span style={{ fontSize: '8.5px', color: 'var(--text-muted)' }}>{totalKb} KB</span>
                       </div>
                     </div>
+
+                    {/* PSRAM (External 2MB RAM) */}
+                    {hasPsram && (
+                      <div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '3px' }}>
+                          <span style={{ fontSize: '10.5px', fontWeight: 600, color: '#059669' }}>2MB PSRAM</span>
+                          <span style={{ fontSize: '10.5px', fontWeight: 700, color: '#059669' }}>
+                            {psramFreeKb >= 1024 ? `${psramFreeMb} MB` : `${psramFreeKb} KB`} <span style={{ opacity: 0.65, fontWeight: 500, color: 'var(--text-muted)' }}>free</span>
+                          </span>
+                        </div>
+                        <div style={{
+                          width: '100%',
+                          height: '4px',
+                          borderRadius: '2px',
+                          background: 'var(--card-muted)',
+                          border: '1px solid var(--border-light)',
+                          overflow: 'hidden'
+                        }}>
+                          <div style={{
+                            height: '100%',
+                            width: `${Math.min(100, Math.max(0, psramPct))}%`,
+                            background: '#10B981',
+                            borderRadius: '2px',
+                            transition: 'width 0.4s ease'
+                          }} />
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '2px' }}>
+                          <span style={{ fontSize: '8.5px', color: 'var(--text-muted)' }}>{psramPct}% used ({psramUsedKb} KB)</span>
+                          <span style={{ fontSize: '8.5px', color: 'var(--text-muted)' }}>{psramTotalMb} MB Chip</span>
+                        </div>
+                      </div>
+                    )}
 
                     {/* Flash Storage Usage */}
                     <div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '3px' }}>
-                        <span style={{ fontSize: '11px', opacity: 0.8, fontWeight: 600 }}>Flash Storage</span>
-                        <span style={{ fontSize: '11px', fontWeight: 700, color: '#A78BFA' }}>
-                          {flashFreeMb} MB <span style={{ opacity: 0.75, fontWeight: 500, color: '#FFFFFF' }}>free</span>
+                        <span style={{ fontSize: '10.5px', color: 'var(--text-dark)', fontWeight: 600 }}>Flash Storage</span>
+                        <span style={{ fontSize: '10.5px', fontWeight: 700, color: '#7C3AED' }}>
+                          {flashFreeMb} MB <span style={{ opacity: 0.65, fontWeight: 500, color: 'var(--text-muted)' }}>free</span>
                         </span>
                       </div>
-                      {/* Progress Bar */}
                       <div style={{
                         width: '100%',
-                        height: '5px',
-                        borderRadius: '3px',
-                        background: 'rgba(255, 255, 255, 0.2)',
+                        height: '4px',
+                        borderRadius: '2px',
+                        background: 'var(--card-muted)',
+                        border: '1px solid var(--border-light)',
                         overflow: 'hidden'
                       }}>
                         <div style={{
                           height: '100%',
                           width: `${Math.min(100, Math.max(0, flashPct))}%`,
-                          background: flashPct > 90 ? '#F43F5E' : '#A78BFA',
-                          borderRadius: '3px',
+                          background: flashPct > 90 ? '#EF4444' : '#8B5CF6',
+                          borderRadius: '2px',
                           transition: 'width 0.4s ease'
                         }} />
                       </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '3px' }}>
-                        <span style={{ fontSize: '9px', opacity: 0.7 }}>{flashPct}% used ({flashUsedMb}M)</span>
-                        <span style={{ fontSize: '9px', opacity: 0.7 }}>{flashTotalMb}M ({flashChipMb}M Chip)</span>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '2px' }}>
+                        <span style={{ fontSize: '8.5px', color: 'var(--text-muted)' }}>{flashPct}% used</span>
+                        <span style={{ fontSize: '8.5px', color: 'var(--text-muted)' }}>{flashChipMb} MB Chip</span>
                       </div>
                     </div>
                   </div>
@@ -1607,9 +1702,7 @@ export default function LiveConsoleView({
               );
             })()}
 
-
-
-            {/* Card 2: ESP32-S3 Built-in Pin 48 RGB LED HeroUI ColorPicker */}
+            {/* Card 2: Bottom Left - ESP32-S3 Pin 48 RGB LED Mood Light */}
             <Esp32LedColorPicker
               onColorChange={(hex) => onTriggerAction(`/do?rgb_color=${encodeURIComponent(hex.replace('#', ''))}`)}
               onClearOverride={() => onTriggerAction('/do?rgb_clear=1')}
@@ -1618,46 +1711,47 @@ export default function LiveConsoleView({
               rgbEnabled={status?.rgbLed?.enabled ?? true}
               showTitle={false}
               showHex={false}
-              style={{ flex: 1, minHeight: 0 }}
+              style={{ flex: 1, minHeight: '92px', boxSizing: 'border-box' }}
             />
-
           </div>
 
-
-
-          {/* Right Column: Connection Status (Green/Red) + Suggestions (White) */}
+          {/* Right Column: Online Link (Top) + Suggestions (Bottom) */}
           <div className="mobile-bento-col">
-            {/* Card 3: Online / Offline Link Status */}
+            {/* Card 3: Top Right - Online / Offline Link Status */}
             <div
               onClick={() => onRefresh?.()}
               style={{
-                background: connected ? '#10B981' : '#EF4444',
-                borderRadius: '20px',
-                padding: '14px 14px',
+                background: connected
+                  ? 'linear-gradient(145deg, #10B981 0%, #059669 100%)'
+                  : 'linear-gradient(145deg, #EF4444 0%, #DC2626 100%)',
+                borderRadius: '22px',
+                padding: '13px 14px',
                 color: '#FFFFFF',
                 cursor: 'pointer',
                 display: 'flex',
                 alignItems: 'center',
                 gap: '10px',
                 boxShadow: connected
-                  ? '0 6px 18px rgba(16, 185, 129, 0.28)'
-                  : '0 6px 18px rgba(239, 68, 68, 0.28)',
+                  ? '0 8px 22px rgba(16, 185, 129, 0.28)'
+                  : '0 8px 22px rgba(239, 68, 68, 0.28)',
+                border: '1px solid rgba(255, 255, 255, 0.2)',
                 transition: 'all 0.2s cubic-bezier(0.16, 1, 0.3, 1)'
               }}
             >
               <div style={{
-                width: '32px', height: '32px', borderRadius: '50%',
-                background: 'rgba(255, 255, 255, 0.2)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                width: '32px',
+                height: '32px',
+                borderRadius: '50%',
+                background: 'rgba(255, 255, 255, 0.22)',
+                backdropFilter: 'blur(6px)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
                 flexShrink: 0
               }}>
-                {connected ? (
-                  <Wifi size={16} color="#FFFFFF" />
-                ) : (
-                  <WifiOff size={16} color="#FFFFFF" />
-                )}
+                {connected ? <Wifi size={16} color="#FFFFFF" /> : <WifiOff size={16} color="#FFFFFF" />}
               </div>
-              <div>
+              <div style={{ flex: 1, minWidth: 0 }}>
                 <span style={{ fontSize: '10px', opacity: 0.85, fontWeight: 600, display: 'block' }}>
                   Robot Link
                 </span>
@@ -1667,72 +1761,58 @@ export default function LiveConsoleView({
               </div>
             </div>
 
-
-
-            {/* Card 4: Suggestions / Smart Controls */}
+            {/* Card 4: Bottom Right - Suggestions / Smart Controls */}
             <div style={{
               background: 'var(--card-white)',
               border: '1px solid var(--border-light)',
               borderRadius: '22px',
-              padding: '12px 10px',
+              padding: '13px 14px',
               display: 'flex',
               flexDirection: 'column',
               justifyContent: 'space-between',
-              gap: '10px',
+              gap: '6px',
               boxShadow: 'var(--shadow-card)',
               width: '100%',
-              boxSizing: 'border-box',
               flex: 1,
-              minHeight: 0
+              boxSizing: 'border-box'
             }}>
+              {/* Header */}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-dark)' }}>
+                <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-dark)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                   Suggestions
                 </span>
                 <span style={{
                   fontSize: '9px', fontWeight: 800, padding: '2px 7px',
-                  borderRadius: '999px', background: 'var(--card-muted)', color: 'var(--text-muted)'
+                  borderRadius: '999px', background: 'var(--card-muted)', color: 'var(--text-muted)',
+                  border: '1px solid var(--border-light)'
                 }}>
-                  All
+                  Smart
                 </span>
               </div>
 
-              {/* Row 1: Daily Greetings */}
+              {/* Row 1: Daily Greetings Tile */}
               <div style={{
+                background: 'var(--card-muted)',
+                border: '1px solid var(--border-light)',
+                borderRadius: '12px',
+                padding: '6px 9px',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
                 gap: '6px',
-                padding: '2px 0',
-                minHeight: '34px',
                 boxSizing: 'border-box'
               }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flex: 1, minWidth: 0 }}>
-                  <div style={{
-                    width: '26px', height: '26px', borderRadius: '7px',
-                    background: 'rgba(99, 102, 241, 0.15)', color: '#818CF8',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0
-                  }}>
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      width="14"
-                      height="14"
-                      viewBox="0 0 24 24"
-                      style={{ display: 'block' }}
-                    >
-                      <path
-                        fill="currentColor"
-                        d="M23 17c0 3.31-2.69 6-6 6v-1.5c2.5 0 4.5-2 4.5-4.5zM1 7c0-3.31 2.69-6 6-6v1.5c-2.5 0-4.5 2-4.5 4.5zm7-2.68l-4.59 4.6c-3.22 3.22-3.22 8.45 0 11.67s8.45 3.22 11.67 0l7.07-7.09c.49-.47.49-1.26 0-1.75a1.25 1.25 0 0 0-1.77 0l-4.42 4.42l-.71-.71l6.54-6.54c.49-.49.49-1.28 0-1.77s-1.29-.49-1.79 0L14.19 13l-.69-.73l6.87-6.89c.49-.49.49-1.28 0-1.77s-1.28-.49-1.77 0l-6.89 6.89l-.71-.7l5.5-5.48c.5-.49.5-1.28 0-1.77s-1.28-.49-1.77 0l-7.62 7.62a4 4 0 0 1-.33 5.28l-.71-.71a3 3 0 0 0 0-4.24l-.35-.35l4.07-4.07c.49-.49.49-1.28 0-1.77c-.5-.48-1.29-.48-1.79.01"
-                      />
-                    </svg>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: '10.5px', fontWeight: 700, color: 'var(--text-dark)', lineHeight: 1.2 }}>
+                    Greetings
                   </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-dark)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                      Greetings
-                    </div>
-                    <div style={{ fontSize: '9px', color: 'var(--text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                      {greetingsEnabled ? 'Active' : 'Disabled'}
-                    </div>
+                  <div style={{
+                    fontSize: '9px',
+                    color: greetingsEnabled ? '#059669' : 'var(--text-muted)',
+                    fontWeight: greetingsEnabled ? 700 : 500,
+                    marginTop: '2px'
+                  }}>
+                    {greetingsEnabled ? 'Active' : 'Disabled'}
                   </div>
                 </div>
                 <button
@@ -1741,53 +1821,52 @@ export default function LiveConsoleView({
                   style={{
                     width: '38px',
                     minWidth: '38px',
-                    maxWidth: '38px',
                     height: '24px',
                     boxSizing: 'border-box',
                     padding: 0,
                     fontSize: '10px',
-                    fontWeight: 700,
+                    fontWeight: 800,
                     borderRadius: '999px',
                     border: '1px solid ' + (greetingsEnabled ? 'var(--accent-lime)' : 'var(--border-light)'),
-                    background: greetingsEnabled ? 'var(--accent-lime)' : 'var(--card-muted)',
-                    color: greetingsEnabled ? '#12141A' : 'var(--text-dark)',
+                    background: greetingsEnabled ? 'var(--accent-lime)' : 'var(--card-white)',
+                    color: greetingsEnabled ? '#12141A' : 'var(--text-muted)',
                     cursor: 'pointer',
                     display: 'inline-flex',
                     alignItems: 'center',
                     justifyContent: 'center',
                     textAlign: 'center',
-                    flexShrink: 0
+                    flexShrink: 0,
+                    boxShadow: greetingsEnabled ? '0 2px 6px rgba(210, 250, 75, 0.3)' : 'none',
+                    transition: 'all 0.18s ease'
                   }}
                 >
                   {greetingsEnabled ? 'ON' : 'OFF'}
                 </button>
               </div>
 
-              {/* Row 2: Wake Word (FluxSelect Dropdown + ON/OFF) */}
+              {/* Row 2: Wake Word (Alexa) Tile */}
               <div style={{
+                background: 'var(--card-muted)',
+                border: '1px solid var(--border-light)',
+                borderRadius: '12px',
+                padding: '6px 9px',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
                 gap: '6px',
-                padding: '2px 0',
-                minHeight: '34px',
                 boxSizing: 'border-box'
               }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flex: 1, minWidth: 0 }}>
-                  <div style={{
-                    width: '26px', height: '26px', borderRadius: '7px',
-                    background: 'rgba(16, 185, 129, 0.15)', color: '#34D399',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0
-                  }}>
-                    <Mic size={13} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: '10.5px', fontWeight: 700, color: 'var(--text-dark)', lineHeight: 1.2 }}>
+                    Wake Word
                   </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-dark)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginBottom: '2px' }}>
-                      Wake Word
-                    </div>
-                    <div style={{ fontSize: '10px', fontWeight: 600, color: 'var(--text-muted)', lineHeight: '14px' }}>
-                      Alexa
-                    </div>
+                  <div style={{
+                    fontSize: '9px',
+                    color: wwEnabled ? '#0284C7' : 'var(--text-muted)',
+                    fontWeight: wwEnabled ? 700 : 500,
+                    marginTop: '2px'
+                  }}>
+                    {wwEnabled ? '“Alexa”' : 'Disabled'}
                   </div>
                 </div>
                 <button
@@ -1796,58 +1875,52 @@ export default function LiveConsoleView({
                   style={{
                     width: '38px',
                     minWidth: '38px',
-                    maxWidth: '38px',
                     height: '24px',
                     boxSizing: 'border-box',
                     padding: 0,
                     fontSize: '10px',
-                    fontWeight: 700,
+                    fontWeight: 800,
                     borderRadius: '999px',
                     border: '1px solid ' + (wwEnabled ? 'var(--accent-lime)' : 'var(--border-light)'),
-                    background: wwEnabled ? 'var(--accent-lime)' : 'var(--card-muted)',
-                    color: wwEnabled ? '#12141A' : 'var(--text-dark)',
+                    background: wwEnabled ? 'var(--accent-lime)' : 'var(--card-white)',
+                    color: wwEnabled ? '#12141A' : 'var(--text-muted)',
                     cursor: 'pointer',
                     display: 'inline-flex',
                     alignItems: 'center',
                     justifyContent: 'center',
                     textAlign: 'center',
-                    flexShrink: 0
+                    flexShrink: 0,
+                    boxShadow: wwEnabled ? '0 2px 6px rgba(210, 250, 75, 0.3)' : 'none',
+                    transition: 'all 0.18s ease'
                   }}
                 >
                   {wwEnabled ? 'ON' : 'OFF'}
                 </button>
               </div>
 
-              {/* Row 3: Boredom Idle Chatter (FluxSelect Dropdown + ON/OFF) */}
+              {/* Row 3: Boredom Idle Chatter Tile */}
               <div style={{
+                background: 'var(--card-muted)',
+                border: '1px solid var(--border-light)',
+                borderRadius: '12px',
+                padding: '6px 9px',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
                 gap: '6px',
-                padding: '2px 0',
-                minHeight: '34px',
                 boxSizing: 'border-box'
               }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flex: 1, minWidth: 0 }}>
-                  <div style={{
-                    width: '26px', height: '26px', borderRadius: '7px',
-                    background: 'rgba(168, 85, 247, 0.15)', color: '#C084FC',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0
-                  }}>
-                    <Coffee size={13} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: '10.5px', fontWeight: 700, color: 'var(--text-dark)', lineHeight: 1.2 }}>
+                    Idle Chatter
                   </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-dark)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginBottom: '2px' }}>
-                      Idle Chatter
-                    </div>
-                    <div style={{ width: '100%', maxWidth: '60px' }}>
-                      <FluxSelect
-                        micro={true}
-                        value={boredomMins}
-                        onChange={(e) => handleBoredomInterval(e.target.value)}
-                        options={MOBILE_BOREDOM_OPTIONS}
-                      />
-                    </div>
+                  <div style={{ width: '54px', marginTop: '3px' }}>
+                    <FluxSelect
+                      micro={true}
+                      value={boredomMins}
+                      onChange={(e) => handleBoredomInterval(e.target.value)}
+                      options={MOBILE_BOREDOM_OPTIONS}
+                    />
                   </div>
                 </div>
                 <button
@@ -1856,32 +1929,86 @@ export default function LiveConsoleView({
                   style={{
                     width: '38px',
                     minWidth: '38px',
-                    maxWidth: '38px',
                     height: '24px',
                     boxSizing: 'border-box',
                     padding: 0,
                     fontSize: '10px',
-                    fontWeight: 700,
+                    fontWeight: 800,
                     borderRadius: '999px',
                     border: '1px solid ' + (boredomEnabled ? 'var(--accent-lime)' : 'var(--border-light)'),
-                    background: boredomEnabled ? 'var(--accent-lime)' : 'var(--card-muted)',
-                    color: boredomEnabled ? '#12141A' : 'var(--text-dark)',
+                    background: boredomEnabled ? 'var(--accent-lime)' : 'var(--card-white)',
+                    color: boredomEnabled ? '#12141A' : 'var(--text-muted)',
                     cursor: 'pointer',
                     display: 'inline-flex',
                     alignItems: 'center',
                     justifyContent: 'center',
                     textAlign: 'center',
-                    flexShrink: 0
+                    flexShrink: 0,
+                    boxShadow: boredomEnabled ? '0 2px 6px rgba(210, 250, 75, 0.3)' : 'none',
+                    transition: 'all 0.18s ease'
                   }}
                 >
                   {boredomEnabled ? 'ON' : 'OFF'}
                 </button>
               </div>
+
+              {/* Row 4: Speaker Audio (Mute / Unmute) Tile */}
+              <div style={{
+                background: 'var(--card-muted)',
+                border: '1px solid var(--border-light)',
+                borderRadius: '12px',
+                padding: '6px 9px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: '6px',
+                boxSizing: 'border-box'
+              }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: '10.5px', fontWeight: 700, color: 'var(--text-dark)', lineHeight: 1.2 }}>
+                    Speaker
+                  </div>
+                  <div style={{
+                    fontSize: '9px',
+                    color: vol > 0 ? '#10B981' : '#EF4444',
+                    fontWeight: 700,
+                    marginTop: '2px'
+                  }}>
+                    {vol > 0 ? `Active (${vol}%)` : 'Muted (0%)'}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleToggleMute}
+                  style={{
+                    width: '38px',
+                    minWidth: '38px',
+                    height: '24px',
+                    boxSizing: 'border-box',
+                    padding: 0,
+                    fontSize: '10px',
+                    fontWeight: 800,
+                    borderRadius: '999px',
+                    border: '1px solid ' + (vol > 0 ? 'var(--accent-lime)' : 'var(--border-light)'),
+                    background: vol > 0 ? 'var(--accent-lime)' : 'var(--card-white)',
+                    color: vol > 0 ? '#12141A' : 'var(--text-muted)',
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    textAlign: 'center',
+                    flexShrink: 0,
+                    boxShadow: vol > 0 ? '0 2px 6px rgba(210, 250, 75, 0.3)' : 'none',
+                    transition: 'all 0.18s ease'
+                  }}
+                >
+                  {vol > 0 ? 'ON' : 'OFF'}
+                </button>
+              </div>
             </div>
-
           </div>
-
         </div>
+
 
         {/* Voice Prompt Box for Mobile */}
         <div className="flux-white-card" style={{ padding: '16px' }}>

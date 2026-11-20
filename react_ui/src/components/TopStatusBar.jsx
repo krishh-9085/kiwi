@@ -87,6 +87,14 @@ export default function TopStatusBar({
             <span style={{ color: 'var(--text-dim)', marginRight: '4px' }}>TTS:</span>
             <strong style={{ color: '#c084fc' }}>{ttsBadge}</strong>
           </div>
+          {status?.psram?.total ? (
+            <div style={{ background: 'rgba(52, 211, 153, 0.1)', border: '1px solid rgba(52, 211, 153, 0.3)', padding: '4px 8px', borderRadius: '6px', fontSize: '11px', color: '#34d399' }}>
+              <span style={{ color: 'rgba(255,255,255,0.6)', marginRight: '4px' }}>PSRAM:</span>
+              <strong style={{ color: '#34d399' }}>
+                {Math.round(status.psram.free / 1024)} KB Free / {(status.psram.total / (1024 * 1024)).toFixed(0)}MB
+              </strong>
+            </div>
+          ) : null}
 
           {/* Update Available Check Button */}
           <button

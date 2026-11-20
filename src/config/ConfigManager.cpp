@@ -178,19 +178,22 @@ void loadConfig() {
   systemPrompt =
       sanitizeField(prefs.getString("prompt", DEFAULT_PROMPT), DEFAULT_PROMPT);
   if (systemPrompt.length() == 0 ||
+      systemPrompt.length() > 320 ||
       systemPrompt.indexOf("Keep every reply strictly") >= 0 ||
       systemPrompt.indexOf("chaotic buddy") >= 0 ||
       systemPrompt.indexOf("3.3 volts") >= 0 ||
       systemPrompt.indexOf("dodging coffee mugs") >= 0 ||
-      systemPrompt.indexOf("croissant") >= 0) {
+      systemPrompt.indexOf("croissant") >= 0 ||
+      systemPrompt.indexOf("fake drama") >= 0 ||
+      systemPrompt.indexOf("expressive, witty, and loyal") >= 0 ||
+      systemPrompt.indexOf("Never repeatedly append") < 0) {
     systemPrompt = DEFAULT_PROMPT;
     prefs.end();
     prefs.begin("myrobot", false);
     prefs.putString("prompt", systemPrompt);
     prefs.end();
     prefs.begin("myrobot", true);
-    Serial.println("[CONFIG] Replaced legacy rambling prompt with clean "
-                   "human-like prompt in NVS");
+    Serial.println("[CONFIG] Upgraded system prompt to ultra-compact Kiwi buddy in NVS");
   }
 
   llmProvider = sanitizeField(prefs.getString("llmprov", "groq"), "groq");

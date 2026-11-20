@@ -29,58 +29,10 @@
 
 
 static String getSmartActionInstruction() {
-
-
-
-  // Compact version: saves ~900 chars of TLS body (fixes HTTP -3 on ESP32-C3)
-
-
-
-  return " ACTIONS: Append action tag(s) after your spoken sentence. "
-
-
-
-         "[ACTION: volume N] [ACTION: skin NAME] [ACTION: emotion NAME] "
-
-
-
-         "[ACTION: timer SECS LABEL] [ACTION: marquee TEXT] "
-
-
-
-         "[ACTION: sleep] [ACTION: weather] [ACTION: time] [ACTION: sound NAME] [ACTION: light COLOR/on/off/dim/bright/bri N/rainbow/fire/breathe/mode] "
-         "If user tells you to sleep/go to sleep or says good night ('so jao', 'sone jao', 'good night', 'shubh ratri'), always append [ACTION: sleep]. "
-
-
-
-         "Skins: kiwi cat cyberpunk retro8bit matrix anime hearts steampunk "
-
-
-
-         "demon cyborg mecha sunglasses puppy hypno alien ninja round default. "
-
-
-
-         "Emotions: excited sad angry confused cool cute evil crying dead "
-
-
-
-         "shocked singing party nervous bored scared proud dizzy lovestruck "
-
-
-
-         "wink smug curious laughing sleepy. "
-
-
-
-         "Sounds: chime sparkle giggle kiss playful sleepy proud. "
-
-
-
-         "Always write your reply first, then the tag. Never tag alone.";
-
-
-
+  return " ACTIONS: Append [ACTION: tag] after answer if needed: "
+         "[ACTION: emotion happy/sad/angry/cool/surprised/sleepy/wink/laughing/excited] "
+         "[ACTION: skin kiwi/vector/pixel/mecha] [ACTION: volume 0-100] [ACTION: timer SECS] "
+         "[ACTION: sleep] (if user says so jao/sleep). Reply first, tag at end.";
 }
 
 static String getVoiceExpressionInstruction() {
@@ -761,7 +713,7 @@ String askGroq(const String &question, SentenceCallback onSentence) {
 
           "\"}],\"max_tokens\":" +
 
-          String(reqTokens) + ",\"temperature\":0.7";
+          String(reqTokens) + ",\"temperature\":0.85,\"top_p\":0.95";
 
   if (model.indexOf("gpt-oss") >= 0) {
 

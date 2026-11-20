@@ -105,7 +105,9 @@ void resyncTouch() {
 }
 
 // ---------- Touch Gesture Action Dispatcher ----------
-constexpr uint32_t DOUBLE_TAP_WINDOW_MS = 240;
+// Calibrated double-tap window: 320ms provides natural, reliable multi-tap detection
+// without accidental single-tap misfires (standard human double-tap rhythm).
+constexpr uint32_t DOUBLE_TAP_WINDOW_MS = 320;
 
 TouchAction getSingleTapAction(uint8_t pin) {
   if (pin == PIN_TOUCH_TOP)

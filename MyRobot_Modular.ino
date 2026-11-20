@@ -93,6 +93,13 @@ void setup() {
   Serial.println("==========================================");
   Serial.println("  MYROBOT (KIWI) - MODULAR ARCHITECTURE   ");
   Serial.println("==========================================");
+  if (psramFound()) {
+    Serial.printf("[PSRAM] Hardware 2MB PSRAM Initialized! Total: %u KB, Free: %u KB\n",
+                  (unsigned)(ESP.getPsramSize() / 1024),
+                  (unsigned)(ESP.getFreePsram() / 1024));
+  } else {
+    Serial.println("[PSRAM] Not initialized or not enabled.");
+  }
 
   randomSeed(esp_random());
   initBase64Lookup();

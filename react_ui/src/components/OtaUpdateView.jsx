@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react'
 import {
-  DownloadCloud, UploadCloud, RefreshCw, FileCode, Sparkles
+  DownloadCloud, UploadCloud, RefreshCw, FileCode, Sparkles, CheckCircle2
 } from 'lucide-react'
 import { Tooltip } from './base/tooltip/tooltip'
 
@@ -195,6 +195,14 @@ export default function OtaUpdateView({ status, getBaseUrl, onToast }) {
     }
   }
 
+  const installedVer = (status?.version || '2.0').replace(/^[vV]/, '')
+  const displayVersion = `v${installedVer}`
+  const releaseLabel = cloudRelease
+    ? (cloudRelease.name && cloudRelease.name.trim().toLowerCase() !== cloudRelease.tag.trim().toLowerCase()
+        ? `${cloudRelease.tag} — ${cloudRelease.name}`
+        : cloudRelease.tag)
+    : (cloudError || 'No releases found')
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
       {/* Title */}
@@ -297,43 +305,56 @@ export default function OtaUpdateView({ status, getBaseUrl, onToast }) {
           </button>
         </div>
 
-        {/* GitHub Wireless Update Dark Card */}
-        <div className="flux-dark-card" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+        {/* GitHub Wireless Update White Card */}
+        <div className="flux-white-card" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: '16px' }}>
           <div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', gap: '12px' }}>
               <span className="flux-card-title">
-                <Sparkles size={16} color="#38BDF8" />
+                <Sparkles size={16} color="var(--accent-cyan, #0EA5E9)" />
                 <span>GitHub Cloud Wireless Releases</span>
               </span>
               <span style={{
-                background: '#242730', padding: '4px 10px', borderRadius: '999px',
-                fontSize: '11px', color: '#FFFFFF'
+                background: (cloudRelease && !cloudRelease.updateAvailable) ? 'rgba(16, 185, 129, 0.1)' : 'var(--card-muted)',
+                border: (cloudRelease && !cloudRelease.updateAvailable) ? '1px solid rgba(16, 185, 129, 0.25)' : '1px solid var(--border-light)',
+                padding: '4px 10px',
+                borderRadius: '999px',
+                fontSize: '11px',
+                fontWeight: 600,
+                color: (cloudRelease && !cloudRelease.updateAvailable) ? '#059669' : 'var(--text-dark)',
+                whiteSpace: 'nowrap',
+                flexShrink: 0
               }}>
-                v{status?.version || '2.0'} Installed
+                {(cloudRelease && !cloudRelease.updateAvailable) ? `${displayVersion} · Latest` : `${displayVersion} Installed`}
               </span>
             </div>
 
-            <p style={{ fontSize: '13px', color: 'var(--text-light-muted)', lineHeight: 1.5 }}>
+            <p style={{ fontSize: '13px', color: 'var(--text-muted)', lineHeight: 1.5, margin: 0 }}>
               Kiwi can autonomously download and install verified firmware releases directly from the cloud repository.
             </p>
 
             <div style={{
-              background: '#0E1013', padding: '16px', borderRadius: '16px',
-              margin: '20px 0', display: 'flex', flexDirection: 'column', gap: '8px'
+              background: 'var(--card-subtle)',
+              border: '1px solid var(--border-light)',
+              padding: '16px',
+              borderRadius: '16px',
+              margin: '16px 0',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '8px'
             }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
-                <span style={{ color: 'var(--text-light-muted)' }}>Latest Cloud Release:</span>
-                <strong style={{ color: cloudRelease?.updateAvailable ? '#38BDF8' : '#FFFFFF' }}>
-                  {checkingCloud ? 'Checking GitHub repo...' : (cloudRelease ? `${cloudRelease.tag} (${cloudRelease.name})` : (cloudError || 'No releases found'))}
+                <span style={{ color: 'var(--text-muted)' }}>Latest Cloud Release:</span>
+                <strong style={{ color: cloudRelease?.updateAvailable ? '#0284C7' : '#059669' }}>
+                  {checkingCloud ? 'Checking GitHub repo...' : releaseLabel}
                 </strong>
               </div>
               {cloudRelease?.binName && (
-                <div style={{ fontSize: '11px', color: '#9CA3AF' }}>
-                  Firmware Asset: <strong>{cloudRelease.binName}</strong> ({(cloudRelease.binSize / 1024 / 1024).toFixed(2)} MB)
+                <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                  Firmware Asset: <strong style={{ color: 'var(--text-dark)' }}>{cloudRelease.binName}</strong> ({(cloudRelease.binSize / 1024 / 1024).toFixed(2)} MB)
                 </div>
               )}
               {cloudRelease?.notes && (
-                <div style={{ fontSize: '11px', color: '#6B7280', maxHeight: '70px', overflowY: 'auto', whiteSpace: 'pre-line' }}>
+                <div style={{ fontSize: '11px', color: 'var(--text-muted)', maxHeight: '70px', overflowY: 'auto', whiteSpace: 'pre-line' }}>
                   {cloudRelease.notes}
                 </div>
               )}
@@ -342,11 +363,11 @@ export default function OtaUpdateView({ status, getBaseUrl, onToast }) {
             {/* Live Progress Bar for GitHub Wireless OTA */}
             {installingGithub && (
               <div style={{ marginBottom: '16px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', marginBottom: '6px', color: '#FFFFFF' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', marginBottom: '6px', color: 'var(--text-dark)' }}>
                   <span>{otaProgressText || 'Downloading firmware from GitHub...'}</span>
                   <strong>{otaProgress?.progress || 0}%</strong>
                 </div>
-                <div style={{ height: '8px', background: '#242730', borderRadius: '999px', overflow: 'hidden' }}>
+                <div style={{ height: '8px', background: 'var(--card-muted)', borderRadius: '999px', overflow: 'hidden' }}>
                   <div style={{
                     height: '100%', width: `${otaProgress?.progress || 0}%`,
                     background: 'linear-gradient(90deg, #38BDF8, #0EA5E9)'
@@ -358,28 +379,33 @@ export default function OtaUpdateView({ status, getBaseUrl, onToast }) {
 
           <button
             onClick={cloudError && !cloudRelease ? checkGithubReleases : handleGithubInstall}
-            disabled={installingGithub || checkingCloud || (!cloudRelease && !cloudError)}
+            disabled={installingGithub || checkingCloud || (!cloudRelease && !cloudError) || (!cloudRelease?.updateAvailable && Boolean(cloudRelease))}
             className="flux-btn"
             style={{
               padding: '12px',
               justifyContent: 'center',
               background: installingGithub
-                ? '#374151'
+                ? 'var(--card-muted)'
                 : (cloudRelease?.updateAvailable
                   ? 'linear-gradient(135deg, #0EA5E9 0%, #0284C7 100%)'
-                  : (cloudRelease ? 'rgba(14, 165, 233, 0.15)' : '#242730')),
+                  : (cloudRelease ? 'rgba(16, 185, 129, 0.1)' : 'var(--card-muted)')),
               color: installingGithub
-                ? '#9CA3AF'
+                ? 'var(--text-muted)'
                 : (cloudRelease?.updateAvailable
                   ? '#FFFFFF'
-                  : (cloudRelease ? '#38BDF8' : '#9CA3AF')),
+                  : (cloudRelease ? '#059669' : 'var(--text-muted)')),
               border: (!cloudRelease?.updateAvailable && cloudRelease)
-                ? '1px solid rgba(56, 189, 248, 0.4)'
-                : 'none',
-              boxShadow: cloudRelease?.updateAvailable ? '0 4px 16px rgba(14, 165, 233, 0.35)' : 'none'
+                ? '1px solid rgba(16, 185, 129, 0.25)'
+                : '1px solid var(--border-light)',
+              boxShadow: cloudRelease?.updateAvailable ? '0 4px 16px rgba(14, 165, 233, 0.35)' : 'none',
+              cursor: (!cloudRelease?.updateAvailable && cloudRelease) ? 'default' : 'pointer'
             }}
           >
-            <DownloadCloud size={16} />
+            {cloudRelease && !cloudRelease.updateAvailable ? (
+              <CheckCircle2 size={16} color="#059669" />
+            ) : (
+              <DownloadCloud size={16} />
+            )}
             <span>
               {installingGithub
                 ? 'Installing Firmware Over Wi-Fi...'
@@ -388,10 +414,29 @@ export default function OtaUpdateView({ status, getBaseUrl, onToast }) {
                   : (cloudRelease?.updateAvailable
                     ? `⚡ Install ${cloudRelease.tag} Wirelessly`
                     : (cloudRelease
-                      ? `Install ${cloudRelease.tag} Wirelessly`
+                      ? `✓ Firmware is Up to Date (${cloudRelease.tag})`
                       : (cloudError ? 'Retry Checking GitHub' : 'Firmware is Up-To-Date'))))}
             </span>
           </button>
+
+          {cloudRelease && !cloudRelease.updateAvailable && !installingGithub && (
+            <div style={{ textAlign: 'center', marginTop: '4px' }}>
+              <button
+                type="button"
+                onClick={handleGithubInstall}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  color: 'var(--text-muted)',
+                  fontSize: '11px',
+                  textDecoration: 'underline',
+                  cursor: 'pointer'
+                }}
+              >
+                Reinstall current {cloudRelease.tag} anyway
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </div>

@@ -5,7 +5,7 @@
 // ============================================================
 // FIRMWARE VERSION CONFIGURATION
 // ============================================================
-#define FIRMWARE_VERSION "v1.2"
+#define FIRMWARE_VERSION "v2.0"
 extern const char *FIRMWARE_VER;
 
 // ============================================================

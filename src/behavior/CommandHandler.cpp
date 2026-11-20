@@ -217,10 +217,7 @@ bool handleBatteryCommand(const String &qIn) {
     // Direct USB power (powered via Type-C cable)
     if (sttLang == "hi" || containsDevanagari(qIn) ||
         hasAny(q, {"kitni", "kitna", "batao", "btao", "बैटरी", "चार्ज"})) {
-      String name = getOwnerName();
-      if (name.length() == 0)
-        name = "Krishna";
-      reply = "Main direct USB power par chal raha hoon " + name + "! Full charge hoon!";
+      reply = "Main direct USB power par chal raha hoon! Full charge hoon!";
     } else {
       reply = "I am running on direct USB power! Fully powered up!";
     }
@@ -1221,11 +1218,8 @@ bool handleHungerCommand(const String &qIn) {
       handleAngryFeedAttempt();
       return true;
     } else {
-      String n = getOwnerName();
-      if (n.length() == 0)
-        n = "Krishna";
       markCurrentMealFed();
-      speakText("Mera pet pehle se bhara hua hai " + n + "!");
+      speakText("Mera pet pehle se bhara hua hai!");
       setEmotion(EMOTION_IDLE);
       return true;
     }

@@ -3,7 +3,7 @@
 #include "config/AppConfig.h"
 #include <utility>
 
-int maxChatHistory = 4;
+int maxChatHistory = 2;
 ChatTurn chatHistory[MAX_CHAT_HISTORY];
 int chatHistoryCount = 0;
 static uint32_t lastChatTime = 0;

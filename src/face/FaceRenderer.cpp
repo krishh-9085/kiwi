@@ -67,6 +67,10 @@ static uint32_t lastRenderAt = 0;
 static float velW = 0, velH = 0, velGap = 0, velY = 0;
 static float velGazeX = 0, velGazeY = 0;
 static float speakW = 16, speakH = 3;
+static uint32_t speakNextSaccadeAt = 0;
+static float speakGazeTgtX = 0.0f;
+static float speakGazeTgtY = -1.2f;
+static bool speakLookingAtUser = true;
 
 static void stepFace(float dt) {
   const float OMEGA = 24.0f; // spring stiffness (rad/s)
@@ -94,7 +98,8 @@ static void stepFace(float dt) {
   faceNow.mouthH = approach(faceNow.mouthH, faceTgt.mouthH, R, dt);
   faceNow.mouthCurve = approach(faceNow.mouthCurve, faceTgt.mouthCurve, R, dt);
   faceNow.mouthY = approach(faceNow.mouthY, faceTgt.mouthY, R, dt);
-  faceNow.pupilScale = approach(faceNow.pupilScale, faceTgt.pupilScale, 9.0f, dt);
+  faceNow.pupilScale =
+      approach(faceNow.pupilScale, faceTgt.pupilScale, 9.0f, dt);
 }
 
 // ---------------------------------------------------------------------------
@@ -416,7 +421,8 @@ void drawFace(float soundLevel) {
   }
   switch (currentEmotion) {
   case EMOTION_THINKING: {
-    // Calm, pensive upward-corner gaze: steady & relaxed (no rapid left/right oscillation)
+    // Calm, pensive upward-corner gaze: steady & relaxed (no rapid left/right
+    // oscillation)
     tx = 2.2f + swing(now, 2600.0f) * 0.4f;
     ty = -3.8f + swing(now, 2000.0f) * 0.3f;
     break;
@@ -427,9 +433,48 @@ void drawFace(float soundLevel) {
     ty = -4.5f;
     break;
   case EMOTION_SPEAKING: {
-    // Engaged with the user, fluidly glancing left/right while speaking
-    tx = swing(now, 580.0f) * 5.0f + swing(now, 276.0f) * 1.5f;
-    ty = swing(now, 414.0f) * 1.2f;
+    // Dynamic conversational gaze: mostly direct eye contact with user,
+    // punctuated by realistic thinking saccades and speech-reactive micro-nods.
+    if (now >= speakNextSaccadeAt) {
+      if (!speakLookingAtUser) {
+        // Return to direct engaged eye contact with user
+        speakLookingAtUser = true;
+        speakGazeTgtX = (float)random(-8, 9) * 0.1f;
+        speakGazeTgtY = -1.2f + (float)random(-4, 5) * 0.1f;
+        speakNextSaccadeAt = now + 1500 + random(0, 1500); // Hold eye contact 1.5s - 3s
+        if (!eyeBlinking && random(0, 100) < 35)
+          triggerTouchBlink(now);
+      } else {
+        // Natural conversational glance away (thinking / emphasizing a point)
+        speakLookingAtUser = false;
+        int r = random(0, 100);
+        if (r < 45) {
+          // Thoughtful upward-side glance (recalling words / ideas)
+          speakGazeTgtX = (random(0, 2) == 0) ? -4.5f : 4.5f;
+          speakGazeTgtY = -3.2f;
+          speakNextSaccadeAt = now + 500 + random(0, 500); // 500 - 1000ms glance
+        } else if (r < 75) {
+          // Subtle lateral glance to punctuate a phrase
+          speakGazeTgtX = (random(0, 2) == 0) ? -5.2f : 5.2f;
+          speakGazeTgtY = -0.5f;
+          speakNextSaccadeAt = now + 400 + random(0, 450); // 400 - 850ms glance
+        } else {
+          // Empathetic / gentle downward conversational beat
+          speakGazeTgtX = (float)random(-15, 16) * 0.1f;
+          speakGazeTgtY = 2.0f;
+          speakNextSaccadeAt = now + 350 + random(0, 400); // 350 - 750ms glance
+        }
+        if (!eyeBlinking && random(0, 100) < 25)
+          triggerTouchBlink(now);
+      }
+    }
+
+    // Organic ocular micro-drift + speech-amplitude micro-nod on emphasized syllables
+    float spk = getSpeechAmplitude();
+    float driftX = swing(now, 750.0f) * 0.35f;
+    float driftY = cwing(now, 820.0f) * 0.25f;
+    tx = speakGazeTgtX + driftX;
+    ty = speakGazeTgtY + driftY + (spk * 1.5f);
     break;
   }
   default:
@@ -438,7 +483,7 @@ void drawFace(float soundLevel) {
   // Ballistic biological saccade spring (omega ~32 rad/s, zeta ~0.68)
   // Rapid acceleration, crisp ~5% micro-overshoot and elastic settle!
   const float SACCADE_OMEGA = 32.0f;
-  const float SACCADE_ZETA  = 0.68f;
+  const float SACCADE_ZETA = 0.68f;
   springStep(gazeX, velGazeX, tx, SACCADE_OMEGA, SACCADE_ZETA, dt);
   springStep(gazeY, velGazeY, ty, SACCADE_OMEGA, SACCADE_ZETA, dt);
 
@@ -446,7 +491,8 @@ void drawFace(float soundLevel) {
   float offX = 0, offY = 0, sc = 1.0f;
   switch (currentEmotion) {
   case EMOTION_IDLE: {
-    // Continuous respiratory breath cycle (~3.2s period) + organic desk sigh offset
+    // Continuous respiratory breath cycle (~3.2s period) + organic desk sigh
+    // offset
     float breath = swing(now, 510.0f);
     offY = breath * 0.70f + idleSighY;
     sc = 1.0f + 0.02f * breath;
@@ -458,8 +504,8 @@ void drawFace(float soundLevel) {
   case EMOTION_SPEAKING: {
     // Natural conversational speech cadence & head bounce tied to live speech energy!
     float spk = getSpeechAmplitude();
-    offY = (swing(now, 160.0f) * 0.8f + spk * 3.5f);
-    sc = 1.0f + 0.02f * swing(now, 220.0f) + spk * 0.045f;
+    offY = (swing(now, 450.0f) * 0.5f + spk * 3.2f);
+    sc = 1.0f + 0.015f * swing(now, 380.0f) + spk * 0.04f;
     break;
   }
   case EMOTION_EXCITED:
@@ -582,23 +628,27 @@ void drawFace(float soundLevel) {
 
   // ---- Eye geometry -----------------------------------------------------
   float open = clampf(eyeOpenAmt, 0.0f, 1.0f);
-  // Elastic Squash & Stretch: width expands up to +7.5% at closure and springs back!
+  // Elastic Squash & Stretch: width expands up to +7.5% at closure and springs
+  // back!
   float squash = 1.0f + 0.075f * (1.0f - open) * (1.0f - open);
   int w = iround(faceNow.w * sc * squash);
   int wL = w;
   int wR = iround(w * faceNow.wR);
 
-  // Eyelid-Gaze Coupling: Looking UP widens eye (+2.5px); Looking DOWN droops upper lid (-2.5px)
+  // Eyelid-Gaze Coupling: Looking UP widens eye (+2.5px); Looking DOWN droops
+  // upper lid (-2.5px)
   float couplingH = 0.0f;
   float couplingLid = 0.0f;
   if (gazeY < 0.0f) {
     // Looking up: attentive & curious opening
     couplingH = -gazeY * 0.38f;
-    if (couplingH > 2.5f) couplingH = 2.5f;
+    if (couplingH > 2.5f)
+      couplingH = 2.5f;
   } else if (gazeY > 0.0f) {
     // Looking down: relaxed desk posture, upper eyelids follow gaze downward
     couplingH = -gazeY * 0.45f;
-    if (couplingH < -2.5f) couplingH = -2.5f;
+    if (couplingH < -2.5f)
+      couplingH = -2.5f;
     couplingLid = gazeY * 0.35f;
   }
 
@@ -646,8 +696,10 @@ void drawFace(float soundLevel) {
   int hR = iround(hRf);
   int lidIn = iround(faceNow.lidIn + couplingLid + idleSighLid);
   int lidOut = iround(faceNow.lidOut + couplingLid + idleSighLid);
-  if (lidIn < 0) lidIn = 0;
-  if (lidOut < 0) lidOut = 0;
+  if (lidIn < 0)
+    lidIn = 0;
+  if (lidOut < 0)
+    lidOut = 0;
 
   display.clearDisplay();
   bool gl = faceNow.glint > 0.5f;
@@ -669,8 +721,8 @@ void drawFace(float soundLevel) {
   if (currentEmotion == EMOTION_SPEAKING || isSpeechPlaying()) {
     float spk = getSpeechAmplitude();
     if (!isSpeechPlaying() || spk < 0.025f) {
-      // Voice has stopped playing OR speech is in a natural pause between words:
-      // smoothly snap lips to resting closed slit (no ghost flapping!)
+      // Voice has stopped playing OR speech is in a natural pause between
+      // words: smoothly snap lips to resting closed slit (no ghost flapping!)
       speakW = approach(speakW, 14.0f, 35.0f, dt);
       speakH = approach(speakH, 2.0f, 35.0f, dt);
       int mw = iround(speakW);

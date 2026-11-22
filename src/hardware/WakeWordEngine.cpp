@@ -71,6 +71,91 @@ static bool s_frontend_initialized = false;
 alignas(16) static uint8_t s_tensor_arena[TENSOR_ARENA_SIZE];
 alignas(16) static uint8_t s_variable_arena[VARIABLE_ARENA_SIZE];
 
+// ============================================================
+// PRE-WAKE AUDIO RING-BUFFER IN PSRAM
+// ============================================================
+static const size_t PRE_WAKE_RING_SAMPLES = 24000; // 1.5s @ 16kHz (48KB)
+static int16_t *s_preWakeRingBuf = nullptr;
+static size_t s_preWakeHead = 0;
+static size_t s_preWakeTotalCount = 0;
+static portMUX_TYPE s_preWakeMux = portMUX_INITIALIZER_UNLOCKED;
+static volatile bool s_preWakeBridgeActive = false;
+static uint32_t s_bridgeStartAt = 0;
+static volatile bool s_wakeWordDetectedTrigger = false;
+
+bool preWakeBufferInit() {
+  if (s_preWakeRingBuf) return true;
+  if (psramFound()) {
+    s_preWakeRingBuf = (int16_t *)heap_caps_malloc(PRE_WAKE_RING_SAMPLES * sizeof(int16_t),
+                                                   MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (s_preWakeRingBuf) {
+      memset(s_preWakeRingBuf, 0, PRE_WAKE_RING_SAMPLES * sizeof(int16_t));
+      Serial.printf("[PRE-WAKE] 1.5s (48KB) Audio Ring-Buffer allocated in PSRAM!\n");
+      return true;
+    }
+  }
+  // Fallback to internal heap if no PSRAM (0.5s = 8000 samples = 16KB)
+  s_preWakeRingBuf = (int16_t *)malloc(8000 * sizeof(int16_t));
+  if (s_preWakeRingBuf) {
+    memset(s_preWakeRingBuf, 0, 8000 * sizeof(int16_t));
+    Serial.printf("[PRE-WAKE] 0.5s (16KB) fallback buffer allocated in SRAM\n");
+    return true;
+  }
+  return false;
+}
+
+void preWakePush(const int16_t *samples, size_t count) {
+  if (!s_preWakeRingBuf || count == 0) return;
+  size_t cap = psramFound() ? PRE_WAKE_RING_SAMPLES : 8000;
+  portENTER_CRITICAL(&s_preWakeMux);
+  for (size_t i = 0; i < count; i++) {
+    s_preWakeRingBuf[s_preWakeHead] = samples[i];
+    s_preWakeHead = (s_preWakeHead + 1) % cap;
+    if (s_preWakeTotalCount < cap) {
+      s_preWakeTotalCount++;
+    }
+  }
+  portEXIT_CRITICAL(&s_preWakeMux);
+}
+
+bool preWakeIsBridgeActive() {
+  return s_preWakeBridgeActive;
+}
+
+void preWakeStopBridge() {
+  s_preWakeBridgeActive = false;
+}
+
+bool preWakeHasData() {
+  return s_wakeWordDetectedTrigger && (s_preWakeTotalCount > 0);
+}
+
+void preWakeReset() {
+  portENTER_CRITICAL(&s_preWakeMux);
+  s_preWakeHead = 0;
+  s_preWakeTotalCount = 0;
+  s_preWakeBridgeActive = false;
+  s_wakeWordDetectedTrigger = false;
+  portEXIT_CRITICAL(&s_preWakeMux);
+}
+
+size_t preWakeDrain(int16_t *dest, size_t maxSamples) {
+  if (!s_preWakeRingBuf || !dest || maxSamples == 0) return 0;
+  size_t cap = psramFound() ? PRE_WAKE_RING_SAMPLES : 8000;
+  portENTER_CRITICAL(&s_preWakeMux);
+  size_t count = s_preWakeTotalCount;
+  if (count > maxSamples) count = maxSamples;
+  size_t start = (s_preWakeHead + cap - count) % cap;
+  for (size_t i = 0; i < count; i++) {
+    dest[i] = s_preWakeRingBuf[(start + i) % cap];
+  }
+  s_preWakeTotalCount = 0;
+  s_wakeWordDetectedTrigger = false;
+  s_preWakeBridgeActive = false;
+  portEXIT_CRITICAL(&s_preWakeMux);
+  return count;
+}
+
 static tflite::MicroMutableOpResolver<20> *s_op_resolver = nullptr;
 static tflite::MicroAllocator *s_micro_allocator = nullptr;
 static tflite::MicroResourceVariables *s_micro_resource_vars = nullptr;
@@ -222,6 +307,9 @@ static bool loadModelInternal(uint8_t modelIndex, float preservedCutoff) {
 // ============================================================
 bool wakeWordInit() {
   Serial.println("[WAKEWORD] Initializing microWakeWord engine...");
+
+  // Initialize Pre-Wake Ring-Buffer in PSRAM
+  preWakeBufferInit();
 
   // Mutex initialization
   if (!s_wwMutex) {
@@ -569,6 +657,40 @@ static void wakeWordTask(void *params) {
   uint8_t slotMismatchCount = 0;
 
   for (;;) {
+    // -------------------------------------------------------------------
+    // PRE-WAKE BRIDGE MODE (Captures live mic into PSRAM while STT TLS connects)
+    // -------------------------------------------------------------------
+    if (s_preWakeBridgeActive) {
+      if (millis() - s_bridgeStartAt > 2500) {
+        s_preWakeBridgeActive = false;
+      } else {
+        size_t bytesRead = 0;
+        esp_err_t err = i2s_channel_read(rxHandle, raw_i2s, sizeof(raw_i2s), &bytesRead, pdMS_TO_TICKS(50));
+        if (err == ESP_OK && bytesRead > 0) {
+          int frames = bytesRead / (2 * sizeof(int32_t));
+          int currentSlot = getMicSlot();
+          for (int i = 0; i < frames; i++) {
+            int32_t s32 = (currentSlot == 1) ? raw_i2s[i * 2 + 1] : raw_i2s[i * 2];
+            float x = (float)(s32 >> 8) / 256.0f;
+            float y = x - s_prevIn + 0.995f * s_prevOut;
+            s_prevIn = x;
+            s_prevOut = y;
+            if (s_gain != 1.0f) {
+              y *= s_gain;
+              if (y > 26000.0f) y = 26000.0f + (y - 26000.0f) * 0.22f;
+              else if (y < -26000.0f) y = -26000.0f + (y + 26000.0f) * 0.22f;
+            }
+            if (y > 32767.0f) y = 32767.0f;
+            else if (y < -32768.0f) y = -32768.0f;
+            pcm_samples[i] = (int16_t)y;
+          }
+          preWakePush(pcm_samples, frames);
+        }
+        vTaskDelay(pdMS_TO_TICKS(1));
+        continue;
+      }
+    }
+
     bool isSpeaking = isSpeechPlaying() || currentEmotion == EMOTION_SPEAKING;
     // Don't listen during STT recording or LLM thinking, or during short tone beeps
     bool isSttOrThinking = (busyProcessing && !isSpeaking) || startRecording || isTonePlaying();
@@ -640,6 +762,7 @@ static void wakeWordTask(void *params) {
       else if (y < -32768.0f) y = -32768.0f;
       pcm_samples[i] = (int16_t)y;
     }
+    preWakePush(pcm_samples, frames);
 
     // F3: Auto-swap mic slot respects micSlotLocked; routes through setMicSlot(slot, false)
     if (!isMicSlotLocked()) {
@@ -793,6 +916,9 @@ static void wakeWordTask(void *params) {
                     // Reset buffers & ignore future triggers until next conversation finishes
                     wakeWordResetLocked();
                     s_isListening = false;
+                    s_wakeWordDetectedTrigger = true;
+                    s_preWakeBridgeActive = true;
+                    s_bridgeStartAt = millis();
 
                     // Trigger speech recording & listening face immediately
                     powerNotifyActivity();

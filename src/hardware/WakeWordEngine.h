@@ -51,3 +51,12 @@ float wakeWordGetBargeInBump();
 void wakeWordPrintStatus();
 void wakeWordProcessSerialCommand(const String &cmd);
 
+// Pre-Wake Audio Ring-Buffer in PSRAM (Never Miss First Words)
+bool preWakeBufferInit();
+void preWakePush(const int16_t *samples, size_t count);
+bool preWakeIsBridgeActive();
+void preWakeStopBridge();
+bool preWakeHasData();
+void preWakeReset();
+size_t preWakeDrain(int16_t *dest, size_t maxSamples);
+

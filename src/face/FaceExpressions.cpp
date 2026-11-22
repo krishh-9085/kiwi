@@ -197,10 +197,11 @@ void faceTargetsForEmotion(Emotion e, PetMood pm) {
     faceTgt.pupilScale = 0.90f;
     break;
   case EMOTION_LAUGHING:
-    setFace(34, 30, 30, 28, 6, 0, 0, 0, 0.2f);
-    faceTgt.mouthW = 26;
-    faceTgt.mouthH = 4;
-    faceTgt.mouthCurve = 0.6f;
+    // Happy squinting arch eyes with laughing mouth and rosy blush
+    setFace(34, 30, 30, 28, 6, 0, 0, 14, 0.4f);
+    faceTgt.mouthW = 28;
+    faceTgt.mouthH = 5;
+    faceTgt.mouthCurve = 0.85f;
     faceTgt.pupilScale = 1.15f;
     break;
   case EMOTION_SCARED:
@@ -607,22 +608,30 @@ bool triggerEmotionByName(const String &nameIn, uint32_t holdMs,
         setOledDim(false);
       }
       setEmotion(m.e);
-      if (m.e == EMOTION_IDLE)
+      if (m.e == EMOTION_IDLE) {
         emotionAutoReturnAt = 0;
-      else
-        emotionAutoReturnAt = millis() + (holdMs > 0 ? holdMs : 4000);
+        returnIdleAt = 0;
+      } else {
+        uint32_t dur = (holdMs > 0 ? holdMs : (m.e == EMOTION_CRYING ? 5200 : (m.e == EMOTION_LAUGHING ? 4500 : 4000)));
+        emotionAutoReturnAt = millis() + dur;
+        returnIdleAt = millis() + dur;
+      }
       if (withSound && m.e != EMOTION_SLEEPING) {
         if (m.e == EMOTION_HAPPY || m.e == EMOTION_PARTY)
           soundPetPlayful();
         else if (m.e == EMOTION_EXCITED || m.e == EMOTION_SURPRISED)
           soundPetSparkle();
-        else if (m.e == EMOTION_SAD || m.e == EMOTION_CRYING)
+        else if (m.e == EMOTION_CRYING)
+          soundCrying();
+        else if (m.e == EMOTION_SAD)
           soundPetShy();
         else if (m.e == EMOTION_DEAD || m.e == EMOTION_ERROR)
           soundError();
         else if (m.e == EMOTION_COOL || m.e == EMOTION_PROUD)
           soundPetProud();
-        else if (m.e == EMOTION_SINGING || m.e == EMOTION_LAUGHING)
+        else if (m.e == EMOTION_LAUGHING)
+          soundLaughing();
+        else if (m.e == EMOTION_SINGING)
           soundPetGiggle();
         else if (m.e == EMOTION_HEARTS || m.e == EMOTION_LOVESTRUCK)
           soundPetLove();

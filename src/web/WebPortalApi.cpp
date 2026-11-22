@@ -85,6 +85,7 @@ void handleDoAction() {
       server.send(200, "application/json", "{\"ok\":true,\"cancelled\":true}");
       return;
     }
+    preWakeReset();
     startRecording = true;
     invalidateStatusCache();
     addTerminalLog("[WEB] Mic record button clicked -> start listening");
@@ -274,20 +275,18 @@ void handleDoAction() {
     String s = server.arg("skin");
     s.toLowerCase();
     if (s == "kiwi" || s == "deskbuddy" || s == "buddy" || s == "cute" ||
-        s == "relaxed" || s == "bored")
+        s == "relaxed" || s == "bored" || s == "vector" || s == "anki" ||
+        s == "squircle_solid" || s == "squircle_bold" || s == "squircle")
       currentEyeSkin = SKIN_KIWI;
-    else if (s == "vector" || s == "anki" || s == "default" || s == "normal" ||
-             s == "clean")
-      currentEyeSkin = SKIN_VECTOR;
     else if (s == "pixel" || s == "8bit" || s == "retro" || s == "retro8bit")
       currentEyeSkin = SKIN_PIXEL;
-    else if (s == "squircle_solid" || s == "squircle_bold" || s == "squircle")
-      currentEyeSkin = SKIN_SQUIRCLE_BOLD;
     else if (s == "squircle_glint" || s == "lumina_spark" || s == "spark" ||
              s == "glint")
       currentEyeSkin = SKIN_LUMINA_SPARK;
     else if (s == "mecha" || s == "circtangle" || s == "circrect")
       currentEyeSkin = SKIN_MECHA;
+    else if (s == "emo" || s == "emo_style" || s == "emo-style" || s == "emostyle")
+      currentEyeSkin = SKIN_EMO;
     else
       currentEyeSkin = SKIN_KIWI;
 
@@ -774,7 +773,7 @@ void handleDoAction() {
     showWeatherScreen = true;
     showClockScreen = false;
     if (snd)
-      soundPetSparkle();
+      soundWeather();
     if (lastWeatherFetchAt == 0 ||
         millis() - lastWeatherFetchAt > 10 * 60 * 1000 || weatherCode < 0) {
       fetchWeather();
@@ -825,7 +824,7 @@ void handleStatus() {
   j += (inCircadianSleep || manualSleep) ? "true," : "false,";
   j += "\"history\":" + String(getConversationHistoryCount());
   const char *skinNames[SKIN_COUNT] = {
-      "kiwi", "vector", "pixel", "squircle_solid", "squircle_glint", "mecha"};
+      "kiwi", "pixel", "squircle_glint", "mecha", "emo"};
   int skIdx = (int)currentEyeSkin;
   if (skIdx < 0 || skIdx >= SKIN_COUNT)
     skIdx = 0;
@@ -932,10 +931,7 @@ void handleConfigApi() {
        "\",";
   j += "\"groqUrl\":\"" + escJson(groqSttEndpoint) + "\",\"groqKey\":\"" +
        escJson(maskSecret(groqSttKey)) + "\",\"groqModel\":\"" +
-       escJson(groqSttModel) + "\",";
-  j += "\"openaiUrl\":\"" + escJson(openaiSttEndpoint) + "\",\"openaiKey\":\"" +
-       escJson(maskSecret(openaiSttKey)) + "\",\"openaiModel\":\"" +
-       escJson(openaiSttModel) + "\"},";
+       escJson(groqSttModel) + "\"},";
   j += "\"llm\":{\"provider\":\"" + escJson(llmProvider) + "\",\"url\":\"" +
        escJson(llmEndpoint) + "\",\"key\":\"" + escJson(maskSecret(llmKey)) +
        "\",\"model\":\"" + escJson(llmModel) + "\",";
@@ -946,14 +942,6 @@ void handleConfigApi() {
        escJson(ttsEndpoint) + "\",\"key\":\"" + escJson(maskSecret(ttsKey)) +
        "\",\"model\":\"" + escJson(ttsModel) + "\",\"voice\":\"" +
        escJson(ttsVoice) + "\",";
-  j += "\"openaiUrl\":\"" + escJson(openaiTtsEndpoint) + "\",\"openaiKey\":\"" +
-       escJson(maskSecret(openaiTtsKey)) + "\",\"openaiModel\":\"" +
-       escJson(openaiTtsModel) + "\",\"openaiVoice\":\"" +
-       escJson(openaiTtsVoice) + "\",";
-  j += "\"elevenUrl\":\"" + escJson(elevenEndpoint) + "\",\"elevenKey\":\"" +
-       escJson(maskSecret(elevenKey)) + "\",\"elevenModel\":\"" +
-       escJson(elevenModel) + "\",\"elevenVoice\":\"" + escJson(elevenVoice) +
-       "\",";
   j += "\"fishUrl\":\"" + escJson(fishEndpoint) + "\",\"fishKey\":\"" +
        escJson(maskSecret(fishKey)) + "\",\"fishModel\":\"" +
        escJson(fishModel) + "\",\"fishVoice\":\"" + escJson(fishVoice) + "\"},";
@@ -1001,7 +989,7 @@ void handleConfigApi() {
        "\",\"sound\":" + String(touchFeedbackSound ? "true" : "false") +
        ",\"deb\":" + String(touchDebounceMs) + "},";
   const char *skinNames[SKIN_COUNT] = {
-      "kiwi", "vector", "pixel", "squircle_solid", "squircle_glint", "mecha"};
+      "kiwi", "pixel", "squircle_glint", "mecha", "emo"};
   int skinIndex = (int)currentEyeSkin;
   if (skinIndex < 0 || skinIndex >= SKIN_COUNT)
     skinIndex = 0;
@@ -1074,47 +1062,34 @@ void handleSave() {
   groqSttModel =
       sanitizeField(server.arg("groqsttmodel"), DEFAULT_GROQ_STT_MODEL);
 
-  openaiSttEndpoint =
-      sanitizeUrl(server.arg("opaistturl"), DEFAULT_OPENAI_STT_URL);
-  if (server.hasArg("openaikey") && server.arg("openaikey").length() > 0 &&
-      !isMaskedSecret(server.arg("openaikey"))) {
-    openaiSttKey = sanitizeField(server.arg("openaikey"));
-    openaiTtsKey = openaiSttKey;
-  } else if (server.hasArg("opaisttkey") &&
-             server.arg("opaisttkey").length() > 0 &&
-             !isMaskedSecret(server.arg("opaisttkey"))) {
-    openaiSttKey = sanitizeField(server.arg("opaisttkey"));
-  }
-  openaiSttModel =
-      sanitizeField(server.arg("opaisttmodel"), DEFAULT_OPENAI_STT_MODEL);
-
   replyLang = sanitizeField(server.arg("replang"));
-  systemPrompt = sanitizeField(server.arg("prompt"), DEFAULT_PROMPT);
-  if (systemPrompt.length() == 0)
-    systemPrompt = DEFAULT_PROMPT;
+  if (server.hasArg("prompt")) {
+    String p = server.arg("prompt");
+    p.trim();
+    if (p.length() > 0) {
+      systemPrompt = p;
+    } else {
+      systemPrompt = DEFAULT_PROMPT;
+    }
+  }
 
   if (server.hasArg("llmprovider")) {
     llmProvider = server.arg("llmprovider");
     llmProvider.trim();
     llmProvider.toLowerCase();
-    if (llmProvider != "gemini" && llmProvider != "groq" &&
-        llmProvider != "openai")
+    if (llmProvider != "gemini" && llmProvider != "groq")
       llmProvider = "groq";
   }
-  if (llmProvider == "openai") {
-    llmEndpoint = sanitizeUrl(server.arg("openaiurl"), DEFAULT_OPENAI_LLM_URL);
-    if (server.hasArg("openaikey") && server.arg("openaikey").length() > 0 &&
-        !isMaskedSecret(server.arg("openaikey"))) {
-      llmKey = sanitizeField(server.arg("openaikey"));
-    }
-    llmModel = sanitizeField(server.arg("openaimodel"), "gpt-4o-mini");
-  } else {
-    llmEndpoint = sanitizeUrl(server.arg("llmurl"), DEFAULT_LLM_URL);
-    if (server.hasArg("llmkey") && server.arg("llmkey").length() > 0 &&
-        !isMaskedSecret(server.arg("llmkey"))) {
-      llmKey = sanitizeField(server.arg("llmkey"));
-    }
-    llmModel = sanitizeField(server.arg("llmmodel"), DEFAULT_LLM_MODEL);
+  llmEndpoint = sanitizeUrl(server.arg("llmurl"), DEFAULT_LLM_URL);
+  if (server.hasArg("llmkey") && server.arg("llmkey").length() > 0 &&
+      !isMaskedSecret(server.arg("llmkey"))) {
+    llmKey = sanitizeField(server.arg("llmkey"));
+  }
+  llmModel = sanitizeField(server.arg("llmmodel"), DEFAULT_LLM_MODEL);
+  if (llmProvider == "gemini" &&
+      llmEndpoint.indexOf("generativelanguage.googleapis.com") >= 0) {
+    llmEndpoint = "https://generativelanguage.googleapis.com/v1beta/models/" +
+                  llmModel + ":generateContent";
   }
   groqEndpoint = sanitizeUrl(server.arg("groqurl"), DEFAULT_GROQ_URL);
   if (server.hasArg("groqkey") && server.arg("groqkey").length() > 0 &&
@@ -1132,24 +1107,6 @@ void handleSave() {
   }
   ttsModel = sanitizeField(server.arg("ttsmodel"), DEFAULT_TTS_MODEL);
   ttsVoice = sanitizeField(server.arg("ttsvoice"), DEFAULT_TTS_VOICE);
-  openaiTtsEndpoint =
-      sanitizeUrl(server.arg("openaittsurl"), DEFAULT_OPENAI_TTS_URL);
-  if (server.hasArg("openaittskey") &&
-      server.arg("openaittskey").length() > 0 &&
-      !isMaskedSecret(server.arg("openaittskey"))) {
-    openaiTtsKey = sanitizeField(server.arg("openaittskey"));
-  }
-  openaiTtsModel =
-      sanitizeField(server.arg("openaittsmodel"), DEFAULT_OPENAI_TTS_MODEL);
-  openaiTtsVoice =
-      sanitizeField(server.arg("openaittsvoice"), DEFAULT_OPENAI_TTS_VOICE);
-  elevenEndpoint = sanitizeUrl(server.arg("elevurl"), DEFAULT_ELEVEN_URL);
-  if (server.hasArg("elevkey") && server.arg("elevkey").length() > 0 &&
-      !isMaskedSecret(server.arg("elevkey"))) {
-    elevenKey = sanitizeField(server.arg("elevkey"));
-  }
-  elevenModel = sanitizeField(server.arg("elevmodel"), DEFAULT_ELEVEN_MODEL);
-  elevenVoice = sanitizeField(server.arg("elevvoice"), DEFAULT_ELEVEN_VOICE);
   fishEndpoint = sanitizeUrl(server.arg("fishurl"), DEFAULT_FISH_TTS_URL);
   if (server.hasArg("fishkey") && server.arg("fishkey").length() > 0 &&
       !isMaskedSecret(server.arg("fishkey"))) {
@@ -1345,20 +1302,18 @@ void handleSave() {
     String s = server.arg("skin");
     s.toLowerCase();
     if (s == "kiwi" || s == "deskbuddy" || s == "buddy" || s == "cute" ||
-        s == "relaxed" || s == "bored")
+        s == "relaxed" || s == "bored" || s == "vector" || s == "anki" ||
+        s == "squircle_solid" || s == "squircle_bold" || s == "squircle")
       currentEyeSkin = SKIN_KIWI;
-    else if (s == "vector" || s == "anki" || s == "default" || s == "normal" ||
-             s == "clean")
-      currentEyeSkin = SKIN_VECTOR;
     else if (s == "pixel" || s == "8bit" || s == "retro" || s == "retro8bit")
       currentEyeSkin = SKIN_PIXEL;
-    else if (s == "squircle_solid" || s == "squircle_bold" || s == "squircle")
-      currentEyeSkin = SKIN_SQUIRCLE_BOLD;
     else if (s == "squircle_glint" || s == "lumina_spark" || s == "spark" ||
              s == "glint")
       currentEyeSkin = SKIN_LUMINA_SPARK;
     else if (s == "mecha" || s == "circtangle" || s == "circrect")
       currentEyeSkin = SKIN_MECHA;
+    else if (s == "emo" || s == "emo_style" || s == "emo-style" || s == "emostyle")
+      currentEyeSkin = SKIN_EMO;
     else
       currentEyeSkin = SKIN_KIWI;
   }
@@ -1389,9 +1344,6 @@ void handleSave() {
   groqSttEndpoint.trim();
   groqSttKey.trim();
   groqSttModel.trim();
-  openaiSttEndpoint.trim();
-  openaiSttKey.trim();
-  openaiSttModel.trim();
   llmEndpoint.trim();
   llmKey.trim();
   llmModel.trim();
@@ -1402,14 +1354,6 @@ void handleSave() {
   ttsKey.trim();
   ttsModel.trim();
   ttsVoice.trim();
-  openaiTtsEndpoint.trim();
-  openaiTtsKey.trim();
-  openaiTtsModel.trim();
-  openaiTtsVoice.trim();
-  elevenEndpoint.trim();
-  elevenKey.trim();
-  elevenModel.trim();
-  elevenVoice.trim();
 
   saveConfigImmediate();
   updateDisplayBrightnessMode();

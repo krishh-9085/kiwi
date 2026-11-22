@@ -6,5 +6,4 @@ typedef std::function<void(const String &sentence, bool isFinal)> SentenceCallba
 
 String askGemini(const String &prompt, SentenceCallback onSentence = nullptr);
 String askGroq(const String &prompt, SentenceCallback onSentence = nullptr);
-String askOpenAI(const String &prompt, SentenceCallback onSentence = nullptr);
 String askLLM(const String &prompt, SentenceCallback onSentence = nullptr, bool saveChatHistory = true);

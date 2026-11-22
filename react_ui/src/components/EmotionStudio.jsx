@@ -2,9 +2,9 @@ import React from 'react'
 import { Smile, Heart, Flame, Moon, Eye, Zap, Coffee, Sparkles, AlertCircle, Glasses } from 'lucide-react'
 
 const EMOTIONS = [
+  { id: 'idle', label: 'Idle / Neutral', icon: Eye, color: '#38bdf8' },
   { id: 'happy', label: 'Happy', icon: Smile, color: '#34d399' },
   { id: 'excited', label: 'Excited', icon: Sparkles, color: '#fbbf24' },
-  { id: 'idle', label: 'Idle / Neutral', icon: Eye, color: '#38bdf8' },
   { id: 'sleeping', label: 'Sleeping', icon: Moon, color: '#94a3b8' },
   { id: 'hearts', label: 'Love Hearts', icon: Heart, color: '#fb7185' },
   { id: 'curious', label: 'Curious', icon: Coffee, color: '#38bdf8' },
@@ -18,11 +18,10 @@ const EMOTIONS = [
 
 const SKINS = [
   { id: 'kiwi', label: 'Kiwi (Default)' },
-  { id: 'vector', label: 'Vector (Anki)' },
   { id: 'pixel', label: 'Retro 8-Bit' },
-  { id: 'squircle_solid', label: 'Squircle Solid' },
   { id: 'squircle_glint', label: 'Lumina Spark' },
-  { id: 'mecha', label: 'Mecha' }
+  { id: 'mecha', label: 'Mecha' },
+  { id: 'emo', label: 'EMO Style' }
 ]
 
 export default function EmotionStudio({ currentEmotion, currentSkin, onTriggerAction }) {

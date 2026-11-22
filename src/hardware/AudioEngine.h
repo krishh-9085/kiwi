@@ -49,6 +49,7 @@ void soundPetSurprised();
 void playBootChime();
 void soundError();
 void soundClock();
+void soundWeather();
 void soundListening();
 void soundTouchBlip();
 void soundVolUp();

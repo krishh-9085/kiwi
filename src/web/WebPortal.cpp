@@ -277,6 +277,11 @@ static int netSuspendDepth = 0;
 static bool originalApState = false;
 
 bool suspendLocalNet() {
+  // If PSRAM is available, SoftAP, DNS server, and WebPortal run continuously
+  // without pausing or socket starvation during AI calls.
+  if (psramFound()) {
+    return false;
+  }
   if (netSuspendDepth++ == 0) {
     originalApState = apMode;
     if (originalApState) {
@@ -294,6 +299,10 @@ bool suspendLocalNet() {
 }
 
 void restoreWebAndAP(bool apWasUp) {
+  if (psramFound()) {
+    startWeb();
+    return;
+  }
   if (--netSuspendDepth <= 0) {
     netSuspendDepth = 0;
     if (apWasUp || originalApState)

@@ -173,8 +173,11 @@ String getFormattedMemoryPrompt() {
     p += "You do not know the user's name yet. If they ask ('mera naam kya hai', 'who am I'), politely say you don't know yet and ask their name. ";
   }
   if (kiwiMemory.friendsFamily.length() > 0) {
-    p += "Friends & Family members (from web settings): " + kiwiMemory.friendsFamily +
-         ". You recognize and know all these people and their relation to the user. ";
+    p += "User's Friends & Family List: [" + kiwiMemory.friendsFamily +
+         "]. IMPORTANT RULES FOR FRIENDS & FAMILY: "
+         "(A) You personally know each person in this list and their exact relationship to the user (e.g. bhatija/nephew, sister, brother, friend). "
+         "(B) Whenever user mentions, asks about, or jokes about anyone in this list (e.g. 'Yunay pagal hai na?', 'Rohan kaisa hai?'), ALWAYS answer in the context of that specific family member/friend and their relation to the user! "
+         "(C) NEVER confuse a family member's name with yourself (Kiwi). The user is talking about that person, NOT calling you that name or accusing you. Reply warmly, playfully, and affectionately like a close companion who knows their family. ";
   }
   if (kiwiMemory.memoryCount > 0) {
     p += "Known facts about user: ";

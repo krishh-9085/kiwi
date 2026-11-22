@@ -15,5 +15,6 @@ bool parseUrl(const String &url, String &host, String &path);
 bool containsDevanagari(const String &s);
 String sarvamSttLangCode();
 String whisperSttLangCode();
+String cleanTranscribedQuestion(const String &rawQ);
 
 extern int8_t b64_lookup[256];

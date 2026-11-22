@@ -75,7 +75,7 @@ extern const char *NTP_SERVER_2;
 
 // ---------- Streaming TTS & Latency Optimization ----------
 #ifndef LLM_STREAM_TTS
-#define LLM_STREAM_TTS 1
+#define LLM_STREAM_TTS 0 // 0 = Full-turn fluent natural speech (no choppy sentence gaps or multi-second pauses)
 #endif
 #ifndef STREAM_TTS_MIN_MAX_ALLOC
 #define STREAM_TTS_MIN_MAX_ALLOC 16000 // ESP32-S3 dual-core optimized (was 45000)
@@ -89,7 +89,7 @@ constexpr uint32_t TOUCH_HOLD_MS = 1500;
 constexpr uint32_t TOUCH_TAP_MAX_MS = 1200;
 constexpr uint32_t TOUCH_CLOCK_MS = 3000;
 constexpr uint32_t TOUCH_HOLD_TOP_MS = 3000;
-constexpr uint32_t TICKLE_CHEEK_WINDOW_MS = 1800;
+constexpr uint32_t TICKLE_CHEEK_WINDOW_MS = 1000;
 constexpr uint32_t TICKLE_COOLDOWN_MS = 6000;
 constexpr uint32_t DUAL_CHEEK_HOLD_MS = 600;
 constexpr uint32_t CIRCADIAN_TEMP_WAKE_MS = 45000;
@@ -111,27 +111,16 @@ extern const char *DEFAULT_STT_URL;
 extern const char *DEFAULT_STT_MODEL;
 extern const char *DEFAULT_GROQ_STT_URL;
 extern const char *DEFAULT_GROQ_STT_MODEL;
-extern const char *DEFAULT_OPENAI_STT_URL;
-extern const char *DEFAULT_OPENAI_STT_MODEL;
 
 extern const char *DEFAULT_PROMPT;
 extern const char *DEFAULT_LLM_URL;
 extern const char *DEFAULT_LLM_MODEL;
-extern const char *DEFAULT_OPENAI_LLM_URL;
 extern const char *DEFAULT_GROQ_URL;
 extern const char *DEFAULT_GROQ_MODEL;
 
 extern const char *DEFAULT_TTS_URL;
 extern const char *DEFAULT_TTS_MODEL;
 extern const char *DEFAULT_TTS_VOICE;
-
-extern const char *DEFAULT_OPENAI_TTS_URL;
-extern const char *DEFAULT_OPENAI_TTS_MODEL;
-extern const char *DEFAULT_OPENAI_TTS_VOICE;
-
-extern const char *DEFAULT_ELEVEN_URL;
-extern const char *DEFAULT_ELEVEN_MODEL;
-extern const char *DEFAULT_ELEVEN_VOICE;
 
 extern const char *DEFAULT_FISH_TTS_URL;
 extern const char *DEFAULT_FISH_TTS_MODEL;
@@ -151,9 +140,6 @@ extern String sttModel;
 extern String groqSttEndpoint;
 extern String groqSttKey;
 extern String groqSttModel;
-extern String openaiSttEndpoint;
-extern String openaiSttKey;
-extern String openaiSttModel;
 
 extern String systemPrompt;
 extern String llmProvider;
@@ -169,14 +155,6 @@ extern String ttsEndpoint;
 extern String ttsModel;
 extern String ttsVoice;
 extern String ttsKey;
-extern String openaiTtsEndpoint;
-extern String openaiTtsModel;
-extern String openaiTtsVoice;
-extern String openaiTtsKey;
-extern String elevenEndpoint;
-extern String elevenModel;
-extern String elevenVoice;
-extern String elevenKey;
 extern String fishEndpoint;
 extern String fishModel;
 extern String fishVoice;

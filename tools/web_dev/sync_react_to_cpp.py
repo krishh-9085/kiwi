@@ -37,9 +37,8 @@ def build_react():
     return True
 
 def sync_react_to_cpp():
-    if not os.path.exists(DIST_HTML):
-        if not build_react():
-            return
+    if not build_react():
+        return
 
     with open(DIST_HTML, "rb") as f:
         raw_data = f.read()

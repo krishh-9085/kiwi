@@ -97,6 +97,8 @@ void setup() {
     Serial.printf("[PSRAM] Hardware 2MB PSRAM Initialized! Total: %u KB, Free: %u KB\n",
                   (unsigned)(ESP.getPsramSize() / 1024),
                   (unsigned)(ESP.getFreePsram() / 1024));
+    initMbedTlsPsram();
+    initTtsBuffers();
   } else {
     Serial.println("[PSRAM] Not initialized or not enabled.");
   }
@@ -333,17 +335,26 @@ static void checkBootGreeting() {
 
   greetingTriggered = true;
 
-  int hour = -1;
+  int hour = -1, minute = 0, wday = -1;
   if (timeSynced) {
     struct tm timeinfo;
     if (getLocalTime(&timeinfo, 50)) {
       hour = timeinfo.tm_hour;
+      minute = timeinfo.tm_min;
+      wday = timeinfo.tm_wday;
     }
   }
 
   String owner = getOwnerName();
   owner.trim();
-  String speech = buildBootGreeting(hour, owner);
+
+  String speech = "";
+  if (WiFi.status() == WL_CONNECTED && (llmKey.length() || groqKey.length())) {
+    speech = generateLlmGreeting(hour, minute, wday, owner);
+  }
+  if (speech.length() == 0) {
+    speech = buildBootGreeting(hour, owner);
+  }
 
   Serial.printf("[BOOT] Greeting: %s (hour=%d)\n", speech.c_str(), hour);
   setEmotion(EMOTION_HAPPY);
@@ -405,7 +416,7 @@ void loop() {
 
   if (webQueuedQuestion.length() > 0 && !busyProcessing) {
     powerNotifyActivity();
-    String q = webQueuedQuestion;
+    String q = cleanTranscribedQuestion(webQueuedQuestion);
     webQueuedQuestion = "";
     busyProcessing = true;
     lastProgressAt = millis();
@@ -424,7 +435,7 @@ void loop() {
       Serial.println("[ROBOT] Web request cancelled");
     } else if (pendingSleepAction) {
       triggerPendingSleepAction();
-    } else if (returnIdleAt == 0 && !manualSleep && !inCircadianSleep &&
+    } else if (returnIdleAt == 0 && emotionAutoReturnAt == 0 && !manualSleep && !inCircadianSleep &&
                !sleepyFallAsleepIsActive()) {
       setEmotion(EMOTION_IDLE);
     }
@@ -449,8 +460,11 @@ void loop() {
                    " seconds; stops after speech ends...");
 
     setEmotion(EMOTION_LISTENING);
-    // Smoothly ease face into listening pose before blocking network STT setup
-    waitMs(120);
+    if (!preWakeHasData()) {
+      waitMs(80);
+    } else {
+      pumpUI();
+    }
 
     if (cancelRequest) {
       Serial.println("[ROBOT] Cancelled before recording");
@@ -484,6 +498,7 @@ void loop() {
                    " (" + cfg.model + ")...");
     String question = recordAndTranscribe(RECORD_SECONDS);
     if (!cancelRequest && question.length()) {
+      question = cleanTranscribedQuestion(question);
       lastTranscribedQuestion = question;
       addTerminalLog("[STT] User: \"" + question + "\"");
       handleQuestion(question);
@@ -512,6 +527,7 @@ void loop() {
       toneStop();
       spkAbortSpeech();
       wakeWordReset();
+      preWakeReset();
       busyProcessing = false;
       startRecording = true;
       setEmotion(EMOTION_LISTENING);
@@ -528,7 +544,7 @@ void loop() {
       Serial.println("[ROBOT] Cancelled - returning to Ready");
     } else if (pendingSleepAction) {
       triggerPendingSleepAction();
-    } else if (returnIdleAt == 0 && !manualSleep && !inCircadianSleep &&
+    } else if (returnIdleAt == 0 && emotionAutoReturnAt == 0 && !manualSleep && !inCircadianSleep &&
                !sleepyFallAsleepIsActive()) {
       setEmotion(EMOTION_IDLE);
     }

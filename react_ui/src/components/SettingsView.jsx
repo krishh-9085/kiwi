@@ -22,9 +22,8 @@ const TOUCH_ACTION_OPTIONS = [
 
 // STT Provider & Language Options
 const STT_PROVIDER_OPTIONS = [
-  { val: 'sarvam', lbl: 'Sarvam AI (saaras:v3)' },
-  { val: 'groq', lbl: 'Groq Whisper (fastest)' },
-  { val: 'openai', lbl: 'OpenAI Whisper' }
+  { val: 'sarvam', lbl: 'Sarvam AI' },
+  { val: 'groq', lbl: 'Groq Whisper' }
 ]
 
 const STT_LANG_OPTIONS = [
@@ -34,8 +33,8 @@ const STT_LANG_OPTIONS = [
 ]
 
 const STT_SARVAM_MODELS = [
-  { val: 'saaras:v3', lbl: 'saaras:v3' },
-  { val: 'saarika:v2', lbl: 'saarika:v2' }
+  { val: 'saaras:v4', lbl: 'saaras:v4' },
+  { val: 'saaras:v3', lbl: 'saaras:v3' }
 ]
 
 const STT_GROQ_MODELS = [
@@ -44,17 +43,10 @@ const STT_GROQ_MODELS = [
   { val: 'distil-whisper-large-v3-en', lbl: 'distil-whisper-large-v3-en' }
 ]
 
-const STT_OPENAI_MODELS = [
-  { val: 'whisper-1', lbl: 'whisper-1' },
-  { val: 'gpt-4o-mini-transcribe', lbl: 'gpt-4o-mini-transcribe' },
-  { val: 'gpt-4o-transcribe', lbl: 'gpt-4o-transcribe' }
-]
-
 // LLM Provider & Model Options
 const LLM_PROVIDER_OPTIONS = [
   { val: 'gemini', lbl: 'Google Gemini' },
-  { val: 'groq', lbl: 'Groq Cloud (fastest)' },
-  { val: 'openai', lbl: 'OpenAI GPT' }
+  { val: 'groq', lbl: 'Groq Cloud' }
 ]
 
 const LLM_GEMINI_MODELS = [
@@ -65,31 +57,19 @@ const LLM_GEMINI_MODELS = [
 ]
 
 const LLM_GROQ_MODELS = [
-  { val: 'llama-3.3-70b-versatile', lbl: 'llama-3.3-70b-versatile' },
   { val: 'openai/gpt-oss-120b', lbl: 'openai/gpt-oss-120b' },
-  { val: 'openai/gpt-oss-20b', lbl: 'openai/gpt-oss-20b' },
-  { val: 'qwen/qwen3-32b', lbl: 'qwen/qwen3-32b' }
-]
-
-const LLM_OPENAI_MODELS = [
-  { val: 'gpt-4o-mini', lbl: 'gpt-4o-mini (fast, recommended)' },
-  { val: 'gpt-4.1-mini', lbl: 'gpt-4.1-mini (quality)' },
-  { val: 'gpt-4.1-nano', lbl: 'gpt-4.1-nano (fastest)' },
-  { val: 'gpt-4o', lbl: 'gpt-4o (higher quality)' }
+  { val: 'openai/gpt-oss-20b', lbl: 'openai/gpt-oss-20b' }
 ]
 
 // TTS Provider & Voice Options
 const TTS_PROVIDER_OPTIONS = [
-  { val: 'sarvam', lbl: 'Sarvam AI (Bulbul)' },
-  { val: 'openai', lbl: 'OpenAI TTS' },
-  { val: 'elevenlabs', lbl: 'ElevenLabs Multilingual' },
-  { val: 'fish', lbl: 'Fish Audio (Ultra-realistic)' }
+  { val: 'sarvam', lbl: 'Sarvam AI' },
+  { val: 'fish', lbl: 'Fish Audio' }
 ]
 
 const TTS_SARVAM_MODELS = [
-  { val: 'bulbul:v4-flash', lbl: 'bulbul:v4-flash (fastest)' },
-  { val: 'bulbul:v3', lbl: 'bulbul:v3 (recommended)' },
-  { val: 'bulbul:v2', lbl: 'bulbul:v2' }
+  { val: 'bulbul:v3', lbl: 'bulbul:v3' },
+  { val: 'bulbul:v4-flash', lbl: 'bulbul:v4-flash' }
 ]
 
 const TTS_SARVAM_VOICES = [
@@ -124,27 +104,6 @@ const TTS_SARVAM_VOICES = [
   { val: 'gokul', lbl: 'Gokul (Male)' }
 ]
 
-const TTS_OPENAI_MODELS = [
-  { val: 'gpt-4o-mini-tts', lbl: 'gpt-4o-mini-tts' },
-  { val: 'tts-1', lbl: 'tts-1 (standard)' },
-  { val: 'tts-1-hd', lbl: 'tts-1-hd (high def)' }
-]
-
-const TTS_OPENAI_VOICES = [
-  { val: 'alloy', lbl: 'Alloy (Neutral)' },
-  { val: 'echo', lbl: 'Echo (Warm Male)' },
-  { val: 'fable', lbl: 'Fable (British Accent)' },
-  { val: 'onyx', lbl: 'Onyx (Deep Male)' },
-  { val: 'nova', lbl: 'Nova (Energetic Female)' },
-  { val: 'shimmer', lbl: 'Shimmer (Clear Female)' }
-]
-
-const TTS_ELEVEN_MODELS = [
-  { val: 'eleven_multilingual_v2', lbl: 'eleven_multilingual_v2' },
-  { val: 'eleven_flash_v2_5', lbl: 'eleven_flash_v2_5' },
-  { val: 'eleven_monolingual_v1', lbl: 'eleven_monolingual_v1' }
-]
-
 const TTS_FISH_MODELS = [
   { val: 's2.1-pro-free', lbl: 's2.1-pro-free' },
   { val: 's1', lbl: 's1' },
@@ -177,40 +136,28 @@ export default function SettingsView({
     llmkey: '',
     ttskey: '',
     groqkey: '',
-    elevkey: '',
-    openaikey: '',
     fishkey: '',
 
     // CARD 3: STT
     sttprovider: 'sarvam',
     sttlang: 'auto',
     stturl: 'https://api.sarvam.ai/speech-to-text',
-    sttmodel: 'saaras:v3',
+    sttmodel: 'saaras:v4',
     groqstturl: 'https://api.groq.com/openai/v1/audio/transcriptions',
     groqsttmodel: 'whisper-large-v3-turbo',
-    opaistturl: 'https://api.openai.com/v1/audio/transcriptions',
-    opaisttmodel: 'whisper-1',
 
     // CARD 4: LLM
     llmprovider: 'gemini',
     llmmodel: 'gemini-2.5-flash',
     llmurl: 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent',
-    groqmodel: 'llama-3.3-70b-versatile',
+    groqmodel: 'openai/gpt-oss-120b',
     groqurl: 'https://api.groq.com/openai/v1/chat/completions',
-    openaimodel: 'gpt-4o-mini',
-    openaiurl: 'https://api.openai.com/v1/chat/completions',
 
     // CARD 5: TTS
     ttsprovider: 'sarvam',
     ttsurl: 'https://api.sarvam.ai/text-to-speech',
-    ttsmodel: 'bulbul:v4-flash',
+    ttsmodel: 'bulbul:v3',
     ttsvoice: 'priya',
-    openaittsurl: 'https://api.openai.com/v1/audio/speech',
-    openaittsmodel: 'gpt-4o-mini-tts',
-    openaittsvoice: 'alloy',
-    elevurl: 'https://api.elevenlabs.io/v1/text-to-speech',
-    elevmodel: 'eleven_multilingual_v2',
-    elevvoice: '21m00Tcm4TlvDq8ikWAM',
     fishurl: 'https://api.fish.audio/v1/tts',
     fishmodel: 's2.1-pro-free',
     fishvoice: 'default',
@@ -270,94 +217,90 @@ export default function SettingsView({
   // Load config into form
   useEffect(() => {
     if (!config) return
-    setFormData((prev) => ({
-      ...prev,
-      ssid: config.wifi?.ssid || config.wifiSSID || config.ssid || prev.ssid,
-      pass: config.wifi?.password || config.wifiPassword || config.pass || prev.pass,
+    setFormData((prev) => {
+      const loadedLlmModel = config.llm?.model || config.llmModel || prev.llmmodel
+      let loadedLlmUrl = config.llm?.url || config.llmEndpoint || prev.llmurl
+      if (loadedLlmUrl && loadedLlmUrl.includes('generativelanguage.googleapis.com') && loadedLlmModel) {
+        loadedLlmUrl = `https://generativelanguage.googleapis.com/v1beta/models/${loadedLlmModel}:generateContent`
+      }
 
-      // API Keys
-      llmkey: config.llm?.key || config.llmKey || prev.llmkey,
-      ttskey: config.tts?.key || config.ttsKey || prev.ttskey,
-      groqkey: config.groqKey || config.stt?.groqKey || prev.groqkey,
-      elevkey: config.tts?.elevenKey || config.elevenKey || prev.elevkey,
-      openaikey: config.openaiKey || config.llm?.openaiKey || prev.openaikey,
-      fishkey: config.tts?.fishKey || config.fishKey || prev.fishkey,
+      return {
+        ...prev,
+        ssid: config.wifi?.ssid || config.wifiSSID || config.ssid || prev.ssid,
+        pass: config.wifi?.password || config.wifiPassword || config.pass || prev.pass,
 
-      // STT
-      sttprovider: config.stt?.provider || config.sttProvider || prev.sttprovider,
-      sttlang: config.stt?.lang || config.sttLang || prev.sttlang,
-      stturl: config.stt?.url || config.sttEndpoint || prev.stturl,
-      sttmodel: config.stt?.model || config.sttModel || prev.sttmodel,
-      groqstturl: config.stt?.groqUrl || config.groqSttEndpoint || prev.groqstturl,
-      groqsttmodel: config.stt?.groqModel || config.groqSttModel || prev.groqsttmodel,
-      opaistturl: config.stt?.openaiUrl || config.openaiSttEndpoint || prev.opaistturl,
-      opaisttmodel: config.stt?.openaiModel || config.openaiSttModel || prev.opaisttmodel,
+        // API Keys
+        llmkey: config.llm?.key || config.llmKey || prev.llmkey,
+        ttskey: config.tts?.key || config.ttsKey || prev.ttskey,
+        groqkey: config.groqKey || config.stt?.groqKey || prev.groqkey,
+        fishkey: config.tts?.fishKey || config.fishKey || prev.fishkey,
 
-      // LLM
-      llmprovider: config.llm?.provider || config.llmProvider || prev.llmprovider,
-      llmmodel: config.llm?.model || config.llmModel || prev.llmmodel,
-      llmurl: config.llm?.url || config.llmEndpoint || prev.llmurl,
-      groqmodel: config.llm?.groqModel || config.groqModel || prev.groqmodel,
-      groqurl: config.llm?.groqUrl || config.groqEndpoint || prev.groqurl,
-      openaimodel: config.llm?.openaiModel || config.openaiModel || prev.openaimodel,
-      openaiurl: config.llm?.openaiUrl || config.openaiEndpoint || prev.openaiurl,
+        // STT
+        sttprovider: config.stt?.provider || config.sttProvider || prev.sttprovider,
+        sttlang: config.stt?.lang || config.sttLang || prev.sttlang,
+        stturl: config.stt?.url || config.sttEndpoint || prev.stturl,
+        sttmodel: config.stt?.model || config.sttModel || prev.sttmodel,
+        groqstturl: config.stt?.groqUrl || config.groqSttEndpoint || prev.groqstturl,
+        groqsttmodel: config.stt?.groqModel || config.groqSttModel || prev.groqsttmodel,
 
-      // TTS
-      ttsprovider: config.tts?.provider || config.ttsProvider || prev.ttsprovider,
-      ttsurl: config.tts?.url || config.ttsEndpoint || prev.ttsurl,
-      ttsmodel: config.tts?.model || config.ttsModel || prev.ttsmodel,
-      ttsvoice: config.tts?.voice || config.ttsVoice || prev.ttsvoice,
-      openaittsurl: config.tts?.openaiUrl || config.openaiTtsEndpoint || prev.openaittsurl,
-      openaittsmodel: config.tts?.openaiModel || config.openaiTtsModel || prev.openaittsmodel,
-      openaittsvoice: config.tts?.openaiVoice || config.openaiTtsVoice || prev.openaittsvoice,
-      elevurl: config.tts?.elevenUrl || config.elevenEndpoint || prev.elevurl,
-      elevmodel: config.tts?.elevenModel || config.elevenModel || prev.elevmodel,
-      elevvoice: config.tts?.elevenVoice || config.elevenVoice || prev.elevvoice,
-      fishurl: config.tts?.fishUrl || config.fishEndpoint || prev.fishurl,
-      fishmodel: config.tts?.fishModel || config.fishModel || prev.fishmodel,
-      fishvoice: config.tts?.fishVoice || config.fishVoice || prev.fishvoice,
+        // LLM
+        llmprovider: config.llm?.provider || config.llmProvider || prev.llmprovider,
+        llmmodel: loadedLlmModel,
+        llmurl: loadedLlmUrl,
+        groqmodel: config.llm?.groqModel || config.groqModel || prev.groqmodel,
+        groqurl: config.llm?.groqUrl || config.groqEndpoint || prev.groqurl,
 
-      // Touch
-      tch_snd: config.touch?.sound != null ? (config.touch.sound ? '1' : '0') : prev.tch_snd,
-      tch_deb: config.touch?.deb ?? prev.tch_deb,
-      act_top_tap: config.touch?.topTap || prev.act_top_tap,
-      act_top_dbl: config.touch?.topDbl || prev.act_top_dbl,
-      act_top_hld: config.touch?.topHld || prev.act_top_hld,
-      act_lt_tap: config.touch?.ltTap || prev.act_lt_tap,
-      act_lt_dbl: config.touch?.ltDbl || prev.act_lt_dbl,
-      act_rt_tap: config.touch?.rtTap || prev.act_rt_tap,
-      act_rt_dbl: config.touch?.rtDbl || prev.act_rt_dbl,
-      act_lt_hld: config.touch?.ltHld || prev.act_lt_hld,
-      act_rt_hld: config.touch?.rtHld || prev.act_rt_hld,
+        // TTS
+        ttsprovider: config.tts?.provider || config.ttsProvider || prev.ttsprovider,
+        ttsurl: config.tts?.url || config.ttsEndpoint || prev.ttsurl,
+        ttsmodel: config.tts?.model || config.ttsModel || prev.ttsmodel,
+        ttsvoice: config.tts?.voice || config.ttsVoice || prev.ttsvoice,
+        fishurl: config.tts?.fishUrl || config.fishEndpoint || prev.fishurl,
+        fishmodel: config.tts?.fishModel || config.fishModel || prev.fishmodel,
+        fishvoice: config.tts?.fishVoice || config.fishVoice || prev.fishvoice,
 
-      // Weather & Personality
-      wthr_city: config.weather?.city || config.weatherCity || prev.wthr_city,
-      wthr_lat: config.weather?.lat || config.weatherLat || prev.wthr_lat,
-      wthr_lon: config.weather?.lon || config.weatherLon || prev.wthr_lon,
-      skin: config.skin || config.currentEyeSkin || prev.skin,
-      prompt: config.prompt || config.systemPrompt || prev.prompt,
+        // Touch
+        tch_snd: config.touch?.sound != null ? (config.touch.sound ? '1' : '0') : prev.tch_snd,
+        tch_deb: config.touch?.deb ?? prev.tch_deb,
+        act_top_tap: config.touch?.topTap || prev.act_top_tap,
+        act_top_dbl: config.touch?.topDbl || prev.act_top_dbl,
+        act_top_hld: config.touch?.topHld || prev.act_top_hld,
+        act_lt_tap: config.touch?.ltTap || prev.act_lt_tap,
+        act_lt_dbl: config.touch?.ltDbl || prev.act_lt_dbl,
+        act_rt_tap: config.touch?.rtTap || prev.act_rt_tap,
+        act_rt_dbl: config.touch?.rtDbl || prev.act_rt_dbl,
+        act_lt_hld: config.touch?.ltHld || prev.act_lt_hld,
+        act_rt_hld: config.touch?.rtHld || prev.act_rt_hld,
 
-      // Memory
-      mem_name: config.memory?.name || config.ownerName || prev.mem_name,
-      mem_friends: config.memory?.friends || prev.mem_friends,
+        // Weather & Personality
+        wthr_city: config.weather?.city || config.weatherCity || prev.wthr_city,
+        wthr_lat: config.weather?.lat || config.weatherLat || prev.wthr_lat,
+        wthr_lon: config.weather?.lon || config.weatherLon || prev.wthr_lon,
+        skin: config.skin || config.currentEyeSkin || prev.skin,
+        prompt: config.prompt != null ? config.prompt : (config.systemPrompt != null ? config.systemPrompt : prev.prompt),
 
-      // Hidden live preservation
-      vol: config.volume ?? config.speakerVolume ?? prev.vol,
-      disp_bright: config.brightness ?? config.displayBrightness ?? prev.disp_bright,
-      night_bright: config.nightBrightness ?? prev.night_bright,
-      night_mode: config.nightMode ?? prev.night_mode,
-      circ_start: config.circadian?.start ?? prev.circ_start,
-      circ_end: config.circadian?.end ?? prev.circ_end,
-      circ_en: config.circadian?.enabled != null ? (config.circadian.enabled ? '1' : '0') : prev.circ_en,
-      greet_en: config.greetings?.enabled != null ? (config.greetings.enabled ? '1' : '0') : prev.greet_en,
-      snd_react: config.soundReactive?.enabled != null ? (config.soundReactive.enabled ? '1' : '0') : prev.snd_react,
-      boredom: config.boredom?.enabled != null ? (config.boredom.enabled ? '1' : '0') : prev.boredom,
-      boredom_mins: config.boredom?.minutes ?? prev.boredom_mins,
-      ww_en: config.wakeWord?.enabled != null ? (config.wakeWord.enabled ? '1' : '0') : prev.ww_en,
-      ww_model: String(config.wakeWord?.model ?? prev.ww_model),
-      rgb_en: config.rgbLed?.enabled != null ? (config.rgbLed.enabled ? '1' : '0') : prev.rgb_en,
-      rgb_bright: config.rgbLed?.brightness ?? prev.rgb_bright
-    }))
+        // Memory
+        mem_name: config.memory?.name || config.ownerName || prev.mem_name,
+        mem_friends: config.memory?.friends || prev.mem_friends,
+
+        // Hidden live preservation
+        vol: config.volume ?? config.speakerVolume ?? prev.vol,
+        disp_bright: config.brightness ?? config.displayBrightness ?? prev.disp_bright,
+        night_bright: config.nightBrightness ?? prev.night_bright,
+        night_mode: config.nightMode ?? prev.night_mode,
+        circ_start: config.circadian?.start ?? prev.circ_start,
+        circ_end: config.circadian?.end ?? prev.circ_end,
+        circ_en: config.circadian?.enabled != null ? (config.circadian.enabled ? '1' : '0') : prev.circ_en,
+        greet_en: config.greetings?.enabled != null ? (config.greetings.enabled ? '1' : '0') : prev.greet_en,
+        snd_react: config.soundReactive?.enabled != null ? (config.soundReactive.enabled ? '1' : '0') : prev.snd_react,
+        boredom: config.boredom?.enabled != null ? (config.boredom.enabled ? '1' : '0') : prev.boredom,
+        boredom_mins: config.boredom?.minutes ?? prev.boredom_mins,
+        ww_en: config.wakeWord?.enabled != null ? (config.wakeWord.enabled ? '1' : '0') : prev.ww_en,
+        ww_model: String(config.wakeWord?.model ?? prev.ww_model),
+        rgb_en: config.rgbLed?.enabled != null ? (config.rgbLed.enabled ? '1' : '0') : prev.rgb_en,
+        rgb_bright: config.rgbLed?.brightness ?? prev.rgb_bright
+      }
+    })
 
     if (config.memory?.facts && Array.isArray(config.memory.facts)) {
       setFacts(config.memory.facts)
@@ -366,10 +309,22 @@ export default function SettingsView({
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target
-    setFormData((prev) => ({
-      ...prev,
-      [name]: type === 'checkbox' ? (checked ? '1' : '0') : value
-    }))
+    const val = type === 'checkbox' ? (checked ? '1' : '0') : value
+    setFormData((prev) => {
+      const updated = {
+        ...prev,
+        [name]: val
+      }
+
+      // Auto-update Gemini Endpoint URL when Gemini Model dropdown is changed
+      if (name === 'llmmodel') {
+        if (!prev.llmurl || prev.llmurl.includes('generativelanguage.googleapis.com')) {
+          updated.llmurl = `https://generativelanguage.googleapis.com/v1beta/models/${val}:generateContent`
+        }
+      }
+
+      return updated
+    })
   }
 
   const handleScanWifi = async () => {
@@ -608,40 +563,6 @@ export default function SettingsView({
 
           <div>
             <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', display: 'block', marginBottom: '6px' }}>
-              ELEVENLABS API
-            </label>
-            <input
-              type={showAllKeys ? 'text' : 'password'}
-              name="elevkey"
-              value={formData.elevkey}
-              onChange={handleChange}
-              placeholder="xi_..."
-              style={{
-                width: '100%', padding: '11px 14px', borderRadius: '12px',
-                background: 'var(--card-muted)', border: '1px solid var(--border-light)', color: 'var(--text-dark)', fontSize: '13px', outline: 'none'
-              }}
-            />
-          </div>
-
-          <div>
-            <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', display: 'block', marginBottom: '6px' }}>
-              OPENAI API
-            </label>
-            <input
-              type={showAllKeys ? 'text' : 'password'}
-              name="openaikey"
-              value={formData.openaikey}
-              onChange={handleChange}
-              placeholder="sk-..."
-              style={{
-                width: '100%', padding: '11px 14px', borderRadius: '12px',
-                background: 'var(--card-muted)', border: '1px solid var(--border-light)', color: 'var(--text-dark)', fontSize: '13px', outline: 'none'
-              }}
-            />
-          </div>
-
-          <div>
-            <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', display: 'block', marginBottom: '6px' }}>
               FISH AUDIO API
             </label>
             <input
@@ -741,29 +662,6 @@ export default function SettingsView({
               </div>
             </div>
           )}
-
-          {formData.sttprovider === 'openai' && (
-            <div>
-              <h3 style={{ fontSize: '13px', fontWeight: 800, color: 'var(--text-dark)', marginBottom: '12px' }}>OpenAI Whisper Settings</h3>
-              <div className="flux-grid-2">
-                <div>
-                  <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>Endpoint</label>
-                  <input
-                    type="url"
-                    name="opaistturl"
-                    value={formData.opaistturl}
-                    onChange={handleChange}
-                    placeholder="https://api.openai.com/v1/audio/transcriptions"
-                    style={{ width: '100%', padding: '10px 14px', borderRadius: '10px', background: 'var(--card-white)', border: '1px solid var(--border-light)', color: 'var(--text-dark)', fontSize: '12px', outline: 'none' }}
-                  />
-                </div>
-                <div>
-                  <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>Model</label>
-                  <FluxSelect name="opaisttmodel" value={formData.opaisttmodel} onChange={handleChange} options={STT_OPENAI_MODELS} />
-                </div>
-              </div>
-            </div>
-          )}
         </div>
       </div>
 
@@ -833,28 +731,6 @@ export default function SettingsView({
               </div>
             </div>
           )}
-
-          {formData.llmprovider === 'openai' && (
-            <div>
-              <h3 style={{ fontSize: '13px', fontWeight: 800, color: 'var(--text-dark)', marginBottom: '12px' }}>OpenAI GPT Model &amp; Settings</h3>
-              <div className="flux-grid-2">
-                <div>
-                  <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>Model</label>
-                  <FluxSelect name="openaimodel" value={formData.openaimodel} onChange={handleChange} options={LLM_OPENAI_MODELS} />
-                </div>
-                <div>
-                  <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>Endpoint</label>
-                  <input
-                    type="url"
-                    name="openaiurl"
-                    value={formData.openaiurl}
-                    onChange={handleChange}
-                    style={{ width: '100%', padding: '10px 14px', borderRadius: '10px', background: 'var(--card-white)', border: '1px solid var(--border-light)', color: 'var(--text-dark)', fontSize: '12px', outline: 'none' }}
-                  />
-                </div>
-              </div>
-            </div>
-          )}
         </div>
       </div>
 
@@ -902,65 +778,6 @@ export default function SettingsView({
                 <div>
                   <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>Voice / Speaker</label>
                   <FluxSelect name="ttsvoice" value={formData.ttsvoice} onChange={handleChange} options={TTS_SARVAM_VOICES} />
-                </div>
-              </div>
-            </div>
-          )}
-
-          {formData.ttsprovider === 'openai' && (
-            <div>
-              <h3 style={{ fontSize: '13px', fontWeight: 800, color: 'var(--text-dark)', marginBottom: '12px' }}>OpenAI TTS Settings</h3>
-              <div className="flux-grid-autofit">
-                <div>
-                  <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>Endpoint</label>
-                  <input
-                    type="url"
-                    name="openaittsurl"
-                    value={formData.openaittsurl}
-                    onChange={handleChange}
-                    style={{ width: '100%', padding: '10px 14px', borderRadius: '10px', background: 'var(--card-white)', border: '1px solid var(--border-light)', color: 'var(--text-dark)', fontSize: '12px', outline: 'none' }}
-                  />
-                </div>
-                <div>
-                  <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>Model</label>
-                  <FluxSelect name="openaittsmodel" value={formData.openaittsmodel} onChange={handleChange} options={TTS_OPENAI_MODELS} />
-                </div>
-                <div>
-                  <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>Voice</label>
-                  <FluxSelect name="openaittsvoice" value={formData.openaittsvoice} onChange={handleChange} options={TTS_OPENAI_VOICES} />
-                </div>
-              </div>
-            </div>
-          )}
-
-          {formData.ttsprovider === 'elevenlabs' && (
-            <div>
-              <h3 style={{ fontSize: '13px', fontWeight: 800, color: 'var(--text-dark)', marginBottom: '12px' }}>ElevenLabs Settings</h3>
-              <div className="flux-grid-autofit">
-                <div>
-                  <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>Endpoint</label>
-                  <input
-                    type="url"
-                    name="elevurl"
-                    value={formData.elevurl}
-                    onChange={handleChange}
-                    style={{ width: '100%', padding: '10px 14px', borderRadius: '10px', background: 'var(--card-white)', border: '1px solid var(--border-light)', color: 'var(--text-dark)', fontSize: '12px', outline: 'none' }}
-                  />
-                </div>
-                <div>
-                  <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>Model</label>
-                  <FluxSelect name="elevmodel" value={formData.elevmodel} onChange={handleChange} options={TTS_ELEVEN_MODELS} />
-                </div>
-                <div>
-                  <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>Voice ID</label>
-                  <input
-                    type="text"
-                    name="elevvoice"
-                    value={formData.elevvoice}
-                    onChange={handleChange}
-                    placeholder="21m00Tcm4TlvDq8ikWAM"
-                    style={{ width: '100%', padding: '10px 14px', borderRadius: '10px', background: 'var(--card-white)', border: '1px solid var(--border-light)', color: 'var(--text-dark)', fontSize: '12px', outline: 'none' }}
-                  />
                 </div>
               </div>
             </div>

@@ -91,6 +91,18 @@ export default function KiwiEyes({ emotion = 'idle', skin = 'kiwi', sleeping = f
       )
     }
 
+    // EMO: Solid rounded rectangle with prominent corner radius, no pupil
+    if (skin === 'emo') {
+      const eyeTilt = side === 'left' ? 'rotate(1 32 34)' : 'rotate(-1 32 34)'
+      return (
+        <g transform={eyeTilt}>
+          <rect x="14" y="16" width="36" height="36" rx="10"
+            fill="#00f0ff"
+            filter="drop-shadow(0 0 14px rgba(0,240,255,0.9))" />
+        </g>
+      )
+    }
+
     // Default / Kiwi / Vector
     const rx      = skin === 'pixel' ? 0 : 12
     const eyeTilt = side === 'left' ? 'rotate(4 32 34)' : 'rotate(-4 32 34)'

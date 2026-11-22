@@ -1,5 +1,6 @@
 #include "services/AiTextTools.h"
 #include "config/AppConfig.h"
+#include "services/MemoryService.h"
 
 // ============================================================
 // BASE64 & UTF-8 HELPERS
@@ -203,6 +204,10 @@ String normalizeFishAudioTags(const String &text) {
     String modernTag = "[" + String(knownTags[k]) + "]";
     s.replace(legacyTag, modernTag);
   }
+  // Normalize variations to official Fish Audio [laughing]
+  s.replace("[laugh]", "[laughing]");
+  s.replace("[laughs]", "[laughing]");
+  s.replace("[laughter]", "[laughing]");
   return s;
 }
 
@@ -225,12 +230,6 @@ String cleanForSpeech(const String &in) {
   if (ttsProvider == "fish" || ttsProvider == "fishaudio") {
     s = stripRobotTags(s);
     static const char *unwantedTags[] = {
-        "[laugh]", "[laughs]", "[laughing]",
-        "[chuckle]", "[chuckles]", "[chuckling]",
-        "[giggle]", "[giggles]", "[giggling]",
-        "(laugh)", "(laughs)", "(laughing)",
-        "(chuckle)", "(chuckles)", "(chuckling)",
-        "(giggle)", "(giggles)", "(giggling)",
         "[happy]", "(happy)", "[joy]", "(joy)",
         nullptr};
     for (int k = 0; unwantedTags[k] != nullptr; k++) {
@@ -316,4 +315,111 @@ String whisperSttLangCode() {
 }
 
 // ============================================================
+// ============================================================
+// CLEAN & NORMALIZE TRANSCRIBED USER QUESTION
+// ============================================================
+String cleanTranscribedQuestion(const String &rawQ) {
+  String q = rawQ;
+  q.trim();
+  if (!q.length())
+    return q;
+
+  // Strip leading dialogue quotes (Whisper frequently wraps Hindi dialogue in quotes)
+  while (q.startsWith("\"") || q.startsWith("'") || q.startsWith("“") || q.startsWith("‘") ||
+         q.startsWith("`") || q.startsWith(",") || q.startsWith(" ")) {
+    q.remove(0, 1);
+    q.trim();
+  }
+  while (q.endsWith("\"") || q.endsWith("'") || q.endsWith("”") || q.endsWith("’") ||
+         q.endsWith("`") || q.endsWith(" ")) {
+    q.remove(q.length() - 1);
+    q.trim();
+  }
+
+  // 1. Guard: If query is asking about the robot's identity or wake word (e.g. "Who is Alexa", "Kiwi kaun hai", "who are you"), do NOT strip!
+  String lowerQ = q;
+  lowerQ.toLowerCase();
+  bool isAskingAboutRobot = lowerQ.startsWith("who is ") || lowerQ.startsWith("what is ") ||
+                            lowerQ.indexOf("kaun hai") >= 0 || lowerQ.indexOf("kya hai") >= 0 ||
+                            lowerQ.indexOf("कौन है") >= 0 || lowerQ.indexOf("क्या है") >= 0;
+
+  if (!isAskingAboutRobot) {
+    // Common wake word / vocative prefixes in Hindi & English (ordered longest to shortest)
+    static const char *const wakePrefixes[] = {
+        // English prefixes
+        "hey alexa,", "hey alexa", "hello alexa,", "hello alexa",
+        "suno alexa,", "suno alexa", "ok alexa,", "ok alexa",
+        "alexa,", "alexa",
+        "hey kiwi,", "hey kiwi", "hello kiwi,", "hello kiwi",
+        "suno kiwi,", "suno kiwi", "ok kiwi,", "ok kiwi",
+        "kiwi,", "kiwi",
+        // Devanagari (Hindi) prefixes
+        "सुनो अलेक्सा,", "सुनो अलेक्सा", "सुनो अलैक्सा,", "सुनो अलैक्सा",
+        "हे अलेक्सा,", "हे अलेक्सा", "हे अलैक्सा,", "हे अलैक्सा",
+        "हेलो अलेक्सा,", "हेलो अलेक्सा", "नमस्ते अलेक्सा,", "नमस्ते अलेक्सा",
+        "अलेक्सा,", "अलेक्सा", "अलैक्सा,", "अलैक्सा",
+        "सुनो कीवी,", "सुनो कीवी", "हे कीवी,", "हे कीवी",
+        "हेलो कीवी,", "हेलो कीवी", "नमस्ते कीवी,", "नमस्ते कीवी",
+        "कीवी,", "कीवी",
+        nullptr
+    };
+
+    for (int i = 0; wakePrefixes[i] != nullptr; i++) {
+      String pfx = wakePrefixes[i];
+      int pLen = pfx.length();
+      if ((int)q.length() >= pLen) {
+        String head = q.substring(0, pLen);
+        bool match = (head == pfx);
+        if (!match) {
+          // Fallback case-insensitive check for ASCII prefixes (e.g. "alexa", "kiwi")
+          match = head.equalsIgnoreCase(pfx);
+        }
+        if (match) {
+          if ((int)q.length() == pLen) {
+            // Entire query was just the wake word
+            q = "";
+            break;
+          }
+          char nextC = q[pLen];
+          if (nextC == ' ' || nextC == ',' || nextC == '-' || nextC == ':' || (unsigned char)nextC >= 0x80) {
+            String rem = q.substring(pLen);
+            rem.trim();
+            while (rem.length() > 0 && (rem[0] == ',' || rem[0] == ' ' || rem[0] == '-' || rem[0] == ':')) {
+              rem.remove(0, 1);
+              rem.trim();
+            }
+            if (rem.length() >= 2) {
+              q = rem;
+              break;
+            }
+          }
+        }
+      }
+    }
+  }
+
+  // 2. Family & Friends phonetic auto-correction
+  // Whisper Hindi often mis-transcribes the name "Yunay" into "यू न" ("you na"), "यून", "युने", "युनै"
+  // Automatically correct these phonetic splits so the LLM and memory system properly identify Yunay
+  q.replace("यू न ", "युनय ");
+  q.replace("यू न,", "युनय,");
+  q.replace("यू न?", "युनय?");
+  q.replace("यू न!", "युनय!");
+  q.replace("यू न।", "युनय।");
+  q.replace("यून ", "युनय ");
+  q.replace("यून,", "युनय,");
+  q.replace("यून?", "युनय?");
+  q.replace("युनै ", "युनय ");
+  q.replace("युने ", "युनय ");
+  q.replace("युनै", "युनय");
+  q.replace("युने", "युनय");
+  q.replace("you na ", "Yunay ");
+  q.replace("you na,", "Yunay,");
+  q.replace("you na?", "Yunay?");
+  q.replace("you na!", "Yunay!");
+
+  q.trim();
+  return q;
+}
+
 // NETWORK TRANSPORT HELPERS

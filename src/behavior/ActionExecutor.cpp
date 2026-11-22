@@ -219,33 +219,27 @@ bool setEyeSkinByName(const String &nameIn) {
     currentEyeSkin = SKIN_KIWI;
     return true;
   }
-  // 2. Vector Classic (#2)
-  if (n == "vector" || n == "vector classic" || n == "classic vector" ||
-      n == "anki" || n == "classic" || n == "glow" || n == "वेक्टर") {
-    currentEyeSkin = SKIN_VECTOR;
-    return true;
-  }
-  // 3. Pixel 8-Bit (#3)
+  // 2. Pixel 8-Bit (#2)
   if (n == "pixel" || n == "pixel 8-bit" || n == "arcade" || n == "retro" ||
       n == "8bit" || n == "8-bit" || n == "पिक्सेल") {
     currentEyeSkin = SKIN_PIXEL;
     return true;
   }
-  // 4. Squircle Bold (#4)
-  if (n == "squircle bold" || n == "squircle solid" || n == "bold" ||
-      n == "squircle" || n == "स्क्वार्कल") {
-    currentEyeSkin = SKIN_SQUIRCLE_BOLD;
-    return true;
-  }
-  // 5. Lumina Spark (#5)
+  // 3. Lumina Spark (#3)
   if (n == "lumina spark" || n == "squircle glint" || n == "spark" ||
       n == "lumina" || n == "glint") {
     currentEyeSkin = SKIN_LUMINA_SPARK;
     return true;
   }
-  // 6. Mecha (#6)
+  // 4. Mecha (#4)
   if (n == "mecha" || n == "circtangle" || n == "robot" || n == "मेका") {
     currentEyeSkin = SKIN_MECHA;
+    return true;
+  }
+  // 5. EMO-style (#5)
+  if (n == "emo" || n == "emo-style" || n == "emo style" || n == "livingai" ||
+      n == "emostyle" || n == "ईमो" || n == "इमो") {
+    currentEyeSkin = SKIN_EMO;
     return true;
   }
 
@@ -263,10 +257,21 @@ void triggerSoundByName(const String &nameIn) {
     playBootChime();
   else if (s == "sparkle" || s == "magic")
     soundPetSparkle();
-  else if (s == "giggle" || s == "laugh" || s == "laughing")
+  else if (s == "giggle" || s == "laugh" || s == "laughing") {
     soundLaughing();
-  else if (s == "cry" || s == "crying" || s == "sob")
+    if (currentEmotion != EMOTION_SLEEPING) {
+      setEmotion(EMOTION_LAUGHING);
+      returnIdleAt = millis() + 4500;
+      emotionAutoReturnAt = returnIdleAt;
+    }
+  } else if (s == "cry" || s == "crying" || s == "sob") {
     soundCrying();
+    if (currentEmotion != EMOTION_SLEEPING) {
+      setEmotion(EMOTION_CRYING);
+      returnIdleAt = millis() + 5200;
+      emotionAutoReturnAt = returnIdleAt;
+    }
+  }
   else if (s == "kiss" || s == "love")
     soundPetKiss();
   else if (s == "playful" || s == "party")
@@ -277,6 +282,10 @@ void triggerSoundByName(const String &nameIn) {
     soundPetProud();
   else if (s == "cuddle")
     soundPetCuddle();
+  else if (s == "weather")
+    soundWeather();
+  else if (s == "clock" || s == "time")
+    soundClock();
   else if (s == "shy")
     soundPetShy();
   else if (s == "error" || s == "alert")

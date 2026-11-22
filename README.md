@@ -2,7 +2,7 @@
 
 **Kiwi** is an expressive, autonomous AI desk companion robot built on the **ESP32-S3** dual-core processor. It features a 128x64 OLED vector face, an I2S digital microphone, an I2S power amplifier and speaker, an onboard WS2812 RGB LED, and three capacitive touch pads.
 
-Kiwi is powered by local offline neural wake word detection, dual-core multithreaded rendering, an interactive Tamagotchi-style pet hunger system, cloud speech-to-text, multiple LLM reasoning engines (Groq, Google Gemini, OpenAI), and expressive streaming text-to-speech. Its eyes, sounds, RGB LED, and behaviors dynamically react to physical touch, vocal emotions, time of day, room lighting (HyperHDR / WLED), and LLM-driven actions.
+Kiwi is powered by local offline neural wake word detection, dual-core multithreaded rendering, an interactive Tamagotchi-style pet hunger system, cloud speech-to-text, multiple LLM reasoning engines (Groq, Google Gemini), and expressive streaming text-to-speech. Its eyes, sounds, RGB LED, and behaviors dynamically react to physical touch, vocal emotions, time of day, room lighting (HyperHDR / WLED), and LLM-driven actions.
 
 - **Firmware Version:** `v1.2` (`FIRMWARE_VERSION` in [AppConfig.h](file:///d:/PROJECTS/MyRobot_Modular/src/config/AppConfig.h#L8))
 - **Hardware Platform:** ESP32-S3 (Dual-Core Xtensa LX7 @ 240 MHz, 4 MB Flash)
@@ -109,18 +109,14 @@ Configured in [AppConfig.h](file:///d:/PROJECTS/MyRobot_Modular/src/config/AppCo
 
 ### 6. Cloud AI & Voice Interaction Pipeline
 - **Speech-to-Text (STT):**
-  - Sarvam AI `saaras:v3` (default, language `hi`, `en`, or `auto`)
+  - Sarvam AI `saaras:v4` (default, language `hi`, `en`, or `auto`)
   - Groq Whisper `whisper-large-v3`
-  - OpenAI Whisper `whisper-1`
 - **Large Language Model (LLM):**
-  - Groq Cloud `llama-3.3-70b-versatile` (default)
+  - Groq Cloud `openai/gpt-oss-120b` (default)
   - Google Gemini (`gemini-2.5-flash-lite`, `gemini-2.5-flash`, etc.)
-  - OpenAI Chat (`gpt-4o`, `gpt-4o-mini`, etc.)
   - Max token limit: 800 tokens (`LLM_MAX_TOKENS`).
 - **Text-to-Speech (TTS):**
-  - Sarvam AI `bulbul:v3` (default voice `priya`)
-  - OpenAI `gpt-4o-mini-tts` (voice `alloy`)
-  - ElevenLabs `eleven_multilingual_v2` (voice `21m00Tcm4TlvDq8ikWAM`)
+  - Sarvam AI `bulbul:v1-flash` (default)
   - Fish Audio `s2.1-pro-free` (detects vocal tags like `[laugh]`, `[whisper]`, `[crying]`, `[angry]` and syncs facial expressions in real time).
 - **Streaming Audio (`LLM_STREAM_TTS 1`):** Kiwi streams speech as sentence chunks arrive from the LLM, achieving low time-to-first-audio latency.
 - **Persistent Memory:** Stores up to **16 persistent facts** in flash (owner name, family details, user goals, and proactive follow-ups).
@@ -201,7 +197,7 @@ Access Kiwi via:
   - **42 Expression Triggers:** Visual gallery of all facial emotion states.
   - **Screen Modes:** Interactive 1-click toggles for Clock, Weather, and OLED Marquee text banner.
 - **Settings & AI Configuration:**
-  - **AI Engines:** Select providers and models for STT (Sarvam, Whisper), LLM (Groq, Gemini, OpenAI), and TTS (Sarvam, OpenAI, ElevenLabs, Fish Audio).
+  - **AI Engines:** Select providers and models for STT (Sarvam, Groq Whisper), LLM (Groq, Gemini), and TTS (Sarvam, Fish Audio).
   - **Hardware & Sensing:** Wake word sensitivity, barge-in bump, and 9-gesture capacitive touch remapping.
   - **Personal Life Diary:** Edit up to 16 persistent memory facts.
 - **Wireless OTA Update View:**
@@ -334,10 +330,10 @@ Saved NVS flash settings take precedence over code defaults.
 | Idle Banter (Boredom)| `boredom`, `boredom_mins`| `false`, `2` | 1 – 60 minutes |
 | Default Eye Skin | `eyeskin` | `0` (`SKIN_KIWI`) | 0 – 5 (6 curated skins) |
 | Chat History Turns | `chat_hist` | `4` | 1 – 8 turns |
-| STT Provider | `sttprov` | `sarvam` | `sarvam`, `groq`, `openai` |
+| STT Provider | `sttprov` | `sarvam` | `sarvam`, `groq` |
 | STT Language | `sttlang` | `hi` | `hi`, `en`, `auto` |
-| LLM Provider | `llmprov` | `groq` | `groq`, `gemini`, `openai` |
-| TTS Provider | `ttsprov` | `sarvam` | `sarvam`, `openai`, `elevenlabs`, `fish` |
+| LLM Provider | `llmprov` | `groq` | `groq`, `gemini` |
+| TTS Provider | `ttsprov` | `sarvam` | `sarvam`, `fish` |
 | Weather City | `wthr_city` | `New Delhi` | City name |
 | Weather Coordinates | `wthr_lat`, `wthr_lon` | `28.6139`, `77.2090` | Lat / Lon decimals |
 | mDNS Hostname | `hostname` | `kiwi` | Resolves to `kiwi.local` |
@@ -416,9 +412,9 @@ src/
     AiTransport.h / .cpp     HTTP / TLS stream transport
     AiTextTools.h / .cpp     JSON parsers, string sanitizers, and Devanagari helpers
     AiChatHistory.h / .cpp   Multi-turn conversation history buffer
-    AiLlmService.h / .cpp    Groq, Google Gemini, and OpenAI client with SSE streaming
+    AiLlmService.h / .cpp    Groq and Google Gemini client with SSE streaming
     AiSttService.h / .cpp    I2S audio recorder & multipart STT client (Sarvam, Whisper)
-    AiTtsService.h / .cpp    Sarvam, OpenAI, ElevenLabs, and Fish Audio PCM stream decoder
+    AiTtsService.h / .cpp    Sarvam and Fish Audio PCM stream decoder
     MemoryService.h / .cpp   16-fact persistent memory storage, owner name, and follow-ups
     HyperHdrService.h / .cpp HyperHDR JSON-RPC client (screen sync, ambilight, HDR, colors)
     WledService.h / .cpp     WLED mDNS discovery and HTTP control

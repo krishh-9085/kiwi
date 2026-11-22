@@ -16,7 +16,8 @@ enum ToneShape : uint8_t {
   SHAPE_WARM_VOCAL = 1, // Warm organic harmonics (voice / vowel formant style)
   SHAPE_PURR = 2,       // Low purring motor with warm tremolo & flutter
   SHAPE_CHIRP = 3,      // Bright expressive robot chirp (harmonic overtones)
-  SHAPE_WARBLE = 4      // Wall-E / R2-D2 expressive FM warble & robotic vocal
+  SHAPE_WARBLE = 4,     // Wall-E / R2-D2 expressive FM warble & robotic vocal
+  SHAPE_BELL = 5        // Acoustic bell / marimba / chime with natural percussive decay
 };
 
 struct Tone {
@@ -132,22 +133,24 @@ enum Flourish { FL_NONE, FL_HEART, FL_SPARKLE, FL_NOTE, FL_MOON, FL_STAR };
 
 enum EyeSkin : uint8_t {
   SKIN_KIWI = 0,          // Kiwi (Flagship Cute Desk Buddy) - Default #1
-  SKIN_VECTOR = 1,        // Vector Classic (#2)
-  SKIN_PIXEL = 2,         // Pixel 8-Bit (#3, arcade retro)
-  SKIN_SQUIRCLE_BOLD = 3, // Squircle Bold (#4, modern solid)
-  SKIN_LUMINA_SPARK = 4,  // Lumina Spark (#5, dual glint)
-  SKIN_MECHA = 5          // Mecha (#6, Cirrectangle Solid with floating rounded pupil & glint)
+  SKIN_PIXEL = 1,         // Pixel 8-Bit (#2, arcade retro)
+  SKIN_LUMINA_SPARK = 2,  // Lumina Spark (#3, dual glint)
+  SKIN_MECHA = 3,         // Mecha (#4, Cirrectangle Solid with floating rounded pupil & glint)
+  SKIN_EMO = 4            // EMO-style (#5, Large rounded-rectangular eyes, no pupils, expressive procedural eyelids)
 };
-#define SKIN_COUNT 6
+#define SKIN_COUNT 5
 
 // Compatibility aliases
 #define SKIN_DEFAULT SKIN_KIWI
+#define SKIN_VECTOR SKIN_KIWI
+#define SKIN_SQUIRCLE_BOLD SKIN_KIWI
 #define SKIN_RETRO8BIT SKIN_PIXEL
-#define SKIN_SQUIRCLE_SOLID SKIN_SQUIRCLE_BOLD
+#define SKIN_SQUIRCLE_SOLID SKIN_KIWI
 #define SKIN_CAPSULE SKIN_KIWI
 #define SKIN_NEON_FRAME SKIN_KIWI
 #define SKIN_SQUIRCLE_OUTLINE SKIN_KIWI
 #define SKIN_SQUIRCLE_GLINT SKIN_LUMINA_SPARK
+#define SKIN_EMO_STYLE SKIN_EMO
 
 enum IdleEye : uint8_t {
   IE_NORMAL,

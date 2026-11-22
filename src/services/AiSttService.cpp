@@ -1,9 +1,11 @@
 #include "services/AiSttService.h"
 #include "services/AiTransport.h"
 #include "services/AiTextTools.h"
+#include "services/MemoryService.h"
 #include "config/AppConfig.h"
 #include "core/Timing.h"
 #include "hardware/AudioEngine.h"
+#include "hardware/WakeWordEngine.h"
 #include "face/FaceEngine.h"
 #include "web/WebPortal.h"
 #include "behavior/InteractionManager.h"
@@ -34,11 +36,6 @@ SttCfg resolveStt() {
     c.url = groqSttEndpoint;
     c.key = groqSttKey.length() ? groqSttKey : (groqKey.length() ? groqKey : llmKey);
     c.model = groqSttModel;
-    c.sarvam = false;
-  } else if (sttProvider == "openai") {
-    c.url = openaiSttEndpoint;
-    c.key = openaiSttKey;
-    c.model = openaiSttModel;
     c.sarvam = false;
   } else {
     c.url = sttEndpoint;
@@ -103,7 +100,7 @@ String recordAndTranscribe(uint32_t recordSeconds) {
     return String("");
   };
 
-  if (ESP.getMaxAllocHeap() < 30000)
+  if (!psramFound() && ESP.getMaxAllocHeap() < 30000)
     return bail("low memory");
   if (WiFi.status() != WL_CONNECTED) {
     uint32_t tw = millis();
@@ -167,10 +164,26 @@ String recordAndTranscribe(uint32_t recordSeconds) {
                "Content-Disposition: form-data; name=\"language\"\r\n\r\n" +
                wl + "\r\n";
     }
+    String sttPrompt = "नमस्ते कीवी, अलेक्सा, Alexa, Kiwi, युनय, Yunay";
+    String owner = getOwnerName();
+    if (owner.length() > 0) {
+      sttPrompt += ", " + owner;
+    }
+    String friends = getFriendsFamily();
+    if (friends.length() > 0) {
+      sttPrompt += ", " + friends;
+      String lowerFr = friends;
+      lowerFr.toLowerCase();
+      if (lowerFr.indexOf("yunay") >= 0 && friends.indexOf("युनय") < 0) {
+        sttPrompt += ", युनय";
+      }
+    }
+    sttPrompt += "। क्या हाल है? सुनो कीवी, आज का मौसम कैसा है? क्या समय हुआ है? Hello Kiwi, how are you? Suno kiwi, time kya hua hai, mausam kaisa hai.\r\n";
+
     part2 += "--" + boundary +
              "\r\n"
-             "Content-Disposition: form-data; name=\"prompt\"\r\n\r\n"
-             "नमस्ते कीवी, क्या हाल है? कैसे हो? आज का मौसम कैसा है? क्या समय हुआ है? Hello Kiwi, how are you? सुनो कीवी, एक जोक सुनाओ। Suno kiwi, time kya hua hai, mausam kaisa hai, mera naam kya hai.\r\n";
+             "Content-Disposition: form-data; name=\"prompt\"\r\n\r\n" +
+             sttPrompt;
   }
 
   String ending = "--" + boundary + "--\r\n";
@@ -194,30 +207,41 @@ String recordAndTranscribe(uint32_t recordSeconds) {
   if (!writeChunk(client, wav, 44))
     return bail("upload failed");
 
+  bool hasPreWake = preWakeHasData();
+  if (hasPreWake) {
+    preWakeStopBridge();
+    vTaskDelay(pdMS_TO_TICKS(15));
+  }
+
   setEmotion(EMOTION_LISTENING);
   pumpUI();
-  drainMic();
-  pumpUI();
+  if (!hasPreWake) {
+    drainMic();
+    pumpUI();
+  }
   if (!micSlotLocked && getMicSlot() < 0) {
     detectMicSlot();
     pumpUI();
   }
 
-  // Play Wall-E inquisitive ready chime NOW that TLS is connected and streaming is live!
-  soundListening();
-  uint32_t chimeWait = millis();
-  while (isTonePlaying() && (millis() - chimeWait < 220)) {
-    updateTonePlayer();
-    serviceUi();
-    yield();
+  // Play Wall-E ready chime ONLY when manually triggered (Touch/Web)
+  // When wake word triggers, user is ALREADY speaking, so chime is skipped to prevent drowning out voice!
+  if (!hasPreWake) {
+    soundListening();
+    uint32_t chimeWait = millis();
+    while (isTonePlaying() && (millis() - chimeWait < 220)) {
+      updateTonePlayer();
+      serviceUi();
+      yield();
+    }
+    delay(40);
+    drainMic(); // Flush prompt chime audio from mic buffer before recording user speech
   }
-  delay(40);
-  drainMic(); // Flush prompt chime audio from mic buffer before recording user speech
   robotStateDesc = "Listening...";
   setEmotion(EMOTION_LISTENING);
-  Serial.printf("[STT] Recording %lu s (mic slot %d%s, gain %.1f)...\n",
+  Serial.printf("[STT] Recording %lu s (mic slot %d%s, gain %.1f, preWake=%s)...\n",
                 (unsigned long)recordSeconds, micSlot, micSlotLocked ? " [cached]" : "",
-                (double)MIC_GAIN);
+                (double)MIC_GAIN, hasPreWake ? "YES" : "NO");
 
   static int32_t raw[AUDIO_FRAMES * 2];
   static uint8_t out[UPLOAD_BATCH * 2];
@@ -226,25 +250,66 @@ String recordAndTranscribe(uint32_t recordSeconds) {
   float prevIn = 0, prevOut = 0;
   float sumAbs = 0;
   uint32_t vuMax = 0;
-  const uint32_t BLK = SAMPLE_RATE / 10;
+  const uint32_t BLK = SAMPLE_RATE / 20; // 50ms block for snappy speech/silence tracking
   uint32_t blkN = 0;
   float blkSum = 0, maxBlkAvg = 0;
   bool speechStarted = false;
   bool captureStopped = false;
   uint32_t consecutiveSpeechBlocks = 0;
   uint32_t silenceSamples = 0;
-  uint32_t softNoiseSamples = 0;
   uint32_t speechSamples = 0;
-  const uint32_t MIN_SPEECH_SAMPLES = (SAMPLE_RATE * 15) / 100; // 150ms minimum speech
-  const uint32_t TRAILING_SILENCE_SAMPLES = (SAMPLE_RATE * 85) / 100; // 850ms trailing silence (comfortable sentence breathing)
-  const uint32_t INITIAL_SILENCE_TIMEOUT_SAMPLES = SAMPLE_RATE * 4; // 4.0s start timeout (generous window to speak)
+  uint32_t aboveGateSpikes = 0;
+  const uint32_t MIN_SPEECH_SAMPLES = (SAMPLE_RATE * 20) / 100; // 200ms minimum speech
+  const uint32_t TRAILING_SILENCE_SAMPLES = (SAMPLE_RATE * 45) / 100; // 450ms snappy trailing silence
+  const uint32_t INITIAL_SILENCE_TIMEOUT_SAMPLES = (SAMPLE_RATE * 35) / 10; // 3.5s start timeout
   float noiseSum = 0;
   uint32_t noiseSamples = 0;
   float calibSumL = 0, calibSumR = 0;
-  float noiseFloor = 220.0f;
+  float noiseFloor = 200.0f;
   float peakSpeechEnergy = 0.0f;
-  float speechActivityGate = 480.0f;
-  float silenceGate = 320.0f;
+  float speechActivityGate = 420.0f;
+  float silenceGate = 280.0f;
+
+  // Stream pre-wake audio from PSRAM ring buffer if available!
+  if (hasPreWake) {
+    const size_t DRAIN_MAX = 24000;
+    int16_t *drainBuf = (int16_t *)heap_caps_malloc(DRAIN_MAX * sizeof(int16_t), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (!drainBuf) drainBuf = (int16_t *)malloc(DRAIN_MAX * sizeof(int16_t));
+    if (drainBuf) {
+      size_t nDrained = preWakeDrain(drainBuf, DRAIN_MAX);
+      Serial.printf("[STT] Streaming %u pre-wake samples (%.2fs) from PSRAM ring buffer\n",
+                    (unsigned)nDrained, (float)nDrained / SAMPLE_RATE);
+      for (size_t i = 0; i < nDrained && sent < recordSamples; i++) {
+        int16_t pcm = drainBuf[i];
+        uint32_t a = abs((int)pcm);
+        sumAbs += a;
+        if (a > vuMax) vuMax = a;
+        blkSum += a;
+        if (++blkN >= BLK) {
+          float avg = blkSum / (float)blkN;
+          if (avg > maxBlkAvg) maxBlkAvg = avg;
+          if (avg >= speechActivityGate) {
+            speechStarted = true;
+            speechSamples += BLK;
+            if (avg > peakSpeechEnergy) peakSpeechEnergy = avg;
+          }
+          blkSum = 0;
+          blkN = 0;
+        }
+        out[outPos++] = pcm & 0xff;
+        out[outPos++] = (pcm >> 8) & 0xff;
+        sent++;
+        if (outPos >= (int)sizeof(out)) {
+          if (!writeChunk(client, out, outPos)) {
+            free(drainBuf);
+            return bail("upload failed");
+          }
+          outPos = 0;
+        }
+      }
+      free(drainBuf);
+    }
+  }
 
   while (sent < recordSamples && !captureStopped) {
     if (cancelRequest)
@@ -292,10 +357,10 @@ String recordAndTranscribe(uint32_t recordSeconds) {
                           micSlot, calibSumL / noiseSamples, calibSumR / noiseSamples);
           }
           float measuredNoise = noiseSum / (float)noiseSamples;
-          // Clamp noise floor between 100 and 450 so user's voice during calibration doesn't lock out speech gate
-          noiseFloor = constrain(measuredNoise, 100.0f, 450.0f);
-          speechActivityGate = noiseFloor * 1.30f + 180.0f;
-          silenceGate = noiseFloor * 1.15f + 80.0f;
+          // Clamp noise floor between 80 and 400
+          noiseFloor = constrain(measuredNoise, 80.0f, 400.0f);
+          speechActivityGate = max(380.0f, noiseFloor * 1.35f + 140.0f);
+          silenceGate = noiseFloor * 1.15f + 60.0f;
           Serial.printf("[STT] Ambient noise floor %.0f (raw %.0f) -> speech gate %.0f, silence gate %.0f (Mic Slot %d)\n",
                         noiseFloor, measuredNoise, speechActivityGate, silenceGate, micSlot);
         }
@@ -313,21 +378,21 @@ String recordAndTranscribe(uint32_t recordSeconds) {
             // Check for speech onset: 1 solid block or 2 consecutive moderate blocks
             if (avg >= speechActivityGate) {
               consecutiveSpeechBlocks++;
-              if (consecutiveSpeechBlocks >= 2 || avg >= (speechActivityGate * 1.35f)) {
+              if (consecutiveSpeechBlocks >= 2 || avg >= (speechActivityGate * 1.45f)) {
                 speechStarted = true;
                 speechSamples = BLK * (consecutiveSpeechBlocks > 1 ? consecutiveSpeechBlocks : 1);
                 peakSpeechEnergy = avg;
                 silenceSamples = 0;
-                softNoiseSamples = 0;
+                aboveGateSpikes = 0;
                 Serial.printf("[STT] Speech started at %.1fs (level=%.0f vs gate=%.0f)\n",
                               (float)sent / SAMPLE_RATE, avg, speechActivityGate);
               }
             } else {
               consecutiveSpeechBlocks = 0;
-              // Smoothly adapt noise floor to ambient room level before speech starts (capped at 450)
-              noiseFloor = min(450.0f, noiseFloor * 0.90f + avg * 0.10f);
-              speechActivityGate = noiseFloor * 1.30f + 180.0f;
-              silenceGate = noiseFloor * 1.15f + 80.0f;
+              // Smoothly adapt noise floor to ambient room level before speech starts (capped at 400)
+              noiseFloor = min(400.0f, noiseFloor * 0.92f + avg * 0.08f);
+              speechActivityGate = max(380.0f, noiseFloor * 1.35f + 140.0f);
+              silenceGate = noiseFloor * 1.15f + 60.0f;
 
               if (sent >= INITIAL_SILENCE_TIMEOUT_SAMPLES) {
                 captureStopped = true;
@@ -341,32 +406,33 @@ String recordAndTranscribe(uint32_t recordSeconds) {
               peakSpeechEnergy = avg;
             }
 
-            // Dynamic silence threshold proportional to user's speaking volume
-            float relSilence = noiseFloor + (peakSpeechEnergy - noiseFloor) * 0.20f;
-            float effectiveSilenceGate = max(silenceGate, min(speechActivityGate * 0.80f, relSilence));
+            // Speech threshold with slight hysteresis
+            float speechOngoingGate = max(340.0f, speechActivityGate * 0.88f);
 
-            if (avg >= speechActivityGate) {
-              speechSamples += BLK;
-              silenceSamples = 0;
-              softNoiseSamples = 0;
-            } else if (avg <= effectiveSilenceGate) {
-              silenceSamples += BLK;
-              if (speechSamples >= MIN_SPEECH_SAMPLES && silenceSamples >= TRAILING_SILENCE_SAMPLES) {
-                captureStopped = true;
-                Serial.printf("[STT] Speech ended after %.1f s (speech %.1fs, silence %lums, level=%.0f vs gate=%.0f); stopping early!\n",
-                              (float)sent / SAMPLE_RATE, (float)speechSamples / SAMPLE_RATE,
-                              (unsigned long)((silenceSamples * 1000UL) / SAMPLE_RATE),
-                              avg, effectiveSilenceGate);
+            if (avg >= speechOngoingGate) {
+              if (silenceSamples == 0) {
+                speechSamples += BLK;
+                aboveGateSpikes = 0;
+              } else {
+                // Anti-transient spike protection: Require 2 consecutive blocks to reset silence
+                aboveGateSpikes++;
+                if (aboveGateSpikes >= 2) {
+                  speechSamples += BLK * aboveGateSpikes;
+                  silenceSamples = 0;
+                  aboveGateSpikes = 0;
+                }
               }
             } else {
-              softNoiseSamples += BLK;
-              if (speechSamples >= MIN_SPEECH_SAMPLES &&
-                  (silenceSamples + softNoiseSamples) >= (SAMPLE_RATE * 14) / 10) {
+              aboveGateSpikes = 0;
+              silenceSamples += BLK;
+
+              // Snappy silence cutoff: 450ms trailing silence once minimum speech (200ms) is satisfied
+              if (speechSamples >= MIN_SPEECH_SAMPLES && silenceSamples >= TRAILING_SILENCE_SAMPLES) {
                 captureStopped = true;
-                Serial.printf("[STT] Speech ended after %.1f s (soft silence %lums, level=%.0f); stopping early!\n",
-                              (float)sent / SAMPLE_RATE,
-                              (unsigned long)(((silenceSamples + softNoiseSamples) * 1000UL) / SAMPLE_RATE),
-                              avg);
+                Serial.printf("[STT] Snappy VAD Cutoff at %.2fs (speech %.2fs, silence %lums, level=%.0f vs gate=%.0f)\n",
+                              (float)sent / SAMPLE_RATE, (float)speechSamples / SAMPLE_RATE,
+                              (unsigned long)((silenceSamples * 1000UL) / SAMPLE_RATE),
+                              avg, speechOngoingGate);
               }
             }
           }
@@ -427,6 +493,10 @@ String recordAndTranscribe(uint32_t recordSeconds) {
   client.flush();
   Serial.println("[STT] Upload complete. Waiting for response...");
   setEmotion(EMOTION_THINKING);
+
+  // Speculatively pre-resolve DNS for active LLM provider while waiting for STT response
+  if (llmProvider == "groq") ensureDns("api.groq.com");
+  else ensureDns("generativelanguage.googleapis.com");
 
   uint32_t waitStart = millis();
   while (!client.available() && client.connected() &&

@@ -4,6 +4,9 @@
 #include "face/FaceExpressions.h"
 #include "hardware/AudioEngine.h"
 #include "services/AiTtsService.h"
+#include "services/AiLlmService.h"
+#include "services/AiTextTools.h"
+#include "services/WeatherService.h"
 #include "services/MemoryService.h"
 #include <WiFi.h>
 #include <time.h>
@@ -71,6 +74,74 @@ static String buildPeriodicGreeting(int period, const String &ownerName) {
   return tpl;
 }
 
+String generateLlmGreeting(int hour, int minute, int wday, const String &ownerName) {
+  if (WiFi.status() != WL_CONNECTED) {
+    return "";
+  }
+  String key = llmKey.length() ? llmKey : groqKey;
+  if (key.length() == 0) {
+    return "";
+  }
+
+  const char *DAYS[] = {"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"};
+  String dayStr = (wday >= 0 && wday < 7) ? DAYS[wday] : "Today";
+
+  const char *timeOfDay = "day";
+  if (hour >= 5 && hour < 12) timeOfDay = "morning";
+  else if (hour >= 12 && hour < 17) timeOfDay = "afternoon";
+  else if (hour >= 17 && hour < 21) timeOfDay = "evening";
+  else if (hour >= 21 || (hour >= 0 && hour < 5)) timeOfDay = "night";
+
+  String target = ownerName.length() ? ownerName : "friend";
+
+  static const char *const MOOD_SEEDS[] = {
+    "playful & energetic wakeup",
+    "cute sleepy yawn stretching into happiness",
+    "witty & cheeky companion greeting",
+    "affectionate robot excited to see its human",
+    "curious & looking forward to hanging out",
+    "dramatic little robot coming back to life",
+    "cool friendly buddy vibe",
+    "cheerful & enthusiastic wave"
+  };
+  const char *mood = MOOD_SEEDS[random(sizeof(MOOD_SEEDS) / sizeof(MOOD_SEEDS[0]))];
+  uint32_t seed = random(1000, 9999);
+
+  String prompt = "You are Kiwi, an adorable, witty, affectionate, living desktop AI robot pet companion.\n"
+                  "You just woke up / turned on and saw your owner (" + target + ").\n"
+                  "Mood inspiration for this greeting: " + String(mood) + " (Seed: " + String(seed) + ")\n"
+                  "Time context (for greeting vibe only): " + String(timeOfDay) + " (" + dayStr + ")\n"
+                  "Strict Rules:\n"
+                  "- Speak in natural, warm, lively, modern conversational Hinglish (Hindi + English).\n"
+                  "- Be creative, spontaneous, and fresh every time! NEVER repeat the same greeting phrasing.\n"
+                  "- NEVER announce clock time, numbers, temperature, or weather forecasts! You are an adorable pet robot, NOT a news reporter, alarm clock, or weather bot.\n"
+                  "- Give a cute, fresh 1-sentence wakeup greeting suited to the " + String(timeOfDay) + " vibe.\n"
+                  "- Length: STRICTLY 1 single sentence, maximum 10-14 words. Keep it short, punchy, and quick to speak!\n"
+                  "- Output ONLY the spoken words. No quotes, no asterisks, no emojis, no explanations.";
+
+  Serial.println("[GREETING] Requesting dynamic LLM wakeup greeting...");
+  String res = askLLM(prompt, nullptr, false); // false = do not pollute chat history
+  res = stripRobotTags(res);
+  res.replace("\"", "");
+  res.replace("*", "");
+  res.trim();
+
+  // If LLM returned multiple sentences, take only the first sentence for a punchy greeting
+  int periodIdx = res.indexOf('.');
+  int exclamIdx = res.indexOf('!');
+  int qIdx = res.indexOf('?');
+  int cut = -1;
+  if (periodIdx > 0 && (cut == -1 || periodIdx < cut)) cut = periodIdx;
+  if (exclamIdx > 0 && (cut == -1 || exclamIdx < cut)) cut = exclamIdx;
+  if (qIdx > 0 && (cut == -1 || qIdx < cut)) cut = qIdx;
+  if (cut >= 20 && cut < (int)res.length() - 1) {
+    res = res.substring(0, cut + 1);
+  }
+
+  Serial.printf("[GREETING] Dynamic LLM greeting generated: \"%s\"\n", res.c_str());
+  return res;
+}
+
 void checkGreetings() {
   if (!timeSynced)
     return;
@@ -115,7 +186,13 @@ void checkGreetings() {
 
   String owner = getOwnerName();
   owner.trim();
-  String greeting = buildPeriodicGreeting(curPeriod, owner);
+  String greeting = "";
+  if (WiFi.status() == WL_CONNECTED && (llmKey.length() || groqKey.length())) {
+    greeting = generateLlmGreeting(curHour, timeinfo.tm_min, timeinfo.tm_wday, owner);
+  }
+  if (greeting.length() == 0) {
+    greeting = buildPeriodicGreeting(curPeriod, owner);
+  }
 
   Serial.printf("[GREETINGS] Firing %s greeting (hour=%02d:%02d, day=%d): %s\n",
                 PERIOD_NAMES[curPeriod], curHour, timeinfo.tm_min, curDay,

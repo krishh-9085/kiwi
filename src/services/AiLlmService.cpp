@@ -37,14 +37,13 @@ static String getSmartActionInstruction() {
 
 static String getVoiceExpressionInstruction() {
   if (ttsProvider == "fish" || ttsProvider == "fishaudio") {
-    // Fish Audio S2: Keep speech clean, natural and direct without laughter
     return " VOCAL RULES: "
-           "1. NEVER use [laugh], [chuckle], [giggle], [happy], or laughing audio cues. Do NOT laugh or giggle in answers. "
-           "2. For normal answers, speak naturally in plain text with ZERO vocal tags. "
-           "3. ONLY use emotion tags if user explicitly demands a specific tone (e.g. user asks 'gusse me bolo' -> use [angry] [ACTION: emotion angry]; user asks 'sad hoke bolo' -> use [sad] [ACTION: emotion sad]). "
-           "Allowed dramatic tags ONLY when explicitly requested: [angry] [sad] [whisper] [excited].";
+           "1. For normal answers, speak naturally in plain text with ZERO vocal tags. "
+           "2. CRITICAL: If the user asks you to laugh in ANY way (e.g. 'has ke dikhao', 'haso', 'laugh', 'hasi sunao', 'thoda haso'): your ENTIRE reply MUST BE ONLY '[laughing] Hahahahaha! Ahahaha, hahahaha! Hahahahaha!' with ABSOLUTELY ZERO EXTRA WORDS, NO TALKING, AND NO CONVERSATIONAL FILLER. "
+           "3. ONLY use emotion tags if user explicitly asks (e.g. 'gusse me bolo' -> [angry]; 'ro ke bolo' -> [sobbing]; 'has ke bolo' -> [laughing]; 'dheere bolo' -> [whisper]). "
+           "Allowed emotion tags: [laughing] [giggle] [sobbing] [angry] [sad] [whisper] [excited].";
   } else {
-    return " VOICE: Plain text only. No bracketed tone or sound tags.";
+    return " VOICE: Plain text only. No bracketed tone or sound tags. If asked to laugh, reply ONLY with 'Hahahahaha! Ahahaha, hahahaha!' without any talking.";
   }
 }
 
@@ -60,7 +59,7 @@ static String getVoiceExpressionInstruction() {
 
 static String extractSseDeltaToken(const String &json) {
 
-  // Supports Gemini ("text") and Groq / OpenAI / Grok ("content")
+  // Supports Gemini ("text") and Groq / Grok ("content")
 
   const char *keys[] = {"\"text\"", "\"content\""};
 
@@ -154,7 +153,7 @@ static String extractSseDeltaToken(const String &json) {
 
 static bool isSentenceComplete(const String &s) {
 
-  if (s.length() < 12)
+  if (s.length() < 40)
 
     return false;
 
@@ -197,13 +196,15 @@ static bool isSentenceComplete(const String &s) {
 
 
   if (last == '.' || last == '!' || last == '?' || last == '\n') {
-
     if (last == '.' && isdigit((unsigned char)prev))
-
       return false;
-
     return true;
+  }
 
+  // Fast sub-clause split on natural speech pause (commas/semicolons) when 55+ chars accumulated
+  // Do not split on commas/semicolons mid-sentence to avoid choppy fragmented audio
+  if (false && (last == ',' || last == ';' || last == ':') && s.length() >= 55) {
+    return true;
   }
 
 
@@ -523,14 +524,17 @@ String askGemini(const String &question, SentenceCallback onSentence) {
 
   {
 
-    WiFiClientSecure client;
-
-    client.setInsecure();
-    client.setTimeout(8000);
-    HTTPClient http;
-    http.setReuse(false);
+    static WiFiClientSecure client;
+    static HTTPClient http;
+    static bool inited = false;
+    if (!inited) {
+      client.setInsecure();
+      client.setTimeout(8000);
+      inited = true;
+    }
+    http.setReuse(psramFound());
     http.setTimeout(8000);
-    http.setConnectTimeout(8000);
+    http.setConnectTimeout(6000);
 
     // DNS pre-check before TLS (fixes HTTP -1 on first boot / after AP mode)
 
@@ -739,15 +743,17 @@ String askGroq(const String &question, SentenceCallback onSentence) {
 
   {
 
-    WiFiClientSecure client;
-
-    client.setInsecure();
-
-    client.setTimeout(8000);
-    HTTPClient http;
-    http.setReuse(false);
+    static WiFiClientSecure client;
+    static HTTPClient http;
+    static bool inited = false;
+    if (!inited) {
+      client.setInsecure();
+      client.setTimeout(8000);
+      inited = true;
+    }
+    http.setReuse(psramFound());
     http.setTimeout(8000);
-    http.setConnectTimeout(8000);
+    http.setConnectTimeout(6000);
 
     uint32_t t0 = millis();
 
@@ -817,153 +823,6 @@ String askGroq(const String &question, SentenceCallback onSentence) {
 
 
 
-String askOpenAI(const String &question, SentenceCallback onSentence) {
-
-  if (!llmKey.length()) {
-
-    Serial.println("[OPENAI] No API key.");
-
-    return "";
-
-  }
-
-  if (WiFi.status() != WL_CONNECTED) {
-
-    Serial.println("[OPENAI] No Wi-Fi.");
-
-    return "";
-
-  }
-
-
-
-  String sys = systemPrompt;
-
-  sys +=
-
-      " LANGUAGE RULES: Understand Hindi, Hinglish, and English. Reply in the "
-
-      "same language as the user. Be lively, specific, concise, and avoid "
-
-      "generic assistant filler. Normally use 2 to 4 natural sentences.";
-
-  sys += getFormattedMemoryPrompt();
-  sys += getSmartActionInstruction();
-
-  sys += getVoiceExpressionInstruction();
-
-
-
-  String body = "{\"model\":\"" + jsonEscape(llmModel) +
-
-                "\",\"messages\":[{\"role\":\"system\",\"content\":\"" +
-
-                jsonEscape(sys) + "\"}";
-
-  for (int i = 0; i < chatHistoryCount; i++) {
-
-    body += ",{\"role\":\"user\",\"content\":\"" +
-
-            jsonEscape(chatHistory[i].question) + "\"}";
-
-    body += ",{\"role\":\"assistant\",\"content\":\"" +
-
-            jsonEscape(chatHistory[i].answer) + "\"}";
-
-  }
-
-  body += ",{\"role\":\"user\",\"content\":\"" + jsonEscape(question) +
-
-          "\"}],\"max_tokens\":" + String(LLM_MAX_TOKENS) +
-
-          ",\"temperature\":0.8,\"stream\":true}";
-
-
-
-  WiFiClientSecure client;
-
-  client.setInsecure();
-
-  client.setTimeout(8000);
-  HTTPClient http;
-  http.setReuse(false);
-  http.setTimeout(8000);
-  http.setConnectTimeout(8000);
-
-  String endpoint = llmEndpoint;
-
-  if (endpoint.length() == 0 ||
-
-      endpoint.indexOf("generativelanguage.googleapis.com") >= 0)
-
-    endpoint = DEFAULT_OPENAI_LLM_URL;
-
-  if (!http.begin(client, endpoint)) {
-
-    Serial.println("[OPENAI] Bad URL.");
-
-    return "";
-
-  }
-
-  http.addHeader("Content-Type", "application/json");
-
-  http.addHeader("Authorization", "Bearer " + llmKey);
-
-  uint32_t t0 = millis();
-
-  int code = http.POST(body);
-
-  String fullAns;
-
-  String resp;
-
-  if (code == 200) {
-
-    WiFiClient *stream = http.getStreamPtr();
-
-    fullAns = processSseStream(http, stream, onSentence);
-
-  } else {
-
-    resp = http.getString();
-
-    if (resp.length() > 300)
-
-      resp = resp.substring(0, 300);
-
-  }
-
-  http.end();
-
-  Serial.printf("[OPENAI] HTTP %d in %.1fs, ansLen=%u, heap=%u\n", code,
-
-                (millis() - t0) / 1000.0f, (unsigned)fullAns.length(),
-
-                (unsigned)ESP.getFreeHeap());
-
-  if (code != 200) {
-
-    Serial.printf("[OPENAI] HTTP %d: %s\n", code, resp.substring(0, 200).c_str());
-
-    addTerminalLog("[OPENAI] Error HTTP " + String(code) + ": " + resp);
-
-    return "";
-
-  }
-
-  if (fullAns.length() == 0) {
-
-    addTerminalLog("[OPENAI] Warning: Empty answer received from OpenAI.");
-
-  }
-
-  return fullAns;
-
-}
-
-
-
 String askLLM(const String &question, SentenceCallback onSentence, bool saveChatHistory) {
 
   checkChatHistoryTimeout();
@@ -979,14 +838,6 @@ String askLLM(const String &question, SentenceCallback onSentence, bool saveChat
                   chatHistoryCount);
 
     ans = askGroq(question, onSentence);
-
-  } else if (llmProvider == "openai") {
-
-    Serial.printf("[LLM] Provider = OpenAI | Memory turns = %d (streaming)\n",
-
-                  chatHistoryCount);
-
-    ans = askOpenAI(question, onSentence);
 
   } else {
 

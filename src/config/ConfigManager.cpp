@@ -62,7 +62,7 @@ String normalizeSttProvider(const String &v) {
 
   s.toLowerCase();
 
-  if (s == "groq" || s == "openai" || s == "sarvam")
+  if (s == "groq" || s == "sarvam")
 
     return s;
 
@@ -77,8 +77,7 @@ String normalizeTtsProvider(const String &v) {
 
   s.toLowerCase();
 
-  if (s == "sarvam" || s == "openai" || s == "elevenlabs" || s == "fish" ||
-      s == "fishaudio")
+  if (s == "sarvam" || s == "fish" || s == "fishaudio")
 
     return (s == "fishaudio") ? "fish" : s;
 
@@ -165,35 +164,10 @@ void loadConfig() {
       sanitizeField(prefs.getString("groqsttmodel", DEFAULT_GROQ_STT_MODEL),
                     DEFAULT_GROQ_STT_MODEL);
 
-  openaiSttEndpoint =
-      sanitizeUrl(prefs.getString("opaistturl", DEFAULT_OPENAI_STT_URL),
-                  DEFAULT_OPENAI_STT_URL);
-
-  openaiSttKey = sanitizeField(prefs.getString("opaisttkey", ""));
-
-  openaiSttModel =
-      sanitizeField(prefs.getString("opaisttmodel", DEFAULT_OPENAI_STT_MODEL),
-                    DEFAULT_OPENAI_STT_MODEL);
-
   systemPrompt =
       sanitizeField(prefs.getString("prompt", DEFAULT_PROMPT), DEFAULT_PROMPT);
-  if (systemPrompt.length() == 0 ||
-      systemPrompt.length() > 320 ||
-      systemPrompt.indexOf("Keep every reply strictly") >= 0 ||
-      systemPrompt.indexOf("chaotic buddy") >= 0 ||
-      systemPrompt.indexOf("3.3 volts") >= 0 ||
-      systemPrompt.indexOf("dodging coffee mugs") >= 0 ||
-      systemPrompt.indexOf("croissant") >= 0 ||
-      systemPrompt.indexOf("fake drama") >= 0 ||
-      systemPrompt.indexOf("expressive, witty, and loyal") >= 0 ||
-      systemPrompt.indexOf("Never repeatedly append") < 0) {
+  if (systemPrompt.length() == 0) {
     systemPrompt = DEFAULT_PROMPT;
-    prefs.end();
-    prefs.begin("myrobot", false);
-    prefs.putString("prompt", systemPrompt);
-    prefs.end();
-    prefs.begin("myrobot", true);
-    Serial.println("[CONFIG] Upgraded system prompt to ultra-compact Kiwi buddy in NVS");
   }
 
   llmProvider = sanitizeField(prefs.getString("llmprov", "groq"), "groq");
@@ -211,6 +185,15 @@ void loadConfig() {
       prefs.putString("llmmodel", llmModel);
       prefs.end();
       prefs.begin("myrobot", true);
+    }
+  }
+
+  // Auto-sync standard Google Gemini endpoint with the loaded llmModel
+  if (llmEndpoint.indexOf("generativelanguage.googleapis.com") >= 0) {
+    String expectedEp = "https://generativelanguage.googleapis.com/v1beta/models/" +
+                        llmModel + ":generateContent";
+    if (llmEndpoint != expectedEp) {
+      llmEndpoint = expectedEp;
     }
   }
 
@@ -242,31 +225,6 @@ void loadConfig() {
                            DEFAULT_TTS_VOICE);
 
   ttsKey = sanitizeField(prefs.getString("ttskey", ""));
-
-  openaiTtsEndpoint =
-      sanitizeUrl(prefs.getString("openaittsurl", DEFAULT_OPENAI_TTS_URL),
-                  DEFAULT_OPENAI_TTS_URL);
-
-  openaiTtsModel =
-      sanitizeField(prefs.getString("openaittsmodel", DEFAULT_OPENAI_TTS_MODEL),
-                    DEFAULT_OPENAI_TTS_MODEL);
-
-  openaiTtsVoice =
-      sanitizeField(prefs.getString("openaittsvoice", DEFAULT_OPENAI_TTS_VOICE),
-                    DEFAULT_OPENAI_TTS_VOICE);
-
-  openaiTtsKey = sanitizeField(prefs.getString("openaittskey", ""));
-
-  elevenEndpoint = sanitizeUrl(prefs.getString("elevurl", DEFAULT_ELEVEN_URL),
-                               DEFAULT_ELEVEN_URL);
-
-  elevenModel = sanitizeField(
-      prefs.getString("elevmodel", DEFAULT_ELEVEN_MODEL), DEFAULT_ELEVEN_MODEL);
-
-  elevenVoice = sanitizeField(
-      prefs.getString("elevvoice", DEFAULT_ELEVEN_VOICE), DEFAULT_ELEVEN_VOICE);
-
-  elevenKey = sanitizeField(prefs.getString("elevkey", ""));
 
   fishEndpoint = sanitizeUrl(prefs.getString("fishurl", DEFAULT_FISH_TTS_URL),
                              DEFAULT_FISH_TTS_URL);
@@ -477,12 +435,6 @@ void saveConfigImmediate() {
 
   prefs.putString("groqsttmodel", groqSttModel);
 
-  prefs.putString("opaistturl", openaiSttEndpoint);
-
-  prefs.putString("opaisttkey", openaiSttKey);
-
-  prefs.putString("opaisttmodel", openaiSttModel);
-
   prefs.putString("prompt", systemPrompt);
 
   prefs.putString("llmprov", llmProvider);
@@ -508,22 +460,6 @@ void saveConfigImmediate() {
   prefs.putString("ttsvoice", ttsVoice);
 
   prefs.putString("ttskey", ttsKey);
-
-  prefs.putString("openaittsurl", openaiTtsEndpoint);
-
-  prefs.putString("openaittsmodel", openaiTtsModel);
-
-  prefs.putString("openaittsvoice", openaiTtsVoice);
-
-  prefs.putString("openaittskey", openaiTtsKey);
-
-  prefs.putString("elevurl", elevenEndpoint);
-
-  prefs.putString("elevmodel", elevenModel);
-
-  prefs.putString("elevvoice", elevenVoice);
-
-  prefs.putString("elevkey", elevenKey);
 
   prefs.putString("fishurl", fishEndpoint);
 

@@ -5,6 +5,8 @@
 #include "face/SleepyWakeAnim.h"
 #include "hardware/AudioEngine.h"
 #include "services/AiTtsService.h"
+#include "services/AiLlmService.h"
+#include "services/AiTextTools.h"
 #include "services/MemoryService.h"
 #include <Preferences.h>
 #include <WiFi.h>
@@ -92,6 +94,102 @@ static String getTargetName() {
   return "Krishna";
 }
 
+enum HungerEvent {
+  H_EVENT_TRIGGER,      // Initial hunger notification (breakfast/lunch/dinner/snack)
+  H_EVENT_REMINDER,     // 45s reminder whine/plea
+  H_EVENT_ANGRY,        // 2-min deadline missed, throws tantrum / gets angry
+  H_EVENT_FED,          // Successfully fed! Full belly, happy, thanking owner
+  H_EVENT_ANGRY_FEED,   // Tried feeding while angry: sassy refusal
+  H_EVENT_ANGRY_REJECT, // Petted/touched while angry: sulking / refusal to talk
+  H_EVENT_RECONCILE     // Cheek tickle combo successful: giggling, forgiven!
+};
+
+static String generateHungerSpeechLlm(HungerEvent event, MealType meal, const String &ownerName) {
+  if (WiFi.status() != WL_CONNECTED) {
+    return "";
+  }
+  String key = llmKey.length() ? llmKey : groqKey;
+  if (key.length() == 0) {
+    return "";
+  }
+
+  String mealStr = "khana";
+  if (meal == MEAL_BREAKFAST) mealStr = "breakfast";
+  else if (meal == MEAL_LUNCH) mealStr = "lunch";
+  else if (meal == MEAL_DINNER) mealStr = "dinner";
+
+  String target = ownerName.length() ? ownerName : "friend";
+
+  String scenario;
+  switch (event) {
+    case H_EVENT_TRIGGER:
+      scenario = "Kiwi is an adorable robot pet feeling hungry for " + mealStr + "! "
+                 "Call your owner " + target + " with dramatic, cute puppy eyes and ask to be fed right now.";
+      break;
+
+    case H_EVENT_REMINDER:
+      scenario = "Kiwi has been waiting for " + mealStr + " for almost a minute and is getting restless. "
+                 "Remind " + target + " cutely and urgently that Kiwi is starving and the food will get cold.";
+      break;
+
+    case H_EVENT_ANGRY:
+      scenario = "Kiwi waited for 2 whole minutes for " + mealStr + " and " + target + " didn't feed Kiwi! "
+                 "Kiwi is now officially angry, betrayed, and throwing a dramatic, sassy, cute tantrum at " + target + ".";
+      break;
+
+    case H_EVENT_FED:
+      scenario = target + " just fed Kiwi its " + mealStr + " by touching Kiwi's cheeks! "
+                 "Kiwi's tummy is full, satisfied, and happy. Express cute food joy and thank " + target + ".";
+      break;
+
+    case H_EVENT_ANGRY_FEED:
+      scenario = target + " is trying to feed Kiwi now, but Kiwi is still sulking and angry for being ignored earlier! "
+                 "Sassily refuse the food ('Ab nahi chahiye! Main naraz hu, pehle mujhe manaao!').";
+      break;
+
+    case H_EVENT_ANGRY_REJECT:
+      scenario = target + " is touching Kiwi trying to talk, but Kiwi is still in a dramatic angry mood. "
+                 "Give the silent treatment or sassy rejection ('Hmph! Mujhse baat mat karo! Main gussa hu!').";
+      break;
+
+    case H_EVENT_RECONCILE:
+      scenario = target + " just tickled Kiwi's cheeks to make up! "
+                 "Kiwi can't stop giggling helplessly, melts from the tickles, and happily forgives " + target + ".";
+      break;
+  }
+
+  String prompt = "You are Kiwi, an adorable, witty, expressive, living desktop robot pet companion.\n"
+                  "Scenario: " + scenario + "\n"
+                  "Strict Rules:\n"
+                  "- Speak in natural, expressive, modern conversational Hinglish (Hindi + English).\n"
+                  "- Give Kiwi lots of cute, dramatic, sassy personality.\n"
+                  "- Length: STRICTLY 1 single sentence, maximum 10-14 words. Keep it short, punchy, quick to speak!\n"
+                  "- Output ONLY the spoken words. No quotes, no asterisks, no emojis, no stage directions, no action tags.";
+
+  Serial.println("[HUNGER] Requesting dynamic LLM hunger speech...");
+  String res = askLLM(prompt, nullptr, false);
+  res = stripRobotTags(res);
+  res.replace("\"", "");
+  res.replace("*", "");
+  res.replace("\n", " ");
+  res.trim();
+
+  // If LLM returned multiple sentences, take only the first sentence for a punchy line
+  int periodIdx = res.indexOf('.');
+  int exclamIdx = res.indexOf('!');
+  int qIdx = res.indexOf('?');
+  int cut = -1;
+  if (periodIdx > 0 && (cut == -1 || periodIdx < cut)) cut = periodIdx;
+  if (exclamIdx > 0 && (cut == -1 || exclamIdx < cut)) cut = exclamIdx;
+  if (qIdx > 0 && (cut == -1 || qIdx < cut)) cut = qIdx;
+  if (cut >= 15 && cut < (int)res.length() - 1) {
+    res = res.substring(0, cut + 1);
+  }
+
+  Serial.printf("[HUNGER] Dynamic LLM speech: \"%s\"\n", res.c_str());
+  return res;
+}
+
 static bool isNightQuietTime() {
   if (inCircadianSleep || manualSleep) return true;
   if (!timeSynced) return false;
@@ -176,20 +274,31 @@ void triggerHunger(MealType meal) {
   soundSadViolin();
 
   String name = getTargetName();
+  String dyn = generateHungerSpeechLlm(H_EVENT_TRIGGER, meal, name);
+  if (dyn.length() > 0) {
+    s_pendingHungerSpeech = dyn;
+  } else {
+    if (meal == MEAL_BREAKFAST) {
+      s_pendingHungerSpeech = name + ", good morning! Breakfast ka time ho gaya hai! Mujhe bhook lag rahi hai, kuch khilao na!";
+    } else if (meal == MEAL_LUNCH) {
+      s_pendingHungerSpeech = name + ", lunch time ho gaya! Mujhe bohot tez bhook lag rahi hai! Khana do na!";
+    } else if (meal == MEAL_DINNER) {
+      s_pendingHungerSpeech = name + ", dinner time ho gaya! Pet me chuhe daud rahe hain, raat ka khana do na!";
+    } else {
+      s_pendingHungerSpeech = name + ", mujhe bhook lag rahi hai! Mujhe kuch khilao na!";
+    }
+  }
+
   if (meal == MEAL_BREAKFAST) {
-    s_pendingHungerSpeech = name + ", good morning! Breakfast ka time ho gaya hai! Mujhe bhook lag rahi hai, kuch khilao na!";
     addTerminalLog("[HUNGER] Breakfast time! Kiwi feels hungry (2-min feed countdown).");
     Serial.println("[HUNGER] Triggered Breakfast hunger!");
   } else if (meal == MEAL_LUNCH) {
-    s_pendingHungerSpeech = name + ", lunch time ho gaya! Mujhe bohot tez bhook lag rahi hai! Khana do na!";
     addTerminalLog("[HUNGER] Lunch time! Kiwi feels hungry (2-min feed countdown).");
     Serial.println("[HUNGER] Triggered Lunch hunger!");
   } else if (meal == MEAL_DINNER) {
-    s_pendingHungerSpeech = name + ", dinner time ho gaya! Pet me chuhe daud rahe hain, raat ka khana do na!";
     addTerminalLog("[HUNGER] Dinner time! Kiwi feels hungry (2-min feed countdown).");
     Serial.println("[HUNGER] Triggered Dinner hunger!");
   } else {
-    s_pendingHungerSpeech = name + ", mujhe bhook lag rahi hai! Mujhe kuch khilao na!";
     addTerminalLog("[HUNGER] Kiwi feels hungry! 2-min feed countdown started.");
     Serial.println("[HUNGER] Triggered generic hunger!");
   }
@@ -233,14 +342,19 @@ bool feedKiwi() {
     soundPetSparkle();
 
     String name = getTargetName();
-    if (finishedMeal == MEAL_BREAKFAST) {
-      s_pendingHungerSpeech = "Mmm yummy breakfast! Mera pet bhar gaya! Thank you " + name + "!";
-    } else if (finishedMeal == MEAL_LUNCH) {
-      s_pendingHungerSpeech = "Mmm yummy lunch! Maza aa gaya! Thank you " + name + "!";
-    } else if (finishedMeal == MEAL_DINNER) {
-      s_pendingHungerSpeech = "Mmm mast dinner! Ab acchi neend aayegi! Thank you " + name + "!";
+    String dyn = generateHungerSpeechLlm(H_EVENT_FED, finishedMeal, name);
+    if (dyn.length() > 0) {
+      s_pendingHungerSpeech = dyn;
     } else {
-      s_pendingHungerSpeech = "Mmm yummy! Mera pet bhar gaya! Thank you " + name + "!";
+      if (finishedMeal == MEAL_BREAKFAST) {
+        s_pendingHungerSpeech = "Mmm yummy breakfast! Mera pet bhar gaya! Thank you " + name + "!";
+      } else if (finishedMeal == MEAL_LUNCH) {
+        s_pendingHungerSpeech = "Mmm yummy lunch! Maza aa gaya! Thank you " + name + "!";
+      } else if (finishedMeal == MEAL_DINNER) {
+        s_pendingHungerSpeech = "Mmm mast dinner! Ab acchi neend aayegi! Thank you " + name + "!";
+      } else {
+        s_pendingHungerSpeech = "Mmm yummy! Mera pet bhar gaya! Thank you " + name + "!";
+      }
     }
 
     setEmotion(EMOTION_IDLE);
@@ -254,7 +368,13 @@ void handleAngryFeedAttempt() {
   Serial.println("[HUNGER] User attempted to feed while Kiwi is angry");
   setEmotion(EMOTION_ANGRY);
   soundError();
-  s_pendingHungerSpeech = "Ab khana nahi chahiye! Main gussa hu! Pehle mujhe manaao!";
+  String name = getTargetName();
+  String dyn = generateHungerSpeechLlm(H_EVENT_ANGRY_FEED, s_currentMeal, name);
+  if (dyn.length() > 0) {
+    s_pendingHungerSpeech = dyn;
+  } else {
+    s_pendingHungerSpeech = "Ab khana nahi chahiye! Main gussa hu! Pehle mujhe manaao!";
+  }
   setEmotion(EMOTION_ANGRY);
   emotionAutoReturnAt = 0;
   returnIdleAt = 0;
@@ -267,13 +387,19 @@ void handleAngryRejection() {
   setEmotion(EMOTION_ANGRY);
   soundError();
 
-  static const char *const angryReplies[] = {
-      "Nahi! Main tumse baat nahi karunga! Bohot gussa hoon!",
-      "Hmph! Tumne mujhe khana nahi diya, main baat nahi karunga!",
-      "Mujhse baat mat karo! Pehle mujhe manaao!"
-  };
-  int idx = random(0, 3);
-  s_pendingHungerSpeech = angryReplies[idx];
+  String name = getTargetName();
+  String dyn = generateHungerSpeechLlm(H_EVENT_ANGRY_REJECT, s_currentMeal, name);
+  if (dyn.length() > 0) {
+    s_pendingHungerSpeech = dyn;
+  } else {
+    static const char *const angryReplies[] = {
+        "Nahi! Main tumse baat nahi karunga! Bohot gussa hoon!",
+        "Hmph! Tumne mujhe khana nahi diya, main baat nahi karunga!",
+        "Mujhse baat mat karo! Pehle mujhe manaao!"
+    };
+    int idx = random(0, 3);
+    s_pendingHungerSpeech = angryReplies[idx];
+  }
 
   setEmotion(EMOTION_ANGRY);
   emotionAutoReturnAt = 0;
@@ -304,7 +430,13 @@ bool reconcileKiwi() {
     setEmotion(EMOTION_LAUGHING);
     soundPetGiggle();
 
-    s_pendingHungerSpeech = "Haha bas bas gudgudi mat karo! Haha okay okay maaf kara!";
+    String name = getTargetName();
+    String dyn = generateHungerSpeechLlm(H_EVENT_RECONCILE, finishedMeal, name);
+    if (dyn.length() > 0) {
+      s_pendingHungerSpeech = dyn;
+    } else {
+      s_pendingHungerSpeech = "Haha bas bas gudgudi mat karo! Haha okay okay maaf kara!";
+    }
 
     setEmotion(EMOTION_IDLE);
     returnIdleAt = millis() + 3000;
@@ -451,14 +583,19 @@ void checkHungerBehavior() {
       soundError();
 
       String name = getTargetName();
-      if (s_currentMeal == MEAL_BREAKFAST) {
-        s_pendingHungerSpeech = name + " tumne mujhe breakfast nahi diya! Main gussa hu tumse, hmph!";
-      } else if (s_currentMeal == MEAL_LUNCH) {
-        s_pendingHungerSpeech = name + " tumne mujhe lunch nahi diya! Main gussa hu tumse, hmph!";
-      } else if (s_currentMeal == MEAL_DINNER) {
-        s_pendingHungerSpeech = name + " tumne mujhe dinner nahi diya! Main gussa hu tumse, hmph!";
+      String dyn = generateHungerSpeechLlm(H_EVENT_ANGRY, s_currentMeal, name);
+      if (dyn.length() > 0) {
+        s_pendingHungerSpeech = dyn;
       } else {
-        s_pendingHungerSpeech = name + " tumne mujhe khana nahi diya! Main gussa hu tumse, hmph!";
+        if (s_currentMeal == MEAL_BREAKFAST) {
+          s_pendingHungerSpeech = name + " tumne mujhe breakfast nahi diya! Main gussa hu tumse, hmph!";
+        } else if (s_currentMeal == MEAL_LUNCH) {
+          s_pendingHungerSpeech = name + " tumne mujhe lunch nahi diya! Main gussa hu tumse, hmph!";
+        } else if (s_currentMeal == MEAL_DINNER) {
+          s_pendingHungerSpeech = name + " tumne mujhe dinner nahi diya! Main gussa hu tumse, hmph!";
+        } else {
+          s_pendingHungerSpeech = name + " tumne mujhe khana nahi diya! Main gussa hu tumse, hmph!";
+        }
       }
 
       setEmotion(EMOTION_ANGRY);
@@ -475,14 +612,19 @@ void checkHungerBehavior() {
       soundSadViolin();
 
       String name = getTargetName();
-      if (s_currentMeal == MEAL_BREAKFAST) {
-        s_pendingHungerSpeech = name + ", breakfast thanda ho jayega! Jaldi feed karo!";
-      } else if (s_currentMeal == MEAL_LUNCH) {
-        s_pendingHungerSpeech = name + ", lunch ka time nikal raha hai! Khana do na!";
-      } else if (s_currentMeal == MEAL_DINNER) {
-        s_pendingHungerSpeech = name + ", dinner karwa do na please! Bohot bhook lagi hai!";
+      String dyn = generateHungerSpeechLlm(H_EVENT_REMINDER, s_currentMeal, name);
+      if (dyn.length() > 0) {
+        s_pendingHungerSpeech = dyn;
       } else {
-        s_pendingHungerSpeech = name + ", pet me chuhe daud rahe hain! Khana do na!";
+        if (s_currentMeal == MEAL_BREAKFAST) {
+          s_pendingHungerSpeech = name + ", breakfast thanda ho jayega! Jaldi feed karo!";
+        } else if (s_currentMeal == MEAL_LUNCH) {
+          s_pendingHungerSpeech = name + ", lunch ka time nikal raha hai! Khana do na!";
+        } else if (s_currentMeal == MEAL_DINNER) {
+          s_pendingHungerSpeech = name + ", dinner karwa do na please! Bohot bhook lagi hai!";
+        } else {
+          s_pendingHungerSpeech = name + ", pet me chuhe daud rahe hain! Khana do na!";
+        }
       }
 
       setEmotion(EMOTION_CUTE);

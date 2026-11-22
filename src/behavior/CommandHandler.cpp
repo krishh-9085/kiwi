@@ -294,7 +294,7 @@ bool handleWeatherCommand(const String &qIn) {
     fetchWeather();
   }
   showWeatherScreen = true;
-  soundPetSparkle();
+  soundWeather();
 
   String voiceReply;
   if (sttLang == "hi" || containsDevanagari(qIn) ||
@@ -338,44 +338,91 @@ bool handleEmotionCommand(const String &qIn) {
   q.toLowerCase();
   q.trim();
 
-  // Negative filter: Reject questions, stories, recipes, informational requests
+  // ============================================================
+  // SPECIAL HIGH-PRIORITY ACTION COMMANDS: CRY & LAUGH
+  // Checked FIRST before any negative filter so "tell me a laugh" or "can you laugh"
+  // always trigger the pure laughing action without talking!
+  // ============================================================
+  auto executeCryAction = [&]() -> bool {
+    Serial.println("[CMD] Crying action requested ('cry / ro kr dikhao')");
+    setEmotion(EMOTION_CRYING);
+    returnIdleAt = millis() + 4800;
+    emotionAutoReturnAt = returnIdleAt;
+    soundCrying();
+    holdFace(4800);
+    setEmotion(EMOTION_IDLE);
+    returnIdleAt = 0;
+    emotionAutoReturnAt = 0;
+    return true;
+  };
+
+  auto executeLaughAction = [&]() -> bool {
+    Serial.println("[CMD] Laughing action requested ('laugh / haske dikhao') -> vocal laugh");
+    setEmotion(EMOTION_LAUGHING);
+    returnIdleAt = millis() + 8000;
+    emotionAutoReturnAt = returnIdleAt;
+
+    String laughSpeech;
+    if (ttsProvider == "fish" || ttsProvider == "fishaudio") {
+      // Fish Audio S2 synthesizes genuine human laughter with [laughing] + laugh syllables
+      laughSpeech = "[laughing] Hahahahaha! Ahahaha, hahahaha! Hahahahaha!";
+    } else {
+      laughSpeech = "Hahahahaha! Ahahaha, hahahaha! Hahahahaha!";
+    }
+
+    bool spoke = false;
+    if (WiFi.status() == WL_CONNECTED) {
+      spoke = speakText(laughSpeech);
+    }
+    if (!spoke) {
+      soundLaughing();
+      holdFace(4500);
+    } else {
+      holdFace(500);
+    }
+    setEmotion(EMOTION_IDLE);
+    returnIdleAt = 0;
+    emotionAutoReturnAt = 0;
+    return true;
+  };
+
+  bool isCryReq = hasAny(q, {"ro kr", "ro kar", "ro ke", "ro k ", "rokar", "roke", "rone ki", "ro do", "ro lo",
+                             "rona dikha", "rona shuru", "rone lago", "ro pad", "ro pado", "cry", "crying", "rona",
+                             "रोना", "रो के", "रो कर", "रोकर", "रोने की", "रो दो", "रो पड़", "रो पड़ो", "रो"}) ||
+                  hasWord(q, {"cry", "crying", "sob", "sobbing", "weep", "tears", "rona", "ro"});
+
+  if (isCryReq) {
+    return executeCryAction();
+  }
+
+  bool isLaughReq = hasAny(q, {
+      "haske", "has ke", "has kr", "has k ", "haskar", "has kar", "has karke",
+      "hanske", "hans ke", "hans kr", "hans k ", "hanskar", "hans kar", "hans karke",
+      "hasske", "hass ke", "hasskar", "hass kar",
+      "haste", "hanste", "haste hue", "hanste hue", "haste raho",
+      "hasne", "hansne", "hasne ki", "hansne ki", "hasne lago", "hasne wala",
+      "hasna", "hansna", "hasna dikhao", "hasna sunao",
+      "haso", "hanso", "hasso", "haso na", "hanso na", "thoda haso", "zara haso",
+      "has do", "hans do", "hass do", "has lo", "hans lo",
+      "hasao", "hansao", "mujhe hasao",
+      "hasi", "hansi", "hasi sunao", "hansi sunao", "hasi dikhao", "hansi dikhao",
+      "thoda has", "thoda hans", "zara has", "zara hans", "ek baar has", "ek baar hans",
+      "laugh", "laughing", "laughter", "giggle", "giggling", "chuckle",
+      "हंस के", "हंस कर", "हंसकर", "हंसते", "हंसने", "हंसना", "हंसी", "हंस दो", "हंसो", "हंस",
+      "हस के", "हस कर", "हसकर", "हसते", "हसने", "हसना", "हसी", "हस दो", "हसो", "हस"
+  }) || hasWord(q, {
+      "laugh", "laughing", "laughter", "giggle", "giggling", "chuckle", "has", "hans",
+      "haso", "hanso", "hasna", "hansna", "hasi", "hansi", "hasso", "haste", "hanste"
+  });
+
+  if (isLaughReq) {
+    return executeLaughAction();
+  }
+
+  // Negative filter: Reject questions, stories, recipes, informational requests for other emotions
   if (hasAny(q, {"why", "how", "who", "what", "explain", "tell me", "recipe",
                  "make a ", "make an ", "story", "difference"}))
     return false;
-
-  // ============================================================
-  // SPECIAL HIGH-PRIORITY ACTION COMMANDS: CRY & LAUGH
-  // "ro kr dikhao", "ro ke dikhao", "rokar dikhao", "haske dikhao", etc.
-  // ============================================================
-  bool isCryReq = hasAny(q, {"ro kr", "ro kar", "ro ke", "ro k ", "rokar", "roke", "rone ki", "ro do", "ro lo",
-                             "rona dikha", "rona shuru", "rone lago", "ro pad", "ro pado",
-                             "रोना", "रो के", "रो कर", "रोकर", "रोने की", "रो दो", "रो पड़", "रो पड़ो"}) ||
-                  ((hasWord(q, {"cry", "crying", "sob", "sobbing", "weep", "tears", "rona", "ro"}) || hasAny(q, {"रोना", "आंसू"})) &&
-                   (hasWord(q, {"dikha", "dikhao", "sunao", "batao", "bata", "karo", "kar", "karke", "krke",
-                                "face", "expression", "sound", "voice", "awaj", "awaaz", "aawaz", "show", "act"}) ||
-                    hasAny(q, {"दिखा", "दिखाओ", "सुनाओ", "बताओ", "आवाज", "आवाज़", "करो"})));
-
-  if (isCryReq) {
-    Serial.println("[CMD] Crying action requested ('ro kr dikhao')");
-    showEmotionFor(EMOTION_CRYING, 4500);
-    return true;
-  }
-
-  bool isLaughReq = hasAny(q, {"haske", "has ke", "has kr", "has k ", "haskar", "haska",
-                               "hans ke", "hans kr", "hanskar", "hanske", "hanska",
-                               "hasne ki", "hansne ki", "has do", "hans do", "has lo", "hans lo",
-                               "haso", "hanso", "thoda has", "thoda hans",
-                               "हंस के", "हंस कर", "हंसकर", "हंसने की", "हंस दो", "हंसो", "हंसना"}) ||
-                    ((hasWord(q, {"laugh", "laughing", "giggle", "giggling", "chuckle", "has", "hans", "haso", "hanso"}) || hasAny(q, {"हंस", "हंसी"})) &&
-                     (hasWord(q, {"dikha", "dikhao", "sunao", "batao", "bata", "karo", "kar", "karke", "krke",
-                                  "face", "expression", "sound", "voice", "awaj", "awaaz", "aawaz", "show", "act"}) ||
-                      hasAny(q, {"दिखा", "दिखाओ", "सुनाओ", "बताओ", "आवाज", "आवाज़", "करो"})));
-
-  if (isLaughReq) {
-    Serial.println("[CMD] Laughing action requested ('haske dikhao')");
-    showEmotionFor(EMOTION_LAUGHING, 4000);
-    return true;
-  }
 
   bool isCommand = hasWord(q, {"face", "expression", "bana", "banao", "dikha", "dikhao", "show",
                                "make", "look", "ho ja", "ho jao", "kar do", "karo"}) ||
@@ -424,8 +471,7 @@ bool handleEmotionCommand(const String &qIn) {
   }
   if (hasWord(q, {"laugh", "laughing", "giggle", "has", "hans"}) ||
       hasAny(q, {"लाफ", "हंस", "hans", "has"})) {
-    showEmotionFor(EMOTION_LAUGHING, 4000);
-    return true;
+    return executeLaughAction();
   }
   if (hasWord(q, {"shy"}) || hasAny(q, {"शाई", "शर्मा", "sharma", "sharam"})) {
     showPetMood(PET_SHY);
@@ -452,7 +498,14 @@ bool handleEmotionCommand(const String &qIn) {
   }
   if (hasWord(q, {"cry", "crying", "sob", "ro", "rona"}) ||
       hasAny(q, {"रोना", "rona", "ro mat", "aansu", "ro"})) {
-    showEmotionFor(EMOTION_CRYING, 4500);
+    setEmotion(EMOTION_CRYING);
+    returnIdleAt = millis() + 5200;
+    emotionAutoReturnAt = returnIdleAt;
+    soundCrying();
+    holdFace(5200);
+    setEmotion(EMOTION_IDLE);
+    returnIdleAt = 0;
+    emotionAutoReturnAt = 0;
     return true;
   }
   if (hasWord(q, {"heart", "hearts"}) || hasAny(q, {"dil", "दिल"})) {
@@ -521,19 +574,11 @@ bool handleSkinCommand(const String &qIn) {
       hasAny(q, {"कीवी"})) {
     targetSkin = SKIN_KIWI;
     name = "Kiwi";
-  } else if (hasWord(q, {"vector", "vector classic", "anki", "default",
-                         "classic", "glow"}) ||
-             hasAny(q, {"वेक्टर"})) {
-    targetSkin = SKIN_VECTOR;
-    name = "Vector Classic";
   } else if (hasWord(q, {"pixel", "pixel 8-bit", "arcade", "retro", "8bit",
                          "8-bit"}) ||
              hasAny(q, {"रेट्रो", "पिक्सेल"})) {
     targetSkin = SKIN_PIXEL;
     name = "Pixel 8-Bit";
-  } else if (hasAny(q, {"squircle bold", "squircle solid", "bold"})) {
-    targetSkin = SKIN_SQUIRCLE_BOLD;
-    name = "Squircle Bold";
   } else if (hasAny(q, {"lumina spark", "squircle glint", "spark", "lumina",
                         "glint"})) {
     targetSkin = SKIN_LUMINA_SPARK;
@@ -541,9 +586,9 @@ bool handleSkinCommand(const String &qIn) {
   } else if (hasWord(q, {"mecha", "circtangle", "circrect"}) || hasAny(q, {"मेका", "मैका"})) {
     targetSkin = SKIN_MECHA;
     name = "Mecha";
-  } else if (hasWord(q, {"squircle"}) || hasAny(q, {"स्क्वार्कल"})) {
-    targetSkin = SKIN_SQUIRCLE_BOLD;
-    name = "Squircle Bold";
+  } else if (hasWord(q, {"emo", "emo-style", "emostyle"}) || hasAny(q, {"emo style", "ईमो", "इमो"})) {
+    targetSkin = SKIN_EMO;
+    name = "EMO Style";
   }
 
   // Check for generic "cycle / next / change" eyes command
@@ -558,8 +603,7 @@ bool handleSkinCommand(const String &qIn) {
   if (name.length() == 0 && isCycleCommand) {
     targetSkin = (EyeSkin)(((uint8_t)currentEyeSkin + 1) % SKIN_COUNT);
     const char *skinNames[SKIN_COUNT] = {
-        "Kiwi", "Vector Classic", "Pixel 8-Bit",
-        "Squircle Bold", "Lumina Spark", "Mecha"};
+        "Kiwi", "Pixel 8-Bit", "Lumina Spark", "Mecha", "EMO Style"};
     name = skinNames[targetSkin];
   }
 

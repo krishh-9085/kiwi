@@ -619,7 +619,9 @@ class DevPortalHandler(BaseHTTPRequestHandler):
                         elif k == "bright": cfg["displayBrightness"] = int(val)
                         elif k == "night_bright": cfg["nightBrightness"] = int(val)
                         elif k == "night_mode": cfg["nightMode"] = int(val)
-                        elif k == "prompt": cfg["systemPrompt"] = val
+                        elif k == "prompt":
+                            cfg["systemPrompt"] = val
+                            cfg["prompt"] = val
                         elif k in ["owner", "mem_name"]:
                             cfg["ownerName"] = val
                         elif k == "ssid": cfg["wifiSSID"] = val
@@ -631,8 +633,6 @@ class DevPortalHandler(BaseHTTPRequestHandler):
                         elif k == "llmkey": cfg["llmKey"] = val
                         elif k == "groqkey": cfg["groqKey"] = val; cfg["groqSttKey"] = val
                         elif k == "ttskey": cfg["ttsKey"] = val; cfg["sttKey"] = val
-                        elif k == "openaikey": cfg["openaiKey"] = val; cfg["openaiSttKey"] = val; cfg["openaiTtsKey"] = val
-                        elif k == "elevkey": cfg["elevenKey"] = val
                         elif k == "fishkey": cfg["fishKey"] = val
                         elif k == "snd_react": cfg["soundReactiveEnabled"] = (val in ["1", "true", "on"])
                         elif k == "greet_en": cfg["greetingsEnabled"] = (val in ["1", "true", "on"])

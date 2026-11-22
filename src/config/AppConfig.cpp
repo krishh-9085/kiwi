@@ -18,13 +18,10 @@ IPAddress apIP(192, 168, 4, 1);
 IPAddress apMask(255, 255, 255, 0);
 
 const char *DEFAULT_STT_URL = "https://api.sarvam.ai/speech-to-text";
-const char *DEFAULT_STT_MODEL = "saaras:v3";
+const char *DEFAULT_STT_MODEL = "saaras:v4";
 const char *DEFAULT_GROQ_STT_URL =
     "https://api.groq.com/openai/v1/audio/transcriptions";
 const char *DEFAULT_GROQ_STT_MODEL = "whisper-large-v3";
-const char *DEFAULT_OPENAI_STT_URL =
-    "https://api.openai.com/v1/audio/transcriptions";
-const char *DEFAULT_OPENAI_STT_MODEL = "whisper-1";
 
 const char *DEFAULT_PROMPT =
     "You are Kiwi, a witty, caring desk buddy with animated eyes. "
@@ -35,23 +32,13 @@ const char *DEFAULT_LLM_URL =
     "https://generativelanguage.googleapis.com/v1beta/models/"
     "gemini-2.5-flash-lite:generateContent";
 const char *DEFAULT_LLM_MODEL = "gemini-2.5-flash-lite";
-const char *DEFAULT_OPENAI_LLM_URL =
-    "https://api.openai.com/v1/chat/completions";
 const char *DEFAULT_GROQ_URL =
     "https://api.groq.com/openai/v1/chat/completions";
-const char *DEFAULT_GROQ_MODEL = "llama-3.3-70b-versatile";
+const char *DEFAULT_GROQ_MODEL = "openai/gpt-oss-120b";
 
 const char *DEFAULT_TTS_URL = "https://api.sarvam.ai/text-to-speech";
 const char *DEFAULT_TTS_MODEL = "bulbul:v3";
 const char *DEFAULT_TTS_VOICE = "priya";
-
-const char *DEFAULT_OPENAI_TTS_URL = "https://api.openai.com/v1/audio/speech";
-const char *DEFAULT_OPENAI_TTS_MODEL = "gpt-4o-mini-tts";
-const char *DEFAULT_OPENAI_TTS_VOICE = "alloy";
-
-const char *DEFAULT_ELEVEN_URL = "https://api.elevenlabs.io/v1/text-to-speech";
-const char *DEFAULT_ELEVEN_MODEL = "eleven_multilingual_v2";
-const char *DEFAULT_ELEVEN_VOICE = "21m00Tcm4TlvDq8ikWAM";
 
 const char *DEFAULT_FISH_TTS_URL = "https://api.fish.audio/v1/tts";
 const char *DEFAULT_FISH_TTS_MODEL = "s2.1-pro-free";
@@ -72,9 +59,6 @@ String sttModel = DEFAULT_STT_MODEL;
 String groqSttEndpoint = DEFAULT_GROQ_STT_URL;
 String groqSttKey = "";
 String groqSttModel = DEFAULT_GROQ_STT_MODEL;
-String openaiSttEndpoint = DEFAULT_OPENAI_STT_URL;
-String openaiSttKey = "";
-String openaiSttModel = DEFAULT_OPENAI_STT_MODEL;
 
 String systemPrompt = DEFAULT_PROMPT;
 String llmProvider = "groq";
@@ -90,14 +74,6 @@ String ttsEndpoint = DEFAULT_TTS_URL;
 String ttsModel = DEFAULT_TTS_MODEL;
 String ttsVoice = DEFAULT_TTS_VOICE;
 String ttsKey = "";
-String openaiTtsEndpoint = DEFAULT_OPENAI_TTS_URL;
-String openaiTtsModel = DEFAULT_OPENAI_TTS_MODEL;
-String openaiTtsVoice = DEFAULT_OPENAI_TTS_VOICE;
-String openaiTtsKey = "";
-String elevenEndpoint = DEFAULT_ELEVEN_URL;
-String elevenModel = DEFAULT_ELEVEN_MODEL;
-String elevenVoice = DEFAULT_ELEVEN_VOICE;
-String elevenKey = "";
 String fishEndpoint = DEFAULT_FISH_TTS_URL;
 String fishModel = DEFAULT_FISH_TTS_MODEL;
 String fishVoice = "";

@@ -16,3 +16,4 @@ int httpReadBlock(HttpStream &s, uint8_t *dst, size_t maxLen);
 bool ensureDns(const String &host);
 bool tlsConnect(WiFiClientSecure &c, const String &host, const char *tag);
 bool clientWriteAll(WiFiClient &c, const uint8_t *buf, size_t len);
+void initMbedTlsPsram();

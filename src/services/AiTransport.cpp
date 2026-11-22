@@ -2,6 +2,32 @@
 #include "config/AppConfig.h"
 #include "core/Timing.h"
 #include "behavior/InteractionManager.h"
+#include <esp_heap_caps.h>
+#include <mbedtls/platform.h>
+
+// ============================================================
+// MBEDTLS PSRAM DYNAMIC ALLOCATOR
+// Routes TLS handshake context, buffers, and cert tables to 2MB PSRAM
+// ============================================================
+static void *psram_mbedtls_calloc(size_t n, size_t size) {
+  if (psramFound()) {
+    void *p = heap_caps_calloc(n, size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (p) return p;
+  }
+  return heap_caps_calloc(n, size, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+}
+
+static void psram_mbedtls_free(void *ptr) {
+  heap_caps_free(ptr);
+}
+
+void initMbedTlsPsram() {
+  if (psramFound()) {
+    mbedtls_platform_set_calloc_free(psram_mbedtls_calloc, psram_mbedtls_free);
+    Serial.printf("[TLS] MbedTLS PSRAM dynamic memory active (Free PSRAM: %u KB)\n",
+                  (unsigned)(ESP.getFreePsram() / 1024));
+  }
+}
 
 // ============================================================
 bool httpReadLine(WiFiClient &c, String &line, uint32_t timeoutMs) {

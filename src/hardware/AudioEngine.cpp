@@ -23,7 +23,7 @@ void pumpUI();
 
 // Speech/transmit frame buffer size (stereo frames).
 #ifndef TX_FRAMES
-#define TX_FRAMES 256
+#define TX_FRAMES 512
 #endif
 
 // ---- Shared handles ---------------------------------------------------------
@@ -178,12 +178,27 @@ void updateTonePlayer() {
 
     // Smooth Hann-tapered envelope eliminates sharp digital click transients
     float env = 1.0f;
-    if (attack > 0.001f && t < attack) {
-      env = 0.5f * (1.0f - cosf((float)M_PI * (t / attack)));
-    } else if (release > 0.001f && t > duration - release) {
-      float rProg = (t - (duration - release)) / release;
-      if (rProg > 1.0f) rProg = 1.0f;
-      env = 0.5f * (1.0f + cosf((float)M_PI * rProg));
+    if (cur.shape == SHAPE_BELL) {
+      // Natural acoustic bell/chime percussive envelope:
+      // Rapid 4ms anti-click attack, followed by natural exponential decay
+      const float bellAttack = 0.004f;
+      if (t < bellAttack) {
+        env = 0.5f * (1.0f - cosf((float)M_PI * (t / bellAttack)));
+      } else {
+        float decayProgress = (duration > bellAttack) ? ((t - bellAttack) / (duration - bellAttack)) : 1.0f;
+        if (decayProgress < 0.0f) decayProgress = 0.0f;
+        if (decayProgress > 1.0f) decayProgress = 1.0f;
+        float d = 1.0f - decayProgress;
+        env = d * d * (0.85f * d + 0.15f);
+      }
+    } else {
+      if (attack > 0.001f && t < attack) {
+        env = 0.5f * (1.0f - cosf((float)M_PI * (t / attack)));
+      } else if (release > 0.001f && t > duration - release) {
+        float rProg = (t - (duration - release)) / release;
+        if (rProg > 1.0f) rProg = 1.0f;
+        env = 0.5f * (1.0f + cosf((float)M_PI * rProg));
+      }
     }
     if (env < 0.0f)
       env = 0.0f;
@@ -244,6 +259,14 @@ void updateTonePlayer() {
         // Dynamic FM robotic warble (R2-D2 / Wall-E chatter)
         float fmMod = sinf(tonePhase * 1.5f) * 1.6f;
         raw = sinf(tonePhase + fmMod) * 0.85f;
+        break;
+      }
+      case SHAPE_BELL: {
+        // Acoustic glockenspiel / chime / marimba timbre:
+        // Fundamental (pure warm core) + inharmonic bell overtone (2.756x) + 2nd harmonic (2x)
+        raw = sinf(tonePhase) * 0.74f +
+              sinf(2.0f * tonePhase) * 0.16f +
+              sinf(2.756f * tonePhase) * 0.10f;
         break;
       }
       default: // SHAPE_SINE
@@ -368,14 +391,15 @@ void soundPetSurprised() {
   playToneQueue(t, 2);
 }
 
-// Futuristic Cyber Startup Chime (warm major chord)
+// Luxurious Ambient Robot Wakeup Chime (Warm F-Major-9 acoustic marimba/celesta arpeggio)
 void playBootChime() {
   Tone t[] = {
-    {392, 80, 523, SHAPE_WARM_VOCAL, 0, 0},    // G4 -> C5
-    {523, 80, 659, SHAPE_WARM_VOCAL, 0, 0},    // C5 -> E5
-    {659, 160, 1046, SHAPE_WARM_VOCAL, 20, 14} // E5 -> C6 soft bell
+    {349.2f, 90, 0, SHAPE_BELL, 0, 0},    // F4 (warm foundational root note)
+    {440.0f, 95, 0, SHAPE_BELL, 0, 0},    // A4 (major third warmth)
+    {523.3f, 110, 0, SHAPE_BELL, 0, 0},   // C5 (pure fifth clarity)
+    {659.3f, 280, 0, SHAPE_BELL, 8, 6}    // E5 (major seventh resolution with gentle acoustic ring-out)
   };
-  playToneQueue(t, 3);
+  playToneQueue(t, 4);
 }
 
 // Wall-E Disappointed "Uh-Oh / Sad Wah"
@@ -388,13 +412,24 @@ void soundError() {
   playToneQueue(t, 3);
 }
 
-// Gentle Marimba / Glockenspiel Clock Chime
+// Elegant Westminster Clock Chime (Classic 3-note antique clock bell motif)
 void soundClock() {
   Tone t[] = {
-    {523, 70, 523, SHAPE_WARM_VOCAL, 0, 0}, // C5
-    {659, 110, 659, SHAPE_WARM_VOCAL, 0, 0} // E5
+    {392.0f, 110, 0, SHAPE_BELL, 0, 0},   // G4 (deep bell toll)
+    {659.3f, 130, 0, SHAPE_BELL, 0, 0},   // E5 (high melodic bell)
+    {523.3f, 260, 0, SHAPE_BELL, 6, 5}    // C5 (warm home clock bell resolution with lingering ring-out)
   };
-  playToneQueue(t, 2);
+  playToneQueue(t, 3);
+}
+
+// Refreshing Morning Breeze & Wind-Chime (Atmospheric pentatonic weather chime)
+void soundWeather() {
+  Tone t[] = {
+    {587.3f, 90, 0, SHAPE_BELL, 0, 0},    // D5 (gentle airy droplet)
+    {784.0f, 110, 0, SHAPE_BELL, 0, 0},   // G5 (bright sunny sky)
+    {880.0f, 240, 0, SHAPE_BELL, 14, 8}   // A5 (fluttering wind chime in a gentle breeze)
+  };
+  playToneQueue(t, 3);
 }
 
 // Inquisitive Wall-E "Hm?"
@@ -462,11 +497,11 @@ void soundFanfare() {
   playToneQueue(t, 4);
 }
 
-// Soft, musical kalimba / marimba chime for skin and face change
+// Soft, musical acoustic marimba chime for skin and face change
 void soundCoin() {
   Tone t[] = {
-    {523, 50, 659, SHAPE_WARM_VOCAL, 0, 0},  // C5 -> E5
-    {784, 130, 784, SHAPE_WARM_VOCAL, 14, 10} // G5 warm chime
+    {523.3f, 65, 0, SHAPE_BELL, 0, 0},    // C5
+    {784.0f, 160, 0, SHAPE_BELL, 10, 7}   // G5 resonant chime
   };
   playToneQueue(t, 2);
 }
@@ -556,8 +591,8 @@ void soundLaughing() {
 bool startAudio() {
   i2s_chan_config_t chan =
       I2S_CHANNEL_DEFAULT_CONFIG(I2S_NUM_0, I2S_ROLE_MASTER);
-  chan.dma_desc_num = 6;
-  chan.dma_frame_num = 256;
+  chan.dma_desc_num = psramFound() ? 8 : 6;
+  chan.dma_frame_num = psramFound() ? 512 : 256;
   chan.auto_clear = true;
   if (i2s_new_channel(&chan, &txHandle, &rxHandle) != ESP_OK)
     return false;

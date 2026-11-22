@@ -9,6 +9,7 @@
 #include "face/FaceEngine.h"
 #include "face/SleepyWakeAnim.h"
 #include "hardware/AudioEngine.h"
+#include "hardware/WakeWordEngine.h"
 #include "power/PowerManager.h"
 #include "services/AiService.h"
 #include "services/WeatherService.h"
@@ -105,9 +106,9 @@ void resyncTouch() {
 }
 
 // ---------- Touch Gesture Action Dispatcher ----------
-// Calibrated double-tap window: 320ms provides natural, reliable multi-tap detection
-// without accidental single-tap misfires (standard human double-tap rhythm).
-constexpr uint32_t DOUBLE_TAP_WINDOW_MS = 320;
+// Calibrated double-tap window: 480ms provides natural, reliable multi-tap detection
+// on physical capacitive sensors without accidental single-tap misfires.
+constexpr uint32_t DOUBLE_TAP_WINDOW_MS = 480;
 
 TouchAction getSingleTapAction(uint8_t pin) {
   if (pin == PIN_TOUCH_TOP)
@@ -212,23 +213,24 @@ void executeTouchAction(TouchAction act, uint8_t pin) {
     return;
   }
 
-  if (showClockScreen || showWeatherScreen) {
-    showClockScreen = false;
-    showWeatherScreen = false;
-    setEmotion(EMOTION_IDLE);
-    returnIdleAt = 0;
-    soundPetSparkle();
-    Serial.println(
-        "[TOUCH] Screen active (Clock/Weather) -> Dismissed by touch action!");
-    return;
+  if (act != TOUCH_ACT_CLOCK && act != TOUCH_ACT_WEATHER) {
+    if (showClockScreen || showWeatherScreen) {
+      showClockScreen = false;
+      showWeatherScreen = false;
+      setEmotion(EMOTION_IDLE);
+      returnIdleAt = 0;
+      soundTouchBlip();
+      Serial.println(
+          "[TOUCH] Screen active (Clock/Weather) -> Dismissed by touch action!");
+      return;
+    }
   }
 
-  // Cheek tickle rapid tap tracking
-  if (pin == PIN_TOUCH_LEFT || pin == PIN_TOUCH_RIGHT) {
+  // Cheek tickle rapid tap tracking (only for playful pet / idle touches, never for functional clock/weather commands)
+  if ((pin == PIN_TOUCH_LEFT || pin == PIN_TOUCH_RIGHT) && (act == TOUCH_ACT_DISMISS || act == TOUCH_ACT_PET || act == TOUCH_ACT_NONE)) {
     if (isKiwiAngry()) {
       cheekTapCount = 0;
-      return; // Never trigger tickle mode or single-tap actions while Kiwi is
-              // angry!
+      return; // Never trigger tickle mode or single-tap actions while Kiwi is angry!
     }
     if (s_inTickleSpeech || isSpeechPlaying() || busyProcessing) {
       Serial.printf("[TOUCH] Cheek pin %d tap during busy/speech -> Absorbed!\n", pin);
@@ -240,12 +242,14 @@ void executeTouchAction(TouchAction act, uint8_t pin) {
       cheekTapCount = 1;
     }
     lastCheekTouchAt = now;
-    if (cheekTapCount >= 3 &&
+    if (cheekTapCount >= 4 &&
         now - lastTickleTriggeredAt > TICKLE_COOLDOWN_MS && !busyProcessing &&
         !inCircadianSleep && !manualSleep) {
       triggerTickleMode();
       return;
     }
+  } else if (pin == PIN_TOUCH_LEFT || pin == PIN_TOUCH_RIGHT) {
+    cheekTapCount = 0; // Clear tickle count on functional gestures (clock, weather, etc.)
   }
 
   switch (act) {
@@ -311,6 +315,7 @@ void executeTouchAction(TouchAction act, uint8_t pin) {
       Serial.println("[TOUCH] Action LISTEN -> Enter Listening Mode!");
       listenStartedAt = millis();
       setEmotion(EMOTION_LISTENING);
+      preWakeReset();
       startRecording = true;
     }
     break;
@@ -333,7 +338,7 @@ void executeTouchAction(TouchAction act, uint8_t pin) {
     showClockScreen = false;
     showWeatherScreen = !showWeatherScreen;
     if (showWeatherScreen) {
-      soundPetSparkle();
+      soundWeather();
       if (millis() - lastWeatherFetchAt > 600000UL)
         fetchWeather();
     } else {
@@ -409,7 +414,9 @@ void executeTouchAction(TouchAction act, uint8_t pin) {
 }
 
 void checkPendingSingleTap(TouchSensor &ts, uint32_t now) {
-  if (ts.pendingSingleTap && (now - ts.lastReleaseAt > DOUBLE_TAP_WINDOW_MS)) {
+  // Only confirm single-tap if the sensor is NOT currently being touched/pressed (!ts.state)
+  // and the double-tap window has elapsed since release.
+  if (ts.pendingSingleTap && !ts.state && (now - ts.lastReleaseAt > DOUBLE_TAP_WINDOW_MS)) {
     ts.pendingSingleTap = false;
     Serial.printf("[TOUCH] Pin %d SINGLE TAP confirmed\n", ts.pin);
     executeTouchAction(getSingleTapAction(ts.pin), ts.pin);
@@ -526,10 +533,14 @@ static void updateOneTouch(TouchSensor &ts, uint32_t now) {
         }
 
         TouchAction dblAct = getDoubleTapAction(ts.pin);
-        if (ts.pendingSingleTap &&
-            (now - ts.lastReleaseAt <= DOUBLE_TAP_WINDOW_MS) &&
-            dblAct != TOUCH_ACT_NONE) {
+        bool isSecondTap = ts.pendingSingleTap &&
+                           (dblAct != TOUCH_ACT_NONE) &&
+                           ((ts.startedAt - ts.lastReleaseAt <= DOUBLE_TAP_WINDOW_MS) ||
+                            (now - ts.lastReleaseAt <= DOUBLE_TAP_WINDOW_MS + 250));
+
+        if (isSecondTap) {
           ts.pendingSingleTap = false;
+          cheekTapCount = 0;
           Serial.printf("[TOUCH] Pin %d DOUBLE TAP triggered!\n", ts.pin);
           executeTouchAction(dblAct, ts.pin);
         } else if (dblAct == TOUCH_ACT_NONE) {

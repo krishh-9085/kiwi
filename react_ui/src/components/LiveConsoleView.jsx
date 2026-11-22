@@ -51,15 +51,10 @@ const QUICK_EMOTIONS = [
 
 
 const QUICK_SKINS = [
-
   { id: 'kiwi', label: 'Kiwi' },
-
-  { id: 'vector', label: 'Vector' },
-
+  { id: 'emo', label: 'EMO' },
   { id: 'mecha', label: 'Mecha' },
-
   { id: 'pixel', label: 'Pixel' }
-
 ]
 
 
@@ -1001,173 +996,25 @@ export default function LiveConsoleView({
 
             </div>
 
-
-
-            {/* Quick Sound Effects Soundboard */}
-
-            <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: '12px' }}>
-
-              <span style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'block', marginBottom: '6px', fontWeight: 600 }}>
-
-                Audio Soundboard:
-
-              </span>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
-
-                {SOUND_EFFECTS.map((snd) => (
-
-                  <button
-
-                    key={snd.id}
-
-                    onClick={() => onTriggerAction(`/do?sound=${snd.id}`)}
-
-                    className="flux-btn"
-
-                    style={{ padding: '6px 8px', fontSize: '11px', background: 'var(--card-muted)', color: 'var(--text-dark)', border: '1px solid var(--border-light)', justifyContent: 'center' }}
-
-                  >
-
-                    <Music size={11} />
-
-                    <span>{snd.label}</span>
-
-                  </button>
-
-                ))}
-
-              </div>
-
-            </div>
-
           </div>
 
 
 
-          {/* ================= COLUMN 3: PET MOOD, GREETINGS & SKINS ================= */}
+          {/* ================= COLUMN 3: GREETINGS, CHATTER & SKINS ================= */}
 
           <div className="flux-white-card" style={{ justifyContent: 'space-between' }}>
 
             <div>
 
-              <div className="flux-card-header">
+              <div className="flux-card-header" style={{ marginBottom: '14px' }}>
 
                 <span className="flux-card-title">
 
-                  <Heart size={15} color="#F43F5E" />
+                  <Sparkles size={15} color="#38BDF8" />
 
-                  <span>Pet Engine & Mood</span>
-
-                </span>
-
-                <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-
-                  Target: <strong>{meal}</strong>
+                  <span>Chatter & Greetings</span>
 
                 </span>
-
-              </div>
-
-
-
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '10px' }}>
-
-                <div className="flux-huge-metric">
-
-                  <span style={{ textTransform: 'capitalize' }}>{hunger}</span>
-
-                </div>
-
-                <span style={{
-
-                  background: hunger === 'satisfied' ? 'var(--accent-lime)' : '#F59E0B',
-
-                  color: '#16181D', fontSize: '10px', fontWeight: 800, padding: '2px 8px', borderRadius: '999px'
-
-                }}>
-
-                  {hunger === 'satisfied' ? 'WELL FED' : 'NEEDS CARE'}
-
-                </span>
-
-              </div>
-
-
-
-              {/* 4 Pet Action Buttons (Feed, Hungry, Apologize, Pat) */}
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px', marginBottom: '14px' }}>
-
-                <button
-
-                  onClick={() => onTriggerAction('/do?feed=1')}
-
-                  className="flux-btn"
-
-                  style={{ padding: '8px 10px', fontSize: '11px', background: 'var(--card-muted)', color: 'var(--text-dark)', border: '1px solid var(--border-light)', justifyContent: 'center' }}
-
-                >
-
-                  <Utensils size={12} />
-
-                  <span>Feed Snack</span>
-
-                </button>
-
-
-
-                <button
-
-                  onClick={() => onTriggerAction('/do?hunger=1')}
-
-                  className="flux-btn"
-
-                  style={{ padding: '8px 10px', fontSize: '11px', background: 'var(--card-muted)', color: 'var(--text-dark)', border: '1px solid var(--border-light)', justifyContent: 'center' }}
-
-                >
-
-                  <Coffee size={12} />
-
-                  <span>Make Hungry</span>
-
-                </button>
-
-
-
-                <button
-
-                  onClick={() => onTriggerAction('/do?apologize=1')}
-
-                  className="flux-btn"
-
-                  style={{ padding: '8px 10px', fontSize: '11px', background: 'var(--card-muted)', color: 'var(--text-dark)', border: '1px solid var(--border-light)', justifyContent: 'center' }}
-
-                >
-
-                  <Heart size={12} />
-
-                  <span>Apologize</span>
-
-                </button>
-
-
-
-                <button
-
-                  onClick={() => onTriggerAction('/do?pat=1')}
-
-                  className="flux-btn"
-
-                  style={{ padding: '8px 10px', fontSize: '11px', background: 'var(--card-muted)', color: 'var(--text-dark)', border: '1px solid var(--border-light)', justifyContent: 'center' }}
-
-                >
-
-                  <Hand size={12} />
-
-                  <span>Pat Head</span>
-
-                </button>
 
               </div>
 

@@ -1,8 +1,8 @@
 #include "face/FaceSkins.h"
-#include "face/FaceSkinEmo.h"
 #include "config/AppConfig.h"
 #include "face/FaceDisplay.h"
 #include "face/FaceExpressions.h"
+#include "face/FaceSkinEmo.h"
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 #include <Wire.h>
@@ -404,7 +404,8 @@ void drawEye(int cx, int cy, int w, int h, int r, int lidIn, int lidOut,
     return;
   }
 
-  // 7. EMO-STYLE: Large solid rounded-rectangular eyes, no pupils, with prominent corner radius
+  // 7. EMO-STYLE: Large solid rounded-rectangular eyes, no pupils, with
+  // prominent corner radius
   if (currentEyeSkin == SKIN_EMO) {
     drawEmoEye(cx, cy, w, h, r, lidIn, lidOut, cheek, isLeft, glint);
     return;

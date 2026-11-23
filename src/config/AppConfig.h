@@ -276,6 +276,13 @@ extern String bannerText;
 extern int bannerScrollX;
 extern int bannerLoops;
 
+// ---------- STT Adaptive Endpointer Parameters ----------
+// All exposed via NVS + Web UI; defaults match the original behaviour.
+extern int   sttTrailingMs;    // NVS: stt_trail_ms  – trailing silence to cut (ms, default 450)
+extern float sttNoiseK;        // NVS: stt_noise_k   – noise EMA multiplier for speech gate (default 2.2)
+extern float sttRelK;          // NVS: stt_rel_k     – speech-peak fraction for silence (default 0.20)
+extern int   sttMaxSilenceMs;  // NVS: stt_max_sil   – hard silence cap after speech (ms, default 1200)
+
 // ---------- Custom OLED Eye Skins ----------
 extern EyeSkin currentEyeSkin;
 extern bool showMouth;

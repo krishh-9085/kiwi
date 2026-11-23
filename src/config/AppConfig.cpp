@@ -231,6 +231,12 @@ String bannerText = "";
 int bannerScrollX = 128;
 int bannerLoops = 0;
 
+// ---------- STT Adaptive Endpointer Parameters ----------
+int   sttTrailingMs   = 450;   // 450 ms trailing silence to cut
+float sttNoiseK       = 2.2f;  // speech onset = noiseFloor * sttNoiseK
+float sttRelK         = 0.20f; // silence = peakSpeech * sttRelK above noise
+int   sttMaxSilenceMs = 1200;  // hard cap: stop if silent > 1.2 s after speech
+
 // ---------- Custom OLED Eye Skins ----------
 EyeSkin currentEyeSkin = SKIN_KIWI;
 bool showMouth = true;

@@ -69,7 +69,8 @@ void setEmotion(Emotion e) {
     nextIdleLookAt = now + 300 + random(0, 500);
     idleExpression = 0;
     idleExpressionEnd = 0;
-  } else if (e == EMOTION_SURPRISED && returnIdleAt == 0 && emotionAutoReturnAt == 0) {
+  } else if (e == EMOTION_SURPRISED && returnIdleAt == 0 &&
+             emotionAutoReturnAt == 0) {
     emotionAutoReturnAt = now + 3000;
   }
 }
@@ -83,18 +84,20 @@ void faceTargetsForEmotion(Emotion e, PetMood pm) {
     faceTgt.mouthCurve = 0.4f;
     break;
   case EMOTION_LISTENING:
-    // Attentive focused eyes with subtle listening squint and clear mouth area for voice dots
+    // Attentive focused eyes with subtle listening squint and clear mouth area
+    // for voice dots
     setFace(34, 27, 30, 27, 6, 2, 2);
     faceTgt.glint = 1;
     faceTgt.blush = 0.0f;
     faceTgt.mouthW = 0;
     break;
   case EMOTION_THINKING:
-    // Pensive, quizzical look: Left eye wide & alert, Right eye narrowed & relaxed
+    // Pensive, quizzical look: Left eye wide & alert, Right eye narrowed &
+    // relaxed
     setFace(34, 32, 28, 28, 6, 3, 1);
-    faceTgt.wR = 0.82f;         // Right eye 18% narrower (one eye big, 2nd eye smaller)
-    faceTgt.hR = 0.58f;         // Right eye 42% shorter (relaxed half-closed squint)
-    faceTgt.cheekR = 2.0f;      // Soft relaxed lower eyelid tuck on right eye
+    faceTgt.wR = 0.82f; // Right eye 18% narrower (one eye big, 2nd eye smaller)
+    faceTgt.hR = 0.58f; // Right eye 42% shorter (relaxed half-closed squint)
+    faceTgt.cheekR = 2.0f; // Soft relaxed lower eyelid tuck on right eye
     faceTgt.mouthW = 12;
     faceTgt.mouthH = 2;
     faceTgt.mouthCurve = 0.15f; // Gentle thoughtful smirk/quirk
@@ -612,9 +615,13 @@ bool triggerEmotionByName(const String &nameIn, uint32_t holdMs,
         emotionAutoReturnAt = 0;
         returnIdleAt = 0;
       } else {
-        uint32_t dur = (holdMs > 0 ? holdMs : (m.e == EMOTION_CRYING ? 5200 : (m.e == EMOTION_LAUGHING ? 4500 : 4000)));
-        emotionAutoReturnAt = millis() + dur;
-        returnIdleAt = millis() + dur;
+        uint32_t dur =
+            (holdMs > 0 ? holdMs
+                        : (m.e == EMOTION_CRYING
+                               ? 5000
+                               : (m.e == EMOTION_LAUGHING ? 5000 : 4000)));
+                               emotionAutoReturnAt = millis() + dur;
+                               returnIdleAt = millis() + dur;
       }
       if (withSound && m.e != EMOTION_SLEEPING) {
         if (m.e == EMOTION_HAPPY || m.e == EMOTION_PARTY)

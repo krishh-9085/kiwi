@@ -10,6 +10,7 @@
 #include "hardware/Battery.h"
 #include "hardware/RgbLed.h"
 #include "hardware/TouchController.h"
+#include "hardware/WakeWordEngine.h"
 #include "services/AiService.h"
 #include "services/AiTextTools.h"
 #include "services/HyperHdrService.h"
@@ -96,18 +97,47 @@ bool handleTimeCommand(const String &qIn) {
   }
 
   // Positive explicit time query phrases
-  bool isTime = hasAny(
-      q, {"what time",     "what's the time", "whats the time", "what is the time",
-          "what time is it", "tell me time",  "tell the time",   "show time",
-          "show clock",    "current time",    "time now",        "time right now",
-          "time kya",      "kya time",        "time kya hua",    "time kya hua hai",
-          "kya time hua",  "kya time hua hai", "kitna baja",     "kitne baje",
-          "kitne baje hain", "kitna baj raha", "kitna baj raha hai", "abhi kitna",
-          "abhi time",     "abhi kya time",   "samay kya",       "kya samay",
-          "samay batao",   "time batao",      "time bolo",       "ghadi dikhao",
-          "time check",    "समय क्या",         "क्या समय",         "समय बताओ",
-          "टाइम बताओ",     "टाइम क्या",        "कितना बजा",       "कितने बजे",
-          "अभी समय"});
+  bool isTime = hasAny(q, {"what time",
+                           "what's the time",
+                           "whats the time",
+                           "what is the time",
+                           "what time is it",
+                           "tell me time",
+                           "tell the time",
+                           "show time",
+                           "show clock",
+                           "current time",
+                           "time now",
+                           "time right now",
+                           "time kya",
+                           "kya time",
+                           "time kya hua",
+                           "time kya hua hai",
+                           "kya time hua",
+                           "kya time hua hai",
+                           "kitna baja",
+                           "kitne baje",
+                           "kitne baje hain",
+                           "kitna baj raha",
+                           "kitna baj raha hai",
+                           "abhi kitna",
+                           "abhi time",
+                           "abhi kya time",
+                           "samay kya",
+                           "kya samay",
+                           "samay batao",
+                           "time batao",
+                           "time bolo",
+                           "ghadi dikhao",
+                           "time check",
+                           "समय क्या",
+                           "क्या समय",
+                           "समय बताओ",
+                           "टाइम बताओ",
+                           "टाइम क्या",
+                           "कितना बजा",
+                           "कितने बजे",
+                           "अभी समय"});
 
   // Short direct queries (e.g. "time", "clock", "samay", "ghadi")
   if (!isTime && q.length() <= 20) {
@@ -177,21 +207,23 @@ bool handleBatteryCommand(const String &qIn) {
   q.trim();
 
   // Negative filter: Prevent science/technology discussions
-  if (hasAny(q, {"what is a battery", "history of battery", "how does a battery",
-                 "battery car", "battery technology", "battery chemistry", "inverter"})) {
+  if (hasAny(q, {"what is a battery", "history of battery",
+                 "how does a battery", "battery car", "battery technology",
+                 "battery chemistry", "inverter"})) {
     return false;
   }
 
-  bool isBattery = hasAny(
-      q, {"battery", "battery kitni", "battery kitna", "battery status",
-          "battery percent", "battery percentage", "battery level", "charge kitna",
-          "kitna charge", "charging", "battery check", "battery batao",
-          "battery btao", "battery low", "बैटरी", "चार्ज", "बैटरी कितनी", "बैटरी लेवल"});
+  bool isBattery =
+      hasAny(q, {"battery", "battery kitni", "battery kitna", "battery status",
+                 "battery percent", "battery percentage", "battery level",
+                 "charge kitna", "kitna charge", "charging", "battery check",
+                 "battery batao", "battery btao", "battery low", "बैटरी", "चार्ज",
+                 "बैटरी कितनी", "बैटरी लेवल"});
 
   if (!isBattery) {
     if (hasWord(q, {"charge", "charging", "battery"}) &&
-        (hasWord(q, {"status", "level", "percent", "percentage", "check", "kitni",
-                     "kitna", "batao", "btao"}) ||
+        (hasWord(q, {"status", "level", "percent", "percentage", "check",
+                     "kitni", "kitna", "batao", "btao"}) ||
          q.length() <= 20)) {
       isBattery = true;
     }
@@ -340,92 +372,188 @@ bool handleEmotionCommand(const String &qIn) {
 
   // ============================================================
   // SPECIAL HIGH-PRIORITY ACTION COMMANDS: CRY & LAUGH
-  // Checked FIRST before any negative filter so "tell me a laugh" or "can you laugh"
-  // always trigger the pure laughing action without talking!
+  // Checked FIRST before any negative filter so "tell me a laugh" or "can you
+  // laugh" always trigger the pure laughing action without talking!
   // ============================================================
   auto executeCryAction = [&]() -> bool {
     Serial.println("[CMD] Crying action requested ('cry / ro kr dikhao')");
+    wakeWordSuppressUntil(millis() + 6500UL);
+    bargeInTriggered = false;
+    cancelRequest = false;
+    startRecording = false;
+
     setEmotion(EMOTION_CRYING);
-    returnIdleAt = millis() + 4800;
+    uint32_t t0 = millis();
+    const uint32_t CRY_TARGET_MS = 4800UL;
+    returnIdleAt = t0 + CRY_TARGET_MS;
     emotionAutoReturnAt = returnIdleAt;
     soundCrying();
-    holdFace(4800);
+
+    while (millis() - t0 < CRY_TARGET_MS) {
+      serviceUi();
+      bargeInTriggered = false;
+      cancelRequest = false;
+      startRecording = false;
+      yield();
+    }
+
+    toneStop();
+    spkAbortSpeech();
+    spkEndSpeech();
+
     setEmotion(EMOTION_IDLE);
     returnIdleAt = 0;
     emotionAutoReturnAt = 0;
+
+    bargeInTriggered = false;
+    cancelRequest = false;
+    startRecording = false;
+    wakeWordReset();
+    preWakeReset();
+    wakeWordSuppressUntil(millis() + 1500UL);
     return true;
   };
 
   auto executeLaughAction = [&]() -> bool {
-    Serial.println("[CMD] Laughing action requested ('laugh / haske dikhao') -> vocal laugh");
+    Serial.println("[CMD] Laughing action requested ('laugh / haske dikhao') "
+                   "-> 5s clean vocal laugh");
+
+    // Suppress wake word and barge-in for full 5s laugh duration + 1.5s post-laugh echo guard
+    wakeWordSuppressUntil(millis() + 6500UL);
+    bargeInTriggered = false;
+    cancelRequest = false;
+    startRecording = false;
+
     setEmotion(EMOTION_LAUGHING);
-    returnIdleAt = millis() + 8000;
+    uint32_t t0 = millis();
+    const uint32_t LAUGH_TARGET_MS = 5000UL; // Strictly 5 seconds!
+    returnIdleAt = t0 + LAUGH_TARGET_MS;
     emotionAutoReturnAt = returnIdleAt;
 
-    String laughSpeech;
-    if (ttsProvider == "fish" || ttsProvider == "fishaudio") {
-      // Fish Audio S2 synthesizes genuine human laughter with [laughing] + laugh syllables
-      laughSpeech = "[laughing] Hahahahaha! Ahahaha, hahahaha! Hahahahaha!";
-    } else {
-      laughSpeech = "Hahahahaha! Ahahaha, hahahaha! Hahahahaha!";
+    bool spoke = false;
+    // Only attempt cloud TTS if Fish Audio is specifically configured with an API key
+    if ((ttsProvider == "fish" || ttsProvider == "fishaudio") &&
+        fishKey.length() > 0 && WiFi.status() == WL_CONNECTED) {
+      // Short, natural laughing cue without repetitive syllables that cause Fish Audio runaway loops
+      spoke = speakText("[laughing] Hahaha! Haha!");
     }
 
-    bool spoke = false;
-    if (WiFi.status() == WL_CONNECTED) {
-      spoke = speakText(laughSpeech);
-    }
     if (!spoke) {
+      // Primary / Offline high-fidelity robot synthesizer laughter: 4-phase baby/robot giggle
       soundLaughing();
-      holdFace(4500);
-    } else {
-      holdFace(500);
     }
+
+    // Keep laughing face animated until exactly 5000ms is reached
+    bool secondGigglePlayed = false;
+    while (millis() - t0 < LAUGH_TARGET_MS) {
+      // Periodic UI and animation pump so the squinting/smiling face bounces smoothly
+      serviceUi();
+
+      // If playing on-device synth, trigger a second playful giggle burst at ~2.2s for a rich 5s laugh
+      if (!spoke && !secondGigglePlayed && (millis() - t0 >= 2200UL)) {
+        soundPetGiggle();
+        secondGigglePlayed = true;
+      }
+
+      // Neutralize any spurious barge-in / cancel flags from mic during speaker playback
+      bargeInTriggered = false;
+      cancelRequest = false;
+      startRecording = false;
+
+      yield();
+    }
+
+    // Clean stop at exactly 5 seconds
+    toneStop();
+    spkAbortSpeech();
+    spkEndSpeech();
+
     setEmotion(EMOTION_IDLE);
     returnIdleAt = 0;
     emotionAutoReturnAt = 0;
+
+    // Reset audio queues and protect against echo
+    bargeInTriggered = false;
+    cancelRequest = false;
+    startRecording = false;
+    wakeWordReset();
+    preWakeReset();
+    wakeWordSuppressUntil(millis() + 1500UL);
+
+    Serial.println("[CMD] Laughing action completed cleanly after 5s.");
     return true;
   };
 
-  bool isCryReq = hasAny(q, {"ro kr", "ro kar", "ro ke", "ro k ", "rokar", "roke", "rone ki", "ro do", "ro lo",
-                             "rona dikha", "rona shuru", "rone lago", "ro pad", "ro pado", "cry", "crying", "rona",
-                             "रोना", "रो के", "रो कर", "रोकर", "रोने की", "रो दो", "रो पड़", "रो पड़ो", "रो"}) ||
-                  hasWord(q, {"cry", "crying", "sob", "sobbing", "weep", "tears", "rona", "ro"});
+  bool isCryReq =
+      hasAny(q, {"ro kr",      "ro kar",    "ro ke",  "ro k ",   "rokar",
+                 "roke",       "rone ki",   "ro do",  "ro lo",   "rona dikha",
+                 "rona shuru", "rone lago", "ro pad", "ro pado", "cry",
+                 "crying",     "rona",      "रोना",   "रो के",    "रो कर",
+                 "रोकर",       "रोने की",    "रो दो",  "रो पड़",   "रो पड़ो",
+                 "रो"}) ||
+      hasWord(q, {"cry", "crying", "sob", "sobbing", "weep", "tears", "rona",
+                  "ro"});
 
   if (isCryReq) {
     return executeCryAction();
   }
 
-  bool isLaughReq = hasAny(q, {
-      "haske", "has ke", "has kr", "has k ", "haskar", "has kar", "has karke",
-      "hanske", "hans ke", "hans kr", "hans k ", "hanskar", "hans kar", "hans karke",
-      "hasske", "hass ke", "hasskar", "hass kar",
-      "haste", "hanste", "haste hue", "hanste hue", "haste raho",
-      "hasne", "hansne", "hasne ki", "hansne ki", "hasne lago", "hasne wala",
-      "hasna", "hansna", "hasna dikhao", "hasna sunao",
-      "haso", "hanso", "hasso", "haso na", "hanso na", "thoda haso", "zara haso",
-      "has do", "hans do", "hass do", "has lo", "hans lo",
-      "hasao", "hansao", "mujhe hasao",
-      "hasi", "hansi", "hasi sunao", "hansi sunao", "hasi dikhao", "hansi dikhao",
-      "thoda has", "thoda hans", "zara has", "zara hans", "ek baar has", "ek baar hans",
-      "laugh", "laughing", "laughter", "giggle", "giggling", "chuckle",
-      "हंस के", "हंस कर", "हंसकर", "हंसते", "हंसने", "हंसना", "हंसी", "हंस दो", "हंसो", "हंस",
-      "हस के", "हस कर", "हसकर", "हसते", "हसने", "हसना", "हसी", "हस दो", "हसो", "हस"
-  }) || hasWord(q, {
-      "laugh", "laughing", "laughter", "giggle", "giggling", "chuckle", "has", "hans",
-      "haso", "hanso", "hasna", "hansna", "hasi", "hansi", "hasso", "haste", "hanste"
-  });
+  bool isLaughReq =
+      hasAny(q, {"haske",       "has ke",      "hasske",      "hass ke",
+                 "has kr",      "has k ",      "hass kr",     "hass k ",
+                 "haskar",      "has kar",     "hasskar",     "hass kar",
+                 "has karke",   "hass karke",  "hanske",      "hans ke",
+                 "hans kr",     "hans k ",     "hanskar",     "hans kar",
+                 "hans karke",
+                 "has ke dikhao", "hass ke dikhao", "haske dikhao", "hans ke dikhao", "hanske dikhao",
+                 "has ke dikha",  "hass ke dikha",  "haske dikha",  "hans ke dikha",  "hanske dikha",
+                 "has kar dikhao","hass kar dikhao","haskar dikhao",
+                 "haste",       "hanste",      "haste hue",   "hanste hue",
+                 "haste raho",  "hasne",       "hansne",      "hasne ki",
+                 "hansne ki",   "hasne lago",  "hasne wala",  "hasna",
+                 "hansna",      "hasna dikhao","hassna dikhao","hansna dikhao",
+                 "hasna sunao", "haso",        "hanso",       "hasso",
+                 "haso na",     "hanso na",    "hasso na",    "thoda haso",
+                 "thoda hasso", "thoda hanso", "zara haso",   "zara hasso",
+                 "has do",      "hans do",     "hass do",     "has do na",
+                 "has lo",      "hans lo",     "hasao",       "hansao",
+                 "mujhe hasao", "hasi",        "hansi",       "hasi sunao",
+                 "hansi sunao", "hasi dikhao", "hansi dikhao",
+                 "thoda has",   "thoda hass",  "thoda hans",
+                 "zara has",    "zara hass",   "zara hans",
+                 "ek baar has", "ek baar hass","ek baar hans",
+                 "laugh for me","can you laugh","please laugh","make me laugh",
+                 "laugh",       "laughing",    "laughter",    "giggle",
+                 "giggling",    "chuckle",
+                 "हंस के दिखाओ",  "हंस के दिखा",   "हंसकर दिखाओ",
+                 "हस के दिखाओ",   "हस के दिखा",    "हसकर दिखाओ",
+                 "हंस के",        "हंस कर",
+                 "हंसकर",        "हंसते",
+                 "हंसने",         "हंसना",
+                 "हंसी",         "हंस दो",
+                 "हंसो",         "हंस",
+                 "हस के",        "हस कर",
+                 "हसकर",        "हसते",
+                 "हसने",         "हसना",
+                 "हसी",         "हस दो",
+                 "हसो",         "हस"}) ||
+      hasWord(q, {"laugh", "laughing", "laughter", "giggle", "giggling",
+                  "chuckle", "haso", "hanso", "hasso", "hasna", "hansna",
+                  "hasi", "hansi", "hass", "hans", "haste", "hanste"});
 
   if (isLaughReq) {
     return executeLaughAction();
   }
 
-  // Negative filter: Reject questions, stories, recipes, informational requests for other emotions
+  // Negative filter: Reject questions, stories, recipes, informational requests
+  // for other emotions
   if (hasAny(q, {"why", "how", "who", "what", "explain", "tell me", "recipe",
                  "make a ", "make an ", "story", "difference"}))
     return false;
 
-  bool isCommand = hasWord(q, {"face", "expression", "bana", "banao", "dikha", "dikhao", "show",
-                               "make", "look", "ho ja", "ho jao", "kar do", "karo"}) ||
+  bool isCommand = hasWord(q, {"face", "expression", "bana", "banao", "dikha",
+                               "dikhao", "show", "make", "look", "ho ja",
+                               "ho jao", "kar do", "karo"}) ||
                    hasAny(q, {"फेस", "चेहरा", "चेहरे", "एक्सप्रेशन", "बना", "दिखा",
                               "हो जा", "हो जाओ", "कर दो", "करो"});
 
@@ -469,8 +597,8 @@ bool handleEmotionCommand(const String &qIn) {
     showPetMood(PET_LOVE);
     return true;
   }
-  if (hasWord(q, {"laugh", "laughing", "giggle", "has", "hans"}) ||
-      hasAny(q, {"लाफ", "हंस", "hans", "has"})) {
+  if (hasWord(q, {"laugh", "laughing", "giggle", "haso", "hanso", "hasso", "hans", "hass"}) ||
+      hasAny(q, {"लाफ", "हंस", "hans", "हस", "हसो", "हंसो"})) {
     return executeLaughAction();
   }
   if (hasWord(q, {"shy"}) || hasAny(q, {"शाई", "शर्मा", "sharma", "sharam"})) {
@@ -556,16 +684,17 @@ bool handleSkinCommand(const String &qIn) {
                  "how to", "movie", "video", "breed", "animal"}))
     return false;
 
-  // Strict Negative filter: Never hijack light, LED, volume, timer, or battery commands!
+  // Strict Negative filter: Never hijack light, LED, volume, timer, or battery
+  // commands!
   if (hasWord(q, {"led", "leds", "light", "lights", "bulb", "lamp", "volume",
                   "timer", "alarm", "battery"}) ||
       hasAny(q, {"बत्ती", "लाइट", "एलईडी", "आवाज़", "वॉल्यूम"})) {
     return false;
   }
 
-  bool isThemeIntent =
-      hasWord(q, {"skin", "eyes", "eye skin", "looks", "theme", "look", "face"}) ||
-      hasAny(q, {"थीम", "स्किन", "आंखें", "चश्मा", "चेहरा"});
+  bool isThemeIntent = hasWord(q, {"skin", "eyes", "eye skin", "looks", "theme",
+                                   "look", "face"}) ||
+                       hasAny(q, {"थीम", "स्किन", "आंखें", "चश्मा", "चेहरा"});
 
   String name = "";
   EyeSkin targetSkin = currentEyeSkin;
@@ -583,27 +712,31 @@ bool handleSkinCommand(const String &qIn) {
                         "glint"})) {
     targetSkin = SKIN_LUMINA_SPARK;
     name = "Lumina Spark";
-  } else if (hasWord(q, {"mecha", "circtangle", "circrect"}) || hasAny(q, {"मेका", "मैका"})) {
+  } else if (hasWord(q, {"mecha", "circtangle", "circrect"}) ||
+             hasAny(q, {"मेका", "मैका"})) {
     targetSkin = SKIN_MECHA;
     name = "Mecha";
-  } else if (hasWord(q, {"emo", "emo-style", "emostyle"}) || hasAny(q, {"emo style", "ईमो", "इमो"})) {
+  } else if (hasWord(q, {"emo", "emo-style", "emostyle"}) ||
+             hasAny(q, {"emo style", "ईमो", "इमो"})) {
     targetSkin = SKIN_EMO;
     name = "EMO Style";
   }
 
   // Check for generic "cycle / next / change" eyes command
-  bool isCycleCommand = isThemeIntent &&
+  bool isCycleCommand =
+      isThemeIntent &&
       (hasWord(q, {"change", "next", "switch", "cycle", "toggle", "badlo"}) ||
-       hasAny(q, {"eyes change", "eye change", "change eye", "change eyes", "change skin",
-                  "skin change", "next skin", "next eyes", "next eye", "aankhein badlo",
-                  "aankh badlo", "aankhein change", "aankh change", "dusri skin",
+       hasAny(q, {"eyes change", "eye change", "change eye", "change eyes",
+                  "change skin", "skin change", "next skin", "next eyes",
+                  "next eye", "aankhein badlo", "aankh badlo",
+                  "aankhein change", "aankh change", "dusri skin",
                   "dusri aankhein", "dusra look", "naya look", "theme badlo"}));
 
   // If user asked to cycle or change eyes without specifying a theme name:
   if (name.length() == 0 && isCycleCommand) {
     targetSkin = (EyeSkin)(((uint8_t)currentEyeSkin + 1) % SKIN_COUNT);
-    const char *skinNames[SKIN_COUNT] = {
-        "Kiwi", "Pixel 8-Bit", "Lumina Spark", "Mecha", "EMO Style"};
+    const char *skinNames[SKIN_COUNT] = {"Kiwi", "Pixel 8-Bit", "Lumina Spark",
+                                         "Mecha", "EMO Style"};
     name = skinNames[targetSkin];
   }
 
@@ -644,13 +777,14 @@ bool handleVolumeCommand(const String &qIn) {
 
   bool hasVolWord = hasWord(q, {"volume", "vol", "aawaz", "awaz", "sound",
                                 "loudness", "mute", "audio"}) ||
-                    hasAny(q, {"volume", "vol", "aawaz", "awaz", "awaaz", "avaz",
-                               "आवाज़", "आवाज", "वॉल्यूम", "म्यूट"});
+                    hasAny(q, {"volume", "vol", "aawaz", "awaz", "awaaz",
+                               "avaz", "आवाज़", "आवाज", "वॉल्यूम", "म्यूट"});
 
-  // Also support direct "tez bolo", "dheere bolo", "chup ho jao", "shant ho jao"
-  bool directIntent = hasAny(q, {"tez bolo", "zor se", "dheere bolo", "chup ho jao",
-                                 "shant ho jao", "mute karo", "mute kar", "sound badhao",
-                                 "sound kam"});
+  // Also support direct "tez bolo", "dheere bolo", "chup ho jao", "shant ho
+  // jao"
+  bool directIntent = hasAny(q, {"tez bolo", "zor se", "dheere bolo",
+                                 "chup ho jao", "shant ho jao", "mute karo",
+                                 "mute kar", "sound badhao", "sound kam"});
 
   if (!hasVolWord && !directIntent)
     return false;
@@ -663,11 +797,13 @@ bool handleVolumeCommand(const String &qIn) {
       hasAny(q, {"chup", "shant", "म्यूट", "शांत", "aawaz band", "sound off"})) {
     targetVol = 0;
   } else if (hasWord(q, {"up", "high", "increase", "louder"}) ||
-             hasAny(q, {"badhao", "badha", "badha do", "tez", "zor se", "unche", "बढ़ाओ", "तेज़", "ज्यादा"})) {
+             hasAny(q, {"badhao", "badha", "badha do", "tez", "zor se", "unche",
+                        "बढ़ाओ", "तेज़", "ज्यादा"})) {
     targetVol = min(100, speakerVolume + 20);
     isUp = true;
   } else if (hasWord(q, {"down", "low", "decrease", "softer"}) ||
-             hasAny(q, {"kam", "ghatao", "dheere", "dheemi", "dheema", "कम", "घटाओ", "धीमे"})) {
+             hasAny(q, {"kam", "ghatao", "dheere", "dheemi", "dheema", "कम",
+                        "घटाओ", "धीमे"})) {
     targetVol = max(10, speakerVolume - 20);
     isDown = true;
   } else if (hasWord(q, {"max", "full", "maximum"}) ||
@@ -708,7 +844,8 @@ bool handleVolumeCommand(const String &qIn) {
 
     String reply;
     if (targetVol == 0) {
-      reply = (sttLang == "hi" || containsDevanagari(qIn) || hasAny(q, {"chup", "aawaz", "awaz"}))
+      reply = (sttLang == "hi" || containsDevanagari(qIn) ||
+               hasAny(q, {"chup", "aawaz", "awaz"}))
                   ? "Kiwi mute ho gaya hai!"
                   : "Muted!";
     } else {
@@ -1110,19 +1247,84 @@ bool handleLightCommand(const String &qIn) {
     uint8_t r, g, b;
     const char *hiReply;
     const char *enReply;
-  } colors[] = {
-      {{"red", "laal", nullptr}, "red", 255, 0, 0, "Light red kar di!", "Light set to red!"},
-      {{"green", "hara", "haree", nullptr}, "green", 0, 255, 0, "Light green kar di!", "Light set to green!"},
-      {{"blue", "neela", "neeli", nullptr}, "blue", 0, 100, 255, "Light blue kar di!", "Light set to blue!"},
-      {{"yellow", "peela", "peeli", nullptr}, "yellow", 255, 200, 0, "Light yellow kar di!", "Light set to yellow!"},
-      {{"pink", "gulabi", nullptr}, "pink", 255, 50, 150, "Light pink kar di!", "Light set to pink!"},
-      {{"purple", "violet", "baingani", nullptr}, "purple", 160, 0, 255, "Light purple kar di!", "Light set to purple!"},
-      {{"orange", "narangi", nullptr}, "orange", 255, 100, 0, "Light orange kar di!", "Light set to orange!"},
-      {{"cyan", "aqua", "firozi", nullptr}, "cyan", 0, 255, 255, "Light cyan kar di!", "Light set to cyan!"},
-      {{"white", "safed", nullptr}, "white", 255, 255, 255, "Light white kar di!", "Light set to white!"},
-      {{"warm", "night", nullptr}, "warm", 255, 180, 80, "Warm light on kar di!", "Warm light activated!"},
-      {{"cool", nullptr}, "cool", 200, 220, 255, "Cool white light on kar di!", "Cool white light activated!"},
-      {{nullptr}, nullptr, 0, 0, 0, nullptr, nullptr}};
+  } colors[] = {{{"red", "laal", nullptr},
+                 "red",
+                 255,
+                 0,
+                 0,
+                 "Light red kar di!",
+                 "Light set to red!"},
+                {{"green", "hara", "haree", nullptr},
+                 "green",
+                 0,
+                 255,
+                 0,
+                 "Light green kar di!",
+                 "Light set to green!"},
+                {{"blue", "neela", "neeli", nullptr},
+                 "blue",
+                 0,
+                 100,
+                 255,
+                 "Light blue kar di!",
+                 "Light set to blue!"},
+                {{"yellow", "peela", "peeli", nullptr},
+                 "yellow",
+                 255,
+                 200,
+                 0,
+                 "Light yellow kar di!",
+                 "Light set to yellow!"},
+                {{"pink", "gulabi", nullptr},
+                 "pink",
+                 255,
+                 50,
+                 150,
+                 "Light pink kar di!",
+                 "Light set to pink!"},
+                {{"purple", "violet", "baingani", nullptr},
+                 "purple",
+                 160,
+                 0,
+                 255,
+                 "Light purple kar di!",
+                 "Light set to purple!"},
+                {{"orange", "narangi", nullptr},
+                 "orange",
+                 255,
+                 100,
+                 0,
+                 "Light orange kar di!",
+                 "Light set to orange!"},
+                {{"cyan", "aqua", "firozi", nullptr},
+                 "cyan",
+                 0,
+                 255,
+                 255,
+                 "Light cyan kar di!",
+                 "Light set to cyan!"},
+                {{"white", "safed", nullptr},
+                 "white",
+                 255,
+                 255,
+                 255,
+                 "Light white kar di!",
+                 "Light set to white!"},
+                {{"warm", "night", nullptr},
+                 "warm",
+                 255,
+                 180,
+                 80,
+                 "Warm light on kar di!",
+                 "Warm light activated!"},
+                {{"cool", nullptr},
+                 "cool",
+                 200,
+                 220,
+                 255,
+                 "Cool white light on kar di!",
+                 "Cool white light activated!"},
+                {{nullptr}, nullptr, 0, 0, 0, nullptr, nullptr}};
 
   for (int i = 0; colors[i].action != nullptr; i++) {
     for (int k = 0; colors[i].names[k] != nullptr; k++) {
@@ -1181,8 +1383,7 @@ bool handleSleepCommand(const String &qIn) {
   }
 
   bool isSleep = hasAny(
-      q, {
-          // Hindi Devanagari
+      q, {// Hindi Devanagari
           "सोने जाओ", "सोने जा", "सोने चलो", "सोने चल", "सो जाओ", "सो जा",
           "सो जाना", "अब सो जाओ", "अब सो जा", "तुम सो जाओ", "चलो सो जाओ",
           "नींद आ रही", "शुभ रात्रि", "गुड नाईट", "गुड नाइट", "जाके सो जाओ",
@@ -1193,12 +1394,12 @@ bool handleSleepCommand(const String &qIn) {
           "tum so jao", "chalo so jao", "kuch der so", "neend aa rahi",
           "shubh ratri", "shubhratri", "good night", "goodnight", "gud night",
           "gudnight", "sleep mode", "go to sleep", "go to bed", "sleep now",
-          "time to sleep", "fall asleep", "take a nap", "night mode"
-      });
+          "time to sleep", "fall asleep", "take a nap", "night mode"});
 
   if (!isSleep && q.length() <= 25) {
     isSleep = hasWord(q, {"sleep", "sleeping"}) &&
-              (hasWord(q, {"mode", "now", "go", "please", "bed"}) || hasAny(q, {"so ja", "jao", "sone"}));
+              (hasWord(q, {"mode", "now", "go", "please", "bed"}) ||
+               hasAny(q, {"so ja", "jao", "sone"}));
   }
 
   if (!isSleep)
@@ -1206,7 +1407,8 @@ bool handleSleepCommand(const String &qIn) {
 
   Serial.println("[CMD] Fast-path: sleep mode requested");
   soundPetSleepy();
-  String reply = (sttLang == "hi" || containsDevanagari(qIn) || hasAny(q, {"so ja", "jao", "sone", "ratri"}))
+  String reply = (sttLang == "hi" || containsDevanagari(qIn) ||
+                  hasAny(q, {"so ja", "jao", "sone", "ratri"}))
                      ? "Theek hai, shubh ratri! Main sone ja raha hoon."
                      : "Alright, going to sleep. Good night!";
   speakText(reply);

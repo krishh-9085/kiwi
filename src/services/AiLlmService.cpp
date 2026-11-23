@@ -26,30 +26,36 @@
 
 #include <WiFiClientSecure.h>
 
-
-
 static String getSmartActionInstruction() {
   return " ACTIONS: Append [ACTION: tag] after answer if needed: "
-         "[ACTION: emotion happy/sad/angry/cool/surprised/sleepy/wink/laughing/excited] "
-         "[ACTION: skin kiwi/vector/pixel/mecha] [ACTION: volume 0-100] [ACTION: timer SECS] "
-         "[ACTION: sleep] (if user says so jao/sleep). Reply first, tag at end.";
+         "[ACTION: emotion "
+         "happy/sad/angry/cool/surprised/sleepy/wink/laughing/excited] "
+         "[ACTION: skin kiwi/vector/pixel/mecha] [ACTION: volume 0-100] "
+         "[ACTION: timer SECS] "
+         "[ACTION: sleep] (if user says so jao/sleep). Reply first, tag at "
+         "end.";
 }
 
 static String getVoiceExpressionInstruction() {
   if (ttsProvider == "fish" || ttsProvider == "fishaudio") {
     return " VOCAL RULES: "
-           "1. For normal answers, speak naturally in plain text with ZERO vocal tags. "
-           "2. CRITICAL: If the user asks you to laugh in ANY way (e.g. 'has ke dikhao', 'haso', 'laugh', 'hasi sunao', 'thoda haso'): your ENTIRE reply MUST BE ONLY '[laughing] Hahahahaha! Ahahaha, hahahaha! Hahahahaha!' with ABSOLUTELY ZERO EXTRA WORDS, NO TALKING, AND NO CONVERSATIONAL FILLER. "
-           "3. ONLY use emotion tags if user explicitly asks (e.g. 'gusse me bolo' -> [angry]; 'ro ke bolo' -> [sobbing]; 'has ke bolo' -> [laughing]; 'dheere bolo' -> [whisper]). "
-           "Allowed emotion tags: [laughing] [giggle] [sobbing] [angry] [sad] [whisper] [excited].";
+           "1. For normal answers, speak naturally in plain text with ZERO "
+           "vocal tags. "
+           "2. CRITICAL: If the user asks you to laugh in ANY way (e.g. 'has "
+           "ke dikhao', 'haso', 'laugh', 'hasi sunao', 'thoda haso'): your "
+           "ENTIRE reply MUST BE ONLY '[ACTION: sound laugh]' with ABSOLUTELY "
+           "ZERO EXTRA WORDS, NO TALKING, AND NO CONVERSATIONAL FILLER. "
+           "3. ONLY use emotion tags if user explicitly asks (e.g. 'gusse me "
+           "bolo' -> [angry]; 'ro ke bolo' -> [sobbing]; 'has ke bolo' -> "
+           "[laughing]; 'dheere bolo' -> [whisper]). "
+           "Allowed emotion tags: [laughing] [giggle] [sobbing] [angry] [sad] "
+           "[whisper] [excited].";
   } else {
-    return " VOICE: Plain text only. No bracketed tone or sound tags. If asked to laugh, reply ONLY with 'Hahahahaha! Ahahaha, hahahaha!' without any talking.";
+    return " VOICE: Plain text only. No bracketed tone or sound tags. If asked "
+           "to laugh, reply ONLY with '[ACTION: sound laugh]' without any "
+           "talking.";
   }
 }
-
-
-
-
 
 // ============================================================
 
@@ -67,15 +73,15 @@ static String extractSseDeltaToken(const String &json) {
 
     int pKey = json.indexOf(keys[k]);
 
-    if (pKey < 0) continue;
+    if (pKey < 0)
+      continue;
 
     int p = pKey + strlen(keys[k]);
 
     int colon = json.indexOf(':', p);
 
-    if (colon < 0) continue;
-
-
+    if (colon < 0)
+      continue;
 
     int openQuote = -1;
 
@@ -83,25 +89,23 @@ static String extractSseDeltaToken(const String &json) {
 
       char c = json[i];
 
-      if (c == ' ' || c == '\t' || c == '\r' || c == '\n') continue;
+      if (c == ' ' || c == '\t' || c == '\r' || c == '\n')
+        continue;
 
       if (c == '"') {
 
         openQuote = i;
 
         break;
-
       }
 
       // Not a string value (e.g. object, array or null)
 
       break;
-
     }
 
-    if (openQuote < 0) continue;
-
-
+    if (openQuote < 0)
+      continue;
 
     int start = openQuote + 1;
 
@@ -117,47 +121,48 @@ static String extractSseDeltaToken(const String &json) {
 
         char next = json[i + 1];
 
-        if (next == '"') token += '"';
+        if (next == '"')
+          token += '"';
 
-        else if (next == '\\') token += '\\';
+        else if (next == '\\')
+          token += '\\';
 
-        else if (next == 'n') token += '\n';
+        else if (next == 'n')
+          token += '\n';
 
-        else if (next == 't') token += '\t';
+        else if (next == 't')
+          token += '\t';
 
-        else if (next == 'r') {}
+        else if (next == 'r') {
+        }
 
-        else { token += '\\'; token += next; }
+        else {
+          token += '\\';
+          token += next;
+        }
 
         i++;
 
         continue;
-
       }
 
-      if (c == '"') break;
+      if (c == '"')
+        break;
 
       token += c;
-
     }
 
     return token;
-
   }
 
   return "";
-
 }
-
-
 
 static bool isSentenceComplete(const String &s) {
 
   if (s.length() < 40)
 
     return false;
-
-
 
   int lastOpen = s.lastIndexOf('[');
 
@@ -166,10 +171,7 @@ static bool isSentenceComplete(const String &s) {
   if (lastOpen >= 0 && lastOpen > lastClose) {
 
     return false;
-
   }
-
-
 
   // Devanagari Purna Viram '।' (UTF-8: 0xE0, 0xA5, 0xA4)
 
@@ -184,16 +186,11 @@ static bool isSentenceComplete(const String &s) {
     if (b1 == 0xE0 && b2 == 0xA5 && b3 == 0xA4)
 
       return true;
-
   }
-
-
 
   char last = s[s.length() - 1];
 
   char prev = s.length() >= 2 ? s[s.length() - 2] : ' ';
-
-
 
   if (last == '.' || last == '!' || last == '?' || last == '\n') {
     if (last == '.' && isdigit((unsigned char)prev))
@@ -201,13 +198,13 @@ static bool isSentenceComplete(const String &s) {
     return true;
   }
 
-  // Fast sub-clause split on natural speech pause (commas/semicolons) when 55+ chars accumulated
-  // Do not split on commas/semicolons mid-sentence to avoid choppy fragmented audio
-  if (false && (last == ',' || last == ';' || last == ':') && s.length() >= 55) {
+  // Fast sub-clause split on natural speech pause (commas/semicolons) when 55+
+  // chars accumulated Do not split on commas/semicolons mid-sentence to avoid
+  // choppy fragmented audio
+  if (false && (last == ',' || last == ';' || last == ':') &&
+      s.length() >= 55) {
     return true;
   }
-
-
 
   if (last == ' ') {
 
@@ -222,20 +219,12 @@ static bool isSentenceComplete(const String &s) {
           return false;
 
         return true;
-
       }
-
     }
-
   }
 
-
-
   return false;
-
 }
-
-
 
 static String cleanSentenceForSpeech(const String &s) {
 
@@ -243,9 +232,8 @@ static String cleanSentenceForSpeech(const String &s) {
 
   out.trim();
 
-  if (!out.length()) return "";
-
-
+  if (!out.length())
+    return "";
 
   if (out.startsWith("[ACTION:") || out.startsWith("[action:") ||
       out.startsWith("[MEM:") || out.startsWith("[mem:") ||
@@ -253,23 +241,16 @@ static String cleanSentenceForSpeech(const String &s) {
     return "";
   }
 
-
-
   if (ttsProvider != "fish" && ttsProvider != "fishaudio") {
 
     out = stripAudioCues(out);
-
   }
 
-
-
   return cleanForSpeech(out);
-
 }
 
-
-
-static String processSseStream(HTTPClient &http, WiFiClient *stream, SentenceCallback onSentence) {
+static String processSseStream(HTTPClient &http, WiFiClient *stream,
+                               SentenceCallback onSentence) {
 
   String fullAnswer;
 
@@ -289,8 +270,6 @@ static String processSseStream(HTTPClient &http, WiFiClient *stream, SentenceCal
 
   uint32_t tStart = millis();
 
-
-
   while (millis() - tStart < 20000) {
 
     if (cancelRequest)
@@ -301,15 +280,11 @@ static String processSseStream(HTTPClient &http, WiFiClient *stream, SentenceCal
 
       break;
 
-
-
     if (stream && stream->available()) {
 
       char ch = (char)stream->read();
 
       tStart = millis();
-
-
 
       if (ch == '\n') {
 
@@ -328,18 +303,19 @@ static String processSseStream(HTTPClient &http, WiFiClient *stream, SentenceCal
             if (payload == "[DONE]") {
 
               break;
-
             }
 
             String delta = extractSseDeltaToken(payload);
 
             if (delta.length() > 0) {
 
-              if (delta.indexOf("<think>") >= 0) inThink = true;
+              if (delta.indexOf("<think>") >= 0)
+                inThink = true;
 
               if (inThink) {
 
-                if (delta.indexOf("</think>") >= 0) inThink = false;
+                if (delta.indexOf("</think>") >= 0)
+                  inThink = false;
 
               } else {
 
@@ -358,23 +334,17 @@ static String processSseStream(HTTPClient &http, WiFiClient *stream, SentenceCal
                     tStart = millis();
                     if (cancelRequest)
                       break;
-
                   }
 
                   currentSentence = "";
-
                 }
-
               }
-
             }
 
           } else if (line.startsWith("{")) {
 
             fullAnswer += line;
-
           }
-
         }
 
         line = "";
@@ -388,32 +358,27 @@ static String processSseStream(HTTPClient &http, WiFiClient *stream, SentenceCal
       serviceUi();
       yield();
     }
-
   }
-
-
 
   if (!cancelRequest && !isSSE && fullAnswer.length() > 0) {
 
     String ans = jsonTextField(fullAnswer, "content");
 
-    if (!ans.length()) ans = jsonTextField(fullAnswer, "text");
+    if (!ans.length())
+      ans = jsonTextField(fullAnswer, "text");
 
-    if (ans.length() > 0) fullAnswer = ans;
+    if (ans.length() > 0)
+      fullAnswer = ans;
 
     String toSpeak = cleanSentenceForSpeech(fullAnswer);
 
     if (toSpeak.length() > 0 && onSentence) {
 
       onSentence(toSpeak, true);
-
     }
 
     return fullAnswer;
-
   }
-
-
 
   if (!cancelRequest && currentSentence.length() > 0) {
 
@@ -422,18 +387,11 @@ static String processSseStream(HTTPClient &http, WiFiClient *stream, SentenceCal
     if (toSpeak.length() > 0 && onSentence) {
 
       onSentence(toSpeak, true);
-
     }
-
   }
 
-
-
   return fullAnswer;
-
 }
-
-
 
 // ============================================================
 
@@ -446,7 +404,6 @@ String askGemini(const String &question, SentenceCallback onSentence) {
     Serial.println("[GEMINI] No API key.");
 
     return "";
-
   }
 
   if (WiFi.status() != WL_CONNECTED) {
@@ -454,10 +411,7 @@ String askGemini(const String &question, SentenceCallback onSentence) {
     Serial.println("[GEMINI] No Wi-Fi.");
 
     return "";
-
   }
-
-
 
   String sys = systemPrompt;
 
@@ -469,14 +423,10 @@ String askGemini(const String &question, SentenceCallback onSentence) {
 
       "2-4 natural sentences, lively, specific. No markdown.";
 
-
-
   sys += getFormattedMemoryPrompt();
   sys += getSmartActionInstruction();
 
   sys += getVoiceExpressionInstruction();
-
-
 
   String body;
 
@@ -493,10 +443,11 @@ String askGemini(const String &question, SentenceCallback onSentence) {
     body += "{\"role\":\"model\",\"parts\":[{\"text\":\"" +
 
             jsonEscape(chatHistory[i].answer) + "\"}]},";
-
   }
 
-  bool isGeminiThinkingModel = (llmModel.indexOf("2.5") >= 0 || llmModel.indexOf("2.0") >= 0 || llmModel.indexOf("thinking") >= 0);
+  bool isGeminiThinkingModel =
+      (llmModel.indexOf("2.5") >= 0 || llmModel.indexOf("2.0") >= 0 ||
+       llmModel.indexOf("thinking") >= 0);
 
   body += "{\"role\":\"user\",\"parts\":[{\"text\":\"" + jsonEscape(question) +
 
@@ -511,10 +462,9 @@ String askGemini(const String &question, SentenceCallback onSentence) {
           "\"generationConfig\":{\"maxOutputTokens\":" +
 
           String(LLM_MAX_TOKENS) + ",\"temperature\":0.85" +
-          (isGeminiThinkingModel ? ",\"thinkingConfig\":{\"thinkingBudget\":0}" : "") +
+          (isGeminiThinkingModel ? ",\"thinkingConfig\":{\"thinkingBudget\":0}"
+                                 : "") +
           "}}";
-
-
 
   String fullAns;
 
@@ -544,8 +494,6 @@ String askGemini(const String &question, SentenceCallback onSentence) {
 
     Serial.println("[GEMINI] Asking (streaming)...");
 
-
-
     String targetEp = llmEndpoint;
 
     if (targetEp == DEFAULT_LLM_URL ||
@@ -565,7 +513,6 @@ String askGemini(const String &question, SentenceCallback onSentence) {
       targetEp.replace(":generateContent", "");
 
       targetEp += ":streamGenerateContent?alt=sse";
-
     }
 
     if (!http.begin(client, targetEp)) {
@@ -573,7 +520,6 @@ String askGemini(const String &question, SentenceCallback onSentence) {
       Serial.println("[GEMINI] Bad URL.");
 
       return "";
-
     }
 
     http.addHeader("Content-Type", "application/json");
@@ -595,7 +541,6 @@ String askGemini(const String &question, SentenceCallback onSentence) {
       if (resp.length() > 200)
 
         resp = resp.substring(0, 200);
-
     }
 
     http.end();
@@ -605,7 +550,6 @@ String askGemini(const String &question, SentenceCallback onSentence) {
                   (millis() - t0) / 1000.0f, (unsigned)fullAns.length(),
 
                   (unsigned)ESP.getFreeHeap());
-
   }
 
   if (code != 200) {
@@ -615,14 +559,10 @@ String askGemini(const String &question, SentenceCallback onSentence) {
     addTerminalLog("[GEMINI] Error HTTP " + String(code) + ": " + resp);
 
     return "";
-
   }
 
   return fullAns;
-
 }
-
-
 
 String askGroq(const String &question, SentenceCallback onSentence) {
 
@@ -635,7 +575,6 @@ String askGroq(const String &question, SentenceCallback onSentence) {
     addTerminalLog("[GROQ] Error: No API key set in Web Portal!");
 
     return "";
-
   }
 
   if (WiFi.status() != WL_CONNECTED) {
@@ -645,10 +584,7 @@ String askGroq(const String &question, SentenceCallback onSentence) {
     addTerminalLog("[GROQ] Error: Wi-Fi disconnected!");
 
     return "";
-
   }
-
-
 
   String sys = systemPrompt;
 
@@ -660,24 +596,17 @@ String askGroq(const String &question, SentenceCallback onSentence) {
 
       "2-4 natural sentences, lively, specific. No markdown.";
 
-
-
   sys += getFormattedMemoryPrompt();
   sys += getSmartActionInstruction();
 
   sys += getVoiceExpressionInstruction();
-
-
 
   String model = groqModel;
 
   if (!model.length()) {
 
     model = DEFAULT_GROQ_MODEL;
-
   }
-
-
 
   int reqTokens =
 
@@ -686,8 +615,6 @@ String askGroq(const String &question, SentenceCallback onSentence) {
           ? 512
 
           : LLM_MAX_TOKENS;
-
-
 
   String body;
 
@@ -710,7 +637,6 @@ String askGroq(const String &question, SentenceCallback onSentence) {
     body += ",{\"role\":\"assistant\",\"content\":\"" +
 
             jsonEscape(chatHistory[i].answer) + "\"}";
-
   }
 
   body += ",{\"role\":\"user\",\"content\":\"" + jsonEscape(question) +
@@ -722,18 +648,13 @@ String askGroq(const String &question, SentenceCallback onSentence) {
   if (model.indexOf("gpt-oss") >= 0) {
 
     body += ",\"reasoning_effort\":\"low\",\"reasoning_format\":\"hidden\"";
-
   }
 
   body += ",\"stream\":true}";
 
-
-
   // DNS pre-check: ensures api.groq.com resolves before TLS (fixes HTTP -1)
 
   ensureDns("api.groq.com");
-
-
 
   String fullAns;
 
@@ -763,10 +684,10 @@ String askGroq(const String &question, SentenceCallback onSentence) {
 
       Serial.println("[GROQ] Bad URL.");
 
-      addTerminalLog("[GROQ] Error: Could not connect to endpoint " + groqEndpoint);
+      addTerminalLog("[GROQ] Error: Could not connect to endpoint " +
+                     groqEndpoint);
 
       return "";
-
     }
 
     http.addHeader("Content-Type", "application/json");
@@ -788,7 +709,6 @@ String askGroq(const String &question, SentenceCallback onSentence) {
       if (resp.length() > 300)
 
         resp = resp.substring(0, 300);
-
     }
 
     http.end();
@@ -798,7 +718,6 @@ String askGroq(const String &question, SentenceCallback onSentence) {
                   (millis() - t0) / 1000.0f, (unsigned)fullAns.length(),
 
                   (unsigned)ESP.getFreeHeap());
-
   }
 
   if (code != 200) {
@@ -808,22 +727,18 @@ String askGroq(const String &question, SentenceCallback onSentence) {
     addTerminalLog("[GROQ] Error HTTP " + String(code) + ": " + resp);
 
     return "";
-
   }
 
   if (fullAns.length() == 0) {
 
     addTerminalLog("[GROQ] Warning: Empty answer received from Groq.");
-
   }
 
   return fullAns;
-
 }
 
-
-
-String askLLM(const String &question, SentenceCallback onSentence, bool saveChatHistory) {
+String askLLM(const String &question, SentenceCallback onSentence,
+              bool saveChatHistory) {
 
   checkChatHistoryTimeout();
 
@@ -846,27 +761,22 @@ String askLLM(const String &question, SentenceCallback onSentence, bool saveChat
                   chatHistoryCount);
 
     ans = askGemini(question, onSentence);
-
   }
 
   restoreWebAndAP(apWasUp);
 
   if (ans.length() > 0) {
 
-    // NOTE: With streaming TTS enabled, ACTION tags are executed after the full LLM
-    // reply has completed streaming. Therefore, actions (volume, eye skins, timer, etc.)
-    // fire after the first sentence (and any streaming sentences) has already been spoken.
+    // NOTE: With streaming TTS enabled, ACTION tags are executed after the full
+    // LLM reply has completed streaming. Therefore, actions (volume, eye skins,
+    // timer, etc.) fire after the first sentence (and any streaming sentences)
+    // has already been spoken.
     parseAndExecuteActions(ans);
     parseAndSaveMemoriesFromLlm(ans);
     if (saveChatHistory) {
       addChatHistory(question, ans);
     }
-
   }
 
   return ans;
-
 }
-
-
-

@@ -1,25 +1,28 @@
 #include "hardware/WakeWordEngine.h"
+#include "config/AppConfig.h"
+#include "face/FaceEngine.h"
 #include "hardware/AudioEngine.h"
 #include "hardware/SoundLevel.h"
 #include "hardware/alexa_model.h"
-#include "config/AppConfig.h"
-#include "face/FaceEngine.h"
 #include "power/PowerManager.h"
+
 
 #include <Preferences.h>
 #include <freertos/FreeRTOS.h>
-#include <freertos/task.h>
 #include <freertos/semphr.h>
+#include <freertos/task.h>
+
 
 #include <frontend.h>
 #include <frontend_util.h>
 
 #include <tensorflow/lite/core/c/common.h>
+#include <tensorflow/lite/micro/micro_allocator.h>
 #include <tensorflow/lite/micro/micro_interpreter.h>
 #include <tensorflow/lite/micro/micro_mutable_op_resolver.h>
 #include <tensorflow/lite/micro/micro_resource_variable.h>
-#include <tensorflow/lite/micro/micro_allocator.h>
 #include <tensorflow/lite/schema/schema_generated.h>
+
 
 // ============================================================
 // CONSTANTS & BUFFERS
@@ -28,7 +31,9 @@ static const uint8_t PREPROCESSOR_FEATURE_SIZE = 40;
 static const uint8_t FEATURE_DURATION_MS = 30;
 static const uint16_t AUDIO_SAMPLE_FREQUENCY = 16000;
 static const uint8_t FEATURE_STEP_SIZE_MS = 10;
-static const size_t STEP_SAMPLES = (FEATURE_STEP_SIZE_MS * AUDIO_SAMPLE_FREQUENCY) / 1000; // 160 samples (10ms)
+static const size_t STEP_SAMPLES =
+    (FEATURE_STEP_SIZE_MS * AUDIO_SAMPLE_FREQUENCY) /
+    1000; // 160 samples (10ms)
 static const size_t MAX_SLIDING_WINDOW_SIZE = 8;
 static const uint8_t MIN_SLICES_BEFORE_DETECTION = 74; // ~740ms initial priming
 static const size_t TENSOR_ARENA_SIZE = 20000;
@@ -48,9 +53,10 @@ struct WakeWordModelEntry {
 };
 
 static const WakeWordModelEntry WAKE_WORD_MODELS[] = {
-  { "alexa",      "Alexa",      alexa_model,      sizeof(alexa_model),      0.90f, 0.60f, 0.98f, 5, true }
-};
-static const size_t NUM_WAKE_WORD_MODELS = sizeof(WAKE_WORD_MODELS) / sizeof(WAKE_WORD_MODELS[0]);
+    {"alexa", "Alexa", alexa_model, sizeof(alexa_model), 0.90f, 0.60f, 0.98f, 5,
+     true}};
+static const size_t NUM_WAKE_WORD_MODELS =
+    sizeof(WAKE_WORD_MODELS) / sizeof(WAKE_WORD_MODELS[0]);
 
 // Mutex protecting frontend state, interpreter and window buffers across cores
 static SemaphoreHandle_t s_wwMutex = nullptr;
@@ -84,13 +90,16 @@ static uint32_t s_bridgeStartAt = 0;
 static volatile bool s_wakeWordDetectedTrigger = false;
 
 bool preWakeBufferInit() {
-  if (s_preWakeRingBuf) return true;
+  if (s_preWakeRingBuf)
+    return true;
   if (psramFound()) {
-    s_preWakeRingBuf = (int16_t *)heap_caps_malloc(PRE_WAKE_RING_SAMPLES * sizeof(int16_t),
-                                                   MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    s_preWakeRingBuf =
+        (int16_t *)heap_caps_malloc(PRE_WAKE_RING_SAMPLES * sizeof(int16_t),
+                                    MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
     if (s_preWakeRingBuf) {
       memset(s_preWakeRingBuf, 0, PRE_WAKE_RING_SAMPLES * sizeof(int16_t));
-      Serial.printf("[PRE-WAKE] 1.5s (48KB) Audio Ring-Buffer allocated in PSRAM!\n");
+      Serial.printf(
+          "[PRE-WAKE] 1.5s (48KB) Audio Ring-Buffer allocated in PSRAM!\n");
       return true;
     }
   }
@@ -105,7 +114,8 @@ bool preWakeBufferInit() {
 }
 
 void preWakePush(const int16_t *samples, size_t count) {
-  if (!s_preWakeRingBuf || count == 0) return;
+  if (!s_preWakeRingBuf || count == 0)
+    return;
   size_t cap = psramFound() ? PRE_WAKE_RING_SAMPLES : 8000;
   portENTER_CRITICAL(&s_preWakeMux);
   for (size_t i = 0; i < count; i++) {
@@ -118,13 +128,9 @@ void preWakePush(const int16_t *samples, size_t count) {
   portEXIT_CRITICAL(&s_preWakeMux);
 }
 
-bool preWakeIsBridgeActive() {
-  return s_preWakeBridgeActive;
-}
+bool preWakeIsBridgeActive() { return s_preWakeBridgeActive; }
 
-void preWakeStopBridge() {
-  s_preWakeBridgeActive = false;
-}
+void preWakeStopBridge() { s_preWakeBridgeActive = false; }
 
 bool preWakeHasData() {
   return s_wakeWordDetectedTrigger && (s_preWakeTotalCount > 0);
@@ -140,11 +146,13 @@ void preWakeReset() {
 }
 
 size_t preWakeDrain(int16_t *dest, size_t maxSamples) {
-  if (!s_preWakeRingBuf || !dest || maxSamples == 0) return 0;
+  if (!s_preWakeRingBuf || !dest || maxSamples == 0)
+    return 0;
   size_t cap = psramFound() ? PRE_WAKE_RING_SAMPLES : 8000;
   portENTER_CRITICAL(&s_preWakeMux);
   size_t count = s_preWakeTotalCount;
-  if (count > maxSamples) count = maxSamples;
+  if (count > maxSamples)
+    count = maxSamples;
   size_t start = (s_preWakeHead + cap - count) % cap;
   for (size_t i = 0; i < count; i++) {
     dest[i] = s_preWakeRingBuf[(start + i) % cap];
@@ -169,6 +177,7 @@ static int16_t s_ignore_windows = -MIN_SLICES_BEFORE_DETECTION;
 static TaskHandle_t s_wakeWordTaskHandle = nullptr;
 static volatile bool s_wakeWordRunning = false;
 static volatile bool s_isListening = false;
+static volatile uint32_t s_suppressWakeWordUntil = 0;
 
 // High-pass DC offset filter state for audio input
 static float s_prevIn = 0.0f;
@@ -184,26 +193,46 @@ static void wakeWordResetLocked();
 // OPERATOR REGISTRATION
 // ============================================================
 static bool registerOps(tflite::MicroMutableOpResolver<20> &resolver) {
-  if (resolver.AddCallOnce() != kTfLiteOk) return false;
-  if (resolver.AddVarHandle() != kTfLiteOk) return false;
-  if (resolver.AddReshape() != kTfLiteOk) return false;
-  if (resolver.AddReadVariable() != kTfLiteOk) return false;
-  if (resolver.AddStridedSlice() != kTfLiteOk) return false;
-  if (resolver.AddConcatenation() != kTfLiteOk) return false;
-  if (resolver.AddAssignVariable() != kTfLiteOk) return false;
-  if (resolver.AddConv2D() != kTfLiteOk) return false;
-  if (resolver.AddMul() != kTfLiteOk) return false;
-  if (resolver.AddAdd() != kTfLiteOk) return false;
-  if (resolver.AddMean() != kTfLiteOk) return false;
-  if (resolver.AddFullyConnected() != kTfLiteOk) return false;
-  if (resolver.AddLogistic() != kTfLiteOk) return false;
-  if (resolver.AddQuantize() != kTfLiteOk) return false;
-  if (resolver.AddDepthwiseConv2D() != kTfLiteOk) return false;
-  if (resolver.AddAveragePool2D() != kTfLiteOk) return false;
-  if (resolver.AddMaxPool2D() != kTfLiteOk) return false;
-  if (resolver.AddPad() != kTfLiteOk) return false;
-  if (resolver.AddPack() != kTfLiteOk) return false;
-  if (resolver.AddSplitV() != kTfLiteOk) return false;
+  if (resolver.AddCallOnce() != kTfLiteOk)
+    return false;
+  if (resolver.AddVarHandle() != kTfLiteOk)
+    return false;
+  if (resolver.AddReshape() != kTfLiteOk)
+    return false;
+  if (resolver.AddReadVariable() != kTfLiteOk)
+    return false;
+  if (resolver.AddStridedSlice() != kTfLiteOk)
+    return false;
+  if (resolver.AddConcatenation() != kTfLiteOk)
+    return false;
+  if (resolver.AddAssignVariable() != kTfLiteOk)
+    return false;
+  if (resolver.AddConv2D() != kTfLiteOk)
+    return false;
+  if (resolver.AddMul() != kTfLiteOk)
+    return false;
+  if (resolver.AddAdd() != kTfLiteOk)
+    return false;
+  if (resolver.AddMean() != kTfLiteOk)
+    return false;
+  if (resolver.AddFullyConnected() != kTfLiteOk)
+    return false;
+  if (resolver.AddLogistic() != kTfLiteOk)
+    return false;
+  if (resolver.AddQuantize() != kTfLiteOk)
+    return false;
+  if (resolver.AddDepthwiseConv2D() != kTfLiteOk)
+    return false;
+  if (resolver.AddAveragePool2D() != kTfLiteOk)
+    return false;
+  if (resolver.AddMaxPool2D() != kTfLiteOk)
+    return false;
+  if (resolver.AddPad() != kTfLiteOk)
+    return false;
+  if (resolver.AddPack() != kTfLiteOk)
+    return false;
+  if (resolver.AddSplitV() != kTfLiteOk)
+    return false;
   return true;
 }
 
@@ -218,12 +247,14 @@ static bool loadModelInternal(uint8_t modelIndex, float preservedCutoff) {
   float prevCutoff = s_probability_cutoff;
   const WakeWordModelEntry &entry = WAKE_WORD_MODELS[modelIndex];
 
-  Serial.printf("[WAKEWORD] Loading model '%s' (%zu bytes)...\n", entry.name, entry.length);
+  Serial.printf("[WAKEWORD] Loading model '%s' (%zu bytes)...\n", entry.name,
+                entry.length);
 
   const tflite::Model *model = tflite::GetModel(entry.data);
   if (!model || model->version() != TFLITE_SCHEMA_VERSION) {
-    Serial.printf("[WAKEWORD] ERROR: Model schema mismatch for '%s' (%lu vs %d)\n",
-                  entry.name, model ? model->version() : 0, TFLITE_SCHEMA_VERSION);
+    Serial.printf(
+        "[WAKEWORD] ERROR: Model schema mismatch for '%s' (%lu vs %d)\n",
+        entry.name, model ? model->version() : 0, TFLITE_SCHEMA_VERSION);
     return false;
   }
 
@@ -236,31 +267,38 @@ static bool loadModelInternal(uint8_t modelIndex, float preservedCutoff) {
   memset(s_variable_arena, 0, sizeof(s_variable_arena));
   memset(s_tensor_arena, 0, sizeof(s_tensor_arena));
 
-  s_micro_allocator = tflite::MicroAllocator::Create(s_variable_arena, VARIABLE_ARENA_SIZE);
+  s_micro_allocator =
+      tflite::MicroAllocator::Create(s_variable_arena, VARIABLE_ARENA_SIZE);
   if (!s_micro_allocator) {
     Serial.println("[WAKEWORD] ERROR: Failed to create MicroAllocator!");
     if (modelIndex != prevIndex && prevIndex < NUM_WAKE_WORD_MODELS) {
-      Serial.printf("[WAKEWORD] Rolling back to '%s'...\n", WAKE_WORD_MODELS[prevIndex].name);
+      Serial.printf("[WAKEWORD] Rolling back to '%s'...\n",
+                    WAKE_WORD_MODELS[prevIndex].name);
       loadModelInternal(prevIndex, prevCutoff);
     }
     return false;
   }
-  s_micro_resource_vars = tflite::MicroResourceVariables::Create(s_micro_allocator, 20);
+  s_micro_resource_vars =
+      tflite::MicroResourceVariables::Create(s_micro_allocator, 20);
   if (!s_micro_resource_vars) {
-    Serial.println("[WAKEWORD] ERROR: Failed to create MicroResourceVariables!");
+    Serial.println(
+        "[WAKEWORD] ERROR: Failed to create MicroResourceVariables!");
     if (modelIndex != prevIndex && prevIndex < NUM_WAKE_WORD_MODELS) {
-      Serial.printf("[WAKEWORD] Rolling back to '%s'...\n", WAKE_WORD_MODELS[prevIndex].name);
+      Serial.printf("[WAKEWORD] Rolling back to '%s'...\n",
+                    WAKE_WORD_MODELS[prevIndex].name);
       loadModelInternal(prevIndex, prevCutoff);
     }
     return false;
   }
 
-  s_interpreter = new tflite::MicroInterpreter(
-      model, *s_op_resolver, s_tensor_arena, TENSOR_ARENA_SIZE, s_micro_resource_vars);
+  s_interpreter =
+      new tflite::MicroInterpreter(model, *s_op_resolver, s_tensor_arena,
+                                   TENSOR_ARENA_SIZE, s_micro_resource_vars);
   if (!s_interpreter) {
     Serial.println("[WAKEWORD] ERROR: Failed to create MicroInterpreter!");
     if (modelIndex != prevIndex && prevIndex < NUM_WAKE_WORD_MODELS) {
-      Serial.printf("[WAKEWORD] Rolling back to '%s'...\n", WAKE_WORD_MODELS[prevIndex].name);
+      Serial.printf("[WAKEWORD] Rolling back to '%s'...\n",
+                    WAKE_WORD_MODELS[prevIndex].name);
       loadModelInternal(prevIndex, prevCutoff);
     }
     return false;
@@ -271,7 +309,8 @@ static bool loadModelInternal(uint8_t modelIndex, float preservedCutoff) {
     delete s_interpreter;
     s_interpreter = nullptr;
     if (modelIndex != prevIndex && prevIndex < NUM_WAKE_WORD_MODELS) {
-      Serial.printf("[WAKEWORD] Rolling back to '%s'...\n", WAKE_WORD_MODELS[prevIndex].name);
+      Serial.printf("[WAKEWORD] Rolling back to '%s'...\n",
+                    WAKE_WORD_MODELS[prevIndex].name);
       loadModelInternal(prevIndex, prevCutoff);
     }
     return false;
@@ -280,9 +319,11 @@ static bool loadModelInternal(uint8_t modelIndex, float preservedCutoff) {
   s_activeModelIndex = modelIndex;
   s_sliding_window_size = entry.windowSize;
 
-  // P1: Validate preserved cutoff against target model's range; otherwise fall back to manifest default
+  // P1: Validate preserved cutoff against target model's range; otherwise fall
+  // back to manifest default
   float targetCutoff = entry.defaultCutoff;
-  if (preservedCutoff >= entry.minCutoff && preservedCutoff <= entry.maxCutoff) {
+  if (preservedCutoff >= entry.minCutoff &&
+      preservedCutoff <= entry.maxCutoff) {
     targetCutoff = preservedCutoff;
   }
   s_probability_cutoff = targetCutoff;
@@ -290,13 +331,16 @@ static bool loadModelInternal(uint8_t modelIndex, float preservedCutoff) {
 
   TfLiteTensor *input = s_interpreter->input(0);
   TfLiteTensor *output = s_interpreter->output(0);
-  Serial.printf("[WAKEWORD] Model '%s' ready! In: [%d,%d,%d] (type %d), Out: [%d,%d] (type %d), Cutoff: %.2f (range %.2f-%.2f, window %zu)\n",
-                entry.name,
-                input->dims->data[0], input->dims->data[1], input->dims->data[2], input->type,
-                output->dims->data[0], output->dims->data[1], output->type,
-                s_probability_cutoff, entry.minCutoff, entry.maxCutoff, s_sliding_window_size);
+  Serial.printf(
+      "[WAKEWORD] Model '%s' ready! In: [%d,%d,%d] (type %d), Out: [%d,%d] "
+      "(type %d), Cutoff: %.2f (range %.2f-%.2f, window %zu)\n",
+      entry.name, input->dims->data[0], input->dims->data[1],
+      input->dims->data[2], input->type, output->dims->data[0],
+      output->dims->data[1], output->type, s_probability_cutoff,
+      entry.minCutoff, entry.maxCutoff, s_sliding_window_size);
   Serial.printf("[WAKEWORD] Arena used: %u / %u bytes\n",
-                (unsigned int)s_interpreter->arena_used_bytes(), (unsigned int)TENSOR_ARENA_SIZE);
+                (unsigned int)s_interpreter->arena_used_bytes(),
+                (unsigned int)TENSOR_ARENA_SIZE);
 
   wakeWordResetLocked();
   return true;
@@ -342,7 +386,8 @@ bool wakeWordInit() {
   s_frontend_config.log_scale.enable_log = 1;
   s_frontend_config.log_scale.scale_shift = 6;
 
-  if (!FrontendPopulateState(&s_frontend_config, &s_frontend_state, AUDIO_SAMPLE_FREQUENCY)) {
+  if (!FrontendPopulateState(&s_frontend_config, &s_frontend_state,
+                             AUDIO_SAMPLE_FREQUENCY)) {
     Serial.println("[WAKEWORD] ERROR: FrontendPopulateState failed!");
     return false;
   }
@@ -367,16 +412,15 @@ bool wakeWordInit() {
   // P2: Task runs unconditionally; running flag gates listening
   s_wakeWordRunning = wakeWordEnabled;
 
-  // 4. Launch FreeRTOS background task pinned to Core 0 (leaving Core 1 for UI & Face)
+  // 4. Launch FreeRTOS background task pinned to Core 0 (leaving Core 1 for UI
+  // & Face)
   if (!s_wakeWordTaskHandle) {
-    BaseType_t res = xTaskCreatePinnedToCore(
-        wakeWordTask,
-        "wake_word_task",
-        6144, // 6 KB stack
-        NULL,
-        1,    // Priority 1
-        &s_wakeWordTaskHandle,
-        0     // Core 0
+    BaseType_t res = xTaskCreatePinnedToCore(wakeWordTask, "wake_word_task",
+                                             6144, // 6 KB stack
+                                             NULL,
+                                             1, // Priority 1
+                                             &s_wakeWordTaskHandle,
+                                             0 // Core 0
     );
 
     if (res != pdPASS) {
@@ -385,9 +429,11 @@ bool wakeWordInit() {
     }
   }
 
-  Serial.printf("[WAKEWORD] Active listener '%s' initialized on Core 0 (cutoff=%.2f, gain=%.1fx, micSlot=%d%s, running=%s)\n",
-                wakeWordGetModelName(), s_probability_cutoff, s_gain, getMicSlot(),
-                isMicSlotLocked() ? "[locked]" : "", s_wakeWordRunning ? "YES" : "PAUSED");
+  Serial.printf("[WAKEWORD] Active listener '%s' initialized on Core 0 "
+                "(cutoff=%.2f, gain=%.1fx, micSlot=%d%s, running=%s)\n",
+                wakeWordGetModelName(), s_probability_cutoff, s_gain,
+                getMicSlot(), isMicSlotLocked() ? "[locked]" : "",
+                s_wakeWordRunning ? "YES" : "PAUSED");
   return true;
 }
 
@@ -407,9 +453,11 @@ static void wakeWordResetLocked() {
 }
 
 void wakeWordReset() {
-  if (s_wwMutex) xSemaphoreTake(s_wwMutex, portMAX_DELAY);
+  if (s_wwMutex)
+    xSemaphoreTake(s_wwMutex, portMAX_DELAY);
   wakeWordResetLocked();
-  if (s_wwMutex) xSemaphoreGive(s_wwMutex);
+  if (s_wwMutex)
+    xSemaphoreGive(s_wwMutex);
 }
 
 void wakeWordStart() {
@@ -423,23 +471,30 @@ void wakeWordStop() {
   wakeWordReset();
 }
 
+void wakeWordSuppressUntil(uint32_t untilMs) {
+  s_suppressWakeWordUntil = untilMs;
+  wakeWordReset();
+  preWakeReset();
+}
+
 void wakeWordSetSensitivity(float cutoff) {
-  if (cutoff < 0.10f) cutoff = 0.10f;
-  if (cutoff > 0.99f) cutoff = 0.99f;
-  if (s_wwMutex) xSemaphoreTake(s_wwMutex, portMAX_DELAY);
+  if (cutoff < 0.10f)
+    cutoff = 0.10f;
+  if (cutoff > 0.99f)
+    cutoff = 0.99f;
+  if (s_wwMutex)
+    xSemaphoreTake(s_wwMutex, portMAX_DELAY);
   s_probability_cutoff = cutoff;
   wakeWordCutoff = cutoff;
-  if (s_wwMutex) xSemaphoreGive(s_wwMutex);
-  Serial.printf("[WAKEWORD] Sensitivity cutoff updated: %.2f\n", s_probability_cutoff);
+  if (s_wwMutex)
+    xSemaphoreGive(s_wwMutex);
+  Serial.printf("[WAKEWORD] Sensitivity cutoff updated: %.2f\n",
+                s_probability_cutoff);
 }
 
-float wakeWordGetSensitivity() {
-  return s_probability_cutoff;
-}
+float wakeWordGetSensitivity() { return s_probability_cutoff; }
 
-bool wakeWordIsEnabled() {
-  return wakeWordEnabled;
-}
+bool wakeWordIsEnabled() { return wakeWordEnabled; }
 
 void wakeWordSetEnabled(bool en) {
   wakeWordEnabled = en;
@@ -451,12 +506,14 @@ void wakeWordSetEnabled(bool en) {
 }
 
 bool wakeWordSetModel(uint8_t modelIndex) {
-  if (modelIndex >= NUM_WAKE_WORD_MODELS) return false;
+  if (modelIndex >= NUM_WAKE_WORD_MODELS)
+    return false;
   if (modelIndex == s_activeModelIndex && s_interpreter != nullptr) {
     return true; // Already loaded
   }
 
-  if (s_wwMutex) xSemaphoreTake(s_wwMutex, portMAX_DELAY);
+  if (s_wwMutex)
+    xSemaphoreTake(s_wwMutex, portMAX_DELAY);
 
   bool wasRunning = s_wakeWordRunning;
   s_wakeWordRunning = false;
@@ -470,76 +527,78 @@ bool wakeWordSetModel(uint8_t modelIndex) {
 
   s_wakeWordRunning = wasRunning && wakeWordEnabled;
 
-  if (s_wwMutex) xSemaphoreGive(s_wwMutex);
+  if (s_wwMutex)
+    xSemaphoreGive(s_wwMutex);
 
   return ok;
 }
 
-uint8_t wakeWordGetModel() {
-  return s_activeModelIndex;
-}
+uint8_t wakeWordGetModel() { return s_activeModelIndex; }
 
-const char* wakeWordGetModelName() {
+const char *wakeWordGetModelName() {
   if (s_activeModelIndex < NUM_WAKE_WORD_MODELS) {
     return WAKE_WORD_MODELS[s_activeModelIndex].name;
   }
   return "Unknown";
 }
 
-bool wakeWordIsListening() {
-  return s_isListening;
-}
+bool wakeWordIsListening() { return s_isListening; }
 
 void wakeWordSetGain(float gain) {
-  if (gain < 0.5f) gain = 0.5f;
-  if (gain > 20.0f) gain = 20.0f;
+  if (gain < 0.5f)
+    gain = 0.5f;
+  if (gain > 20.0f)
+    gain = 20.0f;
   s_gain = gain;
   wakeWordGain = gain;
-  Serial.printf("[WAKEWORD] Input gain updated: %.2fx (soft-knee %s)\n",
-                s_gain, (s_gain == 1.0f) ? "BYPASS" : "ACTIVE");
+  Serial.printf("[WAKEWORD] Input gain updated: %.2fx (soft-knee %s)\n", s_gain,
+                (s_gain == 1.0f) ? "BYPASS" : "ACTIVE");
 }
 
-float wakeWordGetGain() {
-  return s_gain;
-}
+float wakeWordGetGain() { return s_gain; }
 
 void wakeWordSetSpikeTrigger(bool en) {
   s_enable_spike_trigger = en;
   wakeWordSpikeTrigger = en;
-  Serial.printf("[WAKEWORD] Secondary spike trigger: %s\n", en ? "ENABLED" : "DISABLED (pure avg)");
+  Serial.printf("[WAKEWORD] Secondary spike trigger: %s\n",
+                en ? "ENABLED" : "DISABLED (pure avg)");
 }
 
-bool wakeWordGetSpikeTrigger() {
-  return s_enable_spike_trigger;
-}
+bool wakeWordGetSpikeTrigger() { return s_enable_spike_trigger; }
 
 void wakeWordSetBargeInBump(float bump) {
-  if (bump < 0.0f) bump = 0.0f;
-  if (bump > 0.40f) bump = 0.40f;
+  if (bump < 0.0f)
+    bump = 0.0f;
+  if (bump > 0.40f)
+    bump = 0.40f;
   s_bargeInBump = bump;
   wakeWordBargeInBump = bump;
   Serial.printf("[WAKEWORD] Barge-in bump updated: +%.2f\n", s_bargeInBump);
 }
 
-float wakeWordGetBargeInBump() {
-  return s_bargeInBump;
-}
+float wakeWordGetBargeInBump() { return s_bargeInBump; }
 
 void wakeWordPrintStatus() {
   const WakeWordModelEntry &entry = WAKE_WORD_MODELS[s_activeModelIndex];
   Serial.println("================= WAKE WORD ENGINE STATUS =================");
-  Serial.printf("  Active Model    : [%u] %s\n", s_activeModelIndex, entry.name);
+  Serial.printf("  Active Model    : [%u] %s\n", s_activeModelIndex,
+                entry.name);
   Serial.printf("  Running / Listen: %s / %s\n",
-                s_wakeWordRunning ? "YES" : "NO",
-                s_isListening ? "YES" : "NO");
-  Serial.printf("  Sensitivity     : active=%.2f, saved=%.2f (manifest def=%.2f, min=%.2f, max=%.2f)\n",
-                s_probability_cutoff, wakeWordCutoff, entry.defaultCutoff, entry.minCutoff, entry.maxCutoff);
+                s_wakeWordRunning ? "YES" : "NO", s_isListening ? "YES" : "NO");
+  Serial.printf("  Sensitivity     : active=%.2f, saved=%.2f (manifest "
+                "def=%.2f, min=%.2f, max=%.2f)\n",
+                s_probability_cutoff, wakeWordCutoff, entry.defaultCutoff,
+                entry.minCutoff, entry.maxCutoff);
   Serial.printf("  Window Size     : %zu slices\n", s_sliding_window_size);
-  Serial.printf("  Input Gain      : %.2fx (%s)\n", s_gain, (s_gain == 1.0f) ? "Bypass Soft-Knee" : "Soft-Knee Active");
-  Serial.printf("  Spike Clause    : %s\n", s_enable_spike_trigger ? "ON (legacy fallback)" : "OFF (pure average trigger)");
-  Serial.printf("  Barge-In Bump   : +%.2f (effective in speech = %.2f)\n", s_bargeInBump, s_probability_cutoff + s_bargeInBump);
-  Serial.printf("  Mic Slot        : %d (%s, lock=%s)\n",
-                getMicSlot(), (getMicSlot() == 1) ? "Right" : "Left",
+  Serial.printf("  Input Gain      : %.2fx (%s)\n", s_gain,
+                (s_gain == 1.0f) ? "Bypass Soft-Knee" : "Soft-Knee Active");
+  Serial.printf("  Spike Clause    : %s\n", s_enable_spike_trigger
+                                                ? "ON (legacy fallback)"
+                                                : "OFF (pure average trigger)");
+  Serial.printf("  Barge-In Bump   : +%.2f (effective in speech = %.2f)\n",
+                s_bargeInBump, s_probability_cutoff + s_bargeInBump);
+  Serial.printf("  Mic Slot        : %d (%s, lock=%s)\n", getMicSlot(),
+                (getMicSlot() == 1) ? "Right" : "Left",
                 isMicSlotLocked() ? "LOCKED" : "auto-detect");
   Serial.println("===========================================================");
 }
@@ -591,7 +650,8 @@ void wakeWordProcessSerialCommand(const String &cmd) {
   if (c.startsWith("ww spike ") || c.startsWith("ww_spike ")) {
     String val = c.substring(c.indexOf(' ', 3) + 1);
     val.trim();
-    bool sp = (val == "1" || val.equalsIgnoreCase("true") || val.equalsIgnoreCase("on"));
+    bool sp = (val == "1" || val.equalsIgnoreCase("true") ||
+               val.equalsIgnoreCase("on"));
     wakeWordSetSpikeTrigger(sp);
     Preferences p;
     p.begin("myrobot", false);
@@ -619,13 +679,15 @@ void wakeWordProcessSerialCommand(const String &cmd) {
   if (c.startsWith("ww lock ") || c.startsWith("ww_lock ")) {
     String lkStr = c.substring(c.indexOf(' ', 3) + 1);
     lkStr.trim();
-    bool lk = (lkStr == "1" || lkStr.equalsIgnoreCase("true") || lkStr.equalsIgnoreCase("on"));
+    bool lk = (lkStr == "1" || lkStr.equalsIgnoreCase("true") ||
+               lkStr.equalsIgnoreCase("on"));
     setMicSlotLocked(lk);
     Preferences p;
     p.begin("myrobot", false);
     p.putBool("micslot_lock", lk);
     p.end();
-    Serial.printf("[WAKEWORD] Mic slot lock set to: %s\n", lk ? "LOCKED" : "UNLOCKED");
+    Serial.printf("[WAKEWORD] Mic slot lock set to: %s\n",
+                  lk ? "LOCKED" : "UNLOCKED");
     return;
   }
 
@@ -635,10 +697,13 @@ void wakeWordProcessSerialCommand(const String &cmd) {
     Serial.println("  ww gain <float>       (e.g. ww gain 1.0 or ww gain 8.0)");
     Serial.println("  ww cutoff <float>     (e.g. ww cutoff 0.36)");
     Serial.println("  ww model <0>          (0=Alexa)");
-    Serial.println("  ww spike <0|1>        (0=disable spike trigger, 1=enable)");
-    Serial.println("  ww bump <float>       (barge-in bump, e.g. ww bump 0.08)");
+    Serial.println(
+        "  ww spike <0|1>        (0=disable spike trigger, 1=enable)");
+    Serial.println(
+        "  ww bump <float>       (barge-in bump, e.g. ww bump 0.08)");
     Serial.println("  ww mic <0|1>          (0=Left, 1=Right)");
-    Serial.println("  ww lock <0|1>         (lock mic slot to prevent auto-detection)");
+    Serial.println(
+        "  ww lock <0|1>         (lock mic slot to prevent auto-detection)");
   }
 }
 
@@ -658,30 +723,37 @@ static void wakeWordTask(void *params) {
 
   for (;;) {
     // -------------------------------------------------------------------
-    // PRE-WAKE BRIDGE MODE (Captures live mic into PSRAM while STT TLS connects)
+    // PRE-WAKE BRIDGE MODE (Captures live mic into PSRAM while STT TLS
+    // connects)
     // -------------------------------------------------------------------
     if (s_preWakeBridgeActive) {
       if (millis() - s_bridgeStartAt > 2500) {
         s_preWakeBridgeActive = false;
       } else {
         size_t bytesRead = 0;
-        esp_err_t err = i2s_channel_read(rxHandle, raw_i2s, sizeof(raw_i2s), &bytesRead, pdMS_TO_TICKS(50));
+        esp_err_t err = i2s_channel_read(rxHandle, raw_i2s, sizeof(raw_i2s),
+                                         &bytesRead, pdMS_TO_TICKS(50));
         if (err == ESP_OK && bytesRead > 0) {
           int frames = bytesRead / (2 * sizeof(int32_t));
           int currentSlot = getMicSlot();
           for (int i = 0; i < frames; i++) {
-            int32_t s32 = (currentSlot == 1) ? raw_i2s[i * 2 + 1] : raw_i2s[i * 2];
+            int32_t s32 =
+                (currentSlot == 1) ? raw_i2s[i * 2 + 1] : raw_i2s[i * 2];
             float x = (float)(s32 >> 8) / 256.0f;
             float y = x - s_prevIn + 0.995f * s_prevOut;
             s_prevIn = x;
             s_prevOut = y;
             if (s_gain != 1.0f) {
               y *= s_gain;
-              if (y > 26000.0f) y = 26000.0f + (y - 26000.0f) * 0.22f;
-              else if (y < -26000.0f) y = -26000.0f + (y + 26000.0f) * 0.22f;
+              if (y > 26000.0f)
+                y = 26000.0f + (y - 26000.0f) * 0.22f;
+              else if (y < -26000.0f)
+                y = -26000.0f + (y + 26000.0f) * 0.22f;
             }
-            if (y > 32767.0f) y = 32767.0f;
-            else if (y < -32768.0f) y = -32768.0f;
+            if (y > 32767.0f)
+              y = 32767.0f;
+            else if (y < -32768.0f)
+              y = -32768.0f;
             pcm_samples[i] = (int16_t)y;
           }
           preWakePush(pcm_samples, frames);
@@ -691,15 +763,23 @@ static void wakeWordTask(void *params) {
       }
     }
 
-    bool isSpeaking = isSpeechPlaying() || currentEmotion == EMOTION_SPEAKING;
-    // Don't listen during STT recording or LLM thinking, or during short tone beeps
-    bool isSttOrThinking = (busyProcessing && !isSpeaking) || startRecording || isTonePlaying();
+    bool isEmotionAction = (currentEmotion == EMOTION_LAUGHING ||
+                            currentEmotion == EMOTION_CRYING);
+    bool isSpeaking =
+        (isSpeechPlaying() || currentEmotion == EMOTION_SPEAKING) &&
+        !isEmotionAction;
+    // Don't listen during STT recording or LLM thinking, or during short tone
+    // beeps or emotion actions
+    bool isSttOrThinking = (busyProcessing && !isSpeaking) || startRecording ||
+                           isTonePlaying() || isEmotionAction;
 
-    // Listen when robot is idle OR when Kiwi is actively speaking (for Barge-in)
+    bool isSuppressed = (millis() < s_suppressWakeWordUntil);
+
+    // Listen when robot is idle OR when Kiwi is actively speaking (for
+    // Barge-in)
     bool canListen = s_wakeWordRunning && wakeWordEnabled &&
-                     (s_interpreter != nullptr) &&
-                     !isSttOrThinking &&
-                     !manualSleep && !inCircadianSleep &&
+                     (s_interpreter != nullptr) && !isSttOrThinking &&
+                     !isSuppressed && !manualSleep && !inCircadianSleep &&
                      rxHandle != nullptr;
 
     if (!canListen) {
@@ -719,7 +799,8 @@ static void wakeWordTask(void *params) {
 
     // Read 10ms of audio (160 samples at 16kHz) from INMP441 microphone
     size_t bytesRead = 0;
-    esp_err_t err = i2s_channel_read(rxHandle, raw_i2s, sizeof(raw_i2s), &bytesRead, pdMS_TO_TICKS(100));
+    esp_err_t err = i2s_channel_read(rxHandle, raw_i2s, sizeof(raw_i2s),
+                                     &bytesRead, pdMS_TO_TICKS(100));
     if (err != ESP_OK || bytesRead == 0) {
       vTaskDelay(pdMS_TO_TICKS(5));
       continue;
@@ -740,8 +821,10 @@ static void wakeWordTask(void *params) {
       int32_t s32R = raw_i2s[i * 2 + 1];
       int16_t sampleL = abs((int16_t)(s32L >> 16));
       int16_t sampleR = abs((int16_t)(s32R >> 16));
-      if (sampleL > peakL) peakL = sampleL;
-      if (sampleR > peakR) peakR = sampleR;
+      if (sampleL > peakL)
+        peakL = sampleL;
+      if (sampleR > peakR)
+        peakR = sampleR;
 
       int32_t s32 = (currentSlot == 1) ? s32R : s32L;
       float x = (float)(s32 >> 8) / 256.0f;
@@ -749,7 +832,8 @@ static void wakeWordTask(void *params) {
       s_prevIn = x;
       s_prevOut = y;
 
-      // F1: Runtime Gain tuning (default 8.0x) with soft knee compression; bypass soft-knee when 1.0x
+      // F1: Runtime Gain tuning (default 8.0x) with soft knee compression;
+      // bypass soft-knee when 1.0x
       if (s_gain != 1.0f) {
         y *= s_gain;
         if (y > 26000.0f) {
@@ -758,25 +842,30 @@ static void wakeWordTask(void *params) {
           y = -26000.0f + (y + 26000.0f) * 0.22f;
         }
       }
-      if (y > 32767.0f) y = 32767.0f;
-      else if (y < -32768.0f) y = -32768.0f;
+      if (y > 32767.0f)
+        y = 32767.0f;
+      else if (y < -32768.0f)
+        y = -32768.0f;
       pcm_samples[i] = (int16_t)y;
     }
     preWakePush(pcm_samples, frames);
 
-    // F3: Auto-swap mic slot respects micSlotLocked; routes through setMicSlot(slot, false)
+    // F3: Auto-swap mic slot respects micSlotLocked; routes through
+    // setMicSlot(slot, false)
     if (!isMicSlotLocked()) {
       if (currentSlot == 0 && peakR > 500 && peakL < 80) {
         if (++slotMismatchCount > 30) {
           setMicSlot(1, false);
           slotMismatchCount = 0;
-          Serial.println("[WAKEWORD] Auto-switched to micSlot 1 (Right channel active, not persisted)");
+          Serial.println("[WAKEWORD] Auto-switched to micSlot 1 (Right channel "
+                         "active, not persisted)");
         }
       } else if (currentSlot == 1 && peakL > 500 && peakR < 80) {
         if (++slotMismatchCount > 30) {
           setMicSlot(0, false);
           slotMismatchCount = 0;
-          Serial.println("[WAKEWORD] Auto-switched to micSlot 0 (Left channel active, not persisted)");
+          Serial.println("[WAKEWORD] Auto-switched to micSlot 0 (Left channel "
+                         "active, not persisted)");
         }
       } else {
         slotMismatchCount = 0;
@@ -786,20 +875,23 @@ static void wakeWordTask(void *params) {
     }
 
     int16_t currentPeak = (getMicSlot() == 1) ? peakR : peakL;
-    if (currentPeak > maxPeakDiag) maxPeakDiag = currentPeak;
+    if (currentPeak > maxPeakDiag)
+      maxPeakDiag = currentPeak;
 
     if (soundReactiveEnabled) {
       soundLevelFeedSamples(pcm_samples, frames);
     }
 
-    // F3.e: Process all `frames` samples by advancing pcm pointer and remaining count
+    // F3.e: Process all `frames` samples by advancing pcm pointer and remaining
+    // count
     int16_t *pcm_ptr = pcm_samples;
     size_t samples_remaining = frames;
     uint8_t zeroReadCounter = 0;
 
     // P3: Acquire mutex around frontend processing and model inference
     if (s_wwMutex && xSemaphoreTake(s_wwMutex, pdMS_TO_TICKS(50)) == pdTRUE) {
-      const WakeWordModelEntry &activeEntry = WAKE_WORD_MODELS[s_activeModelIndex];
+      const WakeWordModelEntry &activeEntry =
+          WAKE_WORD_MODELS[s_activeModelIndex];
 
       while (samples_remaining > 0 && s_interpreter != nullptr) {
         size_t num_samples_read = 0;
@@ -812,7 +904,8 @@ static void wakeWordTask(void *params) {
             static uint32_t lastZeroReadWarn = 0;
             if (millis() - lastZeroReadWarn > 5000) {
               lastZeroReadWarn = millis();
-              Serial.println("[WAKEWORD] WARN: FrontendProcessSamples read 0 samples repeatedly");
+              Serial.println("[WAKEWORD] WARN: FrontendProcessSamples read 0 "
+                             "samples repeatedly");
             }
             break; // Avoid infinite loop
           }
@@ -826,15 +919,20 @@ static void wakeWordTask(void *params) {
           }
         }
 
-        if (frontend_output.values != nullptr && frontend_output.size == PREPROCESSOR_FEATURE_SIZE) {
+        if (frontend_output.values != nullptr &&
+            frontend_output.size == PREPROCESSOR_FEATURE_SIZE) {
           int8_t features[PREPROCESSOR_FEATURE_SIZE];
           constexpr int32_t value_scale = 256;
           constexpr int32_t value_div = 666; // 25.6 * 26.0 rounded
           for (size_t i = 0; i < frontend_output.size; ++i) {
-            int32_t value = ((frontend_output.values[i] * value_scale) + (value_div / 2)) / value_div;
+            int32_t value =
+                ((frontend_output.values[i] * value_scale) + (value_div / 2)) /
+                value_div;
             value -= 128;
-            if (value < -128) value = -128;
-            if (value > 127) value = 127;
+            if (value < -128)
+              value = -128;
+            if (value > 127)
+              value = 127;
             features[i] = (int8_t)value;
           }
 
@@ -842,7 +940,7 @@ static void wakeWordTask(void *params) {
           TfLiteTensor *input = s_interpreter->input(0);
           uint8_t stride = input->dims->data[1];
           std::memmove((int8_t *)(tflite::GetTensorData<int8_t>(input)) +
-                       PREPROCESSOR_FEATURE_SIZE * s_current_stride_step,
+                           PREPROCESSOR_FEATURE_SIZE * s_current_stride_step,
                        features, PREPROCESSOR_FEATURE_SIZE);
           s_current_stride_step++;
 
@@ -863,23 +961,31 @@ static void wakeWordTask(void *params) {
                 for (size_t k = 0; k < s_sliding_window_size; k++) {
                   sum += s_sliding_window[k];
                 }
-                float avg_prob = (float)sum / (255.0f * (float)s_sliding_window_size);
-                if (avg_prob > maxProbDiag) maxProbDiag = avg_prob;
+                float avg_prob =
+                    (float)sum / (255.0f * (float)s_sliding_window_size);
+                if (avg_prob > maxProbDiag)
+                  maxProbDiag = avg_prob;
 
-                float effectiveCutoff = isSpeaking ? (s_probability_cutoff + s_bargeInBump) : s_probability_cutoff;
+                float effectiveCutoff =
+                    isSpeaking ? (s_probability_cutoff + s_bargeInBump)
+                               : s_probability_cutoff;
 
                 // Log voice activity spike if either probability is notable
                 if (avg_prob > 0.15f || prob_raw > 0.25f) {
-                  Serial.printf("[WAKEWORD] Voice spike%s: raw=%.2f, avg=%.2f (cutoff=%.2f, gain=%.1f)\n",
-                                isSpeaking ? " [barge-in]" : "", prob_raw, avg_prob, effectiveCutoff, s_gain);
+                  Serial.printf("[WAKEWORD] Voice spike%s: raw=%.2f, avg=%.2f "
+                                "(cutoff=%.2f, gain=%.1f)\n",
+                                isSpeaking ? " [barge-in]" : "", prob_raw,
+                                avg_prob, effectiveCutoff, s_gain);
                 }
 
-                // F2: Honor the cutoff in trigger logic (pure average by default; spike clause behind flag)
+                // F2: Honor the cutoff in trigger logic (pure average by
+                // default; spike clause behind flag)
                 bool triggered = false;
                 if (isSpeaking) {
                   if (s_enable_spike_trigger) {
-                    triggered = (avg_prob >= effectiveCutoff && prob_raw >= 0.45f) ||
-                                (prob_raw >= 0.60f && avg_prob >= 0.22f);
+                    triggered =
+                        (avg_prob >= effectiveCutoff && prob_raw >= 0.45f) ||
+                        (prob_raw >= 0.60f && avg_prob >= 0.22f);
                   } else {
                     triggered = (avg_prob >= effectiveCutoff);
                   }
@@ -887,7 +993,8 @@ static void wakeWordTask(void *params) {
                   if (s_enable_spike_trigger) {
                     if (activeEntry.isHighCutoffProfile) {
                       triggered = (avg_prob >= effectiveCutoff) ||
-                                  (prob_raw >= (effectiveCutoff + 0.05f) && avg_prob >= (effectiveCutoff - 0.15f));
+                                  (prob_raw >= (effectiveCutoff + 0.05f) &&
+                                   avg_prob >= (effectiveCutoff - 0.15f));
                     } else {
                       triggered = (avg_prob >= effectiveCutoff) ||
                                   (prob_raw >= 0.45f && avg_prob >= 0.16f);
@@ -899,8 +1006,11 @@ static void wakeWordTask(void *params) {
 
                 if (triggered) {
                   if (isSpeaking) {
-                    Serial.printf("\n[WAKEWORD] *** Voice Barge-In DETECTED during speech! avg=%.3f, raw=%.3f (cutoff=%.2f, gain=%.1f, slot=%d) ***\n",
-                                  avg_prob, prob_raw, effectiveCutoff, s_gain, getMicSlot());
+                    Serial.printf("\n[WAKEWORD] *** Voice Barge-In DETECTED "
+                                  "during speech! avg=%.3f, raw=%.3f "
+                                  "(cutoff=%.2f, gain=%.1f, slot=%d) ***\n",
+                                  avg_prob, prob_raw, effectiveCutoff, s_gain,
+                                  getMicSlot());
                     cancelRequest = true;
                     bargeInTriggered = true;
                     toneStop();
@@ -910,10 +1020,14 @@ static void wakeWordTask(void *params) {
                     powerNotifyActivity();
                     setEmotion(EMOTION_LISTENING);
                   } else {
-                    Serial.printf("\n[WAKEWORD] *** '%s' DETECTED! avg=%.3f, raw=%.3f (cutoff=%.2f, gain=%.1f, slot=%d) ***\n",
-                                  activeEntry.name, avg_prob, prob_raw, s_probability_cutoff, s_gain, getMicSlot());
+                    Serial.printf(
+                        "\n[WAKEWORD] *** '%s' DETECTED! avg=%.3f, raw=%.3f "
+                        "(cutoff=%.2f, gain=%.1f, slot=%d) ***\n",
+                        activeEntry.name, avg_prob, prob_raw,
+                        s_probability_cutoff, s_gain, getMicSlot());
 
-                    // Reset buffers & ignore future triggers until next conversation finishes
+                    // Reset buffers & ignore future triggers until next
+                    // conversation finishes
                     wakeWordResetLocked();
                     s_isListening = false;
                     s_wakeWordDetectedTrigger = true;
@@ -940,16 +1054,14 @@ static void wakeWordTask(void *params) {
     // Periodic heartbeat log every 3 seconds
     if (millis() - lastDiagAt >= 3000) {
       lastDiagAt = millis();
-      float effectiveCutoff = isSpeaking ? (s_probability_cutoff + s_bargeInBump) : s_probability_cutoff;
-      Serial.printf("[WAKEWORD] Listening '%s'%s... peak=%d, prob_max=%.2f, cutoff=%.2f (saved=%.2f), gain=%.1f, slot=%d%s\n",
-                    wakeWordGetModelName(),
-                    isSpeaking ? " [barge-in]" : "",
-                    maxPeakDiag, maxProbDiag,
-                    effectiveCutoff,
-                    wakeWordCutoff,
-                    s_gain,
-                    getMicSlot(),
-                    isMicSlotLocked() ? " [lock]" : "");
+      float effectiveCutoff = isSpeaking
+                                  ? (s_probability_cutoff + s_bargeInBump)
+                                  : s_probability_cutoff;
+      Serial.printf("[WAKEWORD] Listening '%s'%s... peak=%d, prob_max=%.2f, "
+                    "cutoff=%.2f (saved=%.2f), gain=%.1f, slot=%d%s\n",
+                    wakeWordGetModelName(), isSpeaking ? " [barge-in]" : "",
+                    maxPeakDiag, maxProbDiag, effectiveCutoff, wakeWordCutoff,
+                    s_gain, getMicSlot(), isMicSlotLocked() ? " [lock]" : "");
       maxProbDiag = 0.0f;
       maxPeakDiag = 0;
     }

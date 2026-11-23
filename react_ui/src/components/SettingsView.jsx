@@ -145,6 +145,10 @@ export default function SettingsView({
     sttmodel: 'saaras:v4',
     groqstturl: 'https://api.groq.com/openai/v1/audio/transcriptions',
     groqsttmodel: 'whisper-large-v3-turbo',
+    stt_trail_ms: 450,
+    stt_noise_k: 2.2,
+    stt_rel_k: 0.20,
+    stt_max_sil: 1200,
 
     // CARD 4: LLM
     llmprovider: 'gemini',
@@ -242,6 +246,10 @@ export default function SettingsView({
         sttmodel: config.stt?.model || config.sttModel || prev.sttmodel,
         groqstturl: config.stt?.groqUrl || config.groqSttEndpoint || prev.groqstturl,
         groqsttmodel: config.stt?.groqModel || config.groqSttModel || prev.groqsttmodel,
+        stt_trail_ms: config.sttVad?.trailingMs ?? prev.stt_trail_ms,
+        stt_noise_k: config.sttVad?.noiseK ?? prev.stt_noise_k,
+        stt_rel_k: config.sttVad?.relK ?? prev.stt_rel_k,
+        stt_max_sil: config.sttVad?.maxSilenceMs ?? prev.stt_max_sil,
 
         // LLM
         llmprovider: config.llm?.provider || config.llmProvider || prev.llmprovider,
@@ -662,6 +670,79 @@ export default function SettingsView({
               </div>
             </div>
           )}
+        </div>
+
+        {/* Adaptive Voice Endpointer (VAD) Controls */}
+        <div style={{ marginTop: '16px', background: 'var(--card-subtle)', border: '1px solid var(--border-light)', borderRadius: '14px', padding: '16px' }}>
+          <h3 style={{ fontSize: '13px', fontWeight: 800, color: 'var(--text-dark)', marginBottom: '12px' }}>
+            Adaptive Voice Detection (VAD) Endpointer
+          </h3>
+          <div className="flux-grid-2" style={{ gap: '12px' }}>
+            <div>
+              <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>
+                Trailing Silence Cutoff (ms)
+              </label>
+              <input
+                type="number"
+                name="stt_trail_ms"
+                min="100"
+                max="3000"
+                step="50"
+                value={formData.stt_trail_ms}
+                onChange={handleChange}
+                style={{ width: '100%', padding: '10px 14px', borderRadius: '10px', background: 'var(--card-white)', border: '1px solid var(--border-light)', color: 'var(--text-dark)', fontSize: '12px', outline: 'none' }}
+              />
+              <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>Default 450 ms. Cutoff wait after speech finishes.</span>
+            </div>
+            <div>
+              <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>
+                Noise Floor Multiplier (K_noise)
+              </label>
+              <input
+                type="number"
+                name="stt_noise_k"
+                min="1.1"
+                max="10.0"
+                step="0.1"
+                value={formData.stt_noise_k}
+                onChange={handleChange}
+                style={{ width: '100%', padding: '10px 14px', borderRadius: '10px', background: 'var(--card-white)', border: '1px solid var(--border-light)', color: 'var(--text-dark)', fontSize: '12px', outline: 'none' }}
+              />
+              <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>Default 2.2x. Speech gate = noiseFloor * K.</span>
+            </div>
+            <div>
+              <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>
+                Relative Peak Multiplier (K_rel)
+              </label>
+              <input
+                type="number"
+                name="stt_rel_k"
+                min="0.05"
+                max="1.0"
+                step="0.05"
+                value={formData.stt_rel_k}
+                onChange={handleChange}
+                style={{ width: '100%', padding: '10px 14px', borderRadius: '10px', background: 'var(--card-white)', border: '1px solid var(--border-light)', color: 'var(--text-dark)', fontSize: '12px', outline: 'none' }}
+              />
+              <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>Default 0.20 (20%). Silence threshold above noise.</span>
+            </div>
+            <div>
+              <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>
+                Max Silence Hard-Cap (ms)
+              </label>
+              <input
+                type="number"
+                name="stt_max_sil"
+                min="300"
+                max="5000"
+                step="100"
+                value={formData.stt_max_sil}
+                onChange={handleChange}
+                style={{ width: '100%', padding: '10px 14px', borderRadius: '10px', background: 'var(--card-white)', border: '1px solid var(--border-light)', color: 'var(--text-dark)', fontSize: '12px', outline: 'none' }}
+              />
+              <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>Default 1200 ms. Absolute silence cap after speech.</span>
+            </div>
+          </div>
         </div>
       </div>
 

@@ -441,7 +441,8 @@ void drawFace(float soundLevel) {
         speakLookingAtUser = true;
         speakGazeTgtX = (float)random(-8, 9) * 0.1f;
         speakGazeTgtY = -1.2f + (float)random(-4, 5) * 0.1f;
-        speakNextSaccadeAt = now + 1500 + random(0, 1500); // Hold eye contact 1.5s - 3s
+        speakNextSaccadeAt =
+            now + 1500 + random(0, 1500); // Hold eye contact 1.5s - 3s
         if (!eyeBlinking && random(0, 100) < 35)
           triggerTouchBlink(now);
       } else {
@@ -452,7 +453,8 @@ void drawFace(float soundLevel) {
           // Thoughtful upward-side glance (recalling words / ideas)
           speakGazeTgtX = (random(0, 2) == 0) ? -4.5f : 4.5f;
           speakGazeTgtY = -3.2f;
-          speakNextSaccadeAt = now + 500 + random(0, 500); // 500 - 1000ms glance
+          speakNextSaccadeAt =
+              now + 500 + random(0, 500); // 500 - 1000ms glance
         } else if (r < 75) {
           // Subtle lateral glance to punctuate a phrase
           speakGazeTgtX = (random(0, 2) == 0) ? -5.2f : 5.2f;
@@ -469,7 +471,8 @@ void drawFace(float soundLevel) {
       }
     }
 
-    // Organic ocular micro-drift + speech-amplitude micro-nod on emphasized syllables
+    // Organic ocular micro-drift + speech-amplitude micro-nod on emphasized
+    // syllables
     float spk = getSpeechAmplitude();
     float driftX = swing(now, 750.0f) * 0.35f;
     float driftY = cwing(now, 820.0f) * 0.25f;
@@ -502,7 +505,8 @@ void drawFace(float soundLevel) {
     sc = 1.0f + 0.035f * swing(now, 160.0f);
     break;
   case EMOTION_SPEAKING: {
-    // Natural conversational speech cadence & head bounce tied to live speech energy!
+    // Natural conversational speech cadence & head bounce tied to live speech
+    // energy!
     float spk = getSpeechAmplitude();
     offY = (swing(now, 450.0f) * 0.5f + spk * 3.2f);
     sc = 1.0f + 0.015f * swing(now, 380.0f) + spk * 0.04f;

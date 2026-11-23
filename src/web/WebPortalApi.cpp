@@ -514,6 +514,30 @@ void handleDoAction() {
     return;
   }
 
+  // Live STT Adaptive Endpointer Parameters Tuning
+  if (server.hasArg("stt_trail_ms") || server.hasArg("stt_noise_k") ||
+      server.hasArg("stt_rel_k") || server.hasArg("stt_max_sil")) {
+    if (server.hasArg("stt_trail_ms")) {
+      int v = server.arg("stt_trail_ms").toInt();
+      if (v >= 100 && v <= 3000) sttTrailingMs = v;
+    }
+    if (server.hasArg("stt_noise_k")) {
+      float v = server.arg("stt_noise_k").toFloat();
+      if (v >= 1.1f && v <= 10.0f) sttNoiseK = v;
+    }
+    if (server.hasArg("stt_rel_k")) {
+      float v = server.arg("stt_rel_k").toFloat();
+      if (v >= 0.0f && v <= 1.0f) sttRelK = v;
+    }
+    if (server.hasArg("stt_max_sil")) {
+      int v = server.arg("stt_max_sil").toInt();
+      if (v >= 300 && v <= 5000) sttMaxSilenceMs = v;
+    }
+    saveConfig();
+    server.send(200, "application/json", "{\"ok\":true}");
+    return;
+  }
+
   // Live Microphone Slot Selection (0=Left, 1=Right)
   if (server.hasArg("micslot")) {
     int s = server.arg("micslot").toInt();
@@ -976,6 +1000,10 @@ void handleConfigApi() {
        escJson(mdnsHostname + ".local") +
        "\",\"faceTweenMs\":" + String(faceTweenMs) +
        ",\"maxChatHistory\":" + String(maxChatHistory) + ",";
+  j += "\"sttVad\":{\"trailingMs\":" + String(sttTrailingMs) +
+       ",\"noiseK\":" + String(sttNoiseK, 2) +
+       ",\"relK\":" + String(sttRelK, 2) +
+       ",\"maxSilenceMs\":" + String(sttMaxSilenceMs) + "},";
   j += "\"apSSID\":\"" + escJson(apSSID) + "\",";
   j += "\"touch\":{\"topTap\":\"" + touchActionToString(touchActTopTap) +
        "\",\"topDbl\":\"" + touchActionToString(touchActTopDbl) +
@@ -1220,6 +1248,23 @@ void handleSave() {
   if (server.hasArg("ww_bump")) {
     wakeWordBargeInBump = server.arg("ww_bump").toFloat();
     wakeWordSetBargeInBump(wakeWordBargeInBump);
+  }
+  // STT Adaptive Endpointer Parameters
+  if (server.hasArg("stt_trail_ms")) {
+    int v = server.arg("stt_trail_ms").toInt();
+    if (v >= 100 && v <= 3000) sttTrailingMs = v;
+  }
+  if (server.hasArg("stt_noise_k")) {
+    float v = server.arg("stt_noise_k").toFloat();
+    if (v >= 1.1f && v <= 10.0f) sttNoiseK = v;
+  }
+  if (server.hasArg("stt_rel_k")) {
+    float v = server.arg("stt_rel_k").toFloat();
+    if (v >= 0.0f && v <= 1.0f) sttRelK = v;
+  }
+  if (server.hasArg("stt_max_sil")) {
+    int v = server.arg("stt_max_sil").toInt();
+    if (v >= 300 && v <= 5000) sttMaxSilenceMs = v;
   }
   if (server.hasArg("micslot")) {
     int s = server.arg("micslot").toInt();

@@ -4,15 +4,14 @@
 #include "config/AppConfig.h"
 #include "config/ConfigManager.h"
 #include "core/CoreTypes.h"
-#include "face/FaceEngine.h"
 #include "face/BootWakeAnim.h"
+#include "face/FaceEngine.h"
 #include "hardware/AudioEngine.h"
 #include "hardware/RgbLed.h"
 #include "hardware/TouchController.h"
+#include "power/PowerManager.h"
 #include "services/AiService.h"
 #include "web/WebPortal.h"
-#include "power/PowerManager.h"
-
 
 // ============================================================
 // UI PUMP (Display + Touch + Tone Update)
@@ -132,7 +131,8 @@ Emotion detectVocalEmotion(const String &text) {
     return EMOTION_EXCITED;
   }
 
-  // 6. Happy / Joy / Delighted / Satisfied -> Keep natural speaking/idle face (no ugly squinch)
+  // 6. Happy / Joy / Delighted / Satisfied -> Keep natural speaking/idle face
+  // (no ugly squinch)
   if (hasTag("happy") || hasTag("delighted") || hasTag("satisfied") ||
       hasTag("cheerful") || hasTag("joyful") || hasTag("glad")) {
     return EMOTION_SPEAKING;
@@ -229,8 +229,9 @@ static void streamSentenceCallback(const String &sentence, bool isFinal) {
   }
 
   // When isFinal arrives, LLM stream is finishing right now.
-  // On PSRAM with dual-TLS support, if first sentence hasn't spoken yet (e.g. 1-sentence answer),
-  // speak it immediately without waiting for LLM connection teardown!
+  // On PSRAM with dual-TLS support, if first sentence hasn't spoken yet (e.g.
+  // 1-sentence answer), speak it immediately without waiting for LLM connection
+  // teardown!
   if (isFinal) {
     if (psramFound() && !streamSpk.firstSpoken) {
       if (streamSpk.pending.length() > 0) {
@@ -244,8 +245,9 @@ static void streamSentenceCallback(const String &sentence, bool isFinal) {
         setEmotion(EMOTION_SPEAKING);
       }
       robotStateDesc = "Speaking...";
-      Serial.printf("[LATENCY] question->first_audio=%lu ms (PSRAM 1-turn direct)\n",
-                    (unsigned long)(millis() - streamSpk.questionStartedAt));
+      Serial.printf(
+          "[LATENCY] question->first_audio=%lu ms (PSRAM 1-turn direct)\n",
+          (unsigned long)(millis() - streamSpk.questionStartedAt));
       streamSpk.firstSpoken = true;
       streamSpk.ttsInProgress = true;
       bool ok = speakText(streamSpk.pending);
@@ -267,15 +269,18 @@ static void streamSentenceCallback(const String &sentence, bool isFinal) {
   }
 
   // c. Decide heap mode ONCE per question at the first sentence:
-  //      heapOk = ESP.getMaxAllocHeap() >= STREAM_TTS_MIN_MAX_ALLOC (or PSRAM available)
+  //      heapOk = ESP.getMaxAllocHeap() >= STREAM_TTS_MIN_MAX_ALLOC (or PSRAM
+  //      available)
   //    Log: "[STREAM] maxAlloc=%u psram=%u heapOk=%d" and, at first audio,
   //    "[LATENCY] question->first_audio=%lu ms".
   if (!streamSpk.heapDecided) {
     uint32_t maxAlloc = ESP.getMaxAllocHeap();
-    streamSpk.heapOk = psramFound() ? (ESP.getFreePsram() >= 65536) : (maxAlloc >= STREAM_TTS_MIN_MAX_ALLOC);
+    streamSpk.heapOk = psramFound() ? (ESP.getFreePsram() >= 65536)
+                                    : (maxAlloc >= STREAM_TTS_MIN_MAX_ALLOC);
     streamSpk.heapDecided = true;
     Serial.printf("[STREAM] maxAlloc=%u psram=%u heapOk=%d\n",
-                  (unsigned)maxAlloc, (unsigned)ESP.getFreePsram(), streamSpk.heapOk ? 1 : 0);
+                  (unsigned)maxAlloc, (unsigned)ESP.getFreePsram(),
+                  streamSpk.heapOk ? 1 : 0);
   }
 
   // d. If heapOk == false -> just append to pending (no TTS during stream).
@@ -298,13 +303,17 @@ static void streamSentenceCallback(const String &sentence, bool isFinal) {
 
   // e. If heapOk == true:
   //      - First sentence (firstSpoken == false): call speakText(sentence)
-  //        immediately if contiguous heap is safe. Set firstSpoken = true. If it returns false,
-  //        set ttsFailed = true and append the sentence to pending.
+  //        immediately if contiguous heap is safe. Set firstSpoken = true. If
+  //        it returns false, set ttsFailed = true and append the sentence to
+  //        pending.
   if (!streamSpk.firstSpoken) {
-    // Contiguous heap protection: Ensure at least STREAM_TTS_MIN_MAX_ALLOC contiguous bytes before dual-TLS (when no PSRAM)
+    // Contiguous heap protection: Ensure at least STREAM_TTS_MIN_MAX_ALLOC
+    // contiguous bytes before dual-TLS (when no PSRAM)
     if (!psramFound() && ESP.getMaxAllocHeap() < STREAM_TTS_MIN_MAX_ALLOC) {
-      Serial.printf("[STREAM] Contiguous heap low for first sentence (%u < %u). Deferring.\n",
-                    (unsigned)ESP.getMaxAllocHeap(), (unsigned)STREAM_TTS_MIN_MAX_ALLOC);
+      Serial.printf("[STREAM] Contiguous heap low for first sentence (%u < "
+                    "%u). Deferring.\n",
+                    (unsigned)ESP.getMaxAllocHeap(),
+                    (unsigned)STREAM_TTS_MIN_MAX_ALLOC);
       if (streamSpk.pending.length() > 0) {
         streamSpk.pending += " ";
       }
@@ -320,8 +329,9 @@ static void streamSentenceCallback(const String &sentence, bool isFinal) {
     }
     robotStateDesc = "Speaking...";
 
-    Serial.printf("[LATENCY] question->first_audio=%lu ms (PSRAM dual-TLS parallel)\n",
-                  (unsigned long)(millis() - streamSpk.questionStartedAt));
+    Serial.printf(
+        "[LATENCY] question->first_audio=%lu ms (PSRAM dual-TLS parallel)\n",
+        (unsigned long)(millis() - streamSpk.questionStartedAt));
 
     streamSpk.firstSpoken = true;
     streamSpk.ttsInProgress = true;
@@ -342,7 +352,8 @@ static void streamSentenceCallback(const String &sentence, bool isFinal) {
 
   //      - Later sentences: append to pending. Flush pending with speakText()
   //        only when pending.length() >= threshold AND heap is safe.
-  //        Do not call speakText on every sentence (each call is a new TLS handshake).
+  //        Do not call speakText on every sentence (each call is a new TLS
+  //        handshake).
   if (streamSpk.pending.length() > 0) {
     streamSpk.pending += " ";
   }
@@ -354,10 +365,13 @@ static void streamSentenceCallback(const String &sentence, bool isFinal) {
       streamSpk.pending = "";
       return;
     }
-    // Contiguous heap protection: Check heap before initiating secondary TLS handshake
+    // Contiguous heap protection: Check heap before initiating secondary TLS
+    // handshake
     if (!psramFound() && ESP.getMaxAllocHeap() < STREAM_TTS_MIN_MAX_ALLOC) {
-      Serial.printf("[STREAM] Dual-TLS heap tight (maxAlloc=%u < %u). Deferring to final flush.\n",
-                    (unsigned)ESP.getMaxAllocHeap(), (unsigned)STREAM_TTS_MIN_MAX_ALLOC);
+      Serial.printf("[STREAM] Dual-TLS heap tight (maxAlloc=%u < %u). "
+                    "Deferring to final flush.\n",
+                    (unsigned)ESP.getMaxAllocHeap(),
+                    (unsigned)STREAM_TTS_MIN_MAX_ALLOC);
       return;
     }
     Emotion vocalEmotion = detectVocalEmotion(streamSpk.pending);
@@ -503,24 +517,29 @@ void handleQuestion(const String &qIn) {
         currentEmotion != EMOTION_THINKING &&
         currentEmotion != EMOTION_LISTENING && currentEmotion != EMOTION_IDLE &&
         currentEmotion != EMOTION_HAPPY && currentEmotion != EMOTION_LAUGHING) {
-      vocalEmotion =
-          currentEmotion; // Retain emotion set by [ACTION: emotion ...] (e.g. angry, sad)
+      vocalEmotion = currentEmotion; // Retain emotion set by [ACTION: emotion
+                                     // ...] (e.g. angry, sad)
     }
     setEmotion(vocalEmotion);
 
-    // Bedtime / sleep fallback: If user asked to sleep or answer says good night / shubh ratri,
-    // queue sleep action so Kiwi falls asleep as soon as speaking completes!
+    // Bedtime / sleep fallback: If user asked to sleep or answer says good
+    // night / shubh ratri, queue sleep action so Kiwi falls asleep as soon as
+    // speaking completes!
     if (!pendingSleepAction) {
       String qLower = q;
       qLower.toLowerCase();
       String aLower = answer;
       aLower.toLowerCase();
-      if (hasAny(qLower, {"so jao", "sone jao", "sone chalo", "soja", "so ja", "sleep mode",
-                          "go to sleep", "good night", "goodnight", "shubh ratri",
-                          "सोने जाओ", "सोने जा", "सो जाओ", "सो जा", "सोने चलो", "शुभ रात्रि", "गुड नाईट"}) ||
-          ((hasAny(aLower, {"शुभ रात्रि", "shubh ratri", "good night", "goodnight"}) ||
+      if (hasAny(qLower,
+                 {"so jao", "sone jao", "sone chalo", "soja", "so ja",
+                  "sleep mode", "go to sleep", "good night", "goodnight",
+                  "shubh ratri", "सोने जाओ", "सोने जा", "सो जाओ", "सो जा",
+                  "सोने चलो", "शुभ रात्रि", "गुड नाईट"}) ||
+          ((hasAny(aLower,
+                   {"शुभ रात्रि", "shubh ratri", "good night", "goodnight"}) ||
             hasAny(aLower, {"so raha hoon", "so ja", "sone ja"})) &&
-           hasAny(qLower, {"so", "sleep", "night", "sone", "सो", "रात", "नींद"}))) {
+           hasAny(qLower,
+                  {"so", "sleep", "night", "sone", "सो", "रात", "नींद"}))) {
         pendingSleepAction = true;
       }
     }
@@ -529,7 +548,8 @@ void handleQuestion(const String &qIn) {
       return;
 
 #if LLM_STREAM_TTS
-    // Allow LwIP to finalize and free the LLM TCP socket buffers before starting TTS TLS (only needed when no PSRAM)
+    // Allow LwIP to finalize and free the LLM TCP socket buffers before
+    // starting TTS TLS (only needed when no PSRAM)
     if (!psramFound()) {
       yield();
       delay(40);
@@ -537,7 +557,8 @@ void handleQuestion(const String &qIn) {
 
     // 3. Final flush: after askLLM() returns in handleQuestion():
     //    - If cancelRequest -> do nothing more for speech.
-    //    - If pending is non-empty and !cancelRequest -> speakText(pending) once.
+    //    - If pending is non-empty and !cancelRequest -> speakText(pending)
+    //    once.
     if (!cancelRequest && streamSpk.pending.length() > 0) {
       Emotion vocalEmotion = detectVocalEmotion(streamSpk.pending);
       if (vocalEmotion != EMOTION_SPEAKING) {
@@ -557,7 +578,8 @@ void handleQuestion(const String &qIn) {
 
     //    - Do NOT speakText(answer) again if anything was already spoken
     //      (anySpoken == true). Only fall back to speaking the whole answer if
-    //      nothing was spoken at all and answer is non-empty (keeps the old path).
+    //      nothing was spoken at all and answer is non-empty (keeps the old
+    //      path).
     if (!streamSpk.anySpoken && !cancelRequest && answer.length() > 0) {
       bool ok = speakText(answer);
       if (cancelRequest)
@@ -586,7 +608,8 @@ void handleQuestion(const String &qIn) {
     }
 #endif
 
-    // If sleep action is pending, trigger fall-asleep animation immediately after speech ends!
+    // If sleep action is pending, trigger fall-asleep animation immediately
+    // after speech ends!
     if (pendingSleepAction) {
       triggerPendingSleepAction();
       returnIdleAt = 0;

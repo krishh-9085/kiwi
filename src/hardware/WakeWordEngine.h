@@ -51,6 +51,9 @@ float wakeWordGetBargeInBump();
 void wakeWordPrintStatus();
 void wakeWordProcessSerialCommand(const String &cmd);
 
+// Suppress wake word & barge-in triggers until millis() >= untilMs (e.g. echo guard after actions)
+void wakeWordSuppressUntil(uint32_t untilMs);
+
 // Pre-Wake Audio Ring-Buffer in PSRAM (Never Miss First Words)
 bool preWakeBufferInit();
 void preWakePush(const int16_t *samples, size_t count);

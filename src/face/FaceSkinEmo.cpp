@@ -27,15 +27,14 @@ static void drawEmoHeart(int cx, int cy, int w, int h) {
   display.fillRect(cx - hr * 2, circleY, bodyW, bodyH, SSD1306_WHITE);
 
   // Tapered lower point
-  display.fillTriangle(cx - hr * 2, circleY + bodyH - 1,
-                       cx + hr * 2, circleY + bodyH - 1,
-                       cx, botY, SSD1306_WHITE);
+  display.fillTriangle(cx - hr * 2, circleY + bodyH - 1, cx + hr * 2,
+                       circleY + bodyH - 1, cx, botY, SSD1306_WHITE);
 }
 
 // Slanted eyelid mask (angry / sad / sleepy / thinking).
 // Two black triangles form an angled quad cutting the top edge.
 static inline void maskEmoLids(int x0, int x1, int top, int lidIn, int lidOut,
-                              bool isLeft) {
+                               bool isLeft) {
   if (lidIn <= 0 && lidOut <= 0)
     return;
   int lL = isLeft ? lidOut : lidIn;
@@ -68,15 +67,17 @@ void drawEmoEye(int cx, int cy, int w, int h, int r, int lidIn, int lidOut,
   }
 
   // 2. Love / Hearts: EMO's signature glowing heart eyes
-  if (currentEmotion == EMOTION_HEARTS || currentEmotion == EMOTION_LOVESTRUCK ||
+  if (currentEmotion == EMOTION_HEARTS ||
+      currentEmotion == EMOTION_LOVESTRUCK ||
       (glint && currentEmotion == EMOTION_PETTED && petMood == PET_LOVE)) {
     drawEmoHeart(cx, cy, w, h);
     return;
   }
 
   // 3. EMO Procedural Eye Geometry:
-  // Solid glowing rounded rectangle with prominent rounded corners and NO pupil.
-  // Corner radius scaled proportionally to eye dimensions (~30% of dimension).
+  // Solid glowing rounded rectangle with prominent rounded corners and NO
+  // pupil. Corner radius scaled proportionally to eye dimensions (~30% of
+  // dimension).
   int emoR = (r > 3) ? r : (int)clampf(minI(w, h) * 0.30f, 5.0f, 12.0f);
   if (emoR * 2 > h)
     emoR = h / 2;

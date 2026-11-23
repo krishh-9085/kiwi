@@ -250,7 +250,24 @@ String recordAndTranscribe(uint32_t recordSeconds) {
   float prevIn = 0, prevOut = 0;
   float sumAbs = 0;
   uint32_t vuMax = 0;
-  const uint32_t BLK = SAMPLE_RATE / 20; // 50ms block for snappy speech/silence tracking
+
+  // ---- Endpointer constants (read from config, applied once) ----------------
+  // Block size: 50 ms
+  const uint32_t BLK = SAMPLE_RATE / 20;
+  // Trailing silence threshold (samples)
+  const uint32_t TRAILING_SILENCE_SAMPLES =
+      (uint32_t)((uint64_t)SAMPLE_RATE * (uint32_t)sttTrailingMs / 1000UL);
+  // Hard-cap: stop unconditionally after this much silence post-speech
+  const uint32_t MAX_SILENCE_SAMPLES =
+      (uint32_t)((uint64_t)SAMPLE_RATE * (uint32_t)sttMaxSilenceMs / 1000UL);
+  // Minimum speech before we look for silence
+  const uint32_t MIN_SPEECH_SAMPLES = (SAMPLE_RATE * 20) / 100; // 200 ms
+  // Initial timeout before any speech (3.5 s)
+  const uint32_t INITIAL_SILENCE_TIMEOUT_SAMPLES = (SAMPLE_RATE * 35) / 10;
+  // Hysteresis: re-enter speech only if 2+ consecutive blocks or big spike
+  const float SPEECH_ENTRY_HYST = 1.4f; // single-block entry if avg > gate*1.4
+
+  // ---- Endpointer state variables -------------------------------------------
   uint32_t blkN = 0;
   float blkSum = 0, maxBlkAvg = 0;
   bool speechStarted = false;
@@ -259,42 +276,192 @@ String recordAndTranscribe(uint32_t recordSeconds) {
   uint32_t silenceSamples = 0;
   uint32_t speechSamples = 0;
   uint32_t aboveGateSpikes = 0;
-  const uint32_t MIN_SPEECH_SAMPLES = (SAMPLE_RATE * 20) / 100; // 200ms minimum speech
-  const uint32_t TRAILING_SILENCE_SAMPLES = (SAMPLE_RATE * 45) / 100; // 450ms snappy trailing silence
-  const uint32_t INITIAL_SILENCE_TIMEOUT_SAMPLES = (SAMPLE_RATE * 35) / 10; // 3.5s start timeout
+  uint32_t liveSent = 0;
+
+  // ---- Noise floor & gate ---------------------------------------------------
+  // Calibration accumulates the first 250 ms of live mic samples.
+  // The pre-wake drain uses the initial estimate (200) and updates it afterwards
+  // from the FIRST calibration window that is classified as non-speech.
+  float noiseFloor = 200.0f;         // initial estimate; refined during calib
+  float peakSpeechEnergy = 0.0f;     // running max over speech blocks
+  // EMA alpha for ambient noise adaptation (non-speech blocks only)
+  const float NOISE_EMA_ALPHA = 0.08f;
+  // Speech-entry gate: noiseFloor * sttNoiseK (clamped to >=380)
+  auto computeSpeechGate = [&]() -> float {
+    return max(380.0f, noiseFloor * sttNoiseK);
+  };
+  // Silence gate (hysteresis lower bound):
+  //   max(noiseFloor * 1.5,  peakSpeechEnergy * sttRelK + noiseFloor)
+  // If peak is known: use relative threshold so a "hum at 300" that is
+  //   well below the speech peak is classified as silence.
+  // Before any speech: same as entry gate * 0.88 (old behaviour).
+  auto computeSilenceGate = [&]() -> float {
+    if (peakSpeechEnergy > 0.0f) {
+      float relThr = noiseFloor + (peakSpeechEnergy - noiseFloor) * sttRelK;
+      float absThr = noiseFloor * 1.5f;
+      return max(absThr, relThr);
+    }
+    return max(300.0f, computeSpeechGate() * 0.88f);
+  };
+
+  float speechActivityGate = computeSpeechGate(); // updated after calib
+
+  // NVS calib accumulators (live mic path only)
   float noiseSum = 0;
   uint32_t noiseSamples = 0;
   float calibSumL = 0, calibSumR = 0;
-  float noiseFloor = 200.0f;
-  float peakSpeechEnergy = 0.0f;
-  float speechActivityGate = 420.0f;
-  float silenceGate = 280.0f;
+  bool calibDone = hasPreWake; // pre-wake path skips live calib window
+
+  // ---- Inline block processor -----------------------------------------------
+  // Called with the per-block average `avg` and current `sent` count.
+  // Updates speechStarted, speechSamples, silenceSamples, peakSpeechEnergy,
+  // captureStopped, and the noise EMA.  Returns immediately if calib not done.
+  auto processBlock = [&](float avg, bool inPreWake) {
+    if (!calibDone && !inPreWake) return; // calib not complete yet
+
+    if (avg > maxBlkAvg) maxBlkAvg = avg;
+    speechActivityGate = computeSpeechGate();
+    float silGate = computeSilenceGate();
+
+    if (!speechStarted) {
+      // --- Pre-speech: detect onset, adapt noise floor ---
+      if (avg >= speechActivityGate) {
+        consecutiveSpeechBlocks++;
+        // Enter speech immediately on big spike OR after 2 consecutive blocks
+        if (consecutiveSpeechBlocks >= 2 || avg >= speechActivityGate * SPEECH_ENTRY_HYST) {
+          speechStarted = true;
+          speechSamples = BLK * consecutiveSpeechBlocks;
+          peakSpeechEnergy = avg;
+          silenceSamples = 0;
+          aboveGateSpikes = 0;
+          Serial.printf("[STT] Speech started at %.2fs (level=%.0f gate=%.0f noise=%.0f%s)\n",
+                        (float)sent / SAMPLE_RATE, avg, speechActivityGate, noiseFloor,
+                        inPreWake ? " pre-wake" : "");
+        }
+      } else {
+        consecutiveSpeechBlocks = 0;
+        // Adapt noise EMA upward-only while pre-speech (cap at 400)
+        noiseFloor = min(400.0f, noiseFloor * (1.0f - NOISE_EMA_ALPHA) + avg * NOISE_EMA_ALPHA);
+        speechActivityGate = computeSpeechGate();
+
+        if (!inPreWake && liveSent >= INITIAL_SILENCE_TIMEOUT_SAMPLES) {
+          captureStopped = true;
+          Serial.printf("[STT] No speech detected in first %.1fs; stopping early\n",
+                        (float)INITIAL_SILENCE_TIMEOUT_SAMPLES / SAMPLE_RATE);
+        }
+      }
+    } else {
+      // --- Post-speech: track peak, detect silence, adapt noise ---
+      if (avg > peakSpeechEnergy) peakSpeechEnergy = avg;
+
+      if (currentLogLevel >= LOG_LEVEL_DEBUG) {
+        Serial.printf("[STT-BLK] t=%.2fs avg=%.0f silGate=%.0f spGate=%.0f sil=%lums peak=%.0f noise=%.0f\n",
+                      (float)sent / SAMPLE_RATE, avg, silGate, speechActivityGate,
+                      (unsigned long)(silenceSamples * 1000UL / SAMPLE_RATE),
+                      peakSpeechEnergy, noiseFloor);
+      }
+
+      if (avg >= silGate) {
+        // Block is speech-level
+        if (silenceSamples == 0) {
+          speechSamples += BLK;
+          aboveGateSpikes = 0;
+        } else {
+          aboveGateSpikes++;
+          // Strong speech spike (>= speechActivityGate) or 2 consecutive blocks resets silence counter
+          if (avg >= speechActivityGate || aboveGateSpikes >= 2) {
+            speechSamples += BLK * aboveGateSpikes;
+            silenceSamples = 0;
+            aboveGateSpikes = 0;
+          }
+        }
+      } else {
+        aboveGateSpikes = 0;
+        silenceSamples += BLK;
+        // Adapt noise EMA down slowly during post-speech silence
+        noiseFloor = min(400.0f, noiseFloor * (1.0f - NOISE_EMA_ALPHA * 0.5f)
+                         + avg * (NOISE_EMA_ALPHA * 0.5f));
+
+        // ENDPOINTING CUTOFF ONLY APPLIES TO LIVE MIC AUDIO, NEVER TO PRE-WAKE DRAIN!
+        if (!inPreWake && speechSamples >= MIN_SPEECH_SAMPLES) {
+          // Normal snappy cutoff: TRAILING_SILENCE_SAMPLES after min speech
+          if (silenceSamples >= TRAILING_SILENCE_SAMPLES) {
+            captureStopped = true;
+            Serial.printf(
+              "[STT] Endpoint at %.2fs (speech %.2fs, trailing_sil %lums, "
+              "noise %.0f, peak %.0f, silGate %.0f)\n",
+              (float)sent / SAMPLE_RATE,
+              (float)speechSamples / SAMPLE_RATE,
+              (unsigned long)(silenceSamples * 1000UL / SAMPLE_RATE),
+              noiseFloor, peakSpeechEnergy, silGate);
+          }
+          // Hard cap: stop even if trailing didn't trigger
+          else if (silenceSamples >= MAX_SILENCE_SAMPLES) {
+            captureStopped = true;
+            Serial.printf(
+              "[STT] Endpoint (hard-cap) at %.2fs (speech %.2fs, sil %lums, "
+              "noise %.0f, peak %.0f, silGate %.0f)\n",
+              (float)sent / SAMPLE_RATE,
+              (float)speechSamples / SAMPLE_RATE,
+              (unsigned long)(silenceSamples * 1000UL / SAMPLE_RATE),
+              noiseFloor, peakSpeechEnergy, silGate);
+          }
+        }
+      }
+    }
+  };
 
   // Stream pre-wake audio from PSRAM ring buffer if available!
   if (hasPreWake) {
     const size_t DRAIN_MAX = 24000;
-    int16_t *drainBuf = (int16_t *)heap_caps_malloc(DRAIN_MAX * sizeof(int16_t), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    int16_t *drainBuf = (int16_t *)heap_caps_malloc(DRAIN_MAX * sizeof(int16_t),
+                                                     MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
     if (!drainBuf) drainBuf = (int16_t *)malloc(DRAIN_MAX * sizeof(int16_t));
     if (drainBuf) {
       size_t nDrained = preWakeDrain(drainBuf, DRAIN_MAX);
       Serial.printf("[STT] Streaming %u pre-wake samples (%.2fs) from PSRAM ring buffer\n",
                     (unsigned)nDrained, (float)nDrained / SAMPLE_RATE);
+
+      // First pass: calibrate noise floor from quiet pre-wake blocks
+      // We use a two-pass approach: accumulate block averages below initial gate,
+      // set noiseFloor, then process them through the state machine.
+      float preWakeNoiseAcc = 0.0f;
+      uint32_t preWakeNoiseCnt = 0;
+      {
+        uint32_t pN = 0; float pSum = 0;
+        for (size_t i = 0; i < nDrained; i++) {
+          pSum += abs((int)drainBuf[i]);
+          if (++pN >= BLK) {
+            float avg = pSum / (float)pN;
+            if (avg < computeSpeechGate()) { // non-speech block
+              preWakeNoiseAcc += avg;
+              preWakeNoiseCnt++;
+            }
+            pSum = 0; pN = 0;
+          }
+        }
+      }
+      if (preWakeNoiseCnt > 0) {
+        float measuredNoise = preWakeNoiseAcc / (float)preWakeNoiseCnt;
+        noiseFloor = constrain(measuredNoise, 80.0f, 400.0f);
+        speechActivityGate = computeSpeechGate();
+        Serial.printf("[STT] Pre-wake noise floor %.0f -> speech gate %.0f\n",
+                      noiseFloor, speechActivityGate);
+      }
+      calibDone = true; // noise calibrated from pre-wake; skip live calib window
+
+      // Second pass: run full block state machine over drained samples
+      uint32_t pN = 0; float pSum = 0;
       for (size_t i = 0; i < nDrained && sent < recordSamples; i++) {
         int16_t pcm = drainBuf[i];
         uint32_t a = abs((int)pcm);
         sumAbs += a;
         if (a > vuMax) vuMax = a;
-        blkSum += a;
-        if (++blkN >= BLK) {
-          float avg = blkSum / (float)blkN;
-          if (avg > maxBlkAvg) maxBlkAvg = avg;
-          if (avg >= speechActivityGate) {
-            speechStarted = true;
-            speechSamples += BLK;
-            if (avg > peakSpeechEnergy) peakSpeechEnergy = avg;
-          }
-          blkSum = 0;
-          blkN = 0;
+        pSum += a;
+        if (++pN >= BLK) {
+          float avg = pSum / (float)pN;
+          processBlock(avg, true);
+          pSum = 0; pN = 0;
         }
         out[outPos++] = pcm & 0xff;
         out[outPos++] = (pcm >> 8) & 0xff;
@@ -308,6 +475,24 @@ String recordAndTranscribe(uint32_t recordSeconds) {
         }
       }
       free(drainBuf);
+
+      // Pre-wake audio contains the wake word "Alexa" and any trailing bridge silence.
+      // If the user paused after saying "Alexa" (silence at the end of the pre-wake buffer),
+      // the wake word has concluded and the robot is now waiting for the user's actual command.
+      // Reset speechStarted to false so the user gets the full 3.5s timeout window to speak their query,
+      // rather than being cut off 450ms after the wake word!
+      if (silenceSamples >= BLK * 2) {
+        speechStarted = false;
+        speechSamples = 0;
+        silenceSamples = 0;
+        aboveGateSpikes = 0;
+        consecutiveSpeechBlocks = 0;
+        Serial.println("[STT] Wake word concluded with pause; waiting for command in live audio");
+      } else {
+        // Speech was actively ongoing at the end of pre-wake (continuous utterance: "Alexa, what...")
+        silenceSamples = 0;
+        aboveGateSpikes = 0;
+      }
     }
   }
 
@@ -321,6 +506,7 @@ String recordAndTranscribe(uint32_t recordSeconds) {
       return bail("mic read failed");
     int frames = bytesRead / (2 * sizeof(int32_t));
     for (int i = 0; i < frames && sent < recordSamples; i++) {
+      liveSent++;
       int32_t s32 = raw[i * 2 + micSlot];
       float x = (float)(s32 >> 8) / 256.0f;
       float y = x - prevIn + 0.995f * prevOut;
@@ -341,105 +527,44 @@ String recordAndTranscribe(uint32_t recordSeconds) {
       uint32_t a = abs((int)pcm);
       sumAbs += a;
 
-      if (sent < SAMPLE_RATE / 4) {
-        calibSumL += fabsf((float)(raw[i * 2] >> 16));
-        calibSumR += fabsf((float)(raw[i * 2 + 1] >> 16));
-        noiseSum += a;
-        noiseSamples++;
-        if (noiseSamples == SAMPLE_RATE / 4) {
-          if (!micSlotLocked) {
-            if (calibSumL > 3.0f * calibSumR && calibSumL > 20.0f) {
-              setMicSlot(0, false);
-            } else if (calibSumR > 3.0f * calibSumL && calibSumR > 20.0f) {
-              setMicSlot(1, false);
+      // ---- Calibration window (first 250 ms of live mic) ----
+      // Skipped when calibDone==true (pre-wake path sets calibDone=true)
+      if (!calibDone) {
+        if (sent < SAMPLE_RATE / 4) {
+          calibSumL += fabsf((float)(raw[i * 2] >> 16));
+          calibSumR += fabsf((float)(raw[i * 2 + 1] >> 16));
+          noiseSum += a;
+          noiseSamples++;
+          if (noiseSamples == SAMPLE_RATE / 4) {
+            if (!micSlotLocked) {
+              if (calibSumL > 3.0f * calibSumR && calibSumL > 20.0f) {
+                setMicSlot(0, false);
+              } else if (calibSumR > 3.0f * calibSumL && calibSumR > 20.0f) {
+                setMicSlot(1, false);
+              }
+              Serial.printf("[STT] Auto-calibrated Mic Slot: %d (L=%.1f, R=%.1f)\n",
+                            micSlot, calibSumL / noiseSamples, calibSumR / noiseSamples);
             }
-            Serial.printf("[STT] Auto-calibrated Mic Slot: %d (L=%.1f, R=%.1f)\n",
-                          micSlot, calibSumL / noiseSamples, calibSumR / noiseSamples);
+            float measuredNoise = noiseSum / (float)noiseSamples;
+            noiseFloor = constrain(measuredNoise, 80.0f, 400.0f);
+            speechActivityGate = computeSpeechGate();
+            calibDone = true;
+            Serial.printf("[STT] Ambient noise floor %.0f (raw %.0f) -> speech gate %.0f (Mic Slot %d)\n",
+                          noiseFloor, measuredNoise, speechActivityGate, micSlot);
           }
-          float measuredNoise = noiseSum / (float)noiseSamples;
-          // Clamp noise floor between 80 and 400
-          noiseFloor = constrain(measuredNoise, 80.0f, 400.0f);
-          speechActivityGate = max(380.0f, noiseFloor * 1.35f + 140.0f);
-          silenceGate = noiseFloor * 1.15f + 60.0f;
-          Serial.printf("[STT] Ambient noise floor %.0f (raw %.0f) -> speech gate %.0f, silence gate %.0f (Mic Slot %d)\n",
-                        noiseFloor, measuredNoise, speechActivityGate, silenceGate, micSlot);
         }
       } else {
-        // Speech detection ONLY evaluates after calibration locks the noise gate
-        if (a > vuMax)
-          vuMax = a;
+        // ---- Endpointer block accumulation ----
+        if (a > vuMax) vuMax = a;
         blkSum += a;
         if (++blkN >= BLK) {
           float avg = blkSum / (float)blkN;
-          if (avg > maxBlkAvg)
-            maxBlkAvg = avg;
-
-          if (!speechStarted) {
-            // Check for speech onset: 1 solid block or 2 consecutive moderate blocks
-            if (avg >= speechActivityGate) {
-              consecutiveSpeechBlocks++;
-              if (consecutiveSpeechBlocks >= 2 || avg >= (speechActivityGate * 1.45f)) {
-                speechStarted = true;
-                speechSamples = BLK * (consecutiveSpeechBlocks > 1 ? consecutiveSpeechBlocks : 1);
-                peakSpeechEnergy = avg;
-                silenceSamples = 0;
-                aboveGateSpikes = 0;
-                Serial.printf("[STT] Speech started at %.1fs (level=%.0f vs gate=%.0f)\n",
-                              (float)sent / SAMPLE_RATE, avg, speechActivityGate);
-              }
-            } else {
-              consecutiveSpeechBlocks = 0;
-              // Smoothly adapt noise floor to ambient room level before speech starts (capped at 400)
-              noiseFloor = min(400.0f, noiseFloor * 0.92f + avg * 0.08f);
-              speechActivityGate = max(380.0f, noiseFloor * 1.35f + 140.0f);
-              silenceGate = noiseFloor * 1.15f + 60.0f;
-
-              if (sent >= INITIAL_SILENCE_TIMEOUT_SAMPLES) {
-                captureStopped = true;
-                Serial.printf("[STT] No speech detected in first %.1fs; stopping early\n",
-                              (float)INITIAL_SILENCE_TIMEOUT_SAMPLES / SAMPLE_RATE);
-              }
-            }
-          } else {
-            // Speech is active! Track speech peak & end-of-speech silence
-            if (avg > peakSpeechEnergy) {
-              peakSpeechEnergy = avg;
-            }
-
-            // Speech threshold with slight hysteresis
-            float speechOngoingGate = max(340.0f, speechActivityGate * 0.88f);
-
-            if (avg >= speechOngoingGate) {
-              if (silenceSamples == 0) {
-                speechSamples += BLK;
-                aboveGateSpikes = 0;
-              } else {
-                // Anti-transient spike protection: Require 2 consecutive blocks to reset silence
-                aboveGateSpikes++;
-                if (aboveGateSpikes >= 2) {
-                  speechSamples += BLK * aboveGateSpikes;
-                  silenceSamples = 0;
-                  aboveGateSpikes = 0;
-                }
-              }
-            } else {
-              aboveGateSpikes = 0;
-              silenceSamples += BLK;
-
-              // Snappy silence cutoff: 450ms trailing silence once minimum speech (200ms) is satisfied
-              if (speechSamples >= MIN_SPEECH_SAMPLES && silenceSamples >= TRAILING_SILENCE_SAMPLES) {
-                captureStopped = true;
-                Serial.printf("[STT] Snappy VAD Cutoff at %.2fs (speech %.2fs, silence %lums, level=%.0f vs gate=%.0f)\n",
-                              (float)sent / SAMPLE_RATE, (float)speechSamples / SAMPLE_RATE,
-                              (unsigned long)((silenceSamples * 1000UL) / SAMPLE_RATE),
-                              avg, speechOngoingGate);
-              }
-            }
-          }
+          processBlock(avg, false);
           blkSum = 0;
           blkN = 0;
         }
       }
+
       out[outPos++] = pcm & 0xff;
       out[outPos++] = (pcm >> 8) & 0xff;
       sent++;
@@ -473,6 +598,18 @@ String recordAndTranscribe(uint32_t recordSeconds) {
     if (!writeChunk(client, out, outPos))
       return bail("upload failed");
     outPos = 0;
+  }
+
+  // Always log the final endpoint summary (even if max-time was hit)
+  if (!captureStopped) {
+    // Recording reached the hard 7-second max without endpoint firing
+    Serial.printf(
+      "[STT] Endpoint at %.2fs (speech %.2fs, trailing_sil %lums [max-time], "
+      "noise %.0f, peak %.0f, spGate %.0f)\n",
+      (float)capturedSamples / SAMPLE_RATE,
+      (float)speechSamples / SAMPLE_RATE,
+      (unsigned long)(silenceSamples * 1000UL / SAMPLE_RATE),
+      noiseFloor, peakSpeechEnergy, speechActivityGate);
   }
 
   Serial.printf("[STT] Done. captured %.2f s, avg %.0f, loudest 100ms block %.0f (gate %.0f)\n",

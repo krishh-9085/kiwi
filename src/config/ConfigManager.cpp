@@ -402,6 +402,16 @@ void loadConfig() {
   if (faceTweenMs < 0 || faceTweenMs > 1000)
     faceTweenMs = FACE_TWEEN_MS;
 
+  // STT Adaptive Endpointer Parameters
+  sttTrailingMs   = prefs.getInt("stt_trail_ms", 450);
+  if (sttTrailingMs < 100 || sttTrailingMs > 3000) sttTrailingMs = 450;
+  sttNoiseK       = prefs.getFloat("stt_noise_k", 2.2f);
+  if (sttNoiseK < 1.1f || sttNoiseK > 10.0f) sttNoiseK = 2.2f;
+  sttRelK         = prefs.getFloat("stt_rel_k", 0.20f);
+  if (sttRelK < 0.0f || sttRelK > 1.0f) sttRelK = 0.20f;
+  sttMaxSilenceMs = prefs.getInt("stt_max_sil", 1200);
+  if (sttMaxSilenceMs < 300 || sttMaxSilenceMs > 5000) sttMaxSilenceMs = 1200;
+
   prefs.end();
 }
 
@@ -537,6 +547,12 @@ void saveConfigImmediate() {
   prefs.putInt("face_tween", faceTweenMs);
   prefs.putInt("chat_hist", maxChatHistory);
   prefs.putString("ap_pass", String(apPasswordBuf));
+
+  // STT Adaptive Endpointer Parameters
+  prefs.putInt("stt_trail_ms", sttTrailingMs);
+  prefs.putFloat("stt_noise_k", sttNoiseK);
+  prefs.putFloat("stt_rel_k", sttRelK);
+  prefs.putInt("stt_max_sil", sttMaxSilenceMs);
 
   prefs.end();
   configDirty = false;

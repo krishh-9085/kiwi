@@ -11,6 +11,7 @@
 #include "face/FaceScreens.h"
 #include "face/SleepyWakeAnim.h"
 #include "hardware/AudioEngine.h"
+#include "hardware/WakeWordEngine.h"
 #include "services/AiService.h"
 #include "services/HyperHdrService.h"
 #include "services/WledService.h"
@@ -208,7 +209,8 @@ bool setEyeSkinByName(const String &nameIn) {
   n.trim();
 
   // 0. Next / Cycle / Change
-  if (n == "next" || n == "cycle" || n == "change" || n == "अगला" || n == "बदलो") {
+  if (n == "next" || n == "cycle" || n == "change" || n == "अगला" ||
+      n == "बदलो") {
     currentEyeSkin = (EyeSkin)(((uint8_t)currentEyeSkin + 1) % SKIN_COUNT);
     return true;
   }
@@ -258,21 +260,22 @@ void triggerSoundByName(const String &nameIn) {
   else if (s == "sparkle" || s == "magic")
     soundPetSparkle();
   else if (s == "giggle" || s == "laugh" || s == "laughing") {
+    wakeWordSuppressUntil(millis() + 6500UL);
     soundLaughing();
     if (currentEmotion != EMOTION_SLEEPING) {
       setEmotion(EMOTION_LAUGHING);
-      returnIdleAt = millis() + 4500;
+      returnIdleAt = millis() + 5000;
       emotionAutoReturnAt = returnIdleAt;
     }
   } else if (s == "cry" || s == "crying" || s == "sob") {
+    wakeWordSuppressUntil(millis() + 6500UL);
     soundCrying();
     if (currentEmotion != EMOTION_SLEEPING) {
       setEmotion(EMOTION_CRYING);
-      returnIdleAt = millis() + 5200;
+      returnIdleAt = millis() + 5000;
       emotionAutoReturnAt = returnIdleAt;
     }
-  }
-  else if (s == "kiss" || s == "love")
+  } else if (s == "kiss" || s == "love")
     soundPetKiss();
   else if (s == "playful" || s == "party")
     soundPetPlayful();
@@ -353,7 +356,8 @@ bool executeRobotAction(const String &actionCmd) {
 
   // 3. FACIAL EMOTION CHANGE
   if (actionType == "emotion" || actionType == "face" || actionType == "mood") {
-    // Suppress unwanted generic "happy" face from LLM so eyes stay natural idle/speaking
+    // Suppress unwanted generic "happy" face from LLM so eyes stay natural
+    // idle/speaking
     if (param.equalsIgnoreCase("happy") || param.equalsIgnoreCase("joy")) {
       return true;
     }

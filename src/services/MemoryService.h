@@ -26,8 +26,9 @@ void addFriendOrFamily(const String &entry);
 void addFriendOrFamilyNoSave(const String &entry);
 String getFriendsFamily();
 bool addMemoryFact(const String &fact);
-bool addMemoryFactNoSave(const String &fact);
+bool addMemoryFactNoSave(const String &fact, bool stampDate = true);
 void removeMemoryFact(int index);
+void syncMemoryFacts(const String *facts, int count);
 void clearAllMemory();
 
 String getFormattedMemoryPrompt();
@@ -35,5 +36,6 @@ void parseAndSaveMemoriesFromLlm(String &response);
 
 bool hasPendingFollowUp();
 String popPendingFollowUp();
+void clearPendingFollowUp();
 void setPendingFollowUp(const String &q);
 void setPendingFollowUpNoSave(const String &q);

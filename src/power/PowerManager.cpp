@@ -38,7 +38,7 @@ bool suppressBootGreeting = false;
 bool skipBootWakeAnim = false;
 bool wakeFromDeepSleepWakeAnim = false;
 
-static uint32_t currentCpuFreq = 160;
+static uint32_t currentCpuFreq = 240;
 static uint32_t lastActivityAt = 0;
 static uint32_t manualSleepElapsedSec = 0;
 static bool isOledDimmed = false;
@@ -324,7 +324,9 @@ void powerUpdate() {
     if (isOledDimmed) {
       isOledDimmed = false;
       setOledDim(false);
-      powerSetCpuFreq(160);
+      if (currentCpuFreq < 160) {
+        powerSetCpuFreq(160);
+      }
       Serial.println("[POWER] Face activity resumed -> setOledDim(false)");
     }
   } else {
@@ -335,14 +337,11 @@ void powerUpdate() {
     }
   }
 
-  // --- PART C: CPU Frequency Scaling (80 MHz vs 160 MHz) ---
-  // Drop to 80 MHz ONLY in this state:
-  // - display is off or dimmed AND
-  // - no speech, tone, or audio output AND
-  // - no network request in progress AND
-  // - no robot timer ringing AND
-  // - not in deep sleep
-  // Wait at least 10 s in idle before switching down.
+  // --- PART C: CPU Frequency Scaling (80 MHz / 160 MHz / 240 MHz) ---
+  // Boost to 240 MHz during active AI/TLS/OTA/audio workloads; keep calm idle
+  // at 160 MHz (or 80 MHz when dimmed & silent) to minimize heat.
+  bool needTurbo = busyProcessing || startRecording || isTonePlaying() ||
+                   isSpeechPlaying() || otaInProgress;
   bool canDropTo80 = (!displayPowerState || isOledDimmed) &&
                      !wakeWordEnabled && !wakeWordIsListening() &&
                      !kiwiIsOutputting() && !isTonePlaying() &&
@@ -350,7 +349,11 @@ void powerUpdate() {
                      !isRobotTimerRinging() &&
                      (now - lastActivityAt >= 10000);
 
-  if (canDropTo80) {
+  if (needTurbo) {
+    if (currentCpuFreq != 240) {
+      powerSetCpuFreq(240);
+    }
+  } else if (canDropTo80) {
     if (currentCpuFreq != 80) {
       powerSetCpuFreq(80);
     }
@@ -366,7 +369,7 @@ void powerUpdate() {
 // ============================================================
 void powerNotifyActivity() {
   lastActivityAt = millis();
-  if (currentCpuFreq != 160) {
+  if (currentCpuFreq < 160) {
     powerSetCpuFreq(160);
   }
 }
@@ -374,7 +377,7 @@ void powerNotifyActivity() {
 void powerSetCpuFreq(uint32_t mhz) {
   if (mhz == currentCpuFreq)
     return;
-  if (mhz != 80 && mhz != 160)
+  if (mhz != 80 && mhz != 160 && mhz != 240)
     return;
 
   // ESP32-C3 Note:

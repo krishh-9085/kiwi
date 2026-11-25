@@ -3,6 +3,7 @@
 #include "face/FaceEngine.h"
 #include "face/FaceDisplay.h"
 #include <Adafruit_SSD1306.h>
+#include <esp_heap_caps.h>
 #include <math.h>
 #include <Preferences.h>
 
@@ -13,10 +14,22 @@ uint8_t activeAnimation = 0;
 uint16_t animationFrame = 0;
 uint32_t nextFrameAt = 0;
 bool playing = false;
-uint8_t customFrame[OLED_FRAME_BYTES];
-uint8_t customFrames[MAX_CUSTOM_ANIMATIONS][OLED_FRAME_BYTES];
+uint8_t *customFrame = nullptr;
+uint8_t *customFrames[MAX_CUSTOM_ANIMATIONS] = {};
 bool customFrameAvailable[MAX_CUSTOM_ANIMATIONS] = {};
 String customAnimationNames[MAX_CUSTOM_ANIMATIONS];
+
+uint8_t *allocOledFrameBuf() {
+  uint8_t *p = nullptr;
+  if (psramFound()) {
+    p = (uint8_t *)heap_caps_malloc(OLED_FRAME_BYTES,
+                                    MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+  }
+  if (!p) {
+    p = (uint8_t *)malloc(OLED_FRAME_BYTES);
+  }
+  return p;
+}
 bool uploadIsText = false;
 bool uploadFailed = false;
 size_t uploadBytes = 0;
@@ -42,7 +55,8 @@ void drawCustomFrame(uint8_t slot) {
   display.clearDisplay();
   display.setTextColor(SSD1306_WHITE);
 
-  if (slot < MAX_CUSTOM_ANIMATIONS && customFrameAvailable[slot]) {
+  if (slot < MAX_CUSTOM_ANIMATIONS && customFrameAvailable[slot] &&
+      customFrames[slot]) {
     display.drawBitmap(0, 0, customFrames[slot], SCREEN_WIDTH, SCREEN_HEIGHT,
                        SSD1306_WHITE);
   }
@@ -56,19 +70,29 @@ void initAnimations() {
   for (uint8_t i = 0; i < MAX_CUSTOM_ANIMATIONS; i++) {
     String frameKey = "frame" + String(i);
     String nameKey = "name" + String(i);
-    customFrameAvailable[i] =
-        prefs.getBytesLength(frameKey.c_str()) == OLED_FRAME_BYTES &&
-        prefs.getBytes(frameKey.c_str(), customFrames[i], OLED_FRAME_BYTES) ==
-            OLED_FRAME_BYTES;
+    if (prefs.getBytesLength(frameKey.c_str()) == OLED_FRAME_BYTES) {
+      if (!customFrames[i])
+        customFrames[i] = allocOledFrameBuf();
+      customFrameAvailable[i] =
+          customFrames[i] &&
+          prefs.getBytes(frameKey.c_str(), customFrames[i], OLED_FRAME_BYTES) ==
+              OLED_FRAME_BYTES;
+    } else {
+      customFrameAvailable[i] = false;
+    }
     customAnimationNames[i] = prefs.getString(nameKey.c_str(), "");
     if (customFrameAvailable[i] && customAnimationNames[i].length() == 0)
       customAnimationNames[i] = "Saved Upload " + String(i + 1);
   }
   // Migrate the original single-upload format into the first named slot.
-  if (!customFrameAvailable[0] && prefs.getBytesLength("custom") == OLED_FRAME_BYTES &&
-      prefs.getBytes("custom", customFrames[0], OLED_FRAME_BYTES) == OLED_FRAME_BYTES) {
-    customFrameAvailable[0] = true;
-    customAnimationNames[0] = "Saved Upload";
+  if (!customFrameAvailable[0] && prefs.getBytesLength("custom") == OLED_FRAME_BYTES) {
+    if (!customFrames[0])
+      customFrames[0] = allocOledFrameBuf();
+    if (customFrames[0] &&
+        prefs.getBytes("custom", customFrames[0], OLED_FRAME_BYTES) == OLED_FRAME_BYTES) {
+      customFrameAvailable[0] = true;
+      customAnimationNames[0] = "Saved Upload";
+    }
   }
   prefs.end();
 }
@@ -80,7 +104,7 @@ bool animationIsActive() {
 void playAnimation(uint8_t slot) {
   if (!oledOK || slot >= MAX_CUSTOM_ANIMATIONS)
     return;
-  if (!customFrameAvailable[slot])
+  if (!customFrameAvailable[slot] || !customFrames[slot])
     return;
   bannerActive = false;
   activeAnimation = slot;
@@ -119,8 +143,11 @@ String animationListJson() {
 }
 
 void beginCustomAnimationUpload(const String &filename, const String &displayName) {
+  if (!customFrame) {
+    customFrame = allocOledFrameBuf();
+  }
   uploadIsText = !filename.endsWith(".bin") && !filename.endsWith(".raw");
-  uploadFailed = false;
+  uploadFailed = (customFrame == nullptr);
   uploadBytes = 0;
   uploadHexValue = 0;
   uploadHexDigits = 0;
@@ -214,28 +241,38 @@ bool writeCustomAnimationUpload(const uint8_t *data, size_t length) {
 }
 
 bool finishCustomAnimationUpload() {
-  if (uploadFailed || uploadBytes != OLED_FRAME_BYTES)
-    return false;
-  uint8_t slot = MAX_CUSTOM_ANIMATIONS;
-  for (uint8_t i = 0; i < MAX_CUSTOM_ANIMATIONS; i++) {
-    if (!customFrameAvailable[i]) {
-      slot = i;
-      break;
+  bool ok = false;
+  if (!uploadFailed && uploadBytes == OLED_FRAME_BYTES && customFrame) {
+    uint8_t slot = MAX_CUSTOM_ANIMATIONS;
+    for (uint8_t i = 0; i < MAX_CUSTOM_ANIMATIONS; i++) {
+      if (!customFrameAvailable[i]) {
+        slot = i;
+        break;
+      }
+    }
+    if (slot < MAX_CUSTOM_ANIMATIONS) {
+      Preferences prefs;
+      prefs.begin("oledanim", false);
+      String frameKey = "frame" + String(slot);
+      String nameKey = "name" + String(slot);
+      size_t saved = prefs.putBytes(frameKey.c_str(), customFrame, OLED_FRAME_BYTES);
+      prefs.putString(nameKey.c_str(), uploadDisplayName);
+      prefs.end();
+      if (saved == OLED_FRAME_BYTES) {
+        if (!customFrames[slot])
+          customFrames[slot] = allocOledFrameBuf();
+        if (customFrames[slot]) {
+          memcpy(customFrames[slot], customFrame, OLED_FRAME_BYTES);
+          customFrameAvailable[slot] = true;
+          customAnimationNames[slot] = uploadDisplayName;
+          ok = true;
+        }
+      }
     }
   }
-  if (slot == MAX_CUSTOM_ANIMATIONS)
-    return false;
-  Preferences prefs;
-  prefs.begin("oledanim", false);
-  String frameKey = "frame" + String(slot);
-  String nameKey = "name" + String(slot);
-  size_t saved = prefs.putBytes(frameKey.c_str(), customFrame, OLED_FRAME_BYTES);
-  prefs.putString(nameKey.c_str(), uploadDisplayName);
-  prefs.end();
-  if (saved != OLED_FRAME_BYTES)
-    return false;
-  memcpy(customFrames[slot], customFrame, OLED_FRAME_BYTES);
-  customFrameAvailable[slot] = true;
-  customAnimationNames[slot] = uploadDisplayName;
-  return true;
+  if (customFrame) {
+    free(customFrame);
+    customFrame = nullptr;
+  }
+  return ok;
 }

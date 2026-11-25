@@ -606,5 +606,10 @@ void loop() {
     }
   }
 
-  yield();
+  if (!busyProcessing && !startRecording && !isTonePlaying() &&
+      !isSpeechPlaying() && !otaInProgress) {
+    vTaskDelay(pdMS_TO_TICKS(2));
+  } else {
+    yield();
+  }
 }

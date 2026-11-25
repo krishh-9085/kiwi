@@ -235,9 +235,10 @@ static String cleanSentenceForSpeech(const String &s) {
   if (!out.length())
     return "";
 
-  if (out.startsWith("[ACTION:") || out.startsWith("[action:") ||
-      out.startsWith("[MEM:") || out.startsWith("[mem:") ||
-      out.startsWith("[FOLLOWUP:") || out.startsWith("[followup:")) {
+  String upper = out;
+  upper.toUpperCase();
+  if (upper.startsWith("[ACTION:") || upper.startsWith("[MEM:") ||
+      upper.startsWith("[FOLLOWUP:")) {
     return "";
   }
 

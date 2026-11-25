@@ -9,17 +9,17 @@
 #include "behavior/InteractionManager.h"
 #include <WiFiClientSecure.h>
 
-// Unified shared audio buffers with PSRAM dynamic scaling
-static int16_t s_fallbackPrebuf[2560];
-static uint8_t s_fallbackRbuf[2048];
-static int16_t *ttsPrebuf = s_fallbackPrebuf;
-static uint8_t *ttsRbuf = s_fallbackRbuf;
-static size_t ttsPrebufMax = 2560; // 160ms @ 16kHz
-static size_t ttsRbufMax = 2048;
+// Unified shared audio buffers with PSRAM dynamic scaling (zero idle internal SRAM waste)
+static int16_t *ttsPrebuf = nullptr;
+static uint8_t *ttsRbuf = nullptr;
+static size_t ttsPrebufMax = 0;
+static size_t ttsRbufMax = 0;
 
 void initTtsBuffers() {
+  if (ttsPrebuf && ttsRbuf)
+    return;
   if (psramFound()) {
-    if (ttsPrebuf == s_fallbackPrebuf) {
+    if (!ttsPrebuf) {
       // 9600 samples = 600ms jitter cushion @ 16kHz in PSRAM
       int16_t *p = (int16_t *)heap_caps_malloc(9600 * sizeof(int16_t), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
       if (p) {
@@ -28,7 +28,7 @@ void initTtsBuffers() {
         Serial.println("[TTS] Allocated 600ms jitter buffer in PSRAM");
       }
     }
-    if (ttsRbuf == s_fallbackRbuf) {
+    if (!ttsRbuf) {
       // 8KB read chunk in PSRAM consumes full TLS records
       uint8_t *r = (uint8_t *)heap_caps_malloc(8192, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
       if (r) {
@@ -38,13 +38,21 @@ void initTtsBuffers() {
       }
     }
   }
+  if (!ttsPrebuf) {
+    ttsPrebuf = (int16_t *)malloc(2560 * sizeof(int16_t));
+    if (ttsPrebuf)
+      ttsPrebufMax = 2560; // 160ms @ 16kHz SRAM fallback
+  }
+  if (!ttsRbuf) {
+    ttsRbuf = (uint8_t *)malloc(2048);
+    if (ttsRbuf)
+      ttsRbufMax = 2048;
+  }
 }
 
 // ============================================================
 bool speakText(const String &text) {
-  if (psramFound() && ttsPrebuf == s_fallbackPrebuf) {
-    initTtsBuffers();
-  }
+  initTtsBuffers();
   String toSpeak = (ttsProvider == "fish" || ttsProvider == "fishaudio") ? normalizeFishAudioTags(stripRobotTags(text)) : stripAudioCues(stripRobotTags(text));
   toSpeak.trim();
   Serial.printf("[TTS] speakText() prov='%s' len=%d heap=%u txHandle=%s\n",
@@ -148,6 +156,11 @@ static bool prepareTtsConnection(const char *tag, const String &url,
   }
   if (logDetail) {
     Serial.printf("[%s] Free heap before: %u\n", tag, (unsigned)ESP.getFreeHeap());
+  }
+  initTtsBuffers();
+  if (!ttsPrebuf || !ttsRbuf) {
+    Serial.printf("[%s] Failed to allocate TTS buffers.\n", tag);
+    return false;
   }
   net.enter();
   if (!psramFound()) {
@@ -595,9 +608,7 @@ int ttsFishAudio(const String &text, uint32_t maxPlayMs) {
 }
 
 bool speakFishAudio(const String &text, uint32_t maxPlayMs) {
-  if (psramFound() && ttsPrebuf == s_fallbackPrebuf) {
-    initTtsBuffers();
-  }
+  initTtsBuffers();
   String toSpeak = normalizeFishAudioTags(stripRobotTags(text));
   toSpeak.trim();
   Serial.printf("[TTS] speakFishAudio() model='%s' len=%d keyLen=%d heap=%u txHandle=%s\n",

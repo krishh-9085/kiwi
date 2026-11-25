@@ -173,7 +173,17 @@ String stripRobotTags(const String &text) {
     int b1 = s.indexOf('[', i);
     if (b1 < 0) break;
     int b2 = s.indexOf(']', b1);
-    if (b2 < 0) break;
+    if (b2 < 0) {
+      String tail = s.substring(b1 + 1);
+      tail.trim();
+      tail.toUpperCase();
+      if (tail.startsWith("ACTION:") || tail.startsWith("MEM:") ||
+          tail.startsWith("FOLLOWUP:") || tail == "ACTION" ||
+          tail == "MEM" || tail == "FOLLOWUP") {
+        s.remove(b1);
+      }
+      break;
+    }
     String tag = s.substring(b1 + 1, b2);
     tag.trim();
     String tagUpper = tag;

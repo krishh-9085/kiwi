@@ -129,6 +129,7 @@ String recordAndTranscribe(uint32_t recordSeconds) {
                  "Content-Type: audio/wav\r\n\r\n";
 
   String part2;
+  part2.reserve(384);
   if (cfg.sarvam) {
     String sarvamLang = sarvamSttLangCode();
     part2 =
@@ -243,8 +244,39 @@ String recordAndTranscribe(uint32_t recordSeconds) {
                 (unsigned long)recordSeconds, micSlot, micSlotLocked ? " [cached]" : "",
                 (double)MIC_GAIN, hasPreWake ? "YES" : "NO");
 
-  static int32_t raw[AUDIO_FRAMES * 2];
-  static uint8_t out[UPLOAD_BATCH * 2];
+  constexpr size_t RAW_BYTES = AUDIO_FRAMES * 2 * sizeof(int32_t);
+  constexpr size_t OUT_BYTES = UPLOAD_BATCH * 2;
+  struct SttWorkBufs {
+    int32_t *raw = nullptr;
+    uint8_t *out = nullptr;
+    bool init(size_t rawBytes, size_t outBytes) {
+      raw = (int32_t *)malloc(rawBytes);
+      if (psramFound()) {
+        out = (uint8_t *)heap_caps_malloc(outBytes,
+                                          MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+      }
+      if (!out) {
+        out = (uint8_t *)malloc(outBytes);
+      }
+      return raw != nullptr && out != nullptr;
+    }
+    void release() {
+      if (raw) {
+        free(raw);
+        raw = nullptr;
+      }
+      if (out) {
+        free(out);
+        out = nullptr;
+      }
+    }
+    ~SttWorkBufs() { release(); }
+  };
+  SttWorkBufs workBufs;
+  if (!workBufs.init(RAW_BYTES, OUT_BYTES))
+    return bail("low memory");
+  int32_t *raw = workBufs.raw;
+  uint8_t *out = workBufs.out;
   int outPos = 0;
   uint32_t sent = 0, lastProgress = 0;
   float prevIn = 0, prevOut = 0;
@@ -414,8 +446,12 @@ String recordAndTranscribe(uint32_t recordSeconds) {
   // Stream pre-wake audio from PSRAM ring buffer if available!
   if (hasPreWake) {
     const size_t DRAIN_MAX = 24000;
-    int16_t *drainBuf = (int16_t *)heap_caps_malloc(DRAIN_MAX * sizeof(int16_t),
-                                                     MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    static int16_t *s_psramDrainBuf = nullptr;
+    if (psramFound() && !s_psramDrainBuf) {
+      s_psramDrainBuf = (int16_t *)heap_caps_malloc(
+          DRAIN_MAX * sizeof(int16_t), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    }
+    int16_t *drainBuf = s_psramDrainBuf;
     if (!drainBuf) drainBuf = (int16_t *)malloc(DRAIN_MAX * sizeof(int16_t));
     if (drainBuf) {
       size_t nDrained = preWakeDrain(drainBuf, DRAIN_MAX);
@@ -466,15 +502,15 @@ String recordAndTranscribe(uint32_t recordSeconds) {
         out[outPos++] = pcm & 0xff;
         out[outPos++] = (pcm >> 8) & 0xff;
         sent++;
-        if (outPos >= (int)sizeof(out)) {
+        if (outPos >= (int)OUT_BYTES) {
           if (!writeChunk(client, out, outPos)) {
-            free(drainBuf);
+            if (drainBuf != s_psramDrainBuf) free(drainBuf);
             return bail("upload failed");
           }
           outPos = 0;
         }
       }
-      free(drainBuf);
+      if (drainBuf != s_psramDrainBuf) free(drainBuf);
 
       // Pre-wake audio contains the wake word "Alexa" and any trailing bridge silence.
       // If the user paused after saying "Alexa" (silence at the end of the pre-wake buffer),
@@ -501,7 +537,7 @@ String recordAndTranscribe(uint32_t recordSeconds) {
       return bail("cancelled");
     size_t bytesRead = 0;
     esp_err_t e =
-        i2s_channel_read(rxHandle, raw, sizeof(raw), &bytesRead, 1000);
+        i2s_channel_read(rxHandle, raw, RAW_BYTES, &bytesRead, 1000);
     if (e != ESP_OK)
       return bail("mic read failed");
     int frames = bytesRead / (2 * sizeof(int32_t));
@@ -568,7 +604,7 @@ String recordAndTranscribe(uint32_t recordSeconds) {
       out[outPos++] = pcm & 0xff;
       out[outPos++] = (pcm >> 8) & 0xff;
       sent++;
-      if (outPos >= (int)sizeof(out)) {
+      if (outPos >= (int)OUT_BYTES) {
         if (!writeChunk(client, out, outPos))
           return bail("upload failed");
         outPos = 0;
@@ -628,12 +664,19 @@ String recordAndTranscribe(uint32_t recordSeconds) {
   if (!clientWriteAll(client, (const uint8_t *)chunkTerminator, 5))
     return bail("upload failed");
   client.flush();
+  workBufs.release();
   Serial.println("[STT] Upload complete. Waiting for response...");
   setEmotion(EMOTION_THINKING);
 
-  // Speculatively pre-resolve DNS for active LLM provider while waiting for STT response
+  // Speculatively pre-resolve DNS for active LLM & TTS hosts while waiting for STT response
   if (llmProvider == "groq") ensureDns("api.groq.com");
   else ensureDns("generativelanguage.googleapis.com");
+  String ttsHost, ttsPath;
+  if (ttsProvider == "fish" || ttsProvider == "fishaudio") {
+    if (parseUrl(fishEndpoint, ttsHost, ttsPath)) ensureDns(ttsHost);
+  } else {
+    if (parseUrl(ttsEndpoint, ttsHost, ttsPath)) ensureDns(ttsHost);
+  }
 
   uint32_t waitStart = millis();
   while (!client.available() && client.connected() &&

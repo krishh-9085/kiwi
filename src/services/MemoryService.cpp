@@ -1,6 +1,7 @@
 #include "services/MemoryService.h"
-#include <Preferences.h>
 #include "config/AppConfig.h"
+#include <Preferences.h>
+#include <time.h>
 
 static Preferences memPrefs;
 MemoryProfile kiwiMemory = {"", "", {}, 0, "", 0, false};
@@ -31,9 +32,13 @@ void saveMemory() {
   memPrefs.putString("name", kiwiMemory.userName);
   memPrefs.putString("friends", kiwiMemory.friendsFamily);
   memPrefs.putInt("count", kiwiMemory.memoryCount);
-  for (int i = 0; i < kiwiMemory.memoryCount; i++) {
+  for (int i = 0; i < MAX_PERSISTENT_MEMORIES; i++) {
     String key = "m" + String(i);
-    memPrefs.putString(key.c_str(), kiwiMemory.memories[i]);
+    if (i < kiwiMemory.memoryCount) {
+      memPrefs.putString(key.c_str(), kiwiMemory.memories[i]);
+    } else if (memPrefs.isKey(key.c_str())) {
+      memPrefs.remove(key.c_str());
+    }
   }
   memPrefs.putString("followup", kiwiMemory.pendingFollowUp);
   memPrefs.putBool("f_done", kiwiMemory.followUpTriggered);
@@ -69,6 +74,65 @@ void setFriendsFamily(const String &ff) {
   saveMemory();
 }
 
+static bool isRelationWord(const String &w) {
+  static const char *const rels[] = {
+      "my",       "dost",    "friend",  "best",    "bhai",    "behen",
+      "behan",    "didi",    "bhaiya",  "sister",  "brother", "mom",
+      "dad",      "mummy",   "papa",    "mother",  "father",  "bhatija",
+      "bhatiji",  "bhanja",  "bhanji",  "chacha",  "chachi",  "mama",
+      "mami",     "dada",    "dadi",    "nana",    "nani",    "bua",
+      "fufa",     "mausa",   "mausi",   "bhabhi",  "jija",    "cousin",
+      "wife",     "husband", "biwi",    "pati",    "beta",    "beti",
+      "son",      "daughter","saheli",  "yaar",    "mitra",   "roommate",
+      "colleague","partner", "nephew",  "niece",   nullptr};
+  for (int i = 0; rels[i] != nullptr; i++) {
+    if (w == rels[i])
+      return true;
+  }
+  return false;
+}
+
+static String extractPersonKey(const String &rawToken) {
+  String s = rawToken;
+  int p = s.indexOf('(');
+  if (p >= 0) {
+    s = s.substring(0, p);
+  }
+  s.toLowerCase();
+  s.trim();
+  String kept;
+  int i = 0;
+  while (i < (int)s.length()) {
+    while (i < (int)s.length() && s[i] == ' ')
+      i++;
+    if (i >= (int)s.length())
+      break;
+    int sp = s.indexOf(' ', i);
+    String word = (sp < 0) ? s.substring(i) : s.substring(i, sp);
+    i = (sp < 0) ? (int)s.length() : (sp + 1);
+    if (!isRelationWord(word)) {
+      if (kept.length() > 0)
+        kept += ' ';
+      kept += word;
+    }
+  }
+  if (kept.length() > 0)
+    return kept;
+  return s;
+}
+
+static String stripDatePrefix(const String &s) {
+  if (s.startsWith("[")) {
+    int close = s.indexOf("] ");
+    if (close > 0 && close <= 10) {
+      String rest = s.substring(close + 2);
+      rest.trim();
+      return rest;
+    }
+  }
+  return s;
+}
+
 void addFriendOrFamilyNoSave(const String &entryIn) {
   String entry = entryIn;
   entry.trim();
@@ -79,22 +143,58 @@ void addFriendOrFamilyNoSave(const String &entryIn) {
     entry.remove(entry.length() - 1);
     entry.trim();
   }
-
-  String lowerEntry = entry;
-  lowerEntry.toLowerCase();
-  String lowerExisting = kiwiMemory.friendsFamily;
-  lowerExisting.toLowerCase();
-
-  // Avoid exact or substring duplicate in the list
-  if (lowerExisting.indexOf(lowerEntry) >= 0) {
+  if (!entry.length())
     return;
+
+  String newKey = extractPersonKey(entry);
+  String lowerNew = entry;
+  lowerNew.toLowerCase();
+
+  const int MAX_ENTRIES = 24;
+  String items[MAX_ENTRIES];
+  int count = 0;
+  bool updated = false;
+
+  int start = 0;
+  while (start < (int)kiwiMemory.friendsFamily.length() && count < MAX_ENTRIES) {
+    int comma = kiwiMemory.friendsFamily.indexOf(',', start);
+    String tok = (comma < 0) ? kiwiMemory.friendsFamily.substring(start)
+                             : kiwiMemory.friendsFamily.substring(start, comma);
+    tok.trim();
+    start = (comma < 0) ? (int)kiwiMemory.friendsFamily.length() : (comma + 1);
+    if (!tok.length())
+      continue;
+
+    String lowerTok = tok;
+    lowerTok.toLowerCase();
+    String tokKey = extractPersonKey(tok);
+    if (lowerTok == lowerNew) {
+      return; // Exact match already present
+    }
+    if (newKey.length() > 0 && tokKey == newKey) {
+      // Upgrade short entry with richer relation context if longer
+      if (entry.length() > tok.length()) {
+        items[count++] = entry;
+        updated = true;
+      } else {
+        return;
+      }
+    } else {
+      items[count++] = tok;
+    }
   }
 
-  if (kiwiMemory.friendsFamily.length() > 0) {
-    kiwiMemory.friendsFamily += ", " + entry;
-  } else {
-    kiwiMemory.friendsFamily = entry;
+  if (!updated && count < MAX_ENTRIES) {
+    items[count++] = entry;
   }
+
+  String rebuilt;
+  for (int i = 0; i < count; i++) {
+    if (i > 0)
+      rebuilt += ", ";
+    rebuilt += items[i];
+  }
+  kiwiMemory.friendsFamily = rebuilt;
   Serial.printf("[MEMORY] Added to Friends & Family: %s (Now: '%s')\n",
                 entry.c_str(), kiwiMemory.friendsFamily.c_str());
 }
@@ -108,16 +208,26 @@ String getFriendsFamily() {
   return kiwiMemory.friendsFamily;
 }
 
-bool addMemoryFactNoSave(const String &factIn) {
+bool addMemoryFactNoSave(const String &factIn, bool stampDate) {
   String fact = factIn;
   fact.trim();
   if (!fact.length())
     return false;
 
-  // Check if fact is already present
+  String coreNew = stripDatePrefix(fact);
+  // Check if fact is already present (ignoring optional date prefix)
   for (int i = 0; i < kiwiMemory.memoryCount; i++) {
-    if (kiwiMemory.memories[i].equalsIgnoreCase(fact))
+    if (stripDatePrefix(kiwiMemory.memories[i]).equalsIgnoreCase(coreNew))
       return false;
+  }
+
+  if (stampDate && timeSynced && !fact.startsWith("[")) {
+    struct tm ti;
+    if (getLocalTime(&ti, 5)) {
+      char dateBuf[16];
+      strftime(dateBuf, sizeof(dateBuf), "[%d %b] ", &ti);
+      fact = String(dateBuf) + fact;
+    }
   }
 
   // If memory is full, shift older memories out (FIFO)
@@ -134,7 +244,7 @@ bool addMemoryFactNoSave(const String &factIn) {
 }
 
 bool addMemoryFact(const String &factIn) {
-  if (addMemoryFactNoSave(factIn)) {
+  if (addMemoryFactNoSave(factIn, true)) {
     saveMemory();
     return true;
   }
@@ -147,7 +257,21 @@ void removeMemoryFact(int index) {
   for (int i = index; i < kiwiMemory.memoryCount - 1; i++) {
     kiwiMemory.memories[i] = kiwiMemory.memories[i + 1];
   }
+  kiwiMemory.memories[kiwiMemory.memoryCount - 1] = "";
   kiwiMemory.memoryCount--;
+  saveMemory();
+}
+
+void syncMemoryFacts(const String *facts, int count) {
+  kiwiMemory.memoryCount = 0;
+  for (int i = 0; i < MAX_PERSISTENT_MEMORIES; i++) {
+    kiwiMemory.memories[i] = "";
+  }
+  if (facts && count > 0) {
+    for (int i = 0; i < count; i++) {
+      addMemoryFactNoSave(facts[i], false);
+    }
+  }
   saveMemory();
 }
 
@@ -175,8 +299,8 @@ String getFormattedMemoryPrompt() {
   if (kiwiMemory.friendsFamily.length() > 0) {
     p += "User's Friends & Family List: [" + kiwiMemory.friendsFamily +
          "]. IMPORTANT RULES FOR FRIENDS & FAMILY: "
-         "(A) You personally know each person in this list and their exact relationship to the user (e.g. bhatija/nephew, sister, brother, friend). "
-         "(B) Whenever user mentions, asks about, or jokes about anyone in this list (e.g. 'Yunay pagal hai na?', 'Rohan kaisa hai?'), ALWAYS answer in the context of that specific family member/friend and their relation to the user! "
+         "(A) You personally know each person in this list, their relationship to the user, AND any parent/spouse/family links noted inside '(relation - detail)' or in Known facts. Combine them to know who is whose parent, child, spouse, or sibling. "
+         "(B) Whenever user mentions, asks about, or jokes about anyone in this list (e.g. 'Yunay kiska beta hai?', 'Rohan kaisa hai?'), ALWAYS answer using that person's exact family/friend connections! "
          "(C) NEVER confuse a family member's name with yourself (Kiwi). The user is talking about that person, NOT calling you that name or accusing you. Reply warmly, playfully, and affectionately like a close companion who knows their family. ";
   }
   if (kiwiMemory.memoryCount > 0) {
@@ -187,9 +311,10 @@ String getFormattedMemoryPrompt() {
   }
   p += "CRITICAL LEARNING & MEMORY RULES: "
        "1. NEVER save transient requests, jokes, or queries (e.g. NEVER output '[MEM: Story requested]', '[MEM: asked for joke]', etc.). "
-       "2. If user shares a family member or friend's name (e.g. bua, chacha, mama, dadi, dada, mummy, papa, sister, brother, dost, etc.), reply warmly AND append '[MEM: FAMILY: <relation> <name>]' at the very end so it is added to their Friends & Family list (e.g. '[MEM: FAMILY: dadi Raj]'). "
+       "2. If user shares a family member/friend OR clarifies who someone's parent/spouse/child is, reply warmly AND append '[MEM: FAMILY: <Name> (<relation>)]' at the end. If that person already exists in Friends & Family (e.g. 'Yunay (Bhatija)') and user adds a parent/spouse link, keep BOTH in one entry like '[MEM: FAMILY: Yunay (Bhatija - Yash & Aditi's son)]'. "
        "3. If user shares their own name, append '[MEM: Name is <Name>]'. "
-       "4. ONLY save real, meaningful personal life facts (e.g. upcoming exam tomorrow, favorite hobby, pet name, likes black coffee) or when user explicitly says 'yaad rakhna', append '[MEM: <concise fact>]'. ";
+       "4. ONLY save real, meaningful personal life facts (e.g. Papa likes ginger tea, upcoming exam tomorrow, pet name) or when user says 'yaad rakhna', append '[MEM: <concise fact>]'. "
+       "5. If user mentions an upcoming event, test, interview, trip, or doctor visit, optionally append '[FOLLOWUP: <short warm check-in question in user's language>]' at the end so Kiwi checks in later. ";
   return p;
 }
 
@@ -199,9 +324,16 @@ bool hasPendingFollowUp() {
 
 String popPendingFollowUp() {
   String q = kiwiMemory.pendingFollowUp;
+  kiwiMemory.pendingFollowUp = "";
   kiwiMemory.followUpTriggered = true;
   saveMemory();
   return q;
+}
+
+void clearPendingFollowUp() {
+  kiwiMemory.pendingFollowUp = "";
+  kiwiMemory.followUpTriggered = false;
+  saveMemory();
 }
 
 void setPendingFollowUpNoSave(const String &q) {
@@ -218,6 +350,71 @@ void setPendingFollowUpNoSave(const String &q) {
 void setPendingFollowUp(const String &q) {
   setPendingFollowUpNoSave(q);
   saveMemory();
+}
+
+static bool isFactSentenceWord(const String &w) {
+  static const char *const markers[] = {
+      "is",      "was",     "are",     "am",      "likes",  "loves",
+      "like",    "love",    "has",     "have",    "had",    "wants",
+      "went",    "going",   "lives",   "works",   "pasand", "hai",
+      "hain",    "tha",     "thi",     "ka",      "ki",     "ke",
+      "aur",     "and",     "ko",      "exam",    "test",   "birthday",
+      "tomorrow","kal",     "aaj",     nullptr};
+  for (int i = 0; markers[i] != nullptr; i++) {
+    if (w == markers[i])
+      return true;
+  }
+  return w.endsWith("'s");
+}
+
+static bool looksLikeShortFamilyEntry(const String &lowerFact) {
+  int lp = lowerFact.indexOf('(');
+  int rp = lowerFact.indexOf(')');
+  bool hasParens = (lp > 0 && rp > lp);
+
+  int totalWords = 0;
+  int wordsBeforeParen = 0;
+  bool hasRel = false;
+  bool hasSentenceBeforeParen = false;
+  bool hasSentenceAny = false;
+
+  int n = lowerFact.length();
+  int i = 0;
+  while (i < n) {
+    while (i < n) {
+      char c = lowerFact[i];
+      if ((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '\'')
+        break;
+      i++;
+    }
+    if (i >= n)
+      break;
+    int start = i;
+    while (i < n) {
+      char c = lowerFact[i];
+      if (!((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '\''))
+        break;
+      i++;
+    }
+    String w = lowerFact.substring(start, i);
+    totalWords++;
+    if (hasParens && start < lp)
+      wordsBeforeParen++;
+    if (isRelationWord(w))
+      hasRel = true;
+    if (isFactSentenceWord(w)) {
+      hasSentenceAny = true;
+      if (hasParens && start < lp)
+        hasSentenceBeforeParen = true;
+    }
+  }
+
+  if (!hasRel)
+    return false;
+  if (hasParens) {
+    return (wordsBeforeParen >= 1 && wordsBeforeParen <= 3 && !hasSentenceBeforeParen);
+  }
+  return (totalWords <= 4 && !hasSentenceAny);
 }
 
 void parseAndSaveMemoriesFromLlm(String &resp) {
@@ -273,21 +470,11 @@ void parseAndSaveMemoriesFromLlm(String &resp) {
           continue;
         }
 
-        bool isFamily = (lowerF.indexOf("bua") >= 0 || lowerF.indexOf("chacha") >= 0 ||
-            lowerF.indexOf("mama") >= 0 || lowerF.indexOf("mami") >= 0 ||
-            lowerF.indexOf("dadi") >= 0 || lowerF.indexOf("dada") >= 0 ||
-            lowerF.indexOf("nana") >= 0 || lowerF.indexOf("nani") >= 0 ||
-            lowerF.indexOf("mummy") >= 0 || lowerF.indexOf("papa") >= 0 ||
-            lowerF.indexOf("mother") >= 0 || lowerF.indexOf("father") >= 0 ||
-            lowerF.indexOf("brother") >= 0 || lowerF.indexOf("sister") >= 0 ||
-            lowerF.indexOf("bhai") >= 0 || lowerF.indexOf("behen") >= 0 ||
-            lowerF.indexOf("friend") >= 0 || lowerF.indexOf("dost") >= 0);
-
-        if (isFamily) {
+        if (looksLikeShortFamilyEntry(lowerF)) {
           addFriendOrFamilyNoSave(fact);
           modified = true;
         } else {
-          if (addMemoryFactNoSave(fact)) {
+          if (addMemoryFactNoSave(fact, true)) {
             modified = true;
           }
         }

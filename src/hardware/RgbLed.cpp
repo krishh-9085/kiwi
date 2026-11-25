@@ -19,6 +19,20 @@ static uint8_t s_overrideG = 0;
 static uint8_t s_overrideB = 0;
 
 static uint32_t s_lastUpdate = 0;
+static uint8_t s_lastSentR = 0;
+static uint8_t s_lastSentG = 0;
+static uint8_t s_lastSentB = 0;
+static bool s_hasSentRgb = false;
+
+static inline void rgbWriteIfChanged(uint8_t r, uint8_t g, uint8_t b) {
+  if (!s_hasSentRgb || r != s_lastSentR || g != s_lastSentG || b != s_lastSentB) {
+    s_lastSentR = r;
+    s_lastSentG = g;
+    s_lastSentB = b;
+    s_hasSentRgb = true;
+    rgbLedWrite(PIN_RGB_LED, r, g, b);
+  }
+}
 
 void rgbLedInit() {
   pinMode(PIN_RGB_LED, OUTPUT);
@@ -62,7 +76,7 @@ void rgbLedShow(uint8_t r, uint8_t g, uint8_t b) {
   s_currR = (float)r;
   s_currG = (float)g;
   s_currB = (float)b;
-  rgbLedWrite(PIN_RGB_LED, r, g, b);
+  rgbWriteIfChanged(r, g, b);
 }
 
 void rgbLedUpdate() {
@@ -217,6 +231,6 @@ void rgbLedUpdate() {
   uint8_t outG = (uint8_t)fminf(fmaxf(s_currG, 0.0f), 255.0f);
   uint8_t outB = (uint8_t)fminf(fmaxf(s_currB, 0.0f), 255.0f);
 
-  rgbLedWrite(PIN_RGB_LED, outR, outG, outB);
+  rgbWriteIfChanged(outR, outG, outB);
 }
 

@@ -210,6 +210,11 @@ export default function SettingsView({
   })
 
   const [facts, setFacts] = useState([])
+  const [newFamName, setNewFamName] = useState('')
+  const [newFamRel, setNewFamRel] = useState('')
+  const [editingFamIdx, setEditingFamIdx] = useState(null)
+  const [pendingFollowUp, setPendingFollowUp] = useState('')
+  const [confirmClearMem, setConfirmClearMem] = useState(false)
   const [showAllKeys, setShowAllKeys] = useState(false)
   const [showPass, setShowPass] = useState(false)
   const [scanningWifi, setScanningWifi] = useState(false)
@@ -288,8 +293,8 @@ export default function SettingsView({
         prompt: config.prompt != null ? config.prompt : (config.systemPrompt != null ? config.systemPrompt : prev.prompt),
 
         // Memory
-        mem_name: config.memory?.name || config.ownerName || prev.mem_name,
-        mem_friends: config.memory?.friends || prev.mem_friends,
+        mem_name: config.memory?.name ?? config.ownerName ?? prev.mem_name,
+        mem_friends: config.memory?.friends ?? prev.mem_friends,
 
         // Hidden live preservation
         vol: config.volume ?? config.speakerVolume ?? prev.vol,
@@ -313,6 +318,7 @@ export default function SettingsView({
     if (config.memory?.facts && Array.isArray(config.memory.facts)) {
       setFacts(config.memory.facts)
     }
+    setPendingFollowUp(config.memory?.followUp || '')
   }, [config])
 
   const handleChange = (e) => {
@@ -350,17 +356,117 @@ export default function SettingsView({
     setScanningWifi(false)
   }
 
+  const familyMembers = String(formData.mem_friends || '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean)
+
+  const formatFamilyMember = (raw) => {
+    const m = raw.match(/^(.+?)\s*\(([^)]+)\)\s*$/)
+    return m ? { name: m[1].trim(), rel: m[2].trim(), raw } : { name: raw, rel: '', raw }
+  }
+
+  const handleEditFamily = (idx) => {
+    if (editingFamIdx === idx) {
+      setEditingFamIdx(null)
+      setNewFamName('')
+      setNewFamRel('')
+      return
+    }
+    const parsed = formatFamilyMember(familyMembers[idx] || '')
+    setEditingFamIdx(idx)
+    setNewFamName(parsed.name)
+    setNewFamRel(parsed.rel)
+  }
+
+  const handleCancelEditFamily = () => {
+    setEditingFamIdx(null)
+    setNewFamName('')
+    setNewFamRel('')
+  }
+
+  const handleAddFamily = () => {
+    const name = newFamName.trim().replace(/,/g, '')
+    const rel = newFamRel.trim().replace(/[(),]/g, '')
+    if (!name) return
+    const entry = rel ? `${name} (${rel})` : name
+    const key = name.toLowerCase()
+    const nextList = [...familyMembers]
+    let existingIdx = -1
+    if (editingFamIdx !== null && editingFamIdx >= 0 && editingFamIdx < nextList.length) {
+      existingIdx = editingFamIdx
+    } else {
+      existingIdx = nextList.findIndex(
+        (item) => formatFamilyMember(item).name.toLowerCase() === key
+      )
+    }
+    if (existingIdx >= 0) {
+      nextList[existingIdx] = entry
+    } else {
+      nextList.push(entry)
+    }
+    const updated = nextList.join(', ')
+    setFormData((prev) => ({ ...prev, mem_friends: updated }))
+    setEditingFamIdx(null)
+    setNewFamName('')
+    setNewFamRel('')
+    if (onTriggerAction) onTriggerAction('/do?setfriends=' + encodeURIComponent(updated))
+    onToast(existingIdx >= 0 ? 'Updated family/friend!' : 'Added to family & friends!')
+  }
+
+  const handleRemoveFamily = (idx) => {
+    const updated = familyMembers.filter((_, i) => i !== idx).join(', ')
+    setFormData((prev) => ({ ...prev, mem_friends: updated }))
+    if (editingFamIdx !== null) {
+      setEditingFamIdx(null)
+      setNewFamName('')
+      setNewFamRel('')
+    }
+    if (onTriggerAction) onTriggerAction('/do?setfriends=' + encodeURIComponent(updated))
+    onToast('Removed member!')
+  }
+
   const handleAddFact = () => {
     const txt = formData.new_mem.trim()
     if (!txt) return
+    const strippedNew = txt.replace(/^\[\d{1,2}\s+[A-Za-z]{3}\]\s*/, '').toLowerCase()
+    if (facts.some((f) => f.replace(/^\[\d{1,2}\s+[A-Za-z]{3}\]\s*/, '').toLowerCase() === strippedNew)) {
+      onToast('Already in memory!')
+      return
+    }
     setFacts((prev) => [...prev, txt])
     setFormData((prev) => ({ ...prev, new_mem: '' }))
-    onToast('Fact queued to save!')
+    if (onTriggerAction) onTriggerAction('/do?addmem=' + encodeURIComponent(txt))
+    onToast('Fact saved to Kiwi memory!')
   }
 
   const handleDeleteFact = (idx) => {
     setFacts((prev) => prev.filter((_, i) => i !== idx))
+    if (onTriggerAction) onTriggerAction('/do?delmem=' + idx)
     onToast('Fact removed!')
+  }
+
+  const handleClearFollowUp = () => {
+    setPendingFollowUp('')
+    if (onTriggerAction) onTriggerAction('/do?clearfollowup=1')
+    onToast('Follow-up dismissed!')
+  }
+
+  const handleClearAllMemory = () => {
+    if (!confirmClearMem) {
+      setConfirmClearMem(true)
+      setTimeout(() => setConfirmClearMem(false), 4000)
+      return
+    }
+    setConfirmClearMem(false)
+    setEditingFamIdx(null)
+    setNewFamName('')
+    setNewFamRel('')
+    setFormData((prev) => ({ ...prev, mem_name: '', mem_friends: '', new_mem: '' }))
+    setFacts([])
+    setPendingFollowUp('')
+    if (onTriggerAction) onTriggerAction('/do?clearmem=1')
+    onToast('All diary memories cleared!')
   }
 
   const handleSubmit = async (e) => {
@@ -370,6 +476,7 @@ export default function SettingsView({
     Object.entries(formData).forEach(([k, v]) => {
       payload.append(k, String(v))
     })
+    payload.append('facts_present', '1')
     facts.forEach((f) => payload.append('facts[]', f))
 
     try {
@@ -1159,12 +1266,47 @@ export default function SettingsView({
 
       {/* ================= CARD 8: PERSONAL LIFE DIARY & LONG-TERM MEMORY ================= */}
       <div className="flux-white-card">
-        <div className="flux-card-header">
+        <div className="flux-card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
           <span className="flux-card-title">
             <User size={16} />
             <span>Personal Life Diary &amp; Long-Term Memory</span>
           </span>
+          <button
+            type="button"
+            onClick={handleClearAllMemory}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: '5px',
+              padding: '5px 11px', borderRadius: '999px', fontSize: '11px', fontWeight: 700, cursor: 'pointer',
+              background: confirmClearMem ? 'rgba(244, 63, 94, 0.14)' : 'var(--card-muted)',
+              border: confirmClearMem ? '1px solid #F43F5E' : '1px solid var(--border-light)',
+              color: confirmClearMem ? '#F43F5E' : 'var(--text-muted)'
+            }}
+          >
+            <Trash2 size={12} />
+            <span>{confirmClearMem ? 'Confirm Clear?' : 'Clear Memory'}</span>
+          </button>
         </div>
+
+        {pendingFollowUp && (
+          <div style={{
+            marginBottom: '14px', padding: '10px 14px', borderRadius: '12px',
+            background: 'rgba(56, 189, 248, 0.08)', border: '1px solid rgba(56, 189, 248, 0.25)',
+            display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px'
+          }}>
+            <div style={{ fontSize: '12px', color: 'var(--text-dark)' }}>
+              <span style={{ fontWeight: 700, color: '#0284C7', marginRight: '6px' }}>Next Check-In:</span>
+              <span>{pendingFollowUp}</span>
+            </div>
+            <button
+              type="button"
+              onClick={handleClearFollowUp}
+              title="Dismiss follow-up"
+              style={{ background: 'transparent', border: 'none', color: '#F43F5E', cursor: 'pointer', fontWeight: 800, padding: '2px 6px', flexShrink: 0 }}
+            >
+              ✕
+            </button>
+          </div>
+        )}
 
         <div style={{ marginBottom: '14px' }}>
           <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>
@@ -1181,48 +1323,156 @@ export default function SettingsView({
         </div>
 
         <div style={{ marginBottom: '14px' }}>
-          <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>
-            Friends &amp; Family Members
+          <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: '6px' }}>
+            Friends &amp; Family Members ({familyMembers.length})
           </label>
+
+          {familyMembers.length > 0 ? (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '10px' }}>
+              {familyMembers.map((member, idx) => {
+                const { name, rel } = formatFamilyMember(member)
+                const relParts = rel ? rel.split(/\s*(?:\|| - )\s*/).filter(Boolean) : []
+                const baseRel = relParts[0] || ''
+                const linkNote = relParts.slice(1).join(' · ')
+                const isEditing = editingFamIdx === idx
+                return (
+                  <span
+                    key={idx}
+                    style={{
+                      display: 'inline-flex', alignItems: 'center', gap: '4px',
+                      padding: '4px 9px', borderRadius: '999px', fontSize: '12px',
+                      background: isEditing ? 'rgba(14, 165, 233, 0.14)' : 'var(--card-subtle)',
+                      border: isEditing ? '1px solid #0EA5E9' : '1px solid var(--border-light)',
+                      color: 'var(--text-dark)'
+                    }}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => handleEditFamily(idx)}
+                      title="Tap to edit"
+                      style={{
+                        display: 'inline-flex', alignItems: 'center', gap: '5px', flexWrap: 'wrap',
+                        background: 'transparent', border: 'none', padding: 0, cursor: 'pointer',
+                        color: 'inherit', fontSize: 'inherit', textAlign: 'left'
+                      }}
+                    >
+                      <span style={{ fontWeight: 600 }}>{name}</span>
+                      {baseRel && <span style={{ color: 'var(--text-muted)', fontSize: '11px' }}>({baseRel})</span>}
+                      {linkNote && <span style={{ color: '#0EA5E9', fontSize: '10px', fontWeight: 600 }}>· {linkNote}</span>}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveFamily(idx)}
+                      title="Remove member"
+                      style={{ background: 'transparent', border: 'none', color: '#F43F5E', cursor: 'pointer', fontWeight: 800, padding: '0 2px', lineHeight: 1 }}
+                    >
+                      ✕
+                    </button>
+                  </span>
+                )
+              })}
+            </div>
+          ) : (
+            <div style={{ color: 'var(--text-muted)', fontSize: '12px', marginBottom: '8px' }}>
+              No family/friends added yet — add below or tell Kiwi in voice!
+            </div>
+          )}
+
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '8px' }}>
+            <input
+              type="text"
+              value={newFamName}
+              onChange={(e) => setNewFamName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') { e.preventDefault(); handleAddFamily() }
+                if (e.key === 'Escape' && editingFamIdx !== null) { e.preventDefault(); handleCancelEditFamily() }
+              }}
+              placeholder="Name (e.g. Yunay)"
+              style={{ flex: '1 1 120px', padding: '9px 14px', borderRadius: '999px', background: 'var(--card-muted)', border: '1px solid var(--border-light)', color: 'var(--text-dark)', fontSize: '12px', outline: 'none' }}
+            />
+            <input
+              type="text"
+              value={newFamRel}
+              onChange={(e) => setNewFamRel(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') { e.preventDefault(); handleAddFamily() }
+                if (e.key === 'Escape' && editingFamIdx !== null) { e.preventDefault(); handleCancelEditFamily() }
+              }}
+              placeholder="Relation (e.g. Bhatija - Yash & Aditi's son)"
+              style={{ flex: '1 1 170px', padding: '9px 14px', borderRadius: '999px', background: 'var(--card-muted)', border: '1px solid var(--border-light)', color: 'var(--text-dark)', fontSize: '12px', outline: 'none' }}
+            />
+            <button type="button" onClick={handleAddFamily} className="flux-btn" style={{ padding: '0 16px', borderRadius: '999px', minHeight: '36px' }}>
+              <Plus size={14} />
+              <span>{editingFamIdx !== null ? 'Update' : 'Add'}</span>
+            </button>
+            {editingFamIdx !== null && (
+              <button
+                type="button"
+                onClick={handleCancelEditFamily}
+                style={{
+                  padding: '0 12px', borderRadius: '999px', minHeight: '36px', fontSize: '12px', fontWeight: 600, cursor: 'pointer',
+                  background: 'var(--card-muted)', border: '1px solid var(--border-light)', color: 'var(--text-muted)'
+                }}
+              >
+                Cancel
+              </button>
+            )}
+          </div>
+
           <input
             type="text"
             name="mem_friends"
             value={formData.mem_friends}
-            onChange={handleChange}
-            placeholder="e.g. Rohan (best friend), Priya (sister), Papa, Mummy"
-            style={{ width: '100%', padding: '11px 16px', borderRadius: '12px', background: 'var(--card-muted)', border: '1px solid var(--border-light)', color: 'var(--text-dark)', fontSize: '13px', outline: 'none' }}
+            onChange={(e) => {
+              if (editingFamIdx !== null) setEditingFamIdx(null)
+              handleChange(e)
+            }}
+            placeholder="Comma-separated: Rohan (best friend), Priya (sister), Papa"
+            style={{ width: '100%', padding: '9px 14px', borderRadius: '10px', background: 'var(--card-muted)', border: '1px solid var(--border-light)', color: 'var(--text-muted)', fontSize: '12px', outline: 'none' }}
           />
           <small style={{ display: 'block', marginTop: '4px', color: 'var(--text-muted)', fontSize: '12px' }}>
-            Kiwi remembers your friends, family and their relationship with you!
+            Tap any chip to edit. Use &ldquo;Role - Detail&rdquo; (e.g. Bhatija - Yash &amp; Aditi&apos;s son) to link family members!
           </small>
         </div>
 
         {/* Facts List */}
         <div style={{ marginBottom: '14px' }}>
           <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: '6px' }}>
-            Facts Kiwi Remembers About You
+            Facts Kiwi Remembers About You ({facts.length}/16)
           </label>
           <div style={{
             background: 'var(--card-subtle)', border: '1px solid var(--border-light)', borderRadius: '12px',
-            padding: '10px 14px', maxHeight: '180px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '6px'
+            padding: '10px 14px', maxHeight: '190px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '6px'
           }}>
             {facts.length === 0 ? (
               <div style={{ color: 'var(--text-muted)', fontSize: '12px', padding: '6px 0' }}>
                 No memory facts stored yet.
               </div>
             ) : (
-              facts.map((fact, idx) => (
-                <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '12px', color: 'var(--text-dark)' }}>
-                  <span>• {fact}</span>
-                  <button
-                    type="button"
-                    onClick={() => handleDeleteFact(idx)}
-                    style={{ background: 'transparent', border: 'none', color: '#F43F5E', cursor: 'pointer', fontWeight: 800, padding: '2px 6px' }}
-                  >
-                    ✕
-                  </button>
-                </div>
-              ))
+              facts.map((fact, idx) => {
+                const dm = String(fact).match(/^(\[\d{1,2}\s+[A-Za-z]{3}\])\s*(.+)$/)
+                return (
+                  <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', fontSize: '12px', color: 'var(--text-dark)' }}>
+                    <span>
+                      {dm ? (
+                        <>
+                          <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-muted)', marginRight: '6px' }}>{dm[1]}</span>
+                          <span>{dm[2]}</span>
+                        </>
+                      ) : (
+                        <>• {fact}</>
+                      )}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteFact(idx)}
+                      style={{ background: 'transparent', border: 'none', color: '#F43F5E', cursor: 'pointer', fontWeight: 800, padding: '2px 6px', flexShrink: 0 }}
+                    >
+                      ✕
+                    </button>
+                  </div>
+                )
+              })
             )}
           </div>
         </div>
@@ -1238,6 +1488,7 @@ export default function SettingsView({
               name="new_mem"
               value={formData.new_mem}
               onChange={handleChange}
+              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAddFact() } }}
               placeholder="e.g. Coding test tomorrow / Loves chai"
               style={{ flex: 1, padding: '11px 16px', borderRadius: '999px', background: 'var(--card-muted)', border: '1px solid var(--border-light)', color: 'var(--text-dark)', fontSize: '13px', outline: 'none' }}
             />
@@ -1247,7 +1498,7 @@ export default function SettingsView({
             </button>
           </div>
           <small style={{ display: 'block', marginTop: '6px', color: 'var(--text-muted)', fontSize: '12px' }}>
-            Kiwi will remember this during conversations and refer to it when relevant!
+            Kiwi auto-stamps dates and uses follow-up check-ins during natural conversations!
           </small>
         </div>
       </div>

@@ -670,28 +670,40 @@ void handleDoAction() {
   // Memory & Diary Actions
   if (server.hasArg("clearmem")) {
     clearAllMemory();
+    invalidateStatusCache();
     server.send(200, "application/json", "{\"ok\":true,\"cleared\":true}");
     return;
   }
   if (server.hasArg("delmem")) {
     int idx = server.arg("delmem").toInt();
     removeMemoryFact(idx);
+    invalidateStatusCache();
     server.send(200, "application/json", "{\"ok\":true,\"deleted\":true}");
     return;
   }
   if (server.hasArg("addmem")) {
-    addMemoryFact(server.arg("addmem"));
-    server.send(200, "application/json", "{\"ok\":true}");
+    bool added = addMemoryFact(server.arg("addmem"));
+    invalidateStatusCache();
+    server.send(200, "application/json",
+                added ? "{\"ok\":true}" : "{\"ok\":false,\"duplicate\":true}");
     return;
   }
   if (server.hasArg("setname")) {
     setOwnerName(server.arg("setname"));
+    invalidateStatusCache();
     server.send(200, "application/json", "{\"ok\":true}");
     return;
   }
   if (server.hasArg("setfriends")) {
     setFriendsFamily(server.arg("setfriends"));
+    invalidateStatusCache();
     server.send(200, "application/json", "{\"ok\":true}");
+    return;
+  }
+  if (server.hasArg("clearfollowup")) {
+    clearPendingFollowUp();
+    invalidateStatusCache();
+    server.send(200, "application/json", "{\"ok\":true,\"cleared\":true}");
     return;
   }
 

@@ -128,8 +128,7 @@ export default function App() {
       const newStatus = await res.json()
       setStatus(prev => ({
         ...(prev || {}),
-        ...newStatus,
-        logs: newStatus.logs ?? prev?.logs ?? []
+        ...newStatus
       }))
       setConnected(true)
     } catch {
@@ -138,37 +137,13 @@ export default function App() {
           const res2 = await fetch('/status', { signal: AbortSignal.timeout(2000) })
           if (res2.ok) {
             const newStatus = await res2.json()
-            setStatus(prev => ({ ...(prev || {}), ...newStatus, logs: newStatus.logs ?? prev?.logs ?? [] }))
+            setStatus(prev => ({ ...(prev || {}), ...newStatus }))
             setConnected(true)
             return
           }
         } catch {}
       }
       setConnected(false)
-    }
-  }, [getBaseUrl])
-
-  const fetchLogs = useCallback(async () => {
-    try {
-      const url = getBaseUrl() ? `${getBaseUrl()}/logs` : '/logs'
-      const res = await fetch(url, { signal: AbortSignal.timeout(3000) })
-      if (!res.ok) return
-      const logData = await res.json()
-      if (Array.isArray(logData)) {
-        setStatus(prev => prev ? { ...prev, logs: logData } : { logs: logData })
-      }
-    } catch {
-      if (getBaseUrl()) {
-        try {
-          const res2 = await fetch('/logs', { signal: AbortSignal.timeout(2000) })
-          if (res2.ok) {
-            const logData = await res2.json()
-            if (Array.isArray(logData)) {
-              setStatus(prev => prev ? { ...prev, logs: logData } : { logs: logData })
-            }
-          }
-        } catch {}
-      }
     }
   }, [getBaseUrl])
 
@@ -188,21 +163,32 @@ export default function App() {
   }, [getBaseUrl])
 
   useEffect(() => {
-    fetchStatus()
     fetchConfig()
-    if (activeTab === 'live') {
-      fetchLogs()
+    let statusTimer = null
+    const startPolling = () => {
+      if (statusTimer) clearInterval(statusTimer)
+      if (!document.hidden) {
+        fetchStatus()
+        statusTimer = setInterval(fetchStatus, 1500)
+      }
     }
-    const statusTimer = setInterval(fetchStatus, 1500)
-    let logsTimer = null
-    if (activeTab === 'live') {
-      logsTimer = setInterval(fetchLogs, 4000)
+    const handleVisibility = () => {
+      if (document.hidden) {
+        if (statusTimer) {
+          clearInterval(statusTimer)
+          statusTimer = null
+        }
+      } else {
+        startPolling()
+      }
     }
+    startPolling()
+    document.addEventListener('visibilitychange', handleVisibility)
     return () => {
-      clearInterval(statusTimer)
-      if (logsTimer) clearInterval(logsTimer)
+      if (statusTimer) clearInterval(statusTimer)
+      document.removeEventListener('visibilitychange', handleVisibility)
     }
-  }, [fetchStatus, fetchConfig, fetchLogs, activeTab])
+  }, [fetchStatus, fetchConfig])
 
   const triggerAction = async (endpointAndQuery) => {
     try {
@@ -210,8 +196,7 @@ export default function App() {
       const data = await res.json().catch(() => ({}))
       setTimeout(() => {
         fetchStatus()
-        fetchConfig()
-        if (activeTab === 'live') fetchLogs()
+        if (activeTab === 'settings') fetchConfig()
       }, 150)
       return data
     } catch (err) {

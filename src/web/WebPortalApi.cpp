@@ -52,8 +52,6 @@ EyeSkin parseEyeSkinArg(const String &raw) {
 }
 
 void handleStatus() {
-  notifyWebRequest();
-
   uint32_t now = millis();
   // Fast throttle cache: if multiple devices (laptop + phone) poll
   // simultaneously, return cached JSON immediately to eliminate redundant
@@ -173,7 +171,6 @@ void handleStatus() {
 }
 
 void handleLogs() {
-  notifyWebRequest();
   server.sendHeader("Access-Control-Allow-Origin", "*");
   server.sendHeader("Connection", "close");
   server.sendHeader("Cache-Control", "no-cache, no-store, must-revalidate");

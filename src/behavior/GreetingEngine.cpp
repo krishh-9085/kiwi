@@ -74,12 +74,18 @@ static String buildPeriodicGreeting(int period, const String &ownerName) {
   return tpl;
 }
 
+static bool hasActiveLlmKey() {
+  if (llmProvider == "groq") {
+    return groqKey.length() > 0;
+  }
+  return llmKey.length() > 0;
+}
+
 String generateLlmGreeting(int hour, int minute, int wday, const String &ownerName) {
   if (WiFi.status() != WL_CONNECTED) {
     return "";
   }
-  String key = llmKey.length() ? llmKey : groqKey;
-  if (key.length() == 0) {
+  if (!hasActiveLlmKey()) {
     return "";
   }
 
@@ -187,7 +193,7 @@ void checkGreetings() {
   String owner = getOwnerName();
   owner.trim();
   String greeting = "";
-  if (WiFi.status() == WL_CONNECTED && (llmKey.length() || groqKey.length())) {
+  if (WiFi.status() == WL_CONNECTED && hasActiveLlmKey()) {
     greeting = generateLlmGreeting(curHour, timeinfo.tm_min, timeinfo.tm_wday, owner);
   }
   if (greeting.length() == 0) {

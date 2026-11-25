@@ -99,9 +99,42 @@ int httpReadBlock(HttpStream &s, uint8_t *buf, size_t maxLen) {
 }
 
 bool ensureDns(const String &host) {
+  if (!host.length() || WiFi.status() != WL_CONNECTED)
+    return false;
+
+  struct DnsCacheSlot {
+    String host;
+    IPAddress ip;
+    uint32_t cachedAt;
+    bool valid;
+  };
+  static DnsCacheSlot cache[4];
+  uint32_t now = millis();
+
+  for (int i = 0; i < 4; i++) {
+    if (cache[i].valid && cache[i].host == host &&
+        (now - cache[i].cachedAt) < 300000UL) {
+      return true;
+    }
+  }
+
   IPAddress ip;
   if (WiFi.hostByName(host.c_str(), ip) == 1) {
     Serial.printf("[DNS] %s -> %s\n", host.c_str(), ip.toString().c_str());
+    int slot = 0;
+    uint32_t oldestAge = 0;
+    for (int i = 0; i < 4; i++) {
+      if (!cache[i].valid || cache[i].host == host) {
+        slot = i;
+        break;
+      }
+      uint32_t age = now - cache[i].cachedAt;
+      if (age >= oldestAge) {
+        oldestAge = age;
+        slot = i;
+      }
+    }
+    cache[slot] = {host, ip, now, true};
     return true;
   }
   Serial.println("[DNS] Failed, trying 8.8.8.8 / 1.1.1.1");
@@ -111,6 +144,7 @@ bool ensureDns(const String &host) {
   if (WiFi.hostByName(host.c_str(), ip) == 1) {
     Serial.printf("[DNS] %s -> %s (fallback)\n", host.c_str(),
                   ip.toString().c_str());
+    cache[0] = {host, ip, millis(), true};
     return true;
   }
   Serial.println("[DNS] Still failing");

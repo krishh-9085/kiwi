@@ -3,6 +3,7 @@
 #include "face/FaceEngine.h"
 #include "hardware/AudioEngine.h"
 #include "services/AiService.h"
+#include "services/AiChatHistory.h"
 #include "services/AiLlmService.h"
 #include "services/MemoryService.h"
 #include "behavior/ActionExecutor.h"
@@ -210,15 +211,37 @@ void checkAutonomousBoredom() {
     lastUserInteractionAt = now;
     resetBoredomInterval();
 
-    // Prioritize pending life follow-up question if remembered!
+    // Prioritize pending life follow-up question when online & TTS-ready
     if (hasPendingFollowUp()) {
-      String q = popPendingFollowUp();
-      Serial.printf("[MEMORY] Triggering pending life follow-up: %s\n", q.c_str());
-      setEmotion(EMOTION_CURIOUS);
-      speakText(q);
-      setEmotion(EMOTION_HAPPY);
-      returnIdleAt = millis() + 3000;
-      return;
+      String ttsActiveKey = (ttsProvider == "fish" || ttsProvider == "fishaudio") ? fishKey : ttsKey;
+      if (WiFi.status() == WL_CONNECTED && speakerVolume > 0 && ttsActiveKey.length() > 0) {
+        String q = kiwiMemory.pendingFollowUp;
+        q.trim();
+        if (q.length() > 0) {
+          Serial.printf("[MEMORY] Triggering pending life follow-up: %s\n", q.c_str());
+          busyProcessing = true;
+          cancelRequest = false;
+          robotStateDesc = "Checking in...";
+          setEmotion(EMOTION_CURIOUS);
+
+          bool spoken = speakText(q);
+          if (spoken && !cancelRequest) {
+            popPendingFollowUp();
+            addChatHistory("Check in on my recent update.", q);
+            lastLlmAnswer = q;
+            addTerminalLog("[FOLLOWUP] Kiwi: \"" + q + "\"");
+            setEmotion(EMOTION_HAPPY);
+            returnIdleAt = millis() + 3000;
+          } else if (!cancelRequest) {
+            setEmotion(EMOTION_IDLE);
+            returnIdleAt = 0;
+          }
+
+          busyProcessing = false;
+          robotStateDesc = "Ready";
+          return;
+        }
+      }
     }
 
     Serial.printf("[BOREDOM] ~%d mins idle on desk! Triggering AI dynamic desk chatter...\n", boredomMinutes);

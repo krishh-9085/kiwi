@@ -311,9 +311,24 @@ void handleSave() {
   }
 
   if (server.hasArg("mem_name"))
-    setOwnerName(server.arg("mem_name"));
+    setOwnerNameNoSave(server.arg("mem_name"));
   if (server.hasArg("mem_friends"))
-    setFriendsFamily(server.arg("mem_friends"));
+    setFriendsFamilyNoSave(server.arg("mem_friends"));
+  if (server.hasArg("mem_name") || server.hasArg("mem_friends"))
+    saveMemory();
+  if (server.hasArg("facts_present")) {
+    String parsedFacts[MAX_PERSISTENT_MEMORIES];
+    int factCount = 0;
+    for (int i = 0; i < server.args() && factCount < MAX_PERSISTENT_MEMORIES; i++) {
+      if (server.argName(i) == "facts[]") {
+        String f = server.arg(i);
+        f.trim();
+        if (f.length() > 0)
+          parsedFacts[factCount++] = f;
+      }
+    }
+    syncMemoryFacts(parsedFacts, factCount);
+  }
   if (server.hasArg("new_mem") && server.arg("new_mem").length() > 0)
     addMemoryFact(server.arg("new_mem"));
 

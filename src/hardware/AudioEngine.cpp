@@ -692,7 +692,10 @@ void detectMicSlot() {
   if (micSlotLocked || !rxHandle)
     return;
 
-  static int32_t tmp[AUDIO_FRAMES * 2];
+  const size_t tmpSamples = AUDIO_FRAMES * 2;
+  int32_t *tmp = (int32_t *)malloc(tmpSamples * sizeof(int32_t));
+  if (!tmp)
+    return;
   float pL = 0, pR = 0, oL = 0, oR = 0;
   double sumL = 0, sumR = 0;
   uint32_t seen = 0, counted = 0;
@@ -700,7 +703,7 @@ void detectMicSlot() {
 
   while (counted < SAMPLE_RATE / 4 && millis() - t0 < 900) {
     size_t br = 0;
-    if (i2s_channel_read(rxHandle, tmp, sizeof(tmp), &br, 200) != ESP_OK ||
+    if (i2s_channel_read(rxHandle, tmp, tmpSamples * sizeof(int32_t), &br, 200) != ESP_OK ||
         br == 0)
       break;
 
@@ -724,6 +727,8 @@ void detectMicSlot() {
     }
     pumpUI();
   }
+
+  free(tmp);
 
   if (counted < 1000)
     return;

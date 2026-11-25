@@ -14,8 +14,6 @@ static bool eyeDoubleBlinkPending = false;
 uint32_t petMoodT0 = 0;
 uint32_t flourishT0 = 0;
 uint32_t nextIdleLookAt = 0;
-uint32_t idleExpressionEnd = 0;
-int idleExpression = 0;
 
 float gazeMicroX = 0.0f;
 float gazeMicroY = 0.0f;
@@ -162,328 +160,34 @@ void eyesUpdateAnim(uint32_t now) {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Legacy expression helpers (kept intact; not used by the idle loop below)
-// ---------------------------------------------------------------------------
-static void resetIdleFace() __attribute__((unused));
-static void resetIdleFace() {
-  faceTgt.hR = 1.0f;
-  faceTgt.lidIn = 0;
-  faceTgt.lidOut = 0;
-  faceTgt.cheekR = 0;
-  faceTgt.cheek = 0;
-  faceTgt.glint = 0;
-  faceTgt.gazeLock = false;
-  faceTgt.mouthCurve = 0.4f;
-  faceTgt.mouthW = 20;
-  faceTgt.mouthH = 2;
-  faceTgt.mouthY = 0;
-}
+struct IdleMoodEntry {
+  Emotion emotion;
+  const char *name;
+};
 
-static void applyIdleEye(IdleEye e) __attribute__((unused));
-static void applyIdleEye(IdleEye e) {
-  switch (e) {
-  case IE_NORMAL:
-    break;
-  case IE_WIDE:
-    faceTgt.hR = 1.15f;
-    break;
-  case IE_HALF:
-    faceTgt.lidIn = 6;
-    faceTgt.lidOut = 6;
-    break;
-  case IE_SLEEPY:
-    faceTgt.lidIn = 9;
-    faceTgt.lidOut = 9;
-    break;
-  case IE_WINKL:
-    faceTgt.cheekR = 14;
-    break;
-  case IE_WINKR:
-    faceTgt.cheek = 14;
-    break;
-  case IE_ANGRY:
-    faceTgt.lidIn = 10;
-    faceTgt.lidOut = 2;
-    break;
-  case IE_SAD:
-    faceTgt.lidIn = 2;
-    faceTgt.lidOut = 8;
-    faceTgt.gazeLock = true;
-    faceTgt.lockY = 3;
-    break;
-  case IE_CURIOUS:
-    faceTgt.hR = 1.20f;
-    break;
-  case IE_STARRY:
-    faceTgt.glint = 1;
-    break;
-  case IE_LOOK_UP:
-    faceTgt.gazeLock = true;
-    faceTgt.lockY = -3;
-    break;
-  case IE_LOOK_DOWN:
-    faceTgt.gazeLock = true;
-    faceTgt.lockY = 3;
-    break;
-  case IE_SQUINT:
-    faceTgt.lidIn = 7;
-    faceTgt.lidOut = 7;
-    break;
-  case IE_GLINT:
-    faceTgt.glint = 1;
-    break;
-  case IE_SURPRISED:
-    faceTgt.glint = 1;
-    faceTgt.hR = 1.30f;
-    break;
-  case IE_UNEVEN:
-    faceTgt.hR = 0.70f;
-    break;
-  case IE_HEARTS:
-    faceTgt.glint = 1;
-    faceTgt.blush = 0.8f;
-    break;
-  case IE_PUPPY:
-    faceTgt.hR = 1.25f;
-    faceTgt.glint = 1;
-    faceTgt.blush = 0.5f;
-    break;
-  case IE_HAPPY_ARCH:
-    faceTgt.cheek = 15;
-    faceTgt.cheekR = 15;
-    break;
-  case IE_SUSPICIOUS:
-    faceTgt.lidIn = 8;
-    faceTgt.lidOut = 8;
-    break;
-  case IE_COOL_HALF:
-    faceTgt.lidIn = 4;
-    faceTgt.lidOut = 4;
-    faceTgt.glint = 0;
-    break;
-  case IE_SHOCKED_TINY:
-    faceTgt.hR = 0.65f;
-    faceTgt.lidIn = 0;
-    faceTgt.lidOut = 0;
-    break;
-  }
-}
-
-static void applyIdleMouth(IdleMouth m) __attribute__((unused));
-static void applyIdleMouth(IdleMouth m) {
-  switch (m) {
-  case IM_FLAT:
-    faceTgt.mouthCurve = 0.0f;
-    break;
-  case IM_SMILE:
-    faceTgt.mouthCurve = 0.7f;
-    break;
-  case IM_BIGSMILE:
-    faceTgt.mouthCurve = 0.95f;
-    faceTgt.mouthW = 26;
-    faceTgt.mouthH = 3;
-    break;
-  case IM_FROWN:
-    faceTgt.mouthCurve = -0.7f;
-    break;
-  case IM_OPEN_O:
-    faceTgt.mouthW = 8;
-    faceTgt.mouthH = 8;
-    faceTgt.mouthCurve = 0.0f;
-    break;
-  case IM_OPEN_WIDE:
-    faceTgt.mouthW = 24;
-    faceTgt.mouthH = 6;
-    faceTgt.mouthCurve = 0.5f;
-    break;
-  case IM_POUT:
-    faceTgt.mouthW = 14;
-    faceTgt.mouthH = 3;
-    faceTgt.mouthCurve = -0.3f;
-    break;
-  case IM_SMIRK:
-    faceTgt.mouthW = 22;
-    faceTgt.mouthCurve = 0.5f;
-    faceTgt.mouthY = 1;
-    break;
-  case IM_TONGUE:
-    faceTgt.mouthW = 16;
-    faceTgt.mouthH = 4;
-    faceTgt.mouthCurve = 0.3f;
-    break;
-  case IM_YAWN:
-    faceTgt.mouthW = 14;
-    faceTgt.mouthH = 9;
-    faceTgt.mouthCurve = 0.0f;
-    break;
-  case IM_WAVY:
-    faceTgt.mouthW = 24;
-    faceTgt.mouthCurve = 0.4f;
-    break;
-  case IM_TINY:
-    faceTgt.mouthW = 10;
-    faceTgt.mouthH = 2;
-    faceTgt.mouthCurve = 0.3f;
-    break;
-  case IM_KITTY_3:
-    faceTgt.mouthW = 18;
-    faceTgt.mouthH = 3;
-    faceTgt.mouthCurve = 0.6f;
-    break;
-  case IM_WHISTLE:
-    faceTgt.mouthW = 6;
-    faceTgt.mouthH = 6;
-    faceTgt.mouthCurve = 0.0f;
-    faceTgt.mouthY = -1;
-    break;
-  case IM_ZIGZAG:
-    faceTgt.mouthW = 20;
-    faceTgt.mouthH = 2;
-    faceTgt.mouthCurve = -0.2f;
-    break;
-  case IM_CHUCKLE:
-    faceTgt.mouthW = 24;
-    faceTgt.mouthH = 4;
-    faceTgt.mouthCurve = 0.8f;
-    break;
-  case IM_PUPPY_POUT:
-    faceTgt.mouthW = 12;
-    faceTgt.mouthH = 3;
-    faceTgt.mouthCurve = -0.4f;
-    faceTgt.mouthY = 1;
-    break;
-  case IM_DEVIL_SMIRK:
-    faceTgt.mouthW = 22;
-    faceTgt.mouthH = 2;
-    faceTgt.mouthCurve = 0.7f;
-    faceTgt.mouthY = 2;
-    break;
-  }
-}
-
-static void applyClassicIdle(int expr) __attribute__((unused));
-static void applyClassicIdle(int expr) {
-  switch (expr) {
-  case 1:
-    faceTgt.mouthCurve = 0.9f;
-    faceTgt.mouthW = 26;
-    faceTgt.mouthH = 3;
-    break;
-  case 2:
-    faceTgt.cheekR = 10;
-    faceTgt.mouthCurve = 0.6f;
-    break;
-  case 3:
-    faceTgt.lidIn = 7;
-    faceTgt.lidOut = 7;
-    faceTgt.mouthCurve = 0.5f;
-    break;
-  case 4:
-    faceTgt.hR = 1.25f;
-    faceTgt.mouthCurve = 0.2f;
-    break;
-  case 5:
-    faceTgt.mouthCurve = -0.4f;
-    faceTgt.mouthW = 18;
-    break;
-  case 6:
-    faceTgt.cheekR = 12;
-    faceTgt.cheek = 12;
-    faceTgt.mouthCurve = 0.7f;
-    break;
-  case 7:
-    faceTgt.lidIn = 9;
-    faceTgt.lidOut = 9;
-    faceTgt.mouthW = 14;
-    faceTgt.mouthH = 8;
-    faceTgt.mouthCurve = 0.0f;
-    break;
-  case 8:
-    faceTgt.mouthCurve = 0.0f;
-    faceTgt.mouthW = 14;
-    break;
-  case 9:
-    faceTgt.cheek = 14;
-    faceTgt.cheekR = 14;
-    faceTgt.mouthCurve = 0.3f;
-    break;
-  case 10:
-    faceTgt.glint = 1;
-    faceTgt.mouthW = 8;
-    faceTgt.mouthH = 6;
-    faceTgt.mouthCurve = 0.0f;
-    break;
-  case 11:
-    faceTgt.lidIn = 5;
-    faceTgt.lidOut = 5;
-    faceTgt.mouthW = 16;
-    faceTgt.mouthH = 1;
-    faceTgt.mouthCurve = -0.1f;
-    break;
-  case 12:
-    faceTgt.glint = 1;
-    faceTgt.cheek = 10;
-    faceTgt.cheekR = 10;
-    faceTgt.mouthCurve = 0.6f;
-    faceTgt.mouthW = 18;
-    break;
-  case 13:
-    faceTgt.hR = 1.35f;
-    faceTgt.mouthW = 24;
-    faceTgt.mouthH = 5;
-    faceTgt.mouthCurve = 0.5f;
-    break;
-  case 14: // Mischievous Wink
-    faceTgt.cheekR = 14;
-    faceTgt.mouthCurve = 0.7f;
-    faceTgt.mouthW = 20;
-    faceTgt.glint = 1;
-    break;
-  case 15: // Innocent Puppy
-    faceTgt.glint = 1;
-    faceTgt.blush = 0.6f;
-    faceTgt.mouthCurve = 0.3f;
-    faceTgt.mouthW = 12;
-    break;
-  case 16: // Whistling look away
-    faceTgt.gazeLock = true;
-    faceTgt.lockX = 8;
-    faceTgt.lockY = -4;
-    faceTgt.mouthW = 6;
-    faceTgt.mouthH = 6;
-    faceTgt.mouthCurve = 0.0f;
-    break;
-  case 17: // Cool cat smirk
-    faceTgt.lidIn = 4;
-    faceTgt.lidOut = 4;
-    faceTgt.mouthCurve = 0.6f;
-    faceTgt.mouthW = 18;
-    break;
-  case 18: // Daydreaming love
-    faceTgt.glint = 1;
-    faceTgt.blush = 0.8f;
-    faceTgt.mouthCurve = 0.75f;
-    faceTgt.mouthW = 22;
-    break;
-  case 19: // Skeptical eyebrow raise
-    faceTgt.hR = 1.35f;
-    faceTgt.lidIn = 6;
-    faceTgt.mouthCurve = -0.2f;
-    faceTgt.mouthW = 16;
-    break;
-  case 20: // Wide joyful grin
-    faceTgt.cheek = 12;
-    faceTgt.cheekR = 12;
-    faceTgt.mouthCurve = 0.95f;
-    faceTgt.mouthW = 26;
-    faceTgt.mouthH = 4;
-    break;
-  }
-}
+static const IdleMoodEntry IDLE_MOOD_POOL[] = {
+    {EMOTION_CURIOUS, "curious"},
+    {EMOTION_SMUG, "smug"},
+    {EMOTION_SUSPICIOUS, "suspicious"},
+    {EMOTION_BORED, "bored"},
+    {EMOTION_WINK, "wink"},
+    {EMOTION_HAPPY, "happy"},
+    {EMOTION_RELIEVED, "relieved"},
+    {EMOTION_PROUD, "proud"},
+    {EMOTION_CUTE, "cute"},
+};
+static const int IDLE_MOOD_POOL_COUNT =
+    (int)(sizeof(IDLE_MOOD_POOL) / sizeof(IDLE_MOOD_POOL[0]));
 
 static uint32_t idleSqueezeEnd = 0;
 static uint32_t nextIdleSqueezeAt = 0;
+static uint32_t nextIdleMoodAt = 0;
+static int lastIdleMoodIdx = -1;
+static bool s_triggeringIdleMood = false;
+
+bool isTriggeringIdleMood() { return s_triggeringIdleMood; }
+
+void resetIdleMoodTimer() { nextIdleMoodAt = 0; }
 
 void updateIdleVariety() {
   if (currentEmotion != EMOTION_IDLE) {
@@ -533,7 +237,32 @@ void updateIdleVariety() {
     nextIdleSqueezeAt = idleSqueezeEnd + 5000 + random(0, 6000);
   }
 
-  // 2. Natural eye gaze shifts: Center (look at user), Left, Right, Up, Down
+  // 2. Periodic idle mood rotation (full emotion presets via emotionAutoReturnAt)
+  if (nextIdleMoodAt == 0) {
+    nextIdleMoodAt = now + 20000UL + (uint32_t)random(0, 15001);
+  } else if ((int32_t)(now - nextIdleMoodAt) >= 0 && !eyeBlinking &&
+             idleSqueezeEnd == 0 && deskSighStartAt == 0) {
+    int idx = (int)random(0, IDLE_MOOD_POOL_COUNT);
+    if (IDLE_MOOD_POOL_COUNT > 1 && idx == lastIdleMoodIdx) {
+      idx = (idx + 1 + (int)random(0, IDLE_MOOD_POOL_COUNT - 1)) %
+            IDLE_MOOD_POOL_COUNT;
+    }
+    lastIdleMoodIdx = idx;
+
+    uint32_t dur = (uint32_t)random(3000, 5001);
+    nextIdleMoodAt = now + 25000UL + (uint32_t)random(0, 20001);
+
+    s_triggeringIdleMood = true;
+    setEmotion(IDLE_MOOD_POOL[idx].emotion);
+    s_triggeringIdleMood = false;
+    emotionAutoReturnAt = now + dur;
+
+    Serial.printf("[IDLE_MOOD] %s (%lu ms)\n", IDLE_MOOD_POOL[idx].name,
+                  (unsigned long)dur);
+    return;
+  }
+
+  // 3. Natural eye gaze shifts: Center (look at user), Left, Right, Up, Down
   if (now >= nextIdleLookAt) {
     float oldX = gazeTgtX;
     int gRoll = random(0, 100);
@@ -568,7 +297,7 @@ void updateIdleVariety() {
       triggerTouchBlink(now);
   }
 
-  // 3. Organic Desk Sigh Cycle (every 22 - 32 seconds of idle desk companionship)
+  // 4. Organic Desk Sigh Cycle (every 22 - 32 seconds of idle desk companionship)
   if (nextDeskSighAt == 0) {
     nextDeskSighAt = now + 15000 + random(0, 10000);
   }

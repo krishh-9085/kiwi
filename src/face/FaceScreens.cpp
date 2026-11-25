@@ -443,7 +443,7 @@ void showBootInfo(uint32_t holdMs) {
   display.print("KIWI");
   display.drawPixel(28, 5, SSD1306_WHITE);
   display.setCursor(33, 2);
-  display.print("v1.0");
+  display.print(FIRMWARE_VER);
 
   // Inverted Status Pill Badge
   if (WiFi.status() == WL_CONNECTED) {
@@ -474,7 +474,10 @@ void showBootInfo(uint32_t holdMs) {
     display.print("IP:  " + WiFi.localIP().toString());
 
     display.setCursor(6, 37);
-    display.print("WEB: myrobot.local");
+    String webHost = mdnsHostname + ".local";
+    if (webHost.length() > 14)
+      webHost = webHost.substring(0, 12) + "..";
+    display.print("WEB: " + webHost);
   } else {
     display.setCursor(6, 17);
     String ap = apSSID;

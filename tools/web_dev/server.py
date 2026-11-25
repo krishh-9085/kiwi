@@ -349,6 +349,12 @@ class DevPortalHandler(BaseHTTPRequestHandler):
                     "used": 149260,
                     "pct": 45
                 },
+                "psram": {
+                    "free": 1951744,
+                    "total": 2097152,
+                    "used": 145408,
+                    "pct": 7
+                },
                 "flash": {
                     "used": 1648200,
                     "free": 383416,

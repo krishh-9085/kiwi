@@ -48,9 +48,8 @@ export const OLED_FACES = {
 export const SKIN_FACES = {
   "kiwi": "<path d=\"M13 8 H27 V17 C27 21 24 23 20 23 C16 23 13 21 13 17 Z\" fill=\"currentColor\"/><path d=\"M16 8 H24 V14 C24 16 22 17 20 17 C18 17 16 16 16 14 Z\" fill=\"#000\"/><rect x=\"21\" y=\"9\" width=\"2\" height=\"2\" fill=\"currentColor\"/><path d=\"M37 8 H51 V17 C51 21 48 23 44 23 C40 23 37 21 37 17 Z\" fill=\"currentColor\"/><path d=\"M40 8 H48 V14 C48 16 46 17 44 17 C42 17 40 16 40 14 Z\" fill=\"#000\"/><rect x=\"45\" y=\"9\" width=\"2\" height=\"2\" fill=\"currentColor\"/>",
   "pixel": "<rect x=\"14\" y=\"8\" width=\"12\" height=\"16\" fill=\"currentColor\"/><rect x=\"11\" y=\"11\" width=\"18\" height=\"10\" fill=\"currentColor\"/><rect x=\"14\" y=\"11\" width=\"4\" height=\"4\" fill=\"#000\"/><rect x=\"38\" y=\"8\" width=\"12\" height=\"16\" fill=\"currentColor\"/><rect x=\"35\" y=\"11\" width=\"18\" height=\"10\" fill=\"currentColor\"/><rect x=\"38\" y=\"11\" width=\"4\" height=\"4\" fill=\"#000\"/>",
-  "retro": "<rect x=\"14\" y=\"8\" width=\"12\" height=\"16\" fill=\"currentColor\"/><rect x=\"11\" y=\"11\" width=\"18\" height=\"10\" fill=\"currentColor\"/><rect x=\"14\" y=\"11\" width=\"4\" height=\"4\" fill=\"#000\"/><rect x=\"38\" y=\"8\" width=\"12\" height=\"16\" fill=\"currentColor\"/><rect x=\"35\" y=\"11\" width=\"18\" height=\"10\" fill=\"currentColor\"/><rect x=\"38\" y=\"11\" width=\"4\" height=\"4\" fill=\"#000\"/>",
   "squircle_glint": "<rect x=\"12\" y=\"9\" width=\"15\" height=\"13\" rx=\"5\" fill=\"currentColor\"/><rect x=\"37\" y=\"9\" width=\"15\" height=\"13\" rx=\"5\" fill=\"currentColor\"/><rect x=\"17\" y=\"13\" width=\"5\" height=\"5\" fill=\"#000\"/><rect x=\"42\" y=\"13\" width=\"5\" height=\"5\" fill=\"#000\"/><rect x=\"20\" y=\"13\" width=\"1.5\" height=\"1.5\" fill=\"currentColor\"/><rect x=\"45\" y=\"13\" width=\"1.5\" height=\"1.5\" fill=\"currentColor\"/>",
-  "mecha": "<rect x=\"12\" y=\"7\" width=\"16\" height=\"18\" rx=\"4\" fill=\"currentColor\"/><rect x=\"16\" y=\"11\" width=\"8\" height=\"10\" rx=\"2\" fill=\"#000\"/><rect x=\"20\" y=\"12\" width=\"2\" height=\"2\" fill=\"currentColor\"/><rect x=\"36\" y=\"7\" width=\"16\" height=\"18\" rx=\"4\" fill=\"currentColor\"/><rect x=\"40\" y=\"11\" width=\"8\" height=\"10\" rx=\"2\" fill=\"#000\"/><rect x=\"44\" y=\"12\" width=\"2\" height=\"2\" fill=\"currentColor\"/>",
+  "mecha": "<rect x=\"13\" y=\"4\" width=\"15\" height=\"22\" rx=\"4\" fill=\"currentColor\"/><rect x=\"17\" y=\"8\" width=\"7\" height=\"14\" rx=\"2\" fill=\"#000\"/><rect x=\"20.5\" y=\"10\" width=\"2\" height=\"2\" fill=\"currentColor\"/><rect x=\"36\" y=\"4\" width=\"15\" height=\"22\" rx=\"4\" fill=\"currentColor\"/><rect x=\"40\" y=\"8\" width=\"7\" height=\"14\" rx=\"2\" fill=\"#000\"/><rect x=\"43.5\" y=\"10\" width=\"2\" height=\"2\" fill=\"currentColor\"/>",
   "emo": "<rect x=\"11\" y=\"8\" width=\"18\" height=\"16\" rx=\"5\" fill=\"currentColor\"/><rect x=\"35\" y=\"8\" width=\"18\" height=\"16\" rx=\"5\" fill=\"currentColor\"/>"
 };
 
@@ -137,7 +136,7 @@ export const ALL_42_EMOTIONS = [
     "color": "#FB7185"
   },
   {
-    "id": "proud",
+    "id": "proud_pet",
     "key": "proud_pet",
     "title": "Proud",
     "desc": "Big smile",
@@ -435,7 +434,7 @@ export const ALL_42_EMOTIONS = [
   }
 ];
 
-export const ALL_7_SKINS = [
+export const ALL_SKINS = [
   {
     "id": "kiwi",
     "label": "Kiwi",

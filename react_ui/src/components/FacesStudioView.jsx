@@ -4,7 +4,7 @@ import {
   OLED_FACES,
   SKIN_FACES,
   ALL_42_EMOTIONS,
-  ALL_7_SKINS
+  ALL_SKINS
 } from '../data/faceData'
 import {
   Smile, Eye, EyeOff, MessageSquare, Send, StopCircle, Clock, CloudSun,
@@ -330,7 +330,7 @@ export default function FacesStudioView({ status, onTriggerAction, onToast }) {
           gridTemplateColumns: 'repeat(auto-fill, minmax(135px, 1fr))',
           gap: '12px'
         }}>
-          {ALL_7_SKINS.map((s) => {
+          {ALL_SKINS.map((s) => {
             const isSkinActive = currentSkin.toLowerCase() === s.id.toLowerCase()
             const svgMarkup = SKIN_FACES[s.id] || ''
 

@@ -1,10 +1,8 @@
 import React, { useState } from 'react'
-import { motion } from 'motion/react'
 
 /**
  * Animated Lightbulb Theme Toggle Button (Button 4)
- * Rebuilt from toggles.dev / Skiper UI with Framer Motion
- * Pure CSS styling matching Kiwi Robot design system.
+ * CSS-animated SVG lightbulb matching Kiwi Robot design system.
  */
 export function ThemeToggleButton4({
   isDark: controlledIsDark,
@@ -46,11 +44,11 @@ export function ThemeToggleButton4({
         className="flux-theme-btn-4-svg"
       >
         {/* Animate bulb to exact vertical center in dark mode when top rays are hidden */}
-        <motion.g
-          animate={{
-            y: isDark ? -2.8 : 0
+        <g
+          style={{
+            transform: isDark ? 'translateY(-2.8px)' : 'translateY(0px)',
+            transition: 'transform 0.35s ease-in-out'
           }}
-          transition={{ ease: 'easeInOut', duration: 0.35 }}
         >
           {/* Bulb glass outline */}
           <path
@@ -63,13 +61,14 @@ export function ThemeToggleButton4({
           <path d="M19.8 30.7h-7.6" />
 
           {/* Animated Filament (visible & glowing in Light Mode, unwinds in Dark Mode) */}
-          <motion.path
-            animate={{
-              pathLength: isDark ? 0 : 1,
-              opacity: isDark ? 0 : 1,
-            }}
-            transition={{ ease: 'easeInOut', duration: 0.35 }}
+          <path
             pathLength="1"
+            strokeDasharray="1"
+            style={{
+              strokeDashoffset: isDark ? 1 : 0,
+              opacity: isDark ? 0 : 1,
+              transition: 'stroke-dashoffset 0.35s ease-in-out, opacity 0.35s ease-in-out'
+            }}
             fill="none"
             stroke="currentColor"
             strokeWidth="1.3"
@@ -77,12 +76,14 @@ export function ThemeToggleButton4({
           />
 
           {/* Animated Light Rays (expand and beam out in Light Mode, shrink and fade in Dark Mode) */}
-          <motion.g
-            animate={{
-              scale: isDark ? 0.35 : 1,
+          <g
+            style={{
+              transform: isDark ? 'scale(0.35)' : 'scale(1)',
+              transformOrigin: 'center',
+              transformBox: 'fill-box',
               opacity: isDark ? 0 : 1,
+              transition: 'transform 0.35s ease-in-out, opacity 0.35s ease-in-out'
             }}
-            transition={{ ease: 'easeInOut', duration: 0.35 }}
             stroke="currentColor"
             strokeWidth="1.5"
             fill="none"
@@ -92,8 +93,8 @@ export function ThemeToggleButton4({
             <path d="m22.6 9 3.7-3.6" />
             <path d="M9.4 9 5.7 5.4" />
             <path d="M5.7 15.8H.6" />
-          </motion.g>
-        </motion.g>
+          </g>
+        </g>
       </svg>
     </button>
   )

@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import { flushSync } from 'react-dom'
-import { motion, AnimatePresence } from 'motion/react'
 import Sidebar from './components/Sidebar'
 import ContentHeader from './components/ContentHeader'
 import LiveConsoleView from './components/LiveConsoleView'
@@ -321,16 +320,12 @@ export default function App() {
             </div>
           </div>
 
-          {/* Active View Switcher with Framer Motion fluid transitions */}
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={activeTab}
-              initial={{ opacity: 0, y: 10, filter: 'blur(4px)' }}
-              animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
-              exit={{ opacity: 0, y: -8, filter: 'blur(4px)' }}
-              transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
-              style={{ width: '100%', flex: 1, display: 'flex', flexDirection: 'column' }}
-            >
+          {/* Active View Switcher */}
+          <div
+            key={activeTab}
+            className="flux-tab-enter"
+            style={{ width: '100%', flex: 1, display: 'flex', flexDirection: 'column' }}
+          >
               {activeTab === 'live' && (
                 <LiveConsoleView
                   status={status}
@@ -368,8 +363,7 @@ export default function App() {
                   onToast={showToast}
                 />
               )}
-            </motion.div>
-          </AnimatePresence>
+          </div>
         </div>
       </div>
 

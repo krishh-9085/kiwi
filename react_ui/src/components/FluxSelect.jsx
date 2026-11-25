@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react'
-import { ChevronDown, Check } from '@untitledui/icons'
+import { ChevronDown, Check } from 'lucide-react'
 
 /**
  * UntitledUI-styled Rounded Dropdown / Select Component
@@ -217,8 +217,9 @@ export default function FluxSelect({
                 <span>{opt.label}</span>
                 {isSelected && (
                   <Check
-                    className="size-4 shrink-0 stroke-[2.25px]"
+                    strokeWidth={2.25}
                     style={{
+                      flexShrink: 0,
                       width: isMicro ? '10px' : (compact ? '12px' : '15px'),
                       height: isMicro ? '10px' : (compact ? '12px' : '15px'),
                       color: 'var(--select-check, var(--text-dark))'

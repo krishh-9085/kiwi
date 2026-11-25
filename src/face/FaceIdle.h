@@ -4,8 +4,6 @@
 
 
 extern uint32_t nextIdleLookAt;
-extern uint32_t idleExpressionEnd;
-extern int idleExpression;
 extern uint32_t petMoodT0;
 extern uint32_t flourishT0;
 extern int eyeOpenPct;   // 0..100 (kept for compatibility)
@@ -20,5 +18,7 @@ extern float idleSighLid; // Organic desk sigh eyelid droop
 
 void eyesInit(uint32_t now);
 void eyesUpdateAnim(uint32_t now);
+bool isTriggeringIdleMood();
+void resetIdleMoodTimer();
 void updateIdleVariety();
 void triggerTouchBlink(uint32_t now);

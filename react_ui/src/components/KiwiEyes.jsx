@@ -74,19 +74,19 @@ export default function KiwiEyes({ emotion = 'idle', skin = 'kiwi', sleeping = f
       )
     }
 
-    // Mecha: Cirrectangle solid outer eye with floating smooth rounded rectangular pupil & glint dot
+    // Mecha: Tall rounded rectangular solid outer eye with floating tall rounded rectangular pupil & glint dot
     if (skin === 'mecha') {
       const eyeTilt = side === 'left' ? 'rotate(2 32 34)' : 'rotate(-2 32 34)'
       return (
         <g transform={eyeTilt}>
-          {/* Solid Cirrectangle Sclera (distinct rectangle with smooth rounded corners) */}
-          <rect x="14" y="14" width="36" height="40" rx="8"
+          {/* Tall Rounded Rectangular Sclera */}
+          <rect x="15" y="7" width="34" height="48" rx="8"
             fill="#00f0ff"
             filter="drop-shadow(0 0 12px rgba(0,240,255,0.85))" />
-          {/* Floating Smooth Rounded Rectangular Pupil */}
-          <rect x="23" y="24" width="18" height="20" rx="3" fill="#0b0f19" />
+          {/* Floating Tall Rounded Rectangular Pupil */}
+          <rect x="25" y="17" width="14" height="28" rx="3" fill="#0b0f19" />
           {/* Catchlight Glint Dot inside pupil */}
-          <rect x="31" y="27" width="4" height="4" rx="1" fill="#00f0ff" opacity="0.9" />
+          <rect x="32" y="20" width="3.5" height="3.5" rx="1" fill="#00f0ff" opacity="0.9" />
         </g>
       )
     }

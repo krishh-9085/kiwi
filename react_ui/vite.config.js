@@ -7,9 +7,15 @@ import path from 'path'
 export default defineConfig({
   plugins: [react(), viteSingleFile()],
   resolve: {
-    alias: {
-      '@': path.resolve(__dirname, './src'),
-    },
+    alias: [
+      { find: '@', replacement: path.resolve(__dirname, './src') },
+      { find: /^react-dom\/client$/, replacement: 'preact/compat/client' },
+      { find: /^react-dom\/test-utils$/, replacement: 'preact/test-utils' },
+      { find: /^react-dom$/, replacement: 'preact/compat' },
+      { find: /^react\/jsx-runtime$/, replacement: 'preact/compat/jsx-runtime' },
+      { find: /^react\/jsx-dev-runtime$/, replacement: 'preact/compat/jsx-dev-runtime' },
+      { find: /^react$/, replacement: 'preact/compat' },
+    ],
   },
   server: {
     host: true,

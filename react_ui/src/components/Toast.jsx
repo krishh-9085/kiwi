@@ -1,5 +1,4 @@
 import React from 'react'
-import { motion } from 'motion/react'
 import { Check, AlertCircle, Sparkles, X } from 'lucide-react'
 
 /**
@@ -17,12 +16,8 @@ export default function Toast({ toast, onClose }) {
 
   return (
     <div className="flux-toast-wrapper" role="status" aria-live="polite">
-      <motion.div
-        initial={{ opacity: 0, y: -20, scale: 0.92, filter: 'blur(4px)' }}
-        animate={{ opacity: 1, y: 0, scale: 1, filter: 'blur(0px)' }}
-        exit={{ opacity: 0, y: -14, scale: 0.95, filter: 'blur(3px)' }}
-        transition={{ type: 'spring', damping: 26, stiffness: 400 }}
-        className={`flux-toast-card ${isError ? 'is-error' : isInfo ? 'is-info' : 'is-success'}`}
+      <div
+        className={`flux-toast-card flux-toast-enter ${isError ? 'is-error' : isInfo ? 'is-info' : 'is-success'}`}
       >
         <div className="flux-toast-icon">
           {isError ? (
@@ -46,7 +41,7 @@ export default function Toast({ toast, onClose }) {
             <X size={12} />
           </button>
         )}
-      </motion.div>
+      </div>
     </div>
   )
 }

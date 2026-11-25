@@ -75,41 +75,95 @@ bool speakText(const String &text) {
   return res == 1;
 }
 
-int ttsSarvam(const String &text) {
-  String key = ttsKey.length() ? ttsKey : (sttKey.length() ? sttKey : llmKey);
+// ============================================================
+// SHARED TTS TRANSPORT & PREBUFFER HELPERS
+// ============================================================
+struct TtsNetGuard {
+  bool apWasUp = false;
+  bool active = false;
+  void enter() {
+    if (!active) {
+      apWasUp = suspendLocalNet();
+      active = true;
+    }
+  }
+  void leave() {
+    if (active) {
+      restoreWebAndAP(apWasUp);
+      active = false;
+    }
+  }
+  ~TtsNetGuard() { leave(); }
+};
+
+struct TtsPrebuf {
+  size_t count = 0;
+  bool done = false;
+  void push(int16_t s) {
+    if (!done) {
+      ttsPrebuf[count++] = s;
+      if (count >= ttsPrebufMax) {
+        for (size_t k = 0; k < count; k++)
+          spkPushSample(ttsPrebuf[k]);
+        count = 0;
+        done = true;
+      }
+    } else {
+      spkPushSample(s);
+    }
+  }
+  void flushRemaining() {
+    if (!done && count > 0) {
+      for (size_t k = 0; k < count; k++)
+        spkPushSample(ttsPrebuf[k]);
+      count = 0;
+      done = true;
+    }
+  }
+};
+
+static bool prepareTtsConnection(const char *tag, const String &url,
+                                 const String &key, String &host, String &path,
+                                 TtsNetGuard &net, WiFiClientSecure &client,
+                                 uint32_t timeoutMs, int handshakeSec,
+                                 bool logDetail) {
   if (!key.length()) {
-    Serial.println("[TTS] No Sarvam key configured in Web Portal.");
-    addTerminalLog("[TTS] Error: No Sarvam key in Web Portal Settings!");
-    return 0;
+    Serial.printf("[%s] No API key.\n", tag);
+    if (logDetail)
+      addTerminalLog("[TTS] Error: No Sarvam key in Web Portal Settings!");
+    return false;
   }
   if (WiFi.status() != WL_CONNECTED) {
     Serial.println("[TTS] No Wi-Fi.");
-    addTerminalLog("[TTS] Error: Wi-Fi disconnected!");
-    return 0;
+    if (logDetail)
+      addTerminalLog("[TTS] Error: Wi-Fi disconnected!");
+    return false;
   }
-  String host, path;
-  if (!parseUrl(ttsEndpoint, host, path)) {
-    Serial.printf("[TTS] Bad URL: %s\n", ttsEndpoint.c_str());
-    addTerminalLog("[TTS] Error: Bad URL " + ttsEndpoint);
-    return 0;
+  if (!parseUrl(url, host, path)) {
+    if (logDetail) {
+      Serial.printf("[TTS] Bad URL: %s\n", url.c_str());
+      addTerminalLog("[TTS] Error: Bad URL " + url);
+    }
+    return false;
   }
-  Serial.printf("[TTS/Sarvam] Free heap before: %u\n", (unsigned)ESP.getFreeHeap());
-  bool apWasUp = suspendLocalNet();
+  if (logDetail) {
+    Serial.printf("[%s] Free heap before: %u\n", tag, (unsigned)ESP.getFreeHeap());
+  }
+  net.enter();
   if (!psramFound()) {
     if (ESP.getFreeHeap() < 38000 || ESP.getMaxAllocHeap() < 18000) {
-      Serial.printf("[TTS/Sarvam] Low heap: free=%u (<38000) or maxblk=%u (<18000)\n",
-                    (unsigned)ESP.getFreeHeap(), (unsigned)ESP.getMaxAllocHeap());
-      addTerminalLog("[TTS] Low heap (free: " + String(ESP.getFreeHeap()) + ", maxblk: " + String(ESP.getMaxAllocHeap()) + ")");
-      restoreWebAndAP(apWasUp);
-      return 0;
+      Serial.printf("[%s] Low heap: free=%u (<38000) or maxblk=%u (<18000)\n",
+                    tag, (unsigned)ESP.getFreeHeap(),
+                    (unsigned)ESP.getMaxAllocHeap());
+      addTerminalLog("[" + String(tag) + "] Low heap (free: " +
+                     String(ESP.getFreeHeap()) + ", maxblk: " +
+                     String(ESP.getMaxAllocHeap()) + ")");
+      return false;
     }
-  } else {
-    if (ESP.getFreePsram() < 64000 && ESP.getFreeHeap() < 24000) {
-      Serial.printf("[TTS/Sarvam] Low memory: psram=%u, heap=%u\n",
-                    (unsigned)ESP.getFreePsram(), (unsigned)ESP.getFreeHeap());
-      restoreWebAndAP(apWasUp);
-      return 0;
-    }
+  } else if (ESP.getFreePsram() < 64000 && ESP.getFreeHeap() < 24000) {
+    Serial.printf("[%s] Low memory: psram=%u, heap=%u\n", tag,
+                  (unsigned)ESP.getFreePsram(), (unsigned)ESP.getFreeHeap());
+    return false;
   }
   if (WiFi.status() != WL_CONNECTED) {
     uint32_t tw = millis();
@@ -118,16 +172,80 @@ int ttsSarvam(const String &text) {
       yield();
     }
     if (WiFi.status() != WL_CONNECTED) {
-      Serial.println("[TTS/Sarvam] Wi-Fi lost while waiting.");
-      addTerminalLog("[TTS] Error: Wi-Fi lost");
-      restoreWebAndAP(apWasUp);
-      return 0;
+      if (logDetail) {
+        Serial.printf("[%s] Wi-Fi lost while waiting.\n", tag);
+        addTerminalLog("[TTS] Error: Wi-Fi lost");
+      }
+      return false;
     }
   }
   if (!ensureDns(host)) {
-    Serial.printf("[TTS/Sarvam] DNS resolution failed for %s\n", host.c_str());
-    addTerminalLog("[TTS] Error: DNS failed for " + host);
-    restoreWebAndAP(apWasUp);
+    if (logDetail) {
+      Serial.printf("[%s] DNS resolution failed for %s\n", tag, host.c_str());
+      addTerminalLog("[TTS] Error: DNS failed for " + host);
+    }
+    return false;
+  }
+
+  client.setInsecure();
+  client.setTimeout(timeoutMs);
+  client.setHandshakeTimeout(handshakeSec);
+  if (!tlsConnect(client, host, tag)) {
+    client.stop();
+    return false;
+  }
+  return true;
+}
+
+static bool readTtsHttpResponse(const char *tag, WiFiClientSecure &client,
+                                HttpStream &hs, bool logChunked,
+                                bool logTerminalErr) {
+  String line;
+  if (!httpReadLine(client, line, 20000)) {
+    client.stop();
+    return false;
+  }
+  int sp = line.indexOf(' ');
+  int status = sp > 0 ? line.substring(sp + 1).toInt() : 0;
+  hs.c = &client;
+  while (httpReadLine(client, line, 10000) && line.length() > 0) {
+    String l = line;
+    l.toLowerCase();
+    if (l.startsWith("transfer-encoding:") && l.indexOf("chunked") > 0)
+      hs.chunked = true;
+    if (l.startsWith("content-length:"))
+      hs.contentLeft = l.substring(15).toInt();
+  }
+  if (logChunked) {
+    Serial.printf("[TTS] HTTP %d%s\n", status, hs.chunked ? " (chunked)" : "");
+  }
+  if (status != 200) {
+    uint32_t tErr = millis();
+    while (!client.available() && client.connected() && millis() - tErr < 1200) {
+      serviceUi();
+      yield();
+    }
+    String errBody;
+    while (client.available() && errBody.length() < 400)
+      errBody += (char)client.read();
+    Serial.printf("[%s] HTTP %d: %s\n", tag, status, errBody.c_str());
+    if (logTerminalErr) {
+      addTerminalLog("[" + String(tag) + "] HTTP " + String(status) +
+                     (errBody.length() ? (": " + errBody) : String("")));
+    }
+    client.stop();
+    return false;
+  }
+  return true;
+}
+
+int ttsSarvam(const String &text) {
+  String key = ttsKey.length() ? ttsKey : (sttKey.length() ? sttKey : llmKey);
+  String host, path;
+  TtsNetGuard net;
+  WiFiClientSecure client;
+  if (!prepareTtsConnection("TTS/Sarvam", ttsEndpoint, key, host, path, net,
+                            client, 8000, 8, true)) {
     return 0;
   }
 
@@ -168,15 +286,6 @@ int ttsSarvam(const String &text) {
   body += "\"model\":\"" + jsonEscape(ttsModel) + "\",";
   body += "\"speech_sample_rate\":16000,\"enable_preprocessing\":false}";
 
-  WiFiClientSecure client;
-  client.setInsecure();
-  client.setTimeout(8000);
-  client.setHandshakeTimeout(8);
-  if (!tlsConnect(client, host, "TTS")) {
-    client.stop();
-    restoreWebAndAP(apWasUp);
-    return 0;
-  }
   client.printf("POST %s HTTP/1.1\r\n", path.c_str());
   client.printf("Host: %s\r\n", host.c_str());
   client.printf("api-subscription-key: %s\r\n", key.c_str());
@@ -185,37 +294,8 @@ int ttsSarvam(const String &text) {
   client.print("Connection: close\r\n\r\n");
   client.print(body);
 
-  String line;
-  if (!httpReadLine(client, line, 20000)) {
-    client.stop();
-    restoreWebAndAP(apWasUp);
-    return 0;
-  }
-  int sp = line.indexOf(' ');
-  int status = sp > 0 ? line.substring(sp + 1).toInt() : 0;
   HttpStream hs;
-  hs.c = &client;
-  while (httpReadLine(client, line, 10000) && line.length() > 0) {
-    String l = line;
-    l.toLowerCase();
-    if (l.startsWith("transfer-encoding:") && l.indexOf("chunked") > 0)
-      hs.chunked = true;
-    if (l.startsWith("content-length:"))
-      hs.contentLeft = l.substring(15).toInt();
-  }
-  Serial.printf("[TTS] HTTP %d%s\n", status, hs.chunked ? " (chunked)" : "");
-  if (status != 200) {
-    uint32_t tErr = millis();
-    while (!client.available() && client.connected() && millis() - tErr < 1200) {
-      serviceUi();
-      yield();
-    }
-    String errBody;
-    while (client.available() && errBody.length() < 400)
-      errBody += (char)client.read();
-    Serial.printf("[TTS] Error body: %s\n", errBody.c_str());
-    client.stop();
-    restoreWebAndAP(apWasUp);
+  if (!readTtsHttpResponse("TTS/Sarvam", client, hs, true, false)) {
     return 0;
   }
 
@@ -237,10 +317,7 @@ int ttsSarvam(const String &text) {
   uint8_t lo = 0;
 
   // Jitter Pre-Buffer (dynamic 160ms - 600ms): Prevents Wi-Fi packet latency from causing audio gaps
-  const size_t PREBUF_SAMPLES = ttsPrebufMax;
-  int16_t *prebuf = ttsPrebuf;
-  size_t prebufCount = 0;
-  bool prebufDone = false;
+  TtsPrebuf prebuf;
 
   const size_t CHUNK = 512;
   static int16_t pcmChunk[CHUNK];
@@ -248,20 +325,8 @@ int ttsSarvam(const String &text) {
 
   auto flushChunk = [&]() {
     if (chunkFill > 0) {
-      if (!prebufDone) {
-        for (size_t i = 0; i < chunkFill; i++) {
-          prebuf[prebufCount++] = pcmChunk[i];
-          if (prebufCount >= PREBUF_SAMPLES) {
-            for (size_t k = 0; k < prebufCount; k++)
-              spkPushSample(prebuf[k]);
-            prebufCount = 0;
-            prebufDone = true;
-          }
-        }
-      } else {
-        for (size_t i = 0; i < chunkFill; i++)
-          spkPushSample(pcmChunk[i]);
-      }
+      for (size_t i = 0; i < chunkFill; i++)
+        prebuf.push(pcmChunk[i]);
       chunkFill = 0;
     }
   };
@@ -420,65 +485,23 @@ int ttsSarvam(const String &text) {
     }
   }
   client.stop();
-  if (!prebufDone && prebufCount > 0) {
-    for (size_t k = 0; k < prebufCount; k++)
-      spkPushSample(prebuf[k]);
-    prebufCount = 0;
-    prebufDone = true;
-  }
+  prebuf.flushRemaining();
   flushChunk();
   spkFlush();
   for (int i = 0; i < SAMPLE_RATE / 10; i++)
     spkPushSample(0);
   spkEndSpeech();
   gFaceFrameMs = 33;
-  restoreWebAndAP(apWasUp);
+  net.leave();
   return playing ? 1 : 0;
 }
 
-int ttsFishAudio(const String &text) {
-  if (!fishKey.length()) {
-    Serial.println("[TTS/FishAudio] No API key.");
-    return 0;
-  }
-  if (WiFi.status() != WL_CONNECTED) {
-    Serial.println("[TTS] No Wi-Fi.");
-    return 0;
-  }
+int ttsFishAudio(const String &text, uint32_t maxPlayMs) {
   String host, path;
-  if (!parseUrl(fishEndpoint, host, path))
-    return 0;
-
-  bool apWasUp = suspendLocalNet();
-  if (!psramFound()) {
-    if (ESP.getFreeHeap() < 38000 || ESP.getMaxAllocHeap() < 18000) {
-      Serial.printf("[TTS/FishAudio] Low heap: free=%u (<38000) or maxblk=%u (<18000)\n",
-                    (unsigned)ESP.getFreeHeap(), (unsigned)ESP.getMaxAllocHeap());
-      addTerminalLog("[TTS/FishAudio] Low heap (free: " + String(ESP.getFreeHeap()) + ", maxblk: " + String(ESP.getMaxAllocHeap()) + ")");
-      restoreWebAndAP(apWasUp);
-      return 0;
-    }
-  } else {
-    if (ESP.getFreePsram() < 64000 && ESP.getFreeHeap() < 24000) {
-      Serial.printf("[TTS/FishAudio] Low memory: psram=%u, heap=%u\n",
-                    (unsigned)ESP.getFreePsram(), (unsigned)ESP.getFreeHeap());
-      restoreWebAndAP(apWasUp);
-      return 0;
-    }
-  }
-  if (WiFi.status() != WL_CONNECTED) {
-    uint32_t tw = millis();
-    while (WiFi.status() != WL_CONNECTED && millis() - tw < 4000) {
-      serviceUi();
-      yield();
-    }
-    if (WiFi.status() != WL_CONNECTED) {
-      restoreWebAndAP(apWasUp);
-      return 0;
-    }
-  }
-  if (!ensureDns(host)) {
-    restoreWebAndAP(apWasUp);
+  TtsNetGuard net;
+  WiFiClientSecure client;
+  if (!prepareTtsConnection("TTS/FishAudio", fishEndpoint, fishKey, host, path,
+                            net, client, 15000, 12, false)) {
     return 0;
   }
 
@@ -489,15 +512,6 @@ int ttsFishAudio(const String &text) {
   }
   body += "}";
 
-  WiFiClientSecure client;
-  client.setInsecure();
-  client.setTimeout(15000);
-  client.setHandshakeTimeout(12);
-  if (!tlsConnect(client, host, "TTS/FishAudio")) {
-    client.stop();
-    restoreWebAndAP(apWasUp);
-    return 0;
-  }
   client.printf("POST %s HTTP/1.1\r\n", path.c_str());
   client.printf("Host: %s\r\n", host.c_str());
   client.printf("Authorization: Bearer %s\r\n", fishKey.c_str());
@@ -509,36 +523,8 @@ int ttsFishAudio(const String &text) {
   client.print("Connection: close\r\n\r\n");
   client.print(body);
 
-  String line;
-  if (!httpReadLine(client, line, 20000)) {
-    client.stop();
-    restoreWebAndAP(apWasUp);
-    return 0;
-  }
-  int sp = line.indexOf(' ');
-  int status = sp > 0 ? line.substring(sp + 1).toInt() : 0;
   HttpStream hs;
-  hs.c = &client;
-  while (httpReadLine(client, line, 10000) && line.length() > 0) {
-    String l = line;
-    l.toLowerCase();
-    if (l.startsWith("transfer-encoding:") && l.indexOf("chunked") > 0)
-      hs.chunked = true;
-    if (l.startsWith("content-length:"))
-      hs.contentLeft = l.substring(15).toInt();
-  }
-  if (status != 200) {
-    uint32_t tErr = millis();
-    while (!client.available() && client.connected() && millis() - tErr < 1200) {
-      serviceUi();
-      yield();
-    }
-    String errBody;
-    while (client.available() && errBody.length() < 400)
-      errBody += (char)client.read();
-    Serial.printf("[TTS/FishAudio] HTTP %d: %s\n", status, errBody.c_str());
-    client.stop();
-    restoreWebAndAP(apWasUp);
+  if (!readTtsHttpResponse("TTS/FishAudio", client, hs, false, true)) {
     return 0;
   }
   if (currentEmotion == EMOTION_IDLE || currentEmotion == EMOTION_THINKING) {
@@ -550,30 +536,19 @@ int ttsFishAudio(const String &text) {
   uint8_t *rbuf = ttsRbuf;
   int n;
   uint32_t readStart = millis();
+  uint32_t playStartedAt = 0;
 
-  const size_t PREBUF_SAMPLES = ttsPrebufMax;
-  int16_t *prebuf = ttsPrebuf;
-  size_t prebufCount = 0;
-  bool prebufDone = false;
-
-  auto pushWithPrebuf = [&](int16_t s) {
-    if (!prebufDone) {
-      prebuf[prebufCount++] = s;
-      if (prebufCount >= PREBUF_SAMPLES) {
-        for (size_t k = 0; k < prebufCount; k++)
-          spkPushSample(prebuf[k]);
-        prebufCount = 0;
-        prebufDone = true;
-      }
-    } else {
-      spkPushSample(s);
-    }
-  };
+  TtsPrebuf prebuf;
 
   uint32_t lastUiPump = 0;
+  bool hitMaxPlay = false;
   while (true) {
     if (cancelRequest)
       break;
+    if (maxPlayMs > 0 && playing && (millis() - playStartedAt) >= maxPlayMs) {
+      hitMaxPlay = true;
+      break;
+    }
     n = httpReadBlock(hs, rbuf, ttsRbufMax);
     if (n < 0)
       break;
@@ -585,7 +560,10 @@ int ttsFishAudio(const String &text) {
       continue;
     }
     readStart = millis();
-    playing = true;
+    if (!playing) {
+      playing = true;
+      playStartedAt = readStart;
+    }
     for (int i = 0; i < n; i++) {
       if (!haveLo) {
         lo = rbuf[i];
@@ -593,7 +571,7 @@ int ttsFishAudio(const String &text) {
       } else {
         int16_t s = (int16_t)(lo | (rbuf[i] << 8));
         haveLo = false;
-        pushWithPrebuf(s);
+        prebuf.push(s);
       }
     }
     if (millis() - lastUiPump >= 60) {
@@ -602,17 +580,40 @@ int ttsFishAudio(const String &text) {
     }
   }
   client.stop();
-  if (!prebufDone && prebufCount > 0) {
-    for (size_t k = 0; k < prebufCount; k++)
-      spkPushSample(prebuf[k]);
-    prebufCount = 0;
-    prebufDone = true;
+  if (!cancelRequest && !hitMaxPlay) {
+    prebuf.flushRemaining();
   }
   spkFlush();
-  for (int i = 0; i < SAMPLE_RATE / 10; i++)
-    spkPushSample(0);
+  if (!cancelRequest && !hitMaxPlay) {
+    for (int i = 0; i < SAMPLE_RATE / 10; i++)
+      spkPushSample(0);
+  }
   spkEndSpeech();
   gFaceFrameMs = 33;
-  restoreWebAndAP(apWasUp);
+  net.leave();
   return playing ? 1 : 0;
+}
+
+bool speakFishAudio(const String &text, uint32_t maxPlayMs) {
+  if (psramFound() && ttsPrebuf == s_fallbackPrebuf) {
+    initTtsBuffers();
+  }
+  String toSpeak = normalizeFishAudioTags(stripRobotTags(text));
+  toSpeak.trim();
+  Serial.printf("[TTS] speakFishAudio() model='%s' len=%d keyLen=%d heap=%u txHandle=%s\n",
+                fishModel.c_str(), (int)toSpeak.length(), (int)fishKey.length(),
+                (unsigned)ESP.getFreeHeap(), txHandle ? "OK" : "NULL");
+
+  if (!txHandle || !fishKey.length() || WiFi.status() != WL_CONNECTED ||
+      !toSpeak.length()) {
+    return false;
+  }
+
+  int res = ttsFishAudio(toSpeak, maxPlayMs);
+  spkEndSpeech();
+  if (currentEmotion == EMOTION_SPEAKING) {
+    setEmotion(EMOTION_IDLE);
+  }
+  Serial.printf("[TTS] speakFishAudio() returned %d\n", res);
+  return res == 1;
 }

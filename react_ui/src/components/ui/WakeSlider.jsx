@@ -1,7 +1,4 @@
-'use client';
-
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { frame, useMotionValue, useMotionValueEvent, useReducedMotion, useSpring, useVelocity } from 'motion/react';
 
 import './WakeSlider.css';
 
@@ -50,7 +47,11 @@ export default function WakeSlider({
   const [inner, setInner] = useState(defaultValue);
   const value = clamp(valueProp ?? inner, min, max);
   const pct = toPct(value, min, max);
-  const reduce = useReducedMotion();
+  const [reduce, setReduce] = useState(() =>
+    typeof window !== 'undefined' && window.matchMedia
+      ? window.matchMedia('(prefers-reduced-motion: reduce)').matches
+      : false
+  );
   const format = formatValue ?? String;
   const rest = Math.min(restHeight, height - 1) / height;
 
@@ -64,21 +65,30 @@ export default function WakeSlider({
   const latest = useRef(value);
   latest.current = value;
 
-  const target = useMotionValue(pct);
-  const w0 = SETTLE / glide;
-  const head = useSpring(target, { stiffness: w0 * w0, damping: 2 * w0, mass: 1 });
-  const rawSpeed = useVelocity(head);
-  const wv = 2000 / smoothing;
-  const speed = useSpring(rawSpeed, { stiffness: wv * wv, damping: 2.5 * wv, mass: 1 });
+  const springRef = useRef({
+    target: pct,
+    head: pct,
+    headVel: 0,
+    speed: 0,
+    speedVel: 0,
+    rafId: 0,
+    lastT: 0
+  });
 
   useEffect(() => {
-    target.set(pct);
-  }, [pct, target]);
+    if (typeof window === 'undefined' || !window.matchMedia) return;
+    const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const onChangeMq = (e) => setReduce(e.matches);
+    mq.addEventListener?.('change', onChangeMq);
+    return () => mq.removeEventListener?.('change', onChangeMq);
+  }, []);
 
   const paint = (force = false) => {
-    const curVal = reduce ? target.get() : head.get();
+    const st = springRef.current;
+    const rawVal = reduce ? st.target : st.head;
+    const curVal = clamp(Number.isFinite(rawVal) ? rawVal : st.target, 0, 100);
     const h = (curVal / 100) * (bars - 1);
-    const v = reduce ? 0 : speed.get();
+    const v = reduce || !Number.isFinite(st.speed) ? 0 : st.speed;
     const amp = smoothstep(clamp((Math.abs(v) * sensitivity) / FULL_SPEED, 0, 1));
     const dir = Math.sign(v) || 1;
     const r = MIN_REACH + (reach - MIN_REACH) * amp;
@@ -103,10 +113,93 @@ export default function WakeSlider({
   };
   const paintRef = useRef(paint);
   paintRef.current = paint;
-  const run = useCallback(() => paintRef.current(), []);
-  const schedule = useCallback(() => frame.render(run, false, true), [run]);
-  useMotionValueEvent(head, 'change', schedule);
-  useMotionValueEvent(speed, 'change', schedule);
+
+  const stopAnim = useCallback(() => {
+    const st = springRef.current;
+    if (st.rafId) {
+      cancelAnimationFrame(st.rafId);
+      st.rafId = 0;
+    }
+  }, []);
+
+  const startAnim = useCallback(() => {
+    const st = springRef.current;
+    if (reduce) {
+      st.head = st.target;
+      st.headVel = 0;
+      st.speed = 0;
+      st.speedVel = 0;
+      paintRef.current(true);
+      return;
+    }
+    if (st.rafId) return;
+    st.lastT = performance.now();
+    const w0 = SETTLE / glide;
+    const k0 = w0 * w0;
+    const c0 = 2 * w0;
+    const wv = 2000 / smoothing;
+    const kv = wv * wv;
+    const cv = 2.5 * wv;
+
+    const stepFrame = (now) => {
+      let rem = Math.min(0.05, Math.max(0.001, (now - st.lastT) / 1000));
+      st.lastT = now;
+
+      // Fixed <= 4ms physics sub-stepping keeps forward Euler unconditionally stable across any frame rate
+      while (rem > 0) {
+        const dt = Math.min(0.004, rem);
+        const a0 = k0 * (st.target - st.head) - c0 * st.headVel;
+        st.headVel += a0 * dt;
+        st.head += st.headVel * dt;
+
+        const av = kv * (st.headVel - st.speed) - cv * st.speedVel;
+        st.speedVel += av * dt;
+        st.speed += st.speedVel * dt;
+        rem -= dt;
+      }
+
+      if (!Number.isFinite(st.head) || !Number.isFinite(st.headVel) || !Number.isFinite(st.speed)) {
+        st.head = st.target;
+        st.headVel = 0;
+        st.speed = 0;
+        st.speedVel = 0;
+      }
+
+      paintRef.current(false);
+
+      const settled =
+        Math.abs(st.target - st.head) < 0.01 &&
+        Math.abs(st.headVel) < 0.05 &&
+        Math.abs(st.speed) < 0.5 &&
+        Math.abs(st.speedVel) < 1;
+
+      if (settled) {
+        st.head = st.target;
+        st.headVel = 0;
+        st.speed = 0;
+        st.speedVel = 0;
+        st.rafId = 0;
+        paintRef.current(true);
+      } else {
+        st.rafId = requestAnimationFrame(stepFrame);
+      }
+    };
+    st.rafId = requestAnimationFrame(stepFrame);
+  }, [glide, smoothing, reduce]);
+
+  useEffect(() => {
+    const st = springRef.current;
+    st.target = pct;
+    if (Math.abs(st.target - st.head) < 0.01 && Math.abs(st.headVel) < 0.05 && !st.rafId) {
+      st.head = pct;
+      paintRef.current(true);
+      return;
+    }
+    startAnim();
+  }, [pct, startAnim]);
+
+  useEffect(() => stopAnim, [stopAnim]);
+
   useLayoutEffect(() => {
     paintRef.current(true);
   });
@@ -129,7 +222,8 @@ export default function WakeSlider({
     const rawVal = min + ratio * (max - min);
     const cleanVal = snap(rawVal, min, max, step);
     const p = toPct(cleanVal, min, max);
-    target.set(p);
+    springRef.current.target = p;
+    startAnim();
     commit(cleanVal);
   };
 
@@ -174,9 +268,14 @@ export default function WakeSlider({
     const clean = snap(jumps[e.key], min, max, step);
     const p = toPct(clean, min, max);
     rootRef.current?.setAttribute('data-instant', 'true');
-    head.jump(p);
-    speed.jump(0);
-    target.jump(p);
+    stopAnim();
+    const st = springRef.current;
+    st.head = p;
+    st.headVel = 0;
+    st.speed = 0;
+    st.speedVel = 0;
+    st.target = p;
+    paintRef.current(true);
     commit(clean);
     onCommit?.(clean);
   };

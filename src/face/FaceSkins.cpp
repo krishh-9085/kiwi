@@ -277,18 +277,34 @@ void drawEye(int cx, int cy, int w, int h, int r, int lidIn, int lidOut,
     return;
   }
 
-  // 6. MECHA: Cirrectangular solid outer eye with floating smooth rounded
+  // 6. MECHA: Tall rectangular solid outer eye with floating tall rounded
   // rectangular pupil, 3D parallax inertia physics, and specular glint dot
-  // inside.
+  // inside (extended upward into unused top space on 128x64 0.96" OLED).
   if (currentEyeSkin == SKIN_MECHA) {
     if (h <= 3) {
       display.fillRoundRect(x0, cy - 1, w, maxI(2, h), 1, SSD1306_WHITE);
       return;
     }
 
-    // Outer smooth cirrectangular sclera (balanced rounded rectangle: distinct
-    // box with smooth corners, NOT a circle)
-    int cornerR = (minI(w, h) * 26) / 100;
+    int extraTop = 0;
+    if (h > 8) {
+      extraTop = (h * 32) / 100;
+      if (h < 18) {
+        extraTop = (extraTop * (h - 8)) / 10;
+      }
+      int maxUp = top - 2;
+      if (maxUp < 0)
+        maxUp = 0;
+      if (extraTop > maxUp)
+        extraTop = maxUp;
+    }
+    top -= extraTop;
+    h = bot - top;
+    int eyeCy = top + h / 2;
+
+    // Outer smooth tall rectangular sclera (distinct tall box with smooth
+    // corners)
+    int cornerR = (minI(w, h) * 24) / 100;
     if (cornerR < 3)
       cornerR = 3;
     if (cornerR * 2 > h)
@@ -298,11 +314,11 @@ void drawEye(int cx, int cy, int w, int h, int r, int lidIn, int lidOut,
 
     display.fillRoundRect(x0, top, w, h, cornerR, SSD1306_WHITE);
 
-    // Inner floating rounded rectangular pupil (scaled with emotional pupil
-    // dilation & physics)
+    // Inner floating tall rounded rectangular pupil (scaled with emotional
+    // pupil dilation & physics)
     float pScale = clampf(faceNow.pupilScale, 0.65f, 1.40f);
-    int pw = (int)lroundf(w * 0.46f * pScale);
-    int ph = (int)lroundf(h * 0.52f * pScale);
+    int pw = (int)lroundf(w * 0.40f * pScale);
+    int ph = (int)lroundf(h * 0.60f * pScale);
     if (pw < 6)
       pw = 6;
     if (ph < 6)
@@ -312,8 +328,8 @@ void drawEye(int cx, int cy, int w, int h, int r, int lidIn, int lidOut,
     if (ph > h - 6)
       ph = h - 6;
 
-    // Smooth micro-rounded pupil corners (distinctly rectangular with soft
-    // corners)
+    // Smooth micro-rounded pupil corners (distinctly tall rectangular with
+    // soft corners)
     int pr = (minI(pw, ph) * 20) / 100;
     if (pr < 2)
       pr = 2;
@@ -334,9 +350,11 @@ void drawEye(int cx, int cy, int w, int h, int r, int lidIn, int lidOut,
       shiftX = maxShiftX;
     if (shiftY < -maxShiftY)
       shiftY = -maxShiftY;
+    if (shiftY > maxShiftY)
+      shiftY = maxShiftY;
 
     int px = cx + shiftX - pw / 2;
-    int py = cy + shiftY - ph / 2;
+    int py = eyeCy + shiftY - ph / 2;
     if (px < x0 + 2)
       px = x0 + 2;
     if (px + pw > x1 - 2)
@@ -352,7 +370,7 @@ void drawEye(int cx, int cy, int w, int h, int r, int lidIn, int lidOut,
       // Specular Glint Dot inside the pupil (dynamically shifts with real gaze
       // direction)
       if (pw >= 8 && ph >= 8) {
-        int dotSize = (pw >= 13 && ph >= 13) ? 3 : 2;
+        int dotSize = (pw >= 12 && ph >= 18) ? 3 : 2;
         int pcx = px + pw / 2;
         int pcy = py + ph / 2;
 

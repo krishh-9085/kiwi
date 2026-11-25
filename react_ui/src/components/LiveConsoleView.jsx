@@ -115,6 +115,46 @@ const HOUR_OPTIONS = Array.from({ length: 24 }).map((_, i) => ({
   lbl: i === 0 ? '12 AM' : i < 12 ? `${i} AM` : i === 12 ? '12 PM' : `${i - 12} PM`
 }))
 
+const OFFLINE_PSRAM_FALLBACK = {
+  free: 1951744,
+  total: 2097152,
+  used: 145408,
+  pct: 7
+}
+
+function computeVitals(status) {
+  const hasLiveHeap = Boolean(status?.heap?.total > 0)
+  const freeKb = status?.heap?.free ? Math.round(status.heap.free / 1024) : 178
+  const totalKb = status?.heap?.total ? Math.round(status.heap.total / 1024) : 320
+  const ramUsedPct = status?.heap?.pct ?? (freeKb ? Math.round(((totalKb - freeKb) / totalKb) * 100) : 44)
+  const cpuTemp = status?.temp != null ? Math.round(status.temp) : 46
+
+  // Show 2MB PSRAM fallback when offline (no live /status yet); hide only if live device reports no PSRAM
+  const psramSrc = status?.psram ?? (!hasLiveHeap ? OFFLINE_PSRAM_FALLBACK : null)
+  const hasPsram = Boolean(psramSrc && psramSrc.total > 0)
+  const psramTotalKb = hasPsram ? Math.round(psramSrc.total / 1024) : 0
+  const psramFreeKb = hasPsram ? Math.round(psramSrc.free / 1024) : 0
+  const psramUsedKb = hasPsram ? Math.max(0, psramTotalKb - psramFreeKb) : 0
+  const psramPct = hasPsram && psramTotalKb > 0 ? Math.round((psramUsedKb / psramTotalKb) * 100) : 0
+  const psramFreeMb = hasPsram ? (psramFreeKb / 1024).toFixed(2) : '0'
+  const psramTotalMb = hasPsram ? (psramTotalKb / 1024).toFixed(0) : '0'
+
+  const flashUsed = status?.flash?.used ?? 1648200
+  const flashFree = status?.flash?.free ?? 383416
+  const flashTotal = status?.flash?.total ?? (flashUsed + flashFree)
+  const flashPct = status?.flash?.pct ?? Math.round((flashUsed / flashTotal) * 100)
+  const flashFreeMb = (flashFree / (1024 * 1024)).toFixed(2)
+  const flashUsedMb = (flashUsed / (1024 * 1024)).toFixed(2)
+  const flashTotalMb = (flashTotal / (1024 * 1024)).toFixed(1)
+  const flashChipMb = status?.flash?.chip ? Math.round(status.flash.chip / (1024 * 1024)) : 4
+
+  return {
+    freeKb, totalKb, ramUsedPct, cpuTemp,
+    hasPsram, psramTotalKb, psramFreeKb, psramUsedKb, psramPct, psramFreeMb, psramTotalMb,
+    flashPct, flashFreeMb, flashUsedMb, flashTotalMb, flashChipMb
+  }
+}
+
 
 
 export default function LiveConsoleView({
@@ -215,6 +255,7 @@ export default function LiveConsoleView({
   const ownerName = status?.owner || config?.memory?.name || config?.ownerName || config?.mem_name || 'Friend'
 
   const hostName = status?.host || 'kiwi.local'
+  const vitals = computeVitals(status)
 
 
 
@@ -472,29 +513,11 @@ export default function LiveConsoleView({
 
               {/* Desktop Vitals Deck (Live Hardware Telemetry) */}
               {(() => {
-                const freeKb = status?.heap?.free ? Math.round(status.heap.free / 1024) : 178;
-                const totalKb = status?.heap?.total ? Math.round(status.heap.total / 1024) : 320;
-                const ramUsedPct = status?.heap?.pct ?? (freeKb ? Math.round(((totalKb - freeKb) / totalKb) * 100) : 44);
-                const cpuTemp = status?.temp != null ? Math.round(status.temp) : 46;
-
-                // PSRAM calculations (2MB High-Speed External RAM)
-                const hasPsram = Boolean(status?.psram && status.psram.total > 0);
-                const psramTotalKb = hasPsram ? Math.round(status.psram.total / 1024) : 0;
-                const psramFreeKb = hasPsram ? Math.round(status.psram.free / 1024) : 0;
-                const psramUsedKb = hasPsram ? Math.max(0, psramTotalKb - psramFreeKb) : 0;
-                const psramPct = hasPsram && psramTotalKb > 0 ? Math.round((psramUsedKb / psramTotalKb) * 100) : 0;
-                const psramFreeMb = hasPsram ? (psramFreeKb / 1024).toFixed(2) : '0';
-                const psramTotalMb = hasPsram ? (psramTotalKb / 1024).toFixed(0) : '0';
-
-                // Flash storage calculations
-                const flashUsed = status?.flash?.used ?? 1648200;
-                const flashFree = status?.flash?.free ?? 383416;
-                const flashTotal = status?.flash?.total ?? (flashUsed + flashFree);
-                const flashPct = status?.flash?.pct ?? Math.round((flashUsed / flashTotal) * 100);
-                const flashFreeMb = (flashFree / (1024 * 1024)).toFixed(2);
-                const flashUsedMb = (flashUsed / (1024 * 1024)).toFixed(2);
-                const flashTotalMb = (flashTotal / (1024 * 1024)).toFixed(1);
-                const flashChipMb = status?.flash?.chip ? Math.round(status.flash.chip / (1024 * 1024)) : 4;
+                const {
+                  freeKb, totalKb, ramUsedPct, cpuTemp,
+                  hasPsram, psramFreeKb, psramUsedKb, psramPct, psramFreeMb, psramTotalMb,
+                  flashPct, flashFreeMb, flashUsedMb, flashTotalMb, flashChipMb
+                } = vitals;
 
                 return (
                   <div style={{
@@ -740,13 +763,13 @@ export default function LiveConsoleView({
                 <span className="flux-progress-label">Free Heap ({status?.heap?.free ? Math.round(status.heap.free / 1024) : 178} KB)</span>
               </div>
 
-              {status?.psram?.total ? (
+              {vitals.hasPsram ? (
                 <div className="flux-progress-row">
-                  <span className="flux-progress-val" style={{ color: '#34d399' }}>{status?.psram?.pct != null ? `${100 - status.psram.pct}%` : '100%'}</span>
+                  <span className="flux-progress-val" style={{ color: '#34d399' }}>{`${100 - vitals.psramPct}%`}</span>
                   <div className="flux-progress-track">
-                    <div style={{ background: '#34d399', height: '100%', borderRadius: '4px', width: status?.psram?.pct != null ? `${100 - status.psram.pct}%` : '100%' }} />
+                    <div style={{ background: '#34d399', height: '100%', borderRadius: '4px', width: `${100 - vitals.psramPct}%` }} />
                   </div>
-                  <span className="flux-progress-label" style={{ color: '#34d399' }}>Free PSRAM ({Math.round(status.psram.free / 1024)} KB / 2MB)</span>
+                  <span className="flux-progress-label" style={{ color: '#34d399' }}>Free PSRAM ({vitals.psramFreeKb} KB / {vitals.psramTotalMb}MB)</span>
                 </div>
               ) : null}
 
@@ -1376,29 +1399,11 @@ export default function LiveConsoleView({
           <div className="mobile-bento-col">
             {/* Card 1: Live Hardware Telemetry (RAM, Flash & CPU Temp) */}
             {(() => {
-              const freeKb = status?.heap?.free ? Math.round(status.heap.free / 1024) : 178;
-              const totalKb = status?.heap?.total ? Math.round(status.heap.total / 1024) : 320;
-              const ramUsedPct = status?.heap?.pct ?? (freeKb ? Math.round(((totalKb - freeKb) / totalKb) * 100) : 44);
-              const cpuTemp = status?.temp != null ? Math.round(status.temp) : 46;
-
-              // PSRAM calculations (2MB High-Speed External RAM)
-              const hasPsram = Boolean(status?.psram && status.psram.total > 0);
-              const psramTotalKb = hasPsram ? Math.round(status.psram.total / 1024) : 0;
-              const psramFreeKb = hasPsram ? Math.round(status.psram.free / 1024) : 0;
-              const psramUsedKb = hasPsram ? Math.max(0, psramTotalKb - psramFreeKb) : 0;
-              const psramPct = hasPsram && psramTotalKb > 0 ? Math.round((psramUsedKb / psramTotalKb) * 100) : 0;
-              const psramFreeMb = hasPsram ? (psramFreeKb / 1024).toFixed(2) : '0';
-              const psramTotalMb = hasPsram ? (psramTotalKb / 1024).toFixed(0) : '0';
-
-              // Flash storage calculations
-              const flashUsed = status?.flash?.used ?? 1648200;
-              const flashFree = status?.flash?.free ?? 383416;
-              const flashTotal = status?.flash?.total ?? (flashUsed + flashFree);
-              const flashPct = status?.flash?.pct ?? Math.round((flashUsed / flashTotal) * 100);
-              const flashFreeMb = (flashFree / (1024 * 1024)).toFixed(2);
-              const flashUsedMb = (flashUsed / (1024 * 1024)).toFixed(2);
-              const flashTotalMb = (flashTotal / (1024 * 1024)).toFixed(1);
-              const flashChipMb = status?.flash?.chip ? Math.round(status.flash.chip / (1024 * 1024)) : 4;
+              const {
+                freeKb, totalKb, ramUsedPct, cpuTemp,
+                hasPsram, psramFreeKb, psramUsedKb, psramPct, psramFreeMb, psramTotalMb,
+                flashPct, flashFreeMb, flashUsedMb, flashTotalMb, flashChipMb
+              } = vitals;
 
               return (
                 <div style={{

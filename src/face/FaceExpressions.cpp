@@ -67,11 +67,13 @@ void setEmotion(Emotion e) {
   if (e == EMOTION_IDLE) {
     emotionAutoReturnAt = 0;
     nextIdleLookAt = now + 300 + random(0, 500);
-    idleExpression = 0;
-    idleExpressionEnd = 0;
-  } else if (e == EMOTION_SURPRISED && returnIdleAt == 0 &&
-             emotionAutoReturnAt == 0) {
-    emotionAutoReturnAt = now + 3000;
+  } else {
+    if (!isTriggeringIdleMood())
+      resetIdleMoodTimer();
+    if (e == EMOTION_SURPRISED && returnIdleAt == 0 &&
+        emotionAutoReturnAt == 0) {
+      emotionAutoReturnAt = now + 3000;
+    }
   }
 }
 
@@ -665,7 +667,7 @@ bool triggerEmotionByName(const String &nameIn, uint32_t holdMs,
     mood = PET_PLAYFUL;
   else if (e == "sleepy")
     mood = PET_SLEEPY;
-  else if (e == "proud")
+  else if (e == "proud_pet")
     mood = PET_PROUD;
   else if (e == "random")
     mood = random(0, PET_MOOD_COUNT);

@@ -327,7 +327,7 @@ static void checkBootGreeting() {
   if (isTonePlaying())
     return;
 
-  // Give up to 4 seconds for WiFi NTP time sync so the greeting matches the
+  // Give up to 10 seconds for WiFi NTP time sync so the greeting matches the
   // exact time of day
   if (!timeSynced && (millis() - bootStartAt) < 10000UL)
     return;

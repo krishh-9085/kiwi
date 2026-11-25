@@ -484,9 +484,10 @@ void handleQuestion(const String &qIn) {
     if (lastActionsExecuted > 0) {
       robotStateDesc = "Ready";
       addTerminalLog("[ROBOT] Action completed.");
-      setEmotion(EMOTION_IDLE);
-      returnIdleAt = 0;
-      emotionAutoReturnAt = 0;
+      // Preserve timed emotions triggered by [ACTION: emotion/sound ...]
+      if (returnIdleAt == 0 && emotionAutoReturnAt == 0) {
+        setEmotion(EMOTION_IDLE);
+      }
       return;
     }
     robotStateDesc = "LLM Empty / Error";
@@ -507,16 +508,15 @@ void handleQuestion(const String &qIn) {
 
   robotStateDesc = "Speaking...";
   {
-    Emotion vocalEmotion = detectVocalEmotion(answer);
-    if (vocalEmotion == EMOTION_HAPPY || vocalEmotion == EMOTION_LAUGHING) {
-      vocalEmotion = EMOTION_SPEAKING;
-    }
-    if (vocalEmotion == EMOTION_SPEAKING &&
+    bool actionHeldEmotion =
+        (returnIdleAt > millis() || emotionAutoReturnAt > millis()) &&
         currentEmotion != EMOTION_THINKING &&
-        currentEmotion != EMOTION_LISTENING && currentEmotion != EMOTION_IDLE &&
-        currentEmotion != EMOTION_HAPPY && currentEmotion != EMOTION_LAUGHING) {
-      vocalEmotion = currentEmotion; // Retain emotion set by [ACTION: emotion
-                                     // ...] (e.g. angry, sad)
+        currentEmotion != EMOTION_LISTENING && currentEmotion != EMOTION_IDLE;
+    Emotion vocalEmotion = detectVocalEmotion(answer);
+    if (actionHeldEmotion) {
+      vocalEmotion = currentEmotion; // Retain timed emotion set by [ACTION: emotion/sound ...]
+    } else if (vocalEmotion == EMOTION_HAPPY || vocalEmotion == EMOTION_LAUGHING) {
+      vocalEmotion = EMOTION_SPEAKING;
     }
     setEmotion(vocalEmotion);
 
@@ -615,12 +615,16 @@ void handleQuestion(const String &qIn) {
       return;
     }
 
-    // Turn completed: return immediately to natural IDLE eye skin
-    setEmotion(EMOTION_IDLE);
-    returnIdleAt = 0;
+    // Turn completed: return to natural IDLE unless an action timer holds an expression
+    uint32_t endNow = millis();
+    if ((returnIdleAt == 0 || (int32_t)(endNow - returnIdleAt) >= 0) &&
+        (emotionAutoReturnAt == 0 || (int32_t)(endNow - emotionAutoReturnAt) >= 0)) {
+      setEmotion(EMOTION_IDLE);
+      returnIdleAt = 0;
+      emotionAutoReturnAt = 0;
+    }
   }
 
   robotStateDesc = "Ready";
   addTerminalLog("[ROBOT] Turn completed. Ready.");
-  emotionAutoReturnAt = 0;
 }

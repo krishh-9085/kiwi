@@ -357,7 +357,7 @@ ww lock 1          # Lock microphone slot to prevent automatic channel scan on b
 ## Architecture & Codebase Map
 
 ```
-MyRobot_Modular.ino          Main sketch: setup(), loop(), boot watchdog, boot greeting
+Kiwi.ino                     Main sketch: setup(), loop(), boot watchdog, boot greeting
 platformio.ini               PlatformIO configuration (ESP32-S3, 240 MHz, partitions, libs)
 partitions.csv               4MB Dual OTA layout (app0 1.9MB, app1 1.9MB, NVS, coredump)
 assets/models/               Source WakeWord TFLite model & config (alexa.tflite, alexa.json)

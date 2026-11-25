@@ -1,5 +1,5 @@
 #include "face/FaceEngine.h"
-#include "animation/AnimationEngine.h"
+#include "face/AnimationEngine.h"
 #include "config/AppConfig.h"
 #include "face/BootWakeAnim.h"
 #include "face/SleepyWakeAnim.h"

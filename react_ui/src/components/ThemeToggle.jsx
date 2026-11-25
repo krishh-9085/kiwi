@@ -1,10 +1,10 @@
 import React, { useState } from 'react'
 
 /**
- * Animated Lightbulb Theme Toggle Button (Button 4)
+ * Animated Lightbulb Theme Toggle Button
  * CSS-animated SVG lightbulb matching Kiwi Robot design system.
  */
-export function ThemeToggleButton4({
+export function ThemeToggle({
   isDark: controlledIsDark,
   onToggle,
   className = '',
@@ -100,4 +100,4 @@ export function ThemeToggleButton4({
   )
 }
 
-export default ThemeToggleButton4
+export default ThemeToggle

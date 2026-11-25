@@ -1,4 +1,4 @@
-#include "services/WeatherService.h"
+#include "integrations/WeatherService.h"
 #include "config/AppConfig.h"
 #include <WiFi.h>
 #include <HTTPClient.h>

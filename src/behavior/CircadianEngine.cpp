@@ -4,7 +4,7 @@
 #include "face/FaceDisplay.h"
 #include "face/SleepyWakeAnim.h"
 #include "hardware/AudioEngine.h"
-#include "behavior/ActionExecutor.h"
+#include "commands/ActionExecutor.h"
 
 void checkCircadianSleep() {
   if (manualSleep) {

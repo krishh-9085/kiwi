@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
 import { Globe, RefreshCw } from 'lucide-react'
-import { Tooltip } from './base/tooltip/tooltip'
-import ThemeToggleButton4 from './ThemeToggleButton4'
+import { Tooltip } from './Tooltip'
+import ThemeToggle from './ThemeToggle'
 
 export default function ContentHeader({
   status,
@@ -107,9 +107,9 @@ export default function ContentHeader({
           </Tooltip>
         )}
 
-        {/* Animated Lightbulb Theme Toggle Button 4 (toggles.dev / Skiper UI) */}
+        {/* Animated Lightbulb Theme Toggle */}
         <Tooltip title={theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}>
-          <ThemeToggleButton4
+          <ThemeToggle
             isDark={theme === 'dark'}
             onToggle={onToggleTheme}
             style={{ width: '34px', height: '34px' }}

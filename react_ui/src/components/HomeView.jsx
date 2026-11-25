@@ -3,7 +3,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react'
 import KiwiEyes from './KiwiEyes'
 import KiwiLogo from './KiwiLogo'
 
-import { Tooltip } from './base/tooltip/tooltip'
+import { Tooltip } from './Tooltip'
 
 import WakeSlider from './ui/WakeSlider'
 
@@ -22,7 +22,7 @@ import {
 } from 'lucide-react'
 
 import FluxSelect from './FluxSelect'
-import Esp32LedColorPicker from './Esp32LedColorPicker'
+import RgbControlCard from './RgbControlCard'
 
 import { OLED_FACES, SKIN_FACES } from '../data/faceData'
 
@@ -157,7 +157,7 @@ function computeVitals(status) {
 
 
 
-export default function LiveConsoleView({
+export default function HomeView({
 
   status,
 
@@ -738,7 +738,7 @@ export default function LiveConsoleView({
 
               {/* Desktop WS2812 RGB LED (Pin 48) HeroUI ColorPicker */}
               <div style={{ marginTop: '14px', marginBottom: '8px' }}>
-                <Esp32LedColorPicker
+                <RgbControlCard
                   onColorChange={(hex) => onTriggerAction(`/do?rgb_color=${encodeURIComponent(hex.replace('#', ''))}`)}
                   onClearOverride={() => onTriggerAction('/do?rgb_clear=1')}
                   initialColor="#38BDF8"
@@ -1555,7 +1555,7 @@ export default function LiveConsoleView({
             })()}
 
             {/* Card 2: Bottom Left - ESP32-S3 Pin 48 RGB LED Mood Light */}
-            <Esp32LedColorPicker
+            <RgbControlCard
               onColorChange={(hex) => onTriggerAction(`/do?rgb_color=${encodeURIComponent(hex.replace('#', ''))}`)}
               onClearOverride={() => onTriggerAction('/do?rgb_clear=1')}
               initialColor="#38BDF8"

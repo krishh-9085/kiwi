@@ -1,5 +1,5 @@
-#include "behavior/CommandHandler.h"
-#include "behavior/ActionExecutor.h"
+#include "commands/CommandHandler.h"
+#include "commands/ActionExecutor.h"
 #include "behavior/HungerEngine.h"
 #include "behavior/InteractionManager.h"
 #include "config/AppConfig.h"
@@ -8,9 +8,10 @@
 #include "face/FaceEngine.h"
 #include "hardware/AudioEngine.h"
 #include "hardware/TouchController.h"
-#include "services/AiService.h"
-#include "services/AiTextTools.h"
-#include "services/WeatherService.h"
+#include "ai/AiService.h"
+#include "ai/AiTextTools.h"
+#include "integrations/WeatherService.h"
+#include "net/WifiManager.h"
 #include "web/WebPortal.h"
 #include <Preferences.h>
 #include <WiFi.h>

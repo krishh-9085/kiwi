@@ -5,31 +5,27 @@
   Tools -> USB CDC On Boot = Enabled
 
   Architecture & Modules:
-  - config/AppConfig.h / .cpp      : Hardware pinouts, constants, shared globals
-  - core/CoreTypes.h               : Data structures, emotion & mood enums
-  - config/ConfigManager.h / .cpp  : NVS Preferences persistent storage
-  - hardware/AudioEngine.h / .cpp  : I2S driver, Tone player, DSP &
- soft-clipping
-  - face/FaceEngine.h / .cpp       : OLED procedural vector face engine &
- screens
-  - services/WeatherService.h/.cpp : Open-Meteo REST API live weather client
-  - behavior/CircadianEngine.h/.cpp: Circadian night sleep mode & auto-dimming
-  - behavior/BoredomBehavior.h/.cpp: Autonomous idle remarks & desk banter
-  - behavior/CommandHandler.h/.cpp : Voice command parsing & dispatch
-  - behavior/InteractionManager.h/.: User interaction pipeline & UI pump
-  - services/AiService.h / .cpp    : STT, LLM (Gemini/Groq), streaming TTS
- clients
-  - hardware/TouchController.h/.cpp: Capacitive & digital touch sensor gestures
-  - web/WebPortal.h / .cpp         : Captive SoftAP, settings UI, Web OTA
- updates
+  - config/AppConfig.h / .cpp        : Hardware pinouts, constants, shared globals
+  - core/CoreTypes.h                 : Data structures, emotion & mood enums
+  - config/ConfigManager.h / .cpp    : NVS Preferences persistent storage
+  - hardware/AudioEngine.h / .cpp    : I2S driver, Tone player, DSP & soft-clipping
+  - face/FaceEngine.h / .cpp         : OLED procedural vector face, animations & screens
+  - integrations/WeatherService.h/.cp: Open-Meteo REST API live weather client
+  - integrations/Wled & HyperHdr     : WLED & HyperHDR ambilight control
+  - memory/MemoryService.h / .cpp    : Persistent personal diary & family graph
+  - behavior/                        : Circadian, Greeting, Hunger, Boredom, OfflineBrain
+  - commands/                        : Voice command handlers & [ACTION:] executor
+  - ai/                              : STT, LLM (Gemini/Groq), streaming TTS
+  - net/WifiManager.h / .cpp         : STA/SoftAP Wi-Fi, mDNS, captive DNS & NTP sync
+  - web/WebPortal.h / .cpp           : Embedded Preact UI server, REST API & Web OTA
  ==============================================================================
 */
 
-#include "animation/AnimationEngine.h"
-#include "behavior/ActionExecutor.h"
+#include "face/AnimationEngine.h"
+#include "commands/ActionExecutor.h"
 #include "behavior/BoredomBehavior.h"
 #include "behavior/CircadianEngine.h"
-#include "behavior/CommandHandler.h"
+#include "commands/CommandHandler.h"
 #include "behavior/GreetingEngine.h"
 #include "behavior/HungerEngine.h"
 #include "behavior/InteractionManager.h"
@@ -48,11 +44,12 @@
 #include "hardware/WakeWordEngine.h"
 #include <ESP_TF.h>
 #include "power/PowerManager.h"
-#include "services/AiService.h"
-#include "services/HyperHdrService.h"
-#include "services/MemoryService.h"
-#include "services/WeatherService.h"
-#include "services/WledService.h"
+#include "ai/AiService.h"
+#include "integrations/HyperHdrService.h"
+#include "memory/MemoryService.h"
+#include "integrations/WeatherService.h"
+#include "integrations/WledService.h"
+#include "net/WifiManager.h"
 #include "web/WebPortal.h"
 #include <Arduino.h>
 #include <ESPmDNS.h>

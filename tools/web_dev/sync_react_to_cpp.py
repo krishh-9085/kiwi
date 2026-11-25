@@ -61,7 +61,7 @@ def sync_react_to_cpp():
     print(f"  Original single-file HTML bundle: {len(raw_data) / 1024:.1f} KB")
     print(f"  Gzipped PROGMEM payload size:     {len(gz_data) / 1024:.1f} KB")
     print(f"  Target Header: {header_path}")
-    print("\nTip: To revert to the classic HTML UI at any time, run 'sync_ui_to_cpp.bat'.")
+    print("\nTip: Run 'sync_react_to_cpp.bat' anytime after UI edits to rebuild PROGMEM.")
 
 if __name__ == "__main__":
     sync_react_to_cpp()

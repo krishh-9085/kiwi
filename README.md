@@ -4,7 +4,7 @@
 
 Kiwi is powered by local offline neural wake word detection, dual-core multithreaded rendering, an interactive Tamagotchi-style pet hunger system, cloud speech-to-text, multiple LLM reasoning engines (Groq, Google Gemini), and expressive streaming text-to-speech. Its eyes, sounds, RGB LED, and behaviors dynamically react to physical touch, vocal emotions, time of day, room lighting (HyperHDR / WLED), and LLM-driven actions.
 
-- **Firmware Version:** `v1.2` (`FIRMWARE_VERSION` in [AppConfig.h](file:///d:/PROJECTS/MyRobot_Modular/src/config/AppConfig.h#L8))
+- **Firmware Version:** `v1.2` (`FIRMWARE_VERSION` in [AppConfig.h](src/config/AppConfig.h#L8))
 - **Hardware Platform:** ESP32-S3 (Dual-Core Xtensa LX7 @ 240 MHz, 4 MB Flash)
 - **Web UI Platform:** Modern Single-Page App (React 19 + Vite + TailwindCSS + Framer Motion) embedded in PROGMEM Gzip
 - **Build System:** PlatformIO (`default_envs = esp32s3`)
@@ -25,7 +25,7 @@ Please review these items before configuring or flashing:
 
 ## Hardware Pinout & Wiring (ESP32-S3)
 
-Configured in [AppConfig.h](file:///d:/PROJECTS/MyRobot_Modular/src/config/AppConfig.h#L27-L39):
+Configured in [AppConfig.h](src/config/AppConfig.h#L27-L39):
 
 | Peripheral | Signal | ESP32-S3 Pin | Notes |
 | :--- | :--- | :--- | :--- |
@@ -52,7 +52,7 @@ Configured in [AppConfig.h](file:///d:/PROJECTS/MyRobot_Modular/src/config/AppCo
 ## Key Features
 
 ### 1. Dual-Core FreeRTOS Multithreading
-- **Core 0 — Display & Lighting Engine:** A dedicated FreeRTOS task ([FaceEngine.cpp](file:///d:/PROJECTS/MyRobot_Modular/src/face/FaceEngine.cpp#L150-L162)) runs at a locked 40 FPS, driving display I2C rendering and WS2812 RGB LED color blending. It offloads I2C bus traffic completely from Core 1.
+- **Core 0 — Display & Lighting Engine:** A dedicated FreeRTOS task ([FaceEngine.cpp](src/face/FaceEngine.cpp#L150-L162)) runs at a locked 40 FPS, driving display I2C rendering and WS2812 RGB LED color blending. It offloads I2C bus traffic completely from Core 1.
 - **Core 0 — Wake Word Background Worker:** Runs TFLite Micro audio feature extraction and inference in parallel without stalling audio or web requests.
 - **Core 1 — Robot Logic & Networking:** Handles main loop execution, Wi-Fi maintenance, captive SoftAP, REST APIs, TLS client communication, cloud AI pipelines, and touch gesture state machines.
 
@@ -360,9 +360,10 @@ ww lock 1          # Lock microphone slot to prevent automatic channel scan on b
 MyRobot_Modular.ino          Main sketch: setup(), loop(), boot watchdog, boot greeting
 platformio.ini               PlatformIO configuration (ESP32-S3, 240 MHz, partitions, libs)
 partitions.csv               4MB Dual OTA layout (app0 1.9MB, app1 1.9MB, NVS, coredump)
-react_ui/                    Modern React 19 + Vite + Tailwind frontend single-page application
+assets/models/               Source WakeWord TFLite model & config (alexa.tflite, alexa.json)
+react_ui/                    Preact + Vite single-page web dashboard application
   src/
-    components/              LiveConsoleView, FacesStudioView, SettingsView, OtaUpdateView, etc.
+    components/              HomeView, FacesStudioView, SettingsView, OtaUpdateView, RgbControlCard, ThemeToggle, Tooltip
     data/                    faceData.js (SVG definitions, skins, emotion matrices)
 start_react_ui.bat           1-click React UI development server launcher (Hot Reload)
 sync_react_to_cpp.bat        1-click React bundle builder & C++ Gzip PROGMEM sync script
@@ -379,8 +380,9 @@ src/
     SoundLevel.h / .cpp      Microphone amplitude detector for sound-reactive eyes
     TouchController.h / .cpp 3-pad touch debounce, gesture recognition, tickle & apology combo
     WakeWordEngine.h / .cpp  MicroWakeWord (20 KB arena) Alexa task on Core 0
-    alexa_model.h            Official MicroWakeWord Alexa neural network model weights
+    alexa_model.h            Compiled MicroWakeWord Alexa neural network model weights
   face/
+    AnimationEngine.h / .cpp Custom 128x64 OLED frame animation player
     FaceEngine.h / .cpp      OLED refresh loop & Core 0 dedicated 40 FPS task (uiDisplayTask)
     FaceRenderer.h / .cpp    Eye, eyelid, mouth, blush, and flourish rendering with spring physics
     FaceExpressions.h / .cpp 34 facial emotion state definitions and tween easing
@@ -390,38 +392,43 @@ src/
     FaceDisplay.h / .cpp     SSD1306 display hardware driver, contrast, and power control
     BootWakeAnim.h / .cpp    Power-on wake animation routine
     SleepyWakeAnim.h / .cpp  Bedtime fall-asleep and morning wake-up animations
-  animation/
-    AnimationEngine.h / .cpp Custom 128x64 OLED frame animation player
   behavior/
     InteractionManager.h/.cpp Voice interaction pipeline, streaming TTS pump, vocal emotion tags
-    ActionExecutor.h / .cpp  Execution of [ACTION: ...] tags & countdown timer alert loop
-    CommandHandler.h / .cpp  Fast-path local voice commands (time, weather, skins, lights, volume)
     HungerEngine.h / .cpp    Tamagotchi hunger scheduling, feeding, anger, and apology combo
     CircadianEngine.h / .cpp Circadian night sleep schedule and manual sleep logic
     GreetingEngine.h / .cpp  Time-of-day greetings
-    BoredomBehavior.h / .cpp Autonomous idle remarks and chatter
+    BoredomBehavior.h / .cpp Autonomous idle remarks, follow-ups, and chatter
     OfflineBrain.h / .cpp    Desk Buddy offline fallback behavior when Wi-Fi is disconnected
+  commands/
+    ActionExecutor.h / .cpp  Execution of [ACTION: ...] tags & countdown timer alert loop
+    CommandHandler.h / .cpp  Fast-path local voice commands (time, weather, skins, volume)
+    CommandEmotions.cpp      Voice emotion & affection commands
+    CommandLightsTimer.cpp   Voice timer, WLED, RGB & HyperHDR commands
   power/
     PowerManager.h / .cpp    Light & Deep sleep, touch wake, RTC epoch sync, 80/160/240 MHz scaling
-  services/
-    AiService.h / .cpp       Facade header uniting AI modules
-    AiTransport.h / .cpp     HTTP / TLS stream transport
+  ai/
+    AiService.h              Umbrella header uniting AI modules
+    AiTransport.h / .cpp     HTTP / TLS stream transport & DNS TTL cache
     AiTextTools.h / .cpp     JSON parsers, string sanitizers, and Devanagari helpers
     AiChatHistory.h / .cpp   Multi-turn conversation history buffer
     AiLlmService.h / .cpp    Groq and Google Gemini client with SSE streaming
     AiSttService.h / .cpp    I2S audio recorder & multipart STT client (Sarvam, Whisper)
     AiTtsService.h / .cpp    Sarvam and Fish Audio PCM stream decoder
-    MemoryService.h / .cpp   16-fact persistent memory storage, owner name, and follow-ups
+  memory/
+    MemoryService.h / .cpp   16-fact persistent diary, family links, owner name & follow-ups
+  integrations/
     HyperHdrService.h / .cpp HyperHDR JSON-RPC client (screen sync, ambilight, HDR, colors)
     WledService.h / .cpp     WLED mDNS discovery and HTTP control
     WeatherService.h / .cpp  Open-Meteo REST API live weather client
+  net/
+    WifiManager.h / .cpp     STA/SoftAP Wi-Fi lifecycle, captive DNS, mDNS, NTP & AP suspend guards
   web/
-    WebPortal.h / .cpp       SoftAP captive portal, mDNS, HTTP routing
-    WebPortalApi.cpp         REST API handlers (/status, /config, /do, /save, /scan, telemetry)
-    WebPortalDashboard.cpp   Single-page React app delivery handler from PROGMEM Gzip
+    WebPortal.h / .cpp       HTTP router, captive redirects, OTA upload, PROGMEM SPA delivery
+    WebPortalApi.cpp         REST telemetry & config API (/status, /config, /logs, /scan)
+    WebPortalActions.cpp     Action endpoint (/do) for UI & hardware controls
+    WebPortalSave.cpp        Configuration save endpoint (/save)
     WebPortalOtaEngine.cpp   FreeRTOS background OTA downloader from GitHub or custom URL
-    WebPortalWiring.cpp      Redirect handler for /wiring
-    dashboard_html_gz.h      Compiled Gzip PROGMEM byte array of the unified React SPA
+    dashboard_html_gz.h      Compiled Gzip PROGMEM byte array of the unified Preact SPA
     icon.h                   Embedded Web Portal apple-touch icon
 tools/web_dev/               Local Python web dev server, mock simulator, and sync scripts
 ```

@@ -1,5 +1,5 @@
-#include "behavior/ActionExecutor.h"
-#include "behavior/CommandHandler.h"
+#include "commands/ActionExecutor.h"
+#include "commands/CommandHandler.h"
 #include "behavior/InteractionManager.h"
 #include "config/AppConfig.h"
 #include "config/ConfigManager.h"
@@ -12,9 +12,9 @@
 #include "face/SleepyWakeAnim.h"
 #include "hardware/AudioEngine.h"
 #include "hardware/WakeWordEngine.h"
-#include "services/AiService.h"
-#include "services/HyperHdrService.h"
-#include "services/WledService.h"
+#include "ai/AiService.h"
+#include "integrations/HyperHdrService.h"
+#include "integrations/WledService.h"
 #include <WiFi.h>
 
 // ============================================================

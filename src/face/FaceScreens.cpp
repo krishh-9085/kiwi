@@ -1,6 +1,6 @@
 #include "face/FaceScreens.h"
 #include "core/Timing.h"
-#include "animation/AnimationEngine.h"
+#include "face/AnimationEngine.h"
 #include "behavior/InteractionManager.h"
 #include "config/AppConfig.h"
 #include "face/FaceDisplay.h"

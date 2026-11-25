@@ -2,7 +2,7 @@
 #include "config/AppConfig.h"
 #include "hardware/AudioEngine.h"
 #include "hardware/RgbLed.h"
-#include "services/AiChatHistory.h"
+#include "ai/AiChatHistory.h"
 #include <Preferences.h>
 #include <WiFi.h>
 

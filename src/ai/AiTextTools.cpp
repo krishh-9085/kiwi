@@ -1,6 +1,6 @@
-#include "services/AiTextTools.h"
+#include "ai/AiTextTools.h"
 #include "config/AppConfig.h"
-#include "services/MemoryService.h"
+#include "memory/MemoryService.h"
 
 // ============================================================
 // BASE64 & UTF-8 HELPERS

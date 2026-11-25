@@ -1,6 +1,6 @@
 #include "hardware/TouchController.h"
-#include "animation/AnimationEngine.h"
-#include "behavior/ActionExecutor.h"
+#include "face/AnimationEngine.h"
+#include "commands/ActionExecutor.h"
 #include "behavior/HungerEngine.h"
 #include "config/AppConfig.h"
 #include "config/ConfigManager.h"
@@ -11,8 +11,9 @@
 #include "hardware/AudioEngine.h"
 #include "hardware/WakeWordEngine.h"
 #include "power/PowerManager.h"
-#include "services/AiService.h"
-#include "services/WeatherService.h"
+#include "ai/AiService.h"
+#include "integrations/WeatherService.h"
+#include "net/WifiManager.h"
 #include <WiFi.h>
 #include <esp_sleep.h>
 
@@ -24,7 +25,6 @@ TouchSensor touchT = {PIN_TOUCH_TOP, false, false, 0, 0,
                       false,         false, false, 0, false};
 
 void triggerPetReaction();
-bool syncTimeFromNTP();
 
 // ---------- Tickle / Gudgudi Tracking ----------
 static uint32_t lastCheekTouchAt = 0;

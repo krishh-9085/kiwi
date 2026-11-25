@@ -1,5 +1,5 @@
-#include "services/HyperHdrService.h"
-#include "services/WledService.h"
+#include "integrations/HyperHdrService.h"
+#include "integrations/WledService.h"
 #include "config/AppConfig.h"
 #include "core/Timing.h"
 #include <ESPmDNS.h>

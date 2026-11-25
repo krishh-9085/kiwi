@@ -1,6 +1,6 @@
 #include "behavior/InteractionManager.h"
-#include "behavior/ActionExecutor.h"
-#include "behavior/CommandHandler.h"
+#include "commands/ActionExecutor.h"
+#include "commands/CommandHandler.h"
 #include "config/AppConfig.h"
 #include "config/ConfigManager.h"
 #include "core/CoreTypes.h"
@@ -10,7 +10,7 @@
 #include "hardware/RgbLed.h"
 #include "hardware/TouchController.h"
 #include "power/PowerManager.h"
-#include "services/AiService.h"
+#include "ai/AiService.h"
 #include "web/WebPortal.h"
 
 // ============================================================

@@ -8,8 +8,9 @@
 #include "face/FaceDisplay.h"
 #include "face/FaceEngine.h"
 #include "face/SleepyWakeAnim.h"
-#include "animation/AnimationEngine.h"
-#include "behavior/ActionExecutor.h"
+#include "face/AnimationEngine.h"
+#include "commands/ActionExecutor.h"
+#include "net/WifiManager.h"
 #include "web/WebPortal.h"
 #include <WebServer.h>
 #include <DNSServer.h>

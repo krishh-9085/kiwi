@@ -22,10 +22,13 @@ dist/
 temp_chrome_profile/
 
 # Local editor and agent metadata
+.cache/
 .vscode/
 .agents/
 .claude/
+compile_commands.json
 skills-lock.json
 scratch/
 __pycache__/
 *.py[cod]
+*.exe

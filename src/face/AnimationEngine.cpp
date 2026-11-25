@@ -1,4 +1,4 @@
-#include "animation/AnimationEngine.h"
+#include "face/AnimationEngine.h"
 #include "config/AppConfig.h"
 #include "face/FaceEngine.h"
 #include "face/FaceDisplay.h"

@@ -1,13 +1,13 @@
 #include "behavior/GreetingEngine.h"
-#include "behavior/ActionExecutor.h"
+#include "commands/ActionExecutor.h"
 #include "config/AppConfig.h"
 #include "face/FaceExpressions.h"
 #include "hardware/AudioEngine.h"
-#include "services/AiTtsService.h"
-#include "services/AiLlmService.h"
-#include "services/AiTextTools.h"
-#include "services/WeatherService.h"
-#include "services/MemoryService.h"
+#include "ai/AiTtsService.h"
+#include "ai/AiLlmService.h"
+#include "ai/AiTextTools.h"
+#include "integrations/WeatherService.h"
+#include "memory/MemoryService.h"
 #include <WiFi.h>
 #include <time.h>
 

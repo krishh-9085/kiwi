@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react'
 import {
   DownloadCloud, UploadCloud, RefreshCw, FileCode, Sparkles, CheckCircle2
 } from 'lucide-react'
-import { Tooltip } from './base/tooltip/tooltip'
+import { Tooltip } from './Tooltip'
 
 export default function OtaUpdateView({ status, getBaseUrl, onToast }) {
   const [file, setFile] = useState(null)

@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { Tooltip } from './base/tooltip/tooltip'
+import { Tooltip } from './Tooltip'
 import {
   OLED_FACES,
   SKIN_FACES,

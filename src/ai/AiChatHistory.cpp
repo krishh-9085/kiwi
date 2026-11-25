@@ -1,5 +1,5 @@
-#include "services/AiChatHistory.h"
-#include "services/AiTextTools.h"
+#include "ai/AiChatHistory.h"
+#include "ai/AiTextTools.h"
 #include "config/AppConfig.h"
 #include <utility>
 

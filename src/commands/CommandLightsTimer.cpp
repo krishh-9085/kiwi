@@ -1,12 +1,12 @@
-#include "behavior/CommandHandler.h"
-#include "behavior/ActionExecutor.h"
+#include "commands/CommandHandler.h"
+#include "commands/ActionExecutor.h"
 #include "config/AppConfig.h"
 #include "face/FaceEngine.h"
 #include "hardware/AudioEngine.h"
 #include "hardware/RgbLed.h"
-#include "services/AiService.h"
-#include "services/HyperHdrService.h"
-#include "services/WledService.h"
+#include "ai/AiService.h"
+#include "integrations/HyperHdrService.h"
+#include "integrations/WledService.h"
 
 // ============================================================
 // COMMAND: TIMER / COUNTDOWN

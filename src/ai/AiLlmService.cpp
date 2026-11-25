@@ -1,14 +1,14 @@
-#include "services/AiLlmService.h"
+#include "ai/AiLlmService.h"
 
-#include "services/AiTransport.h"
+#include "ai/AiTransport.h"
 
-#include "services/AiChatHistory.h"
+#include "ai/AiChatHistory.h"
 
 #include "core/Timing.h"
 
-#include "services/AiTextTools.h"
+#include "ai/AiTextTools.h"
 
-#include "services/MemoryService.h"
+#include "memory/MemoryService.h"
 
 #include "config/AppConfig.h"
 
@@ -16,7 +16,9 @@
 
 #include "behavior/InteractionManager.h"
 
-#include "behavior/ActionExecutor.h"
+#include "commands/ActionExecutor.h"
+
+#include "net/WifiManager.h"
 
 #include "web/WebPortal.h"
 

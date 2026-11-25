@@ -1,9 +1,0 @@
-#pragma once
-#include <Arduino.h>
-#include "core/CoreTypes.h"
-#include "services/AiTextTools.h"
-#include "services/AiTransport.h"
-#include "services/AiChatHistory.h"
-#include "services/AiLlmService.h"
-#include "services/AiSttService.h"
-#include "services/AiTtsService.h"

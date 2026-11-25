@@ -1,5 +1,5 @@
-#include "behavior/CommandHandler.h"
-#include "behavior/ActionExecutor.h"
+#include "commands/CommandHandler.h"
+#include "commands/ActionExecutor.h"
 #include "behavior/InteractionManager.h"
 #include "config/AppConfig.h"
 #include "config/ConfigManager.h"
@@ -7,8 +7,8 @@
 #include "face/FaceEngine.h"
 #include "hardware/AudioEngine.h"
 #include "hardware/WakeWordEngine.h"
-#include "services/AiService.h"
-#include "services/AiTextTools.h"
+#include "ai/AiService.h"
+#include "ai/AiTextTools.h"
 #include <WiFi.h>
 
 // ============================================================

@@ -5,8 +5,9 @@
 #include "hardware/AudioEngine.h"
 #include "hardware/RgbLed.h"
 #include "hardware/WakeWordEngine.h"
-#include "services/AiService.h"
-#include "services/MemoryService.h"
+#include "ai/AiService.h"
+#include "memory/MemoryService.h"
+#include "net/WifiManager.h"
 #include "web/WebPortal.h"
 #include "web/WebPortalApiInternal.h"
 #include <WebServer.h>

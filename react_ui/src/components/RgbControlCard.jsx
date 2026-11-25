@@ -96,7 +96,7 @@ function hexToHsv(hex) {
   return rgbToHsv(r, g, b)
 }
 
-export default function Esp32LedColorPicker({
+export default function RgbControlCard({
   onColorChange,
   onClearOverride,
   initialColor = '#38BDF8',

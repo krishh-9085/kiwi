@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react'
 import { flushSync } from 'react-dom'
 import Sidebar from './components/Sidebar'
 import ContentHeader from './components/ContentHeader'
-import LiveConsoleView from './components/LiveConsoleView'
+import HomeView from './components/HomeView'
 import FacesStudioView from './components/FacesStudioView'
 import SettingsView from './components/SettingsView'
 import OtaUpdateView from './components/OtaUpdateView'
@@ -10,7 +10,7 @@ import RebootOverlay from './components/RebootOverlay'
 import MobileBottomDock from './components/MobileBottomDock'
 import Toast from './components/Toast'
 import KiwiLogo from './components/KiwiLogo'
-import ThemeToggleButton4 from './components/ThemeToggleButton4'
+import ThemeToggle from './components/ThemeToggle'
 import { RotateCw } from 'lucide-react'
 
 export default function App() {
@@ -244,9 +244,7 @@ export default function App() {
     setRefreshing(true)
     showToast('Telemetry refreshed!')
     try {
-      const tasks = [fetchStatus(), fetchConfig()]
-      if (activeTab === 'live') tasks.push(fetchLogs())
-      await Promise.allSettled(tasks)
+      await Promise.allSettled([fetchStatus(), fetchConfig()])
     } finally {
       setTimeout(() => setRefreshing(false), 600)
     }
@@ -288,8 +286,7 @@ export default function App() {
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              {/* Theme Toggle Button 4 (Lightbulb animation) just left of refresh button on Mobile */}
-              <ThemeToggleButton4
+              <ThemeToggle
                 isDark={theme === 'dark'}
                 onToggle={toggleTheme}
                 mobile
@@ -312,14 +309,14 @@ export default function App() {
             style={{ width: '100%', flex: 1, display: 'flex', flexDirection: 'column' }}
           >
               {activeTab === 'live' && (
-                <LiveConsoleView
+                <HomeView
                   status={status}
                   config={config}
                   connected={connected}
                   onTriggerAction={triggerAction}
                   onToast={showToast}
                   onTabChange={setActiveTab}
-                  onRefresh={() => { fetchStatus(); fetchConfig(); fetchLogs(); showToast('Telemetry refreshed!') }}
+                  onRefresh={handleRefreshTelemetry}
                 />
               )}
 

@@ -3,7 +3,7 @@ import {
   Wifi, Key, Mic, Brain, Volume2, Hand, CloudSun, User, Save, RefreshCw, Plus, Trash2, CheckCircle2
 } from 'lucide-react'
 import FluxSelect from './FluxSelect'
-import { Tooltip } from './base/tooltip/tooltip'
+import { Tooltip } from './Tooltip'
 import WakeSlider from './ui/WakeSlider'
 
 // 10 Touch Action Options from legacy HTML

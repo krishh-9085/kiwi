@@ -1,6 +1,6 @@
 import React from 'react'
 import { LayoutDashboard, Smile, Settings, UploadCloud, Sparkles, Moon, Sun } from 'lucide-react'
-import { Tooltip } from './base/tooltip/tooltip'
+import { Tooltip } from './Tooltip'
 import KiwiLogo from './KiwiLogo'
 
 const NAV_ITEMS = [

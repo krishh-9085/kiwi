@@ -2,11 +2,11 @@
 #include "config/AppConfig.h"
 #include "face/FaceEngine.h"
 #include "hardware/AudioEngine.h"
-#include "services/AiService.h"
-#include "services/AiChatHistory.h"
-#include "services/AiLlmService.h"
-#include "services/MemoryService.h"
-#include "behavior/ActionExecutor.h"
+#include "ai/AiService.h"
+#include "ai/AiChatHistory.h"
+#include "ai/AiLlmService.h"
+#include "memory/MemoryService.h"
+#include "commands/ActionExecutor.h"
 #include <WiFi.h>
 #include <time.h>
 

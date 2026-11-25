@@ -43,15 +43,11 @@ float wakeWordGetGain();
 void wakeWordSetSpikeTrigger(bool en);
 bool wakeWordGetSpikeTrigger();
 
-// Barge-in sensitivity bump added during Kiwi speech (default: 0.08f)
-void wakeWordSetBargeInBump(float bump);
-float wakeWordGetBargeInBump();
-
 // Diagnostics & Serial Console Tuning
 void wakeWordPrintStatus();
 void wakeWordProcessSerialCommand(const String &cmd);
 
-// Suppress wake word & barge-in triggers until millis() >= untilMs (e.g. echo guard after actions)
+// Suppress wake word triggers until millis() >= untilMs (e.g. echo guard after actions)
 void wakeWordSuppressUntil(uint32_t untilMs);
 
 // Pre-Wake Audio Ring-Buffer in PSRAM (Never Miss First Words)

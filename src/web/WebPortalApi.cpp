@@ -500,20 +500,6 @@ void handleDoAction() {
     return;
   }
 
-  // Live Wake-Word Barge-In Bump Tuning (default 0.08)
-  if (server.hasArg("ww_bump")) {
-    float b = server.arg("ww_bump").toFloat();
-    wakeWordSetBargeInBump(b);
-    Preferences p;
-    p.begin("myrobot", false);
-    p.putFloat("ww_bargein_bump", wakeWordBargeInBump);
-    p.end();
-    server.send(200, "application/json",
-                "{\"ok\":true,\"ww_bump\":" + String(wakeWordBargeInBump, 2) +
-                    "}");
-    return;
-  }
-
   // Live STT Adaptive Endpointer Parameters Tuning
   if (server.hasArg("stt_trail_ms") || server.hasArg("stt_noise_k") ||
       server.hasArg("stt_rel_k") || server.hasArg("stt_max_sil")) {
@@ -537,7 +523,6 @@ void handleDoAction() {
     server.send(200, "application/json", "{\"ok\":true}");
     return;
   }
-
   // Live Microphone Slot Selection (0=Left, 1=Right)
   if (server.hasArg("micslot")) {
     int s = server.arg("micslot").toInt();
@@ -1244,10 +1229,6 @@ void handleSave() {
     String spStr = server.arg("ww_spike");
     wakeWordSpikeTrigger = (spStr == "1" || spStr == "true" || spStr == "on");
     wakeWordSetSpikeTrigger(wakeWordSpikeTrigger);
-  }
-  if (server.hasArg("ww_bump")) {
-    wakeWordBargeInBump = server.arg("ww_bump").toFloat();
-    wakeWordSetBargeInBump(wakeWordBargeInBump);
   }
   // STT Adaptive Endpointer Parameters
   if (server.hasArg("stt_trail_ms")) {

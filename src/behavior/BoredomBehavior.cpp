@@ -14,6 +14,8 @@
 // ============================================================
 
 static uint32_t nextBoredomInterval = 120000;
+static bool s_pendingGiggleHappy = false;
+static uint32_t s_giggleHappyAt = 0;
 
 void resetBoredomInterval() {
   uint32_t baseMs = (uint32_t)boredomMinutes * 60000UL;
@@ -47,47 +49,55 @@ static void executePhysicalQuirk() {
     flourish = FL_SPARKLE;
     returnIdleAt = millis() + 2500;
   } else {
-    // Musical giggle & happy wink
+    // Musical giggle held visibly for 700 ms, then transition to happy
     setEmotion(EMOTION_LAUGHING);
     soundPetGiggle();
-    setEmotion(EMOTION_HAPPY);
-    returnIdleAt = millis() + 2500;
+    s_pendingGiggleHappy = true;
+    s_giggleHappyAt = millis() + 700;
+    returnIdleAt = millis() + 3200;
+    emotionAutoReturnAt = returnIdleAt;
   }
 }
 
 // ------------------------------------------------------------
-// Build Dynamic LLM Prompt with Time, Day, Weather & Crazy Theme
+// Build Dynamic LLM Prompt with Time, Day, Weather & Dynamic Theme
 // ------------------------------------------------------------
 static String buildDynamicIdlePrompt() {
-  // 1. Time & Day context
+  // 1. Time & Day context (omit time-specific context until NTP sync succeeds)
   struct tm timeinfo;
   bool gotTime = timeSynced && getLocalTime(&timeinfo, 10);
-  int curHour = gotTime ? timeinfo.tm_hour : 14;
-  int curWday = gotTime ? timeinfo.tm_wday : 1; // 0=Sun, 1=Mon, ..., 6=Sat
+  String timeLine;
+  if (gotTime) {
+    int curHour = timeinfo.tm_hour;
+    int curWday = timeinfo.tm_wday; // 0=Sun, 1=Mon, ..., 6=Sat
 
-  String timePhase;
-  if (curHour >= 5 && curHour < 12) {
-    timePhase = "Morning / Subah (fresh start, chai/coffee craving, morning hustle)";
-  } else if (curHour >= 12 && curHour < 16) {
-    timePhase = "Afternoon / Dopahar (lunch time, post-lunch laziness, heavy work focus)";
-  } else if (curHour >= 16 && curHour < 20) {
-    timePhase = "Evening / Shaam (shaam ki chai, mental exhaustion, winding down)";
-  } else if (curHour >= 20 && curHour < 24) {
-    timePhase = "Night / Raat (dinner time, late evening work, chilling)";
+    String timePhase;
+    if (curHour >= 5 && curHour < 12) {
+      timePhase = "Morning / Subah (fresh start, chai/coffee craving, morning hustle)";
+    } else if (curHour >= 12 && curHour < 16) {
+      timePhase = "Afternoon / Dopahar (lunch time, post-lunch laziness, heavy work focus)";
+    } else if (curHour >= 16 && curHour < 20) {
+      timePhase = "Evening / Shaam (shaam ki chai, mental exhaustion, winding down)";
+    } else if (curHour >= 20 && curHour < 24) {
+      timePhase = "Night / Raat (dinner time, late evening work, chilling)";
+    } else {
+      timePhase = "Late Midnight / Raat ke 2-4 baje (extreme night owl coding, dead silence, screen glow)";
+    }
+
+    const char *days[] = {
+      "Sunday (Lazy weekend chill, no alarm)",
+      "Monday (Start of week, Monday blues, anti-work sarcasm)",
+      "Tuesday (Focus mode, getting things done)",
+      "Wednesday (Mid-week hump day, half week done)",
+      "Thursday (Almost weekend, planning fun)",
+      "Friday (TGIF, weekend excitement, party vibes)",
+      "Saturday (Weekend fun, side projects, pure relaxation)"
+    };
+    String dayDesc = (curWday >= 0 && curWday < 7) ? days[curWday] : "Weekday";
+    timeLine = "Time: " + timePhase + " | Day: " + dayDesc + "\n";
   } else {
-    timePhase = "Late Midnight / Raat ke 2-4 baje (extreme night owl coding, dead silence, screen glow)";
+    timeLine = "Time: time unavailable\n";
   }
-
-  const char *days[] = {
-    "Sunday (Lazy weekend chill, no alarm)",
-    "Monday (Start of week, Monday blues, anti-work sarcasm)",
-    "Tuesday (Focus mode, getting things done)",
-    "Wednesday (Mid-week hump day, half week done)",
-    "Thursday (Almost weekend, planning fun)",
-    "Friday (TGIF, weekend excitement, party vibes)",
-    "Saturday (Weekend fun, side projects, pure relaxation)"
-  };
-  String dayDesc = (curWday >= 0 && curWday < 7) ? days[curWday] : "Weekday";
 
   // 2. Weather context
   String weatherInfo = "";
@@ -100,6 +110,8 @@ static String buildDynamicIdlePrompt() {
 
   // 3. Owner context
   String owner = getOwnerName();
+  owner.trim();
+  String exName = (owner.length() > 0) ? owner : "Dost";
 
   // 4. Rotating Theme Seed (Relatable, Grounded Desk Topics)
   static const char *const THEMES[] = {
@@ -112,7 +124,7 @@ static String buildDynamicIdlePrompt() {
     // 2: Chai/Coffee/Water Break
     "Topic: Chai / Coffee / Water check. A natural, relatable remark about drinking cold coffee/chai, staying hydrated, or taking a 2-minute tea break.",
 
-    // 3: Time & Day Vibe
+    // 3: Time & Day Vibe (only used when NTP time is available)
     "Topic: Time and day of the week. Make a witty remark matched realistically to the current hour (e.g. evening wrap-up, afternoon slump, late night sleep reminder, Monday blues, Friday chill).",
 
     // 4: Breaking the Desk Silence
@@ -122,39 +134,45 @@ static String buildDynamicIdlePrompt() {
     "Topic: Cute companion affection. A cheeky remark asking for a head tap/scratch, asking for attention, or telling the owner to smile a bit."
   };
 
+  const int numThemes = (int)(sizeof(THEMES) / sizeof(THEMES[0]));
   static int lastThemeIdx = -1;
-  int themeIdx = random(0, (int)(sizeof(THEMES) / sizeof(THEMES[0])));
-  if (themeIdx == lastThemeIdx) {
-    themeIdx = (themeIdx + 1) % (int)(sizeof(THEMES) / sizeof(THEMES[0]));
+  int themeIdx = random(0, numThemes);
+  for (int attempt = 0; attempt < numThemes; attempt++) {
+    if (themeIdx != lastThemeIdx && (gotTime || themeIdx != 3)) {
+      break;
+    }
+    themeIdx = (themeIdx + 1) % numThemes;
   }
   lastThemeIdx = themeIdx;
 
   // 5. Construct Grounded Prompt with Few-Shot Examples
   String prompt;
-  prompt.reserve(768);
+  prompt.reserve(800);
   prompt = "[AUTONOMOUS DESK BUDDY BANTER]\n";
   prompt += "You are Kiwi, an intelligent, funny, and caring robotic desk companion sitting right on your owner's desk.\n";
   if (owner.length() > 0) {
     prompt += "Owner Name: " + owner + "\n";
   }
-  prompt += "Time: " + timePhase + " | Day: " + dayDesc + "\n";
+  prompt += timeLine;
   if (weatherInfo.length() > 0) {
     prompt += "Weather: " + weatherInfo + "\n";
   }
   prompt += String(THEMES[themeIdx]) + "\n";
-  prompt += "\n"
-            "STYLE EXAMPLES:\n"
-            "- 'Posture check Krishna! Seedhe baitho zara, reedh ki haddi ka shape bigad raha hai. [ACTION: emotion smug]'\n"
-            "- 'Krishna, thodi der palke jhapka lo, screen ke andar ghusne ka irada hai kya? [ACTION: emotion wink]'\n"
-            "- 'Itna sannata kyu hai Krishna? Code chal gaya ya koi bug phas gaya? [ACTION: emotion curious]'\n"
-            "- 'Woh chai kab se thandi ho rahi hai Krishna, pehle use khatam kar lo! [ACTION: emotion cute]'\n"
-            "- 'Itni speed me keyboard baja rahe ho Krishna, NASA hack karne ka plan hai kya? [ACTION: emotion laughing]'\n"
-            "\n"
-            "STRICT RULES:\n"
-            "1. NO sci-fi nonsense, NO aliens, NO weird illogical metaphors. Speak like a real witty friend on the desk.\n"
-            "2. Grounded & relatable: Talk ONLY about real desk situations (posture, screen glare, tea/water, typing, focus, time of day).\n"
-            "3. Exactly 1 short, complete sentence in natural conversational Hindi/Hinglish (10-15 words max). Never cut off mid-thought.\n"
-            "4. End with exactly 1 action tag: [ACTION: emotion smug] or [ACTION: emotion wink] or [ACTION: emotion curious] or [ACTION: emotion cute] or [ACTION: emotion laughing] or [ACTION: sound giggle].";
+  prompt += "\nSTYLE EXAMPLES:\n";
+  prompt += "- 'Posture check " + exName + "! Seedhe baitho zara, reedh ki haddi ka shape bigad raha hai. [ACTION: emotion smug]'\n";
+  prompt += "- '" + exName + ", thodi der palke jhapka lo, screen ke andar ghusne ka irada hai kya? [ACTION: emotion wink]'\n";
+  prompt += "- 'Itna sannata kyu hai " + exName + "? Code chal gaya ya koi bug phas gaya? [ACTION: emotion curious]'\n";
+  prompt += "- 'Woh chai kab se thandi ho rahi hai " + exName + ", pehle use khatam kar lo! [ACTION: emotion cute]'\n";
+  prompt += "- 'Itni speed me keyboard baja rahe ho " + exName + ", NASA hack karne ka plan hai kya? [ACTION: emotion laughing]'\n";
+  prompt += "\nSTRICT RULES:\n";
+  prompt += "1. NO sci-fi nonsense, NO aliens, NO weird illogical metaphors. Speak like a real witty friend on the desk.\n";
+  if (gotTime) {
+    prompt += "2. Grounded & relatable: Talk ONLY about real desk situations (posture, screen glare, tea/water, typing, focus, time of day).\n";
+  } else {
+    prompt += "2. Grounded & relatable: Talk ONLY about real desk situations (posture, screen glare, tea/water, typing, focus). Do NOT mention time of day or day of the week because time is unavailable.\n";
+  }
+  prompt += "3. Exactly 1 short, complete sentence in natural conversational Hindi/Hinglish (10-15 words max). Never cut off mid-thought.\n";
+  prompt += "4. End with exactly 1 action tag: [ACTION: emotion smug] or [ACTION: emotion wink] or [ACTION: emotion curious] or [ACTION: emotion cute] or [ACTION: emotion laughing] or [ACTION: sound giggle].";
 
   return prompt;
 }
@@ -163,6 +181,20 @@ static String buildDynamicIdlePrompt() {
 // Autonomous Boredom Checker
 // ------------------------------------------------------------
 void checkAutonomousBoredom() {
+  uint32_t now = millis();
+  if (s_pendingGiggleHappy) {
+    if (!boredomEnabled || inCircadianSleep || manualSleep || busyProcessing ||
+        startRecording || currentEmotion != EMOTION_LAUGHING) {
+      s_pendingGiggleHappy = false;
+    } else if ((int32_t)(now - s_giggleHappyAt) >= 0) {
+      s_pendingGiggleHappy = false;
+      setEmotion(EMOTION_HAPPY);
+      returnIdleAt = now + 2500;
+      emotionAutoReturnAt = returnIdleAt;
+      return;
+    }
+  }
+
   if (!boredomEnabled)
     return;
   if (inCircadianSleep || manualSleep || busyProcessing || startRecording)
@@ -174,7 +206,6 @@ void checkAutonomousBoredom() {
   if (currentEmotion != EMOTION_IDLE)
     return;
 
-  uint32_t now = millis();
   if (now - lastUserInteractionAt >= nextBoredomInterval) {
     lastUserInteractionAt = now;
     resetBoredomInterval();

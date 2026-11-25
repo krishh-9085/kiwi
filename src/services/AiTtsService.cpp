@@ -68,7 +68,7 @@ bool speakText(const String &text) {
     res = ttsSarvam(toSpeak);
 
   spkEndSpeech();
-  if (!bargeInTriggered && (currentEmotion == EMOTION_SPEAKING || currentEmotion == EMOTION_HAPPY)) {
+  if (currentEmotion == EMOTION_SPEAKING || currentEmotion == EMOTION_HAPPY) {
     setEmotion(EMOTION_IDLE);
   }
   Serial.printf("[TTS] speakText() returned %d\n", res);

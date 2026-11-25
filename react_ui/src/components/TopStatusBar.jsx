@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import {
-  Bot, Wifi, Battery, BatteryCharging, Cpu, Globe, RefreshCw,
+  Bot, Wifi, Cpu, Globe, RefreshCw,
   Sparkles, DownloadCloud, Terminal, Settings, Smile, UploadCloud
 } from 'lucide-react'
 

@@ -17,10 +17,9 @@ Please review these items before configuring or flashing:
 
 1. **Microcontroller Platform:** The active firmware is built for **ESP32-S3** (`esp32-s3-devkitc-1` / ESP32-S3 Super Mini), **not** the older ESP32-C3. Pin assignments, I2S clock routing, and dual-core tasks reflect the ESP32-S3 pinout.
 2. **Flash Chip Size:** 4 MB Flash partition scheme with dual 1.93 MB OTA app partitions (`partitions.csv`).
-3. **Battery Sensing:** Battery monitoring is a placeholder stub (`batteryPercent()` in [Battery.cpp](file:///d:/PROJECTS/MyRobot_Modular/src/hardware/Battery.cpp#L4) returns `-1`). `showBatteryIcon` defaults to `false`.
-4. **Wiring Blueprint Route:** The `/wiring` endpoint currently redirects (HTTP 302) to the root dashboard `/`.
-5. **Build Path:** PlatformIO is required. The Arduino IDE is **not supported** because the codebase is structured into modular subfolders under `src/`.
-6. **Wi-Fi Modem Sleep:** Wi-Fi modem sleep is explicitly deactivated while connected (`WiFi.setSleep(false)`) to maintain instantaneous Web Portal responsiveness and low network latency. Power saving is managed via display dimming, CPU frequency scaling (down to 80 MHz), Light Sleep, and Deep Sleep.
+3. **Wiring Blueprint Route:** The `/wiring` endpoint currently redirects (HTTP 302) to the root dashboard `/`.
+4. **Build Path:** PlatformIO is required. The Arduino IDE is **not supported** because the codebase is structured into modular subfolders under `src/`.
+5. **Wi-Fi Modem Sleep:** Wi-Fi modem sleep is explicitly deactivated while connected (`WiFi.setSleep(false)`) to maintain instantaneous Web Portal responsiveness and low network latency. Power saving is managed via display dimming, CPU frequency scaling (down to 80 MHz), Light Sleep, and Deep Sleep.
 
 ---
 
@@ -61,7 +60,6 @@ Configured in [AppConfig.h](file:///d:/PROJECTS/MyRobot_Modular/src/config/AppCo
 - **Offline Hotword Detection:** Runs on-device via TensorFlow Lite Micro and ESPMicroSpeechFeatures frontend.
 - **Optimized Single Active Model:** Dedicated **`Alexa`** model (probability cutoff: `0.90`, sliding window: 5).
 - **RAM Optimization:** TensorFlow arena size reduced from 36 KB to **20 KB** (`TENSOR_ARENA_SIZE = 20000`), freeing ~16 KB of static internal SRAM for TLS networking and streaming audio buffers.
-- **Barge-In Interruption:** Say the wake word while Kiwi is speaking to immediately cut off speech playback and begin listening for your new command (with configurable barge-in sensitivity bump `0.08`).
 - **Serial Console CLI:** Tune sensitivity, gains, and parameters on the fly via the USB serial monitor without reflashing (e.g. `ww cutoff 0.90`, `ww gain 8.0`, `ww spike 0`).
 
 ### 3. Onboard WS2812 RGB LED (GPIO 48)
@@ -147,7 +145,7 @@ When the LLM outputs command tags, Kiwi executes the command locally and strips 
 
 | Sensor | Gesture | Default Action | Behavior |
 | :--- | :--- | :--- | :--- |
-| **Top Head (GPIO12)** | Single Tap | `TOUCH_ACT_LISTEN` | Starts voice recording; cancels active speech or interrupts via barge-in |
+| **Top Head (GPIO12)** | Single Tap | `TOUCH_ACT_LISTEN` | Starts voice recording; cancels active speech or listening |
 | **Top Head** | Double Tap | `TOUCH_ACT_NONE` | Unassigned (customizable) |
 | **Top Head** | Hold 3 s | `TOUCH_ACT_CYCLE_SKIN` | Cycles to next eye skin theme |
 | **Top Head** | Hold 7 s (2 s if asleep) | Sleep Toggle | Toggles manual sleep mode |
@@ -198,7 +196,7 @@ Access Kiwi via:
   - **Screen Modes:** Interactive 1-click toggles for Clock, Weather, and OLED Marquee text banner.
 - **Settings & AI Configuration:**
   - **AI Engines:** Select providers and models for STT (Sarvam, Groq Whisper), LLM (Groq, Gemini), and TTS (Sarvam, Fish Audio).
-  - **Hardware & Sensing:** Wake word sensitivity, barge-in bump, and 9-gesture capacitive touch remapping.
+  - **Hardware & Sensing:** Wake word sensitivity and 9-gesture capacitive touch remapping.
   - **Personal Life Diary:** Edit up to 16 persistent memory facts.
 - **Wireless OTA Update View:**
   - **Local Binary Flasher:** Drag and drop `.bin` files with live progress bar and auto-restart.
@@ -350,7 +348,6 @@ ww gain 8.0        # Set pre-amplifier software gain (default: 8.0)
 ww cutoff 0.90     # Set probability trigger cutoff (0.10 to 0.99)
 ww model 0         # Active model: 0 = Alexa
 ww spike 0         # Toggle secondary voice spike trigger (0 = off, 1 = on)
-ww bump 0.08       # Set barge-in sensitivity bump applied during speech playback
 ww mic 0           # Set I2S microphone slot (0 = Left, 1 = Right)
 ww lock 1          # Lock microphone slot to prevent automatic channel scan on boot
 ```
@@ -378,11 +375,10 @@ src/
     ConfigManager.h / .cpp   NVS flash storage manager (Preferences) with debounced commit
   hardware/
     AudioEngine.h / .cpp     I2S standard driver, procedural tone synthesizer, soft-clipper
-    Battery.h / .cpp         Battery sensing stub (returns -1)
     RgbLed.h / .cpp          WS2812 NeoPixel (GPIO 48) state, emotion & custom color sync
     SoundLevel.h / .cpp      Microphone amplitude detector for sound-reactive eyes
     TouchController.h / .cpp 3-pad touch debounce, gesture recognition, tickle & apology combo
-    WakeWordEngine.h / .cpp  MicroWakeWord (20 KB arena) Alexa task on Core 0 with barge-in
+    WakeWordEngine.h / .cpp  MicroWakeWord (20 KB arena) Alexa task on Core 0
     alexa_model.h            Official MicroWakeWord Alexa neural network model weights
   face/
     FaceEngine.h / .cpp      OLED refresh loop & Core 0 dedicated 40 FPS task (uiDisplayTask)

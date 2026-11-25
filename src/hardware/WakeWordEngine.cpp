@@ -66,7 +66,6 @@ static size_t s_sliding_window_size = 5;
 static float s_probability_cutoff = 0.90f;
 static float s_gain = 8.0f;
 static bool s_enable_spike_trigger = false;
-static float s_bargeInBump = 0.08f;
 
 // Frontend State
 static FrontendConfig s_frontend_config;
@@ -367,7 +366,6 @@ bool wakeWordInit() {
   // Sync runtime settings from AppConfig
   s_gain = wakeWordGain;
   s_enable_spike_trigger = wakeWordSpikeTrigger;
-  s_bargeInBump = wakeWordBargeInBump;
 
   // 1. Setup Mel-filterbank preprocessor frontend
   s_frontend_config.window.size_ms = FEATURE_DURATION_MS;
@@ -566,18 +564,6 @@ void wakeWordSetSpikeTrigger(bool en) {
 
 bool wakeWordGetSpikeTrigger() { return s_enable_spike_trigger; }
 
-void wakeWordSetBargeInBump(float bump) {
-  if (bump < 0.0f)
-    bump = 0.0f;
-  if (bump > 0.40f)
-    bump = 0.40f;
-  s_bargeInBump = bump;
-  wakeWordBargeInBump = bump;
-  Serial.printf("[WAKEWORD] Barge-in bump updated: +%.2f\n", s_bargeInBump);
-}
-
-float wakeWordGetBargeInBump() { return s_bargeInBump; }
-
 void wakeWordPrintStatus() {
   const WakeWordModelEntry &entry = WAKE_WORD_MODELS[s_activeModelIndex];
   Serial.println("================= WAKE WORD ENGINE STATUS =================");
@@ -595,8 +581,6 @@ void wakeWordPrintStatus() {
   Serial.printf("  Spike Clause    : %s\n", s_enable_spike_trigger
                                                 ? "ON (legacy fallback)"
                                                 : "OFF (pure average trigger)");
-  Serial.printf("  Barge-In Bump   : +%.2f (effective in speech = %.2f)\n",
-                s_bargeInBump, s_probability_cutoff + s_bargeInBump);
   Serial.printf("  Mic Slot        : %d (%s, lock=%s)\n", getMicSlot(),
                 (getMicSlot() == 1) ? "Right" : "Left",
                 isMicSlotLocked() ? "LOCKED" : "auto-detect");
@@ -660,16 +644,6 @@ void wakeWordProcessSerialCommand(const String &cmd) {
     return;
   }
 
-  if (c.startsWith("ww bump ") || c.startsWith("ww_bump ")) {
-    float b = c.substring(c.indexOf(' ', 3) + 1).toFloat();
-    wakeWordSetBargeInBump(b);
-    Preferences p;
-    p.begin("myrobot", false);
-    p.putFloat("ww_bargein_bump", wakeWordBargeInBump);
-    p.end();
-    return;
-  }
-
   if (c.startsWith("ww mic ") || c.startsWith("ww_mic ")) {
     int s = c.substring(c.indexOf(' ', 3) + 1).toInt();
     setMicSlot(s, true, true);
@@ -699,8 +673,6 @@ void wakeWordProcessSerialCommand(const String &cmd) {
     Serial.println("  ww model <0>          (0=Alexa)");
     Serial.println(
         "  ww spike <0|1>        (0=disable spike trigger, 1=enable)");
-    Serial.println(
-        "  ww bump <float>       (barge-in bump, e.g. ww bump 0.08)");
     Serial.println("  ww mic <0|1>          (0=Left, 1=Right)");
     Serial.println(
         "  ww lock <0|1>         (lock mic slot to prevent auto-detection)");
@@ -765,20 +737,16 @@ static void wakeWordTask(void *params) {
 
     bool isEmotionAction = (currentEmotion == EMOTION_LAUGHING ||
                             currentEmotion == EMOTION_CRYING);
-    bool isSpeaking =
-        (isSpeechPlaying() || currentEmotion == EMOTION_SPEAKING) &&
-        !isEmotionAction;
-    // Don't listen during STT recording or LLM thinking, or during short tone
-    // beeps or emotion actions
-    bool isSttOrThinking = (busyProcessing && !isSpeaking) || startRecording ||
-                           isTonePlaying() || isEmotionAction;
+    bool isSpeakingOrBusy = busyProcessing || startRecording ||
+                            isTonePlaying() || isSpeechPlaying() ||
+                            kiwiIsOutputting() || isEmotionAction ||
+                            currentEmotion == EMOTION_SPEAKING;
+    bool isSuppressed = (s_suppressWakeWordUntil != 0 &&
+                         (int32_t)(millis() - s_suppressWakeWordUntil) < 0);
 
-    bool isSuppressed = (millis() < s_suppressWakeWordUntil);
-
-    // Listen when robot is idle OR when Kiwi is actively speaking (for
-    // Barge-in)
+    // Listen only when robot is idle, awake, and not suppressed/busy
     bool canListen = s_wakeWordRunning && wakeWordEnabled &&
-                     (s_interpreter != nullptr) && !isSttOrThinking &&
+                     (s_interpreter != nullptr) && !isSpeakingOrBusy &&
                      !isSuppressed && !manualSleep && !inCircadianSleep &&
                      rxHandle != nullptr;
 
@@ -966,81 +934,45 @@ static void wakeWordTask(void *params) {
                 if (avg_prob > maxProbDiag)
                   maxProbDiag = avg_prob;
 
-                float effectiveCutoff =
-                    isSpeaking ? (s_probability_cutoff + s_bargeInBump)
-                               : s_probability_cutoff;
-
                 // Log voice activity spike if either probability is notable
                 if (avg_prob > 0.15f || prob_raw > 0.25f) {
-                  Serial.printf("[WAKEWORD] Voice spike%s: raw=%.2f, avg=%.2f "
-                                "(cutoff=%.2f, gain=%.1f)\n",
-                                isSpeaking ? " [barge-in]" : "", prob_raw,
-                                avg_prob, effectiveCutoff, s_gain);
+                  Serial.printf("[WAKEWORD] Voice spike: raw=%.2f, avg=%.2f (cutoff=%.2f, gain=%.1f)\n",
+                                prob_raw, avg_prob, s_probability_cutoff, s_gain);
                 }
 
                 // F2: Honor the cutoff in trigger logic (pure average by
                 // default; spike clause behind flag)
                 bool triggered = false;
-                if (isSpeaking) {
-                  if (s_enable_spike_trigger) {
-                    triggered =
-                        (avg_prob >= effectiveCutoff && prob_raw >= 0.45f) ||
-                        (prob_raw >= 0.60f && avg_prob >= 0.22f);
+                if (s_enable_spike_trigger) {
+                  if (activeEntry.isHighCutoffProfile) {
+                    triggered = (avg_prob >= s_probability_cutoff) ||
+                                (prob_raw >= (s_probability_cutoff + 0.05f) &&
+                                 avg_prob >= (s_probability_cutoff - 0.15f));
                   } else {
-                    triggered = (avg_prob >= effectiveCutoff);
+                    triggered = (avg_prob >= s_probability_cutoff) ||
+                                (prob_raw >= 0.45f && avg_prob >= 0.16f);
                   }
                 } else {
-                  if (s_enable_spike_trigger) {
-                    if (activeEntry.isHighCutoffProfile) {
-                      triggered = (avg_prob >= effectiveCutoff) ||
-                                  (prob_raw >= (effectiveCutoff + 0.05f) &&
-                                   avg_prob >= (effectiveCutoff - 0.15f));
-                    } else {
-                      triggered = (avg_prob >= effectiveCutoff) ||
-                                  (prob_raw >= 0.45f && avg_prob >= 0.16f);
-                    }
-                  } else {
-                    triggered = (avg_prob >= effectiveCutoff);
-                  }
+                  triggered = (avg_prob >= s_probability_cutoff);
                 }
 
                 if (triggered) {
-                  if (isSpeaking) {
-                    Serial.printf("\n[WAKEWORD] *** Voice Barge-In DETECTED "
-                                  "during speech! avg=%.3f, raw=%.3f "
-                                  "(cutoff=%.2f, gain=%.1f, slot=%d) ***\n",
-                                  avg_prob, prob_raw, effectiveCutoff, s_gain,
-                                  getMicSlot());
-                    cancelRequest = true;
-                    bargeInTriggered = true;
-                    toneStop();
-                    spkAbortSpeech();
-                    wakeWordResetLocked();
-                    s_isListening = false;
-                    powerNotifyActivity();
-                    setEmotion(EMOTION_LISTENING);
-                  } else {
-                    Serial.printf(
-                        "\n[WAKEWORD] *** '%s' DETECTED! avg=%.3f, raw=%.3f "
-                        "(cutoff=%.2f, gain=%.1f, slot=%d) ***\n",
-                        activeEntry.name, avg_prob, prob_raw,
-                        s_probability_cutoff, s_gain, getMicSlot());
+                  Serial.printf("\n[WAKEWORD] *** '%s' DETECTED! avg=%.3f, raw=%.3f (cutoff=%.2f, gain=%.1f, slot=%d) ***\n",
+                                activeEntry.name, avg_prob, prob_raw, s_probability_cutoff, s_gain, getMicSlot());
 
-                    // Reset buffers & ignore future triggers until next
-                    // conversation finishes
-                    wakeWordResetLocked();
-                    s_isListening = false;
-                    s_wakeWordDetectedTrigger = true;
-                    s_preWakeBridgeActive = true;
-                    s_bridgeStartAt = millis();
+                  // Reset buffers & ignore future triggers until next conversation finishes
+                  wakeWordResetLocked();
+                  s_isListening = false;
+                  s_wakeWordDetectedTrigger = true;
+                  s_preWakeBridgeActive = true;
+                  s_bridgeStartAt = millis();
 
-                    // Trigger speech recording & listening face immediately
-                    powerNotifyActivity();
-                    showClockScreen = false;
-                    showWeatherScreen = false;
-                    setEmotion(EMOTION_LISTENING);
-                    startRecording = true;
-                  }
+                  // Trigger speech recording & listening face immediately
+                  powerNotifyActivity();
+                  showClockScreen = false;
+                  showWeatherScreen = false;
+                  setEmotion(EMOTION_LISTENING);
+                  startRecording = true;
                   break; // Exit while loop for this frame block
                 }
               }
@@ -1054,14 +986,11 @@ static void wakeWordTask(void *params) {
     // Periodic heartbeat log every 3 seconds
     if (millis() - lastDiagAt >= 3000) {
       lastDiagAt = millis();
-      float effectiveCutoff = isSpeaking
-                                  ? (s_probability_cutoff + s_bargeInBump)
-                                  : s_probability_cutoff;
-      Serial.printf("[WAKEWORD] Listening '%s'%s... peak=%d, prob_max=%.2f, "
+      Serial.printf("[WAKEWORD] Listening '%s'... peak=%d, prob_max=%.2f, "
                     "cutoff=%.2f (saved=%.2f), gain=%.1f, slot=%d%s\n",
-                    wakeWordGetModelName(), isSpeaking ? " [barge-in]" : "",
-                    maxPeakDiag, maxProbDiag, effectiveCutoff, wakeWordCutoff,
-                    s_gain, getMicSlot(), isMicSlotLocked() ? " [lock]" : "");
+                    wakeWordGetModelName(), maxPeakDiag, maxProbDiag,
+                    s_probability_cutoff, wakeWordCutoff, s_gain,
+                    getMicSlot(), isMicSlotLocked() ? " [lock]" : "");
       maxProbDiag = 0.0f;
       maxPeakDiag = 0;
     }

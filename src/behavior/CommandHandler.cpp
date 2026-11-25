@@ -7,7 +7,6 @@
 #include "core/Timing.h"
 #include "face/FaceEngine.h"
 #include "hardware/AudioEngine.h"
-#include "hardware/Battery.h"
 #include "hardware/RgbLed.h"
 #include "hardware/TouchController.h"
 #include "hardware/WakeWordEngine.h"
@@ -199,70 +198,6 @@ bool handleTimeCommand(const String &qIn) {
 }
 
 // ============================================================
-// COMMAND: BATTERY STATUS FAST-PATH (<50ms)
-// ============================================================
-bool handleBatteryCommand(const String &qIn) {
-  String q = qIn;
-  q.toLowerCase();
-  q.trim();
-
-  // Negative filter: Prevent science/technology discussions
-  if (hasAny(q, {"what is a battery", "history of battery",
-                 "how does a battery", "battery car", "battery technology",
-                 "battery chemistry", "inverter"})) {
-    return false;
-  }
-
-  bool isBattery =
-      hasAny(q, {"battery", "battery kitni", "battery kitna", "battery status",
-                 "battery percent", "battery percentage", "battery level",
-                 "charge kitna", "kitna charge", "charging", "battery check",
-                 "battery batao", "battery btao", "battery low", "बैटरी", "चार्ज",
-                 "बैटरी कितनी", "बैटरी लेवल"});
-
-  if (!isBattery) {
-    if (hasWord(q, {"charge", "charging", "battery"}) &&
-        (hasWord(q, {"status", "level", "percent", "percentage", "check",
-                     "kitni", "kitna", "batao", "btao"}) ||
-         q.length() <= 20)) {
-      isBattery = true;
-    }
-  }
-
-  if (!isBattery)
-    return false;
-
-  Serial.println("[CMD] Fast-path: battery requested");
-  int bp = batteryPercent();
-  soundCoin();
-  setEmotion(EMOTION_SPEAKING);
-
-  String reply;
-  if (bp >= 0) {
-    if (sttLang == "hi" || containsDevanagari(qIn) ||
-        hasAny(q, {"kitni", "kitna", "batao", "btao", "बैटरी", "चार्ज"})) {
-      reply = "Battery abhi " + String(bp) + " percent hai!";
-    } else {
-      reply = "Battery is at " + String(bp) + " percent!";
-    }
-  } else {
-    // Direct USB power (powered via Type-C cable)
-    if (sttLang == "hi" || containsDevanagari(qIn) ||
-        hasAny(q, {"kitni", "kitna", "batao", "btao", "बैटरी", "चार्ज"})) {
-      reply = "Main direct USB power par chal raha hoon! Full charge hoon!";
-    } else {
-      reply = "I am running on direct USB power! Fully powered up!";
-    }
-  }
-
-  setEmotion(EMOTION_SPEAKING);
-  speakText(reply);
-  setEmotion(EMOTION_IDLE);
-  returnIdleAt = 0;
-  return true;
-}
-
-// ============================================================
 // COMMAND: WEATHER
 // ============================================================
 bool handleWeatherCommand(const String &qIn) {
@@ -378,7 +313,6 @@ bool handleEmotionCommand(const String &qIn) {
   auto executeCryAction = [&]() -> bool {
     Serial.println("[CMD] Crying action requested ('cry / ro kr dikhao')");
     wakeWordSuppressUntil(millis() + 6500UL);
-    bargeInTriggered = false;
     cancelRequest = false;
     startRecording = false;
 
@@ -391,7 +325,6 @@ bool handleEmotionCommand(const String &qIn) {
 
     while (millis() - t0 < CRY_TARGET_MS) {
       serviceUi();
-      bargeInTriggered = false;
       cancelRequest = false;
       startRecording = false;
       yield();
@@ -405,7 +338,6 @@ bool handleEmotionCommand(const String &qIn) {
     returnIdleAt = 0;
     emotionAutoReturnAt = 0;
 
-    bargeInTriggered = false;
     cancelRequest = false;
     startRecording = false;
     wakeWordReset();
@@ -418,9 +350,8 @@ bool handleEmotionCommand(const String &qIn) {
     Serial.println("[CMD] Laughing action requested ('laugh / haske dikhao') "
                    "-> 5s clean vocal laugh");
 
-    // Suppress wake word and barge-in for full 5s laugh duration + 1.5s post-laugh echo guard
+    // Suppress wake word for full 5s laugh duration + 1.5s post-laugh echo guard
     wakeWordSuppressUntil(millis() + 6500UL);
-    bargeInTriggered = false;
     cancelRequest = false;
     startRecording = false;
 
@@ -455,8 +386,7 @@ bool handleEmotionCommand(const String &qIn) {
         secondGigglePlayed = true;
       }
 
-      // Neutralize any spurious barge-in / cancel flags from mic during speaker playback
-      bargeInTriggered = false;
+      // Neutralize any spurious cancel / record flags during speaker playback
       cancelRequest = false;
       startRecording = false;
 
@@ -473,7 +403,6 @@ bool handleEmotionCommand(const String &qIn) {
     emotionAutoReturnAt = 0;
 
     // Reset audio queues and protect against echo
-    bargeInTriggered = false;
     cancelRequest = false;
     startRecording = false;
     wakeWordReset();
@@ -684,10 +613,9 @@ bool handleSkinCommand(const String &qIn) {
                  "how to", "movie", "video", "breed", "animal"}))
     return false;
 
-  // Strict Negative filter: Never hijack light, LED, volume, timer, or battery
-  // commands!
+  // Strict Negative filter: Never hijack light, LED, volume, or timer commands!
   if (hasWord(q, {"led", "leds", "light", "lights", "bulb", "lamp", "volume",
-                  "timer", "alarm", "battery"}) ||
+                  "timer", "alarm"}) ||
       hasAny(q, {"बत्ती", "लाइट", "एलईडी", "आवाज़", "वॉल्यूम"})) {
     return false;
   }

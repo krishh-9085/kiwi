@@ -291,7 +291,6 @@ void loadConfig() {
 
   wakeWordGain = prefs.getFloat("ww_gain", 8.0f);
   wakeWordSpikeTrigger = prefs.getBool("ww_spike", false);
-  wakeWordBargeInBump = prefs.getFloat("ww_bargein_bump", 0.08f);
 
   circadianSleepStart = prefs.getInt("circ_start", 23);
 
@@ -498,7 +497,6 @@ void saveConfigImmediate() {
   prefs.putUChar("ww_model", wakeWordModel);
   prefs.putFloat("ww_gain", wakeWordGain);
   prefs.putBool("ww_spike", wakeWordSpikeTrigger);
-  prefs.putFloat("ww_bargein_bump", wakeWordBargeInBump);
   prefs.putBool("rgb_en", rgbLedEnabled);
   prefs.putUChar("rgb_bright", rgbLedBrightness);
 

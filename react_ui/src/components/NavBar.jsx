@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { Bot, Wifi, BatteryCharging, Battery, Cpu, Activity, Globe, RefreshCw } from 'lucide-react'
+import { Bot, Wifi, Cpu, Activity, Globe, RefreshCw } from 'lucide-react'
 
 export default function NavBar({ status, robotHost, onSetRobotHost, onRefresh, connected }) {
   const [editingHost, setEditingHost] = useState(false)
@@ -144,17 +144,6 @@ export default function NavBar({ status, robotHost, onSetRobotHost, onRefresh, c
         }}>
           <Activity size={13} color="var(--accent-cyan)" />
           <span style={{ textTransform: 'capitalize' }}>{status?.emotion || 'Idle'}</span>
-        </div>
-
-        {/* Battery Pill */}
-        <div style={{
-          background: 'rgba(255,255,255,0.05)',
-          padding: '4px 10px', borderRadius: '8px',
-          fontSize: '12px', color: 'var(--text-main)',
-          display: 'flex', alignItems: 'center', gap: '6px'
-        }}>
-          <Battery size={14} color="#34d399" />
-          <span>{status?.battery?.pct != null ? `${status.battery.pct}%` : 'USB/100%'}</span>
         </div>
       </div>
     </header>

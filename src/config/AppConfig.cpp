@@ -161,7 +161,6 @@ float wakeWordCutoff = 0.90f;      // NVS: ww_cutoff (shipped manifest default: 
 uint8_t wakeWordModel = 0;         // NVS: ww_model (0=Alexa)
 float wakeWordGain = 8.0f;         // NVS: ww_gain (default 8.0f)
 bool wakeWordSpikeTrigger = false; // NVS: ww_spike (default false)
-float wakeWordBargeInBump = 0.08f; // NVS: ww_bargein_bump (default 0.08f)
 bool rgbLedEnabled = true;         // NVS: rgb_en (default true)
 uint8_t rgbLedBrightness = 160;     // NVS: rgb_bright (0-255, default 160 ~63%)
 bool bootCompleted = false;
@@ -193,7 +192,6 @@ uint32_t lastNtpTryAt = 0;
 volatile bool startRecording = false;
 volatile bool busyProcessing = false;
 volatile bool cancelRequest = false;
-volatile bool bargeInTriggered = false;
 volatile uint32_t lastProgressAt = 0;
 
 int micSlot = MIC_SLOT_OFFSET;
@@ -219,7 +217,6 @@ uint32_t gazeLockUntil = 0;
 
 // ---------- System Security & mDNS ----------
 String mdnsHostname = "kiwi";
-bool showBatteryIcon = false;
 LogLevel currentLogLevel = LOG_LEVEL_INFO;
 
 // ---------- Autonomous Desk Quirks & Custom Banner ----------

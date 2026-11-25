@@ -6,7 +6,6 @@
 #include "face/FaceIdle.h"
 #include "face/FaceSkins.h"
 #include "hardware/AudioEngine.h"
-#include "hardware/Battery.h"
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 #include <Wire.h>
@@ -855,18 +854,6 @@ void drawFace(float soundLevel) {
       display.drawPixel(114, 10, SSD1306_WHITE);
       display.drawPixel(18, 24, SSD1306_WHITE);
       display.drawPixel(110, 18, SSD1306_WHITE);
-    }
-  }
-
-  if (showBatteryIcon && currentEmotion == EMOTION_IDLE) {
-    int bp = batteryPercent();
-    if (bp >= 0) {
-      display.drawRect(115, 2, 10, 5, SSD1306_WHITE);
-      display.drawFastVLine(125, 3, 3, SSD1306_WHITE);
-      int fillW = (bp * 8 + 50) / 100;
-      if (fillW > 0) {
-        display.fillRect(116, 3, fillW, 3, SSD1306_WHITE);
-      }
     }
   }
 

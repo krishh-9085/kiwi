@@ -91,7 +91,7 @@ static String getTargetName() {
   String n = getOwnerName();
   n.trim();
   if (n.length() > 0) return n;
-  return "Krishna";
+  return "Dost";
 }
 
 enum HungerEvent {

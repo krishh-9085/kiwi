@@ -197,7 +197,6 @@ extern float wakeWordCutoff;      // NVS: ww_cutoff (default 0.90 for Alexa)
 extern uint8_t wakeWordModel;     // NVS: ww_model (0=Alexa)
 extern float wakeWordGain;        // NVS: ww_gain (default 8.0f)
 extern bool wakeWordSpikeTrigger; // NVS: ww_spike (default false)
-extern float wakeWordBargeInBump; // NVS: ww_bargein_bump (default 0.08f)
 extern bool rgbLedEnabled;        // NVS: rgb_en (default true)
 extern uint8_t rgbLedBrightness;  // NVS: rgb_bright (0-255, default 160)
 extern bool bootCompleted;
@@ -231,7 +230,6 @@ extern uint32_t lastNtpTryAt;
 extern volatile bool startRecording;
 extern volatile bool busyProcessing;
 extern volatile bool cancelRequest;
-extern volatile bool bargeInTriggered; // True when user interrupts Kiwi mid-speech
 extern volatile uint32_t lastProgressAt;
 
 extern int micSlot;
@@ -256,7 +254,6 @@ extern uint32_t gazeLockUntil;
 
 // ---------- System Security & mDNS ----------
 extern String mdnsHostname;
-extern bool showBatteryIcon;
 
 enum LogLevel {
   LOG_LEVEL_ERROR = 0,

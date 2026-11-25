@@ -409,8 +409,6 @@ void handleQuestion(const String &qIn) {
     return;
   if (handleTimeCommand(q))
     return;
-  if (handleBatteryCommand(q))
-    return;
   if (handleVolumeCommand(q))
     return;
   if (handleLightCommand(q))
@@ -544,7 +542,7 @@ void handleQuestion(const String &qIn) {
       }
     }
 
-    if (cancelRequest || bargeInTriggered)
+    if (cancelRequest)
       return;
 
 #if LLM_STREAM_TTS
@@ -573,7 +571,7 @@ void handleQuestion(const String &qIn) {
       streamSpk.pending = "";
     }
 
-    if (cancelRequest || bargeInTriggered)
+    if (cancelRequest)
       return;
 
     //    - Do NOT speakText(answer) again if anything was already spoken
@@ -596,7 +594,7 @@ void handleQuestion(const String &qIn) {
 #else
     cancelRequest = false;
     bool ok = speakText(answer);
-    if (cancelRequest || bargeInTriggered)
+    if (cancelRequest)
       return;
     if (!ok) {
       robotStateDesc = "TTS Failed";
@@ -617,16 +615,10 @@ void handleQuestion(const String &qIn) {
       return;
     }
 
-    if (bargeInTriggered)
-      return;
-
     // Turn completed: return immediately to natural IDLE eye skin
     setEmotion(EMOTION_IDLE);
     returnIdleAt = 0;
   }
-
-  if (bargeInTriggered)
-    return;
 
   robotStateDesc = "Ready";
   addTerminalLog("[ROBOT] Turn completed. Ready.");

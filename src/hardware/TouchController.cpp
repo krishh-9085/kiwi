@@ -42,7 +42,6 @@ void triggerTickleMode() {
   busyProcessing = true;
   s_inTickleSpeech = true;
   cancelRequest = false;
-  bargeInTriggered = false;
   startRecording = false;
   lastTickleTriggeredAt = millis();
   lastUserInteractionAt = millis();
@@ -139,7 +138,7 @@ void executeTouchAction(TouchAction act, uint8_t pin) {
   lastUserInteractionAt = now;
 
   // Protect ongoing speech and tickle mode from accidental cheek touches:
-  // Cheek taps while Kiwi is speaking or tickling must NEVER cancel or barge-in on speech!
+  // Cheek taps while Kiwi is speaking or tickling must NEVER cancel or interrupt speech!
   if (pin == PIN_TOUCH_LEFT || pin == PIN_TOUCH_RIGHT) {
     if (s_inTickleSpeech || isSpeechPlaying() || (now - lastTickleTriggeredAt < 4500 && busyProcessing)) {
       Serial.printf("[TOUCH] Cheek pin %d touched during active speech/tickle -> Absorbed! Speech protected.\n", pin);
@@ -270,26 +269,8 @@ void executeTouchAction(TouchAction act, uint8_t pin) {
       return;
     }
 
-    bool isSpeaking = isSpeechPlaying() || currentEmotion == EMOTION_SPEAKING;
-    if (isSpeaking) {
-      // Barge-in: ONLY top button tap while Kiwi is speaking cuts off speech
-      // and immediately starts listening for the new question!
-      if (pin == PIN_TOUCH_TOP) {
-        Serial.println("[TOUCH] Barge-in top tap during speech -> Cut off speech & start listening!");
-        cancelRequest = true;
-        bargeInTriggered = true;
-        toneStop();
-        spkAbortSpeech();
-        listenStartedAt = millis();
-        setEmotion(EMOTION_LISTENING);
-        return;
-      } else {
-        Serial.printf("[TOUCH] Cheek pin %d touched during speech -> Ignored barge-in to protect speech\n", pin);
-        return;
-      }
-    }
-
-    if (busyProcessing || startRecording) {
+    if (busyProcessing || startRecording || isSpeechPlaying() ||
+        currentEmotion == EMOTION_SPEAKING) {
       if (pin == PIN_TOUCH_TOP) {
         // Debounce cancel: only cancel if listening was initiated > 600ms ago.
         // This prevents the user's initial touch release / bounce from
@@ -298,7 +279,6 @@ void executeTouchAction(TouchAction act, uint8_t pin) {
           Serial.println(
               "[TOUCH] Action LISTEN (Top) -> Cancel current request / listening");
           cancelRequest = true;
-          bargeInTriggered = false;
           startRecording = false;
           toneStop();
           spkEndSpeech();

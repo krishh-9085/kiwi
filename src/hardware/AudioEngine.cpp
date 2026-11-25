@@ -815,7 +815,7 @@ void spkEndSpeech() {
   }
 }
 
-// Instantly cuts off speech without flushing remaining buffer (for barge-in & fast cancel)
+// Instantly cuts off speech without flushing remaining buffer (for fast cancel)
 void spkAbortSpeech() {
   txPos = 0;
   tonePlaying = false;

@@ -7,7 +7,6 @@
   Architecture & Modules:
   - config/AppConfig.h / .cpp      : Hardware pinouts, constants, shared globals
   - core/CoreTypes.h               : Data structures, emotion & mood enums
-  - hardware/Battery.h / .cpp      : Non-linear LiPo battery sensing curve
   - config/ConfigManager.h / .cpp  : NVS Preferences persistent storage
   - hardware/AudioEngine.h / .cpp  : I2S driver, Tone player, DSP &
  soft-clipping
@@ -522,18 +521,7 @@ void loop() {
     }
     bool wasCancelled = cancelRequest;
     cancelRequest = false;
-    if (bargeInTriggered) {
-      bargeInTriggered = false;
-      toneStop();
-      spkAbortSpeech();
-      wakeWordReset();
-      preWakeReset();
-      busyProcessing = false;
-      startRecording = true;
-      setEmotion(EMOTION_LISTENING);
-      robotStateDesc = "Listening...";
-      Serial.println("[BARGE-IN] Speech cut off -> Recording next command immediately!");
-    } else if (wasCancelled) {
+    if (wasCancelled) {
       pendingSleepAction = false;
       returnIdleAt = 0;
       setEmotion(EMOTION_IDLE);

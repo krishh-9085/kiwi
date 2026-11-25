@@ -9,9 +9,9 @@ import WakeSlider from './ui/WakeSlider'
 
 import {
 
-  Heart, Zap, Activity, Moon, Volume2, Sun,
+  Heart, Zap, Activity, Moon, Volume2, VolumeX, Sun,
 
-  Mic, MicOff, Send,
+  Mic, MicOff, Send, SlidersHorizontal,
 
   Utensils, Coffee, Hand, Eye, Music, Radio, Shield, Sparkles,
 
@@ -110,10 +110,45 @@ const MOBILE_BOREDOM_OPTIONS = [
 
 
 
-const HOUR_OPTIONS = Array.from({ length: 24 }).map((_, i) => ({
-  val: i,
-  lbl: i === 0 ? '12 AM' : i < 12 ? `${i} AM` : i === 12 ? '12 PM' : `${i - 12} PM`
-}))
+function formatTime24To12(hhmm) {
+  if (!hhmm || !String(hhmm).includes(':')) return '--:--'
+  const [hRaw, mRaw] = String(hhmm).split(':')
+  const h = Number(hRaw)
+  const m = Number(mRaw)
+  if (Number.isNaN(h) || Number.isNaN(m)) return '--:--'
+  const ap = h >= 12 ? 'PM' : 'AM'
+  const h12 = (h % 12) === 0 ? 12 : (h % 12)
+  return `${h12}:${String(m).padStart(2, '0')} ${ap}`
+}
+
+const HALF_HOUR_OPTIONS = Array.from({ length: 48 }).map((_, i) => {
+  const h = Math.floor(i / 2)
+  const m = (i % 2) * 30
+  const val = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
+  return { val, lbl: formatTime24To12(val) }
+})
+
+const TZ_OPTIONS = [
+  { val: '-480', lbl: 'PST (UTC-8:00)' },
+  { val: '-420', lbl: 'MST (UTC-7:00)' },
+  { val: '-360', lbl: 'CST (UTC-6:00)' },
+  { val: '-300', lbl: 'EST (UTC-5:00)' },
+  { val: '-240', lbl: 'EDT (UTC-4:00)' },
+  { val: '-180', lbl: 'BRT (UTC-3:00)' },
+  { val: '0', lbl: 'UTC / GMT (+0:00)' },
+  { val: '60', lbl: 'CET / BST (+1:00)' },
+  { val: '120', lbl: 'EET / CEST (+2:00)' },
+  { val: '180', lbl: 'AST / MSK (+3:00)' },
+  { val: '240', lbl: 'GST Dubai (+4:00)' },
+  { val: '300', lbl: 'PKT (+5:00)' },
+  { val: '330', lbl: 'IST India (+5:30)' },
+  { val: '360', lbl: 'BST Dhaka (+6:00)' },
+  { val: '420', lbl: 'ICT (+7:00)' },
+  { val: '480', lbl: 'SGT / HKT (+8:00)' },
+  { val: '540', lbl: 'JST / KST (+9:00)' },
+  { val: '600', lbl: 'AEST (+10:00)' },
+  { val: '720', lbl: 'NZST (+12:00)' }
+]
 
 const OFFLINE_PSRAM_FALLBACK = {
   free: 1951744,
@@ -175,22 +210,85 @@ export default function HomeView({
 
 }) {
 
+  const [isMobileView, setIsMobileView] = useState(() =>
+    typeof window !== 'undefined' && window.matchMedia
+      ? window.matchMedia('(max-width: 768px)').matches
+      : false
+  )
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.matchMedia) return
+    const mq = window.matchMedia('(max-width: 768px)')
+    const onMqChange = (e) => setIsMobileView(e.matches)
+    mq.addEventListener?.('change', onMqChange)
+  return () => mq.removeEventListener?.('change', onMqChange)
+  }, [])
+
   const [vol, setVol] = useState(70)
   const lastUnmutedVol = useRef(70)
+  const draggingSlidersRef = useRef({ vol: false, bright: false, nightBright: false, rgbBright: false })
+  const sliderHoldUntilRef = useRef({ vol: 0, bright: 0, nightBright: 0, rgbBright: 0 })
+  const configInitRef = useRef({ vol: false, bright: false, nightBright: false, rgbBright: false })
+
+  const sliderCommitThrottleRef = useRef({})
+
+  useEffect(() => () => {
+    Object.values(sliderCommitThrottleRef.current).forEach((rec) => {
+      if (rec?.timer) clearTimeout(rec.timer)
+    })
+  }, [])
+
+  const pushSliderValue = (key, url, immediate = false) => {
+    const rec = sliderCommitThrottleRef.current[key] || { lastAt: 0, lastUrl: '', timer: null }
+    sliderCommitThrottleRef.current[key] = rec
+    if (immediate) {
+      if (rec.timer) {
+        clearTimeout(rec.timer)
+        rec.timer = null
+      }
+      if (rec.lastUrl !== url) {
+        rec.lastAt = Date.now()
+        rec.lastUrl = url
+        onTriggerAction?.(url)
+      }
+      return
+    }
+    const now = Date.now()
+    const wait = 180 - (now - rec.lastAt)
+    if (wait <= 0) {
+      if (rec.timer) {
+        clearTimeout(rec.timer)
+        rec.timer = null
+      }
+      rec.lastAt = now
+      rec.lastUrl = url
+      onTriggerAction?.(url)
+    } else {
+      if (rec.timer) clearTimeout(rec.timer)
+      rec.timer = setTimeout(() => {
+        rec.timer = null
+        rec.lastAt = Date.now()
+        rec.lastUrl = url
+        onTriggerAction?.(url)
+      }, wait)
+    }
+  }
 
   const handleToggleMute = () => {
+    sliderHoldUntilRef.current.vol = Date.now() + 1500
     if (vol > 0) {
-      lastUnmutedVol.current = vol;
-      setVol(0);
-      onTriggerAction('/do?vol=0');
+      lastUnmutedVol.current = vol
+      setVol(0)
+      pushSliderValue('vol', '/do?vol=0', true)
     } else {
-      const restoreVol = lastUnmutedVol.current > 0 ? lastUnmutedVol.current : 70;
-      setVol(restoreVol);
-      onTriggerAction(`/do?vol=${restoreVol}`);
+      const restoreVol = lastUnmutedVol.current > 0 ? lastUnmutedVol.current : 70
+      setVol(restoreVol)
+      pushSliderValue('vol', `/do?vol=${restoreVol}`, true)
     }
-  };
+  }
 
   const [bright, setBright] = useState(90)
+  const [nightBright, setNightBright] = useState(10)
 
   const [rgbBright, setRgbBright] = useState(65)
 
@@ -200,25 +298,50 @@ export default function HomeView({
 
 
 
-  // Sync state from status / config (snap to clean 5-by-5 increments)
+  // Sync state from status / config without fighting active drags or recent commits
 
   useEffect(() => {
+    const now = Date.now()
 
-    if (status?.volume != null) setVol(Math.round(status.volume / 5) * 5)
+    if (!draggingSlidersRef.current.vol && now >= sliderHoldUntilRef.current.vol) {
+      if (status?.volume != null) {
+        setVol(Math.round(status.volume / 5) * 5)
+        configInitRef.current.vol = true
+      } else if (!configInitRef.current.vol && config?.volume != null) {
+        setVol(Math.round(config.volume / 5) * 5)
+        configInitRef.current.vol = true
+      }
+    }
 
-    else if (config?.volume != null) setVol(Math.round(config.volume / 5) * 5)
+    if (!draggingSlidersRef.current.bright && now >= sliderHoldUntilRef.current.bright) {
+      if (status?.brightness != null) {
+        setBright(Math.max(5, Math.round(status.brightness / 5) * 5))
+        configInitRef.current.bright = true
+      } else if (!configInitRef.current.bright && config?.brightness != null) {
+        setBright(Math.max(5, Math.round(config.brightness / 5) * 5))
+        configInitRef.current.bright = true
+      }
+    }
 
+    if (!draggingSlidersRef.current.nightBright && now >= sliderHoldUntilRef.current.nightBright) {
+      if (status?.nightBrightness != null) {
+        setNightBright(Math.max(5, Math.round(status.nightBrightness / 5) * 5))
+        configInitRef.current.nightBright = true
+      } else if (!configInitRef.current.nightBright && config?.nightBrightness != null) {
+        setNightBright(Math.max(5, Math.round(config.nightBrightness / 5) * 5))
+        configInitRef.current.nightBright = true
+      }
+    }
 
-
-    if (status?.brightness != null) setBright(Math.max(5, Math.round(status.brightness / 5) * 5))
-
-    else if (config?.brightness != null) setBright(Math.max(5, Math.round(config.brightness / 5) * 5))
-
-
-
-    if (status?.rgbLed?.brightness != null) setRgbBright(Math.round(status.rgbLed.brightness / 5) * 5)
-
-    else if (config?.rgbLed?.brightness != null) setRgbBright(Math.round(config.rgbLed.brightness / 5) * 5)
+    if (!draggingSlidersRef.current.rgbBright && now >= sliderHoldUntilRef.current.rgbBright) {
+      if (status?.rgbLed?.brightness != null) {
+        setRgbBright(Math.round(status.rgbLed.brightness / 5) * 5)
+        configInitRef.current.rgbBright = true
+      } else if (!configInitRef.current.rgbBright && config?.rgbLed?.brightness != null) {
+        setRgbBright(Math.round(config.rgbLed.brightness / 5) * 5)
+        configInitRef.current.rgbBright = true
+      }
+    }
 
   }, [status, config])
 
@@ -310,18 +433,46 @@ export default function HomeView({
   // Greetings state (CRITICAL)
   const greetingsEnabled = localGreetings ?? status?.greetings?.enabled ?? config?.greetings?.enabled ?? true
 
-  // Circadian state
+  // Circadian & Timezone state
   const circEnabled = status?.circadian?.enabled ?? config?.circadian?.enabled ?? true
+  const circStartH = status?.circadian?.start ?? config?.circadian?.start ?? 23
+  const circStartM = status?.circadian?.startMin ?? config?.circadian?.startMin ?? 0
+  const circEndH = status?.circadian?.end ?? config?.circadian?.end ?? 7
+  const circEndM = status?.circadian?.endMin ?? config?.circadian?.endMin ?? 0
+  const circStart = status?.circadian?.startStr || config?.circadian?.startStr ||
+    `${String(circStartH).padStart(2, '0')}:${String(circStartM).padStart(2, '0')}`
+  const circEnd = status?.circadian?.endStr || config?.circadian?.endStr ||
+    `${String(circEndH).padStart(2, '0')}:${String(circEndM).padStart(2, '0')}`
+  const ecoSleepEnabled = status?.circadian?.ecoSleep ?? status?.power?.ecoSleep ?? config?.circadian?.ecoSleep ?? false
+  const tzMin = String(status?.time?.tzMin ?? config?.tzMin ?? 330)
+  const timeSynced = Boolean(status?.time?.synced)
+  const localTimeStr = status?.time?.localTime || ''
+  const skipTonight = Boolean(status?.circadian?.skipTonight)
+  const tempWakeSec = status?.circadian?.tempWakeSec ?? 0
+  const circScheduledActive = Boolean(status?.circadian?.active)
+  const circManualActive = Boolean(status?.circadian?.manual)
 
-  const circStart = String(config?.circadian?.start ?? 23)
+  const startOptions = useMemo(() => {
+    if (HALF_HOUR_OPTIONS.some((o) => o.val === circStart)) return HALF_HOUR_OPTIONS
+    return [{ val: circStart, lbl: formatTime24To12(circStart) }, ...HALF_HOUR_OPTIONS]
+  }, [circStart])
 
-  const circEnd = String(config?.circadian?.end ?? 7)
+  const endOptions = useMemo(() => {
+    if (HALF_HOUR_OPTIONS.some((o) => o.val === circEnd)) return HALF_HOUR_OPTIONS
+    return [{ val: circEnd, lbl: formatTime24To12(circEnd) }, ...HALF_HOUR_OPTIONS]
+  }, [circEnd])
 
-
+  const tzOptions = useMemo(() => {
+    if (TZ_OPTIONS.some((o) => o.val === tzMin)) return TZ_OPTIONS
+    const n = Number(tzMin)
+    const sign = n >= 0 ? '+' : '-'
+    const ah = Math.floor(Math.abs(n) / 60)
+    const am = Math.abs(n) % 60
+    return [{ val: tzMin, lbl: `UTC${sign}${ah}:${String(am).padStart(2, '0')}` }, ...TZ_OPTIONS]
+  }, [tzMin])
 
   // Night Mode state (0: Same, 1: Dim, 2: Screen off)
-
-  const nightMode = status?.nightMode ?? config?.nightMode ?? 0
+  const nightMode = status?.nightMode ?? config?.nightMode ?? 1
 
 
 
@@ -394,31 +545,34 @@ export default function HomeView({
   }
 
   const handleCircadianToggle = async (checked) => {
-
     await onTriggerAction(`/do?circ_en=${checked ? '1' : '0'}`)
-
     onToast(`Sleep Schedule ${checked ? 'Enabled' : 'Disabled'}`)
-
   }
-
-
 
   const handleCircStartChange = async (val) => {
-
-    await onTriggerAction(`/do?circ_start=${val}`)
-
-    onToast(`Sleep time set to ${val}:00`)
-
+    await onTriggerAction(`/do?circ_start=${encodeURIComponent(val)}`)
+    onToast(`Sleep time set to ${formatTime24To12(val)}`)
   }
 
-
-
   const handleCircEndChange = async (val) => {
+    await onTriggerAction(`/do?circ_end=${encodeURIComponent(val)}`)
+    onToast(`Wake time set to ${formatTime24To12(val)}`)
+  }
 
-    await onTriggerAction(`/do?circ_end=${val}`)
+  const handleSnooze = async (mins = 15) => {
+    setLocalSleeping(false)
+    await onTriggerAction(`/do?snooze=${mins}`)
+    onToast(`Snoozed sleep for ${mins} minutes`)
+  }
 
-    onToast(`Wake time set to ${val}:00`)
+  const handleEcoSleepToggle = async (checked) => {
+    await onTriggerAction(`/do?eco_sleep=${checked ? '1' : '0'}`)
+    onToast(checked ? 'Eco Hardware Deep Sleep enabled' : 'Desk Mode enabled (Wi-Fi & Zzz live)')
+  }
 
+  const handleTzChange = async (val) => {
+    await onTriggerAction(`/do?tz_min=${encodeURIComponent(val)}`)
+    onToast('Timezone updated & NTP syncing...')
   }
 
 
@@ -460,12 +614,503 @@ export default function HomeView({
   else if (isBusy) statusBadge = 'THINKING'
   else if (isSleeping) statusBadge = 'SLEEPING'
 
+  const renderHardwareSliders = () => {
+    const isMuted = vol === 0
+    const isOledLow = bright <= 25
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+        {/* Speaker Volume */}
+        <div style={{
+          background: 'var(--card-subtle)',
+          border: '1px solid var(--border-light)',
+          borderRadius: '12px',
+          padding: '10px 12px'
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', gap: '8px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              {isMuted ? <VolumeX size={13} color="#F59E0B" /> : <Volume2 size={13} color="#A3E635" />}
+              <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-dark)' }}>
+                Speaker Volume
+              </span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <button
+                type="button"
+                onClick={handleToggleMute}
+                style={{
+                  border: '1px solid var(--border-light)',
+                  borderRadius: '999px',
+                  padding: '2px 8px',
+                  fontSize: '10px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  background: isMuted ? 'rgba(245, 158, 11, 0.16)' : 'var(--card-muted)',
+                  color: isMuted ? '#F59E0B' : 'var(--text-muted)'
+                }}
+              >
+                {isMuted ? 'Unmute' : 'Mute'}
+              </button>
+              <strong style={{
+                fontSize: '12px',
+                fontVariantNumeric: 'tabular-nums',
+                minWidth: '34px',
+                textAlign: 'right',
+                color: isMuted ? '#F59E0B' : 'var(--text-dark)'
+              }}>
+                {vol}%
+              </strong>
+            </div>
+          </div>
+          <WakeSlider
+            value={vol}
+            min={0}
+            max={100}
+            step={5}
+            bars={20}
+            height={30}
+            restHeight={15}
+            gap={4}
+            fillColor={isMuted ? '#64748B' : 'var(--slider-fill)'}
+            trackColor="var(--slider-track)"
+            crestColor="#D2FA4B"
+            onDragStart={() => { draggingSlidersRef.current.vol = true }}
+            onDragEnd={() => {
+              draggingSlidersRef.current.vol = false
+              sliderHoldUntilRef.current.vol = Date.now() + 1500
+            }}
+            onChange={(v) => {
+              sliderHoldUntilRef.current.vol = Date.now() + 1500
+              if (v > 0) lastUnmutedVol.current = v
+              setVol(v)
+              pushSliderValue('vol', `/do?vol=${v}`, false)
+            }}
+            onCommit={(v) => {
+              sliderHoldUntilRef.current.vol = Date.now() + 1500
+              if (v > 0) lastUnmutedVol.current = v
+              pushSliderValue('vol', `/do?vol=${v}`, true)
+            }}
+            ariaLabel="Speaker Volume"
+          />
+        </div>
+
+        {/* OLED Brightness */}
+        <div style={{
+          background: 'var(--card-subtle)',
+          border: '1px solid var(--border-light)',
+          borderRadius: '12px',
+          padding: '10px 12px'
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', gap: '8px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <Sun size={13} color="#0EA5E9" />
+              <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-dark)' }}>
+                OLED Brightness
+              </span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <button
+                type="button"
+                onClick={() => {
+                  const nextB = isOledLow ? 80 : 15
+                  sliderHoldUntilRef.current.bright = Date.now() + 1500
+                  setBright(nextB)
+                  pushSliderValue('bright', `/do?brightness=${nextB}`, true)
+                }}
+                style={{
+                  border: '1px solid var(--border-light)',
+                  borderRadius: '999px',
+                  padding: '2px 8px',
+                  fontSize: '10px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  background: 'var(--card-muted)',
+                  color: 'var(--text-muted)'
+                }}
+              >
+                {isOledLow ? 'Bright' : 'Low'}
+              </button>
+              <strong style={{
+                fontSize: '12px',
+                fontVariantNumeric: 'tabular-nums',
+                minWidth: '34px',
+                textAlign: 'right',
+                color: 'var(--text-dark)'
+              }}>
+                {bright}%
+              </strong>
+            </div>
+          </div>
+          <WakeSlider
+            value={bright}
+            min={0}
+            max={100}
+            step={5}
+            bars={20}
+            height={30}
+            restHeight={15}
+            gap={4}
+            fillColor="#0ea5e9"
+            trackColor="var(--slider-track)"
+            crestColor="#38bdf8"
+            onDragStart={() => { draggingSlidersRef.current.bright = true }}
+            onDragEnd={() => {
+              draggingSlidersRef.current.bright = false
+              sliderHoldUntilRef.current.bright = Date.now() + 1500
+            }}
+            onChange={(v) => {
+              const clamped = Math.max(5, v)
+              sliderHoldUntilRef.current.bright = Date.now() + 1500
+              setBright(clamped)
+              pushSliderValue('bright', `/do?brightness=${clamped}`, false)
+            }}
+            onCommit={(v) => {
+              const clamped = Math.max(5, v)
+              sliderHoldUntilRef.current.bright = Date.now() + 1500
+              setBright(clamped)
+              pushSliderValue('bright', `/do?brightness=${clamped}`, true)
+            }}
+            ariaLabel="OLED Brightness"
+          />
+        </div>
+
+        {/* NeoPixel Status RGB LED */}
+        <div style={{
+          background: 'var(--card-subtle)',
+          border: '1px solid var(--border-light)',
+          borderRadius: '12px',
+          padding: '10px 12px'
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', gap: '8px' }}>
+            <label className="flux-toggle">
+              <input
+                type="checkbox"
+                checked={rgbEnabled}
+                onChange={(e) => handleRgbToggle(e.target.checked)}
+              />
+              <span className="flux-toggle-slider" />
+              <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-dark)' }}>
+                NeoPixel RGB
+              </span>
+            </label>
+            <span style={{
+              fontSize: '10.5px',
+              fontWeight: 800,
+              fontVariantNumeric: 'tabular-nums',
+              padding: '2px 8px',
+              borderRadius: '999px',
+              background: rgbEnabled ? 'rgba(16, 185, 129, 0.14)' : 'var(--card-muted)',
+              color: rgbEnabled ? '#10B981' : 'var(--text-muted)'
+            }}>
+              {rgbEnabled ? `${rgbBright}%` : 'OFF'}
+            </span>
+          </div>
+          <WakeSlider
+            value={rgbBright}
+            min={0}
+            max={100}
+            step={5}
+            bars={20}
+            height={30}
+            restHeight={15}
+            gap={4}
+            disabled={!rgbEnabled}
+            fillColor="#10B981"
+            trackColor="var(--slider-track)"
+            crestColor="#34D399"
+            onDragStart={() => { draggingSlidersRef.current.rgbBright = true }}
+            onDragEnd={() => {
+              draggingSlidersRef.current.rgbBright = false
+              sliderHoldUntilRef.current.rgbBright = Date.now() + 1500
+            }}
+            onChange={(v) => {
+              sliderHoldUntilRef.current.rgbBright = Date.now() + 1500
+              setRgbBright(v)
+              pushSliderValue('rgbBright', `/do?rgb_bright=${v}`, false)
+            }}
+            onCommit={(v) => {
+              sliderHoldUntilRef.current.rgbBright = Date.now() + 1500
+              pushSliderValue('rgbBright', `/do?rgb_bright=${v}`, true)
+            }}
+            ariaLabel="NeoPixel RGB Brightness"
+          />
+        </div>
+      </div>
+    )
+  }
+
+  const isEqualSchedule = circEnabled && circStart === circEnd
+
+  let sleepBadgeText = 'AWAKE'
+  let sleepBadgeColor = '#15803D'
+  let sleepBadgeBg = 'rgba(52, 199, 89, 0.15)'
+  if (isSleeping) {
+    sleepBadgeText = circManualActive && !circScheduledActive ? 'MANUAL SLEEP' : 'SCHEDULED SLEEP'
+    sleepBadgeColor = '#DC2626'
+    sleepBadgeBg = '#FEE2E2'
+  } else if (tempWakeSec > 0) {
+    sleepBadgeText = tempWakeSec >= 60 ? `SNOOZE ${Math.ceil(tempWakeSec / 60)}M` : `PEEK ${tempWakeSec}S`
+    sleepBadgeColor = '#B45309'
+    sleepBadgeBg = '#FEF3C7'
+  } else if (skipTonight) {
+    sleepBadgeText = 'OVERRIDE'
+    sleepBadgeColor = '#0284C7'
+    sleepBadgeBg = 'rgba(14, 165, 233, 0.15)'
+  }
+
+  const renderSleepSchedulePanel = (isCompact = true) => (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: isCompact ? '8px' : '10px' }}>
+      {/* Live Clock Sync & Power State Row */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+        <span style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: '4px',
+          fontSize: '10px',
+          fontWeight: 700,
+          padding: '2px 8px',
+          borderRadius: '999px',
+          background: timeSynced ? 'var(--card-muted)' : '#FEF3C7',
+          color: timeSynced ? 'var(--text-dark)' : '#B45309',
+          border: '1px solid var(--border-light)'
+        }}>
+          <Clock size={10} />
+          <span>{timeSynced ? formatTime24To12(localTimeStr) : 'Waiting NTP...'}</span>
+        </span>
+        <span style={{
+          fontSize: '9.5px',
+          fontWeight: 800,
+          padding: '2px 8px',
+          borderRadius: '999px',
+          background: sleepBadgeBg,
+          color: sleepBadgeColor,
+          letterSpacing: '0.03em'
+        }}>
+          {sleepBadgeText}
+        </span>
+      </div>
+
+      {/* Put to Sleep / Wake Up + Snooze 15m */}
+      <div style={{ display: 'flex', gap: '6px' }}>
+        <button
+          type="button"
+          onClick={handleSleepToggle}
+          className="flux-btn"
+          style={{
+            flex: 1,
+            padding: isCompact ? '10px 12px' : '11px 16px',
+            borderRadius: '12px',
+            background: isSleeping ? 'linear-gradient(135deg, #0EA5E9 0%, #0284C7 100%)' : 'var(--card-dark)',
+            color: '#FFFFFF',
+            fontWeight: 800,
+            fontSize: isCompact ? '12px' : '13px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '7px',
+            cursor: 'pointer',
+            border: isSleeping ? '1px solid #38BDF8' : 'none',
+            boxShadow: isSleeping ? '0 4px 14px rgba(14, 165, 233, 0.35)' : '0 4px 14px rgba(0, 0, 0, 0.14)',
+            transition: 'all 0.2s ease'
+          }}
+        >
+          {isSleeping ? <Sun size={isCompact ? 14 : 16} /> : <Moon size={isCompact ? 14 : 16} />}
+          <span>{isSleeping ? 'Wake Kiwi Up' : 'Put to Sleep'}</span>
+        </button>
+        {isSleeping && (
+          <button
+            type="button"
+            onClick={() => handleSnooze(15)}
+            className="flux-btn"
+            title="Wake briefly for 15 minutes without disabling schedule"
+            style={{
+              padding: isCompact ? '10px 11px' : '11px 14px',
+              borderRadius: '12px',
+              background: 'var(--card-subtle)',
+              color: 'var(--text-dark)',
+              border: '1px solid var(--border-light)',
+              fontWeight: 800,
+              fontSize: '11px',
+              whiteSpace: 'nowrap',
+              cursor: 'pointer'
+            }}
+          >
+            +15m
+          </button>
+        )}
+      </div>
+
+      {/* Sleep Schedule (Circadian) Box */}
+      <div style={{
+        background: 'var(--card-subtle)',
+        border: '1px solid var(--border-light)',
+        borderRadius: '12px',
+        padding: isCompact ? '10px 12px' : '12px 14px',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '8px'
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <label className="flux-toggle">
+            <input
+              type="checkbox"
+              checked={circEnabled}
+              onChange={(e) => handleCircadianToggle(e.target.checked)}
+            />
+            <span className="flux-toggle-slider" />
+            <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-dark)' }}>
+              Sleep Schedule
+            </span>
+          </label>
+          <span style={{
+            fontSize: '10px',
+            fontWeight: 800,
+            color: circEnabled ? '#15803D' : 'var(--text-muted)',
+            background: circEnabled ? 'rgba(52, 199, 89, 0.15)' : 'var(--card-muted)',
+            padding: '2px 8px',
+            borderRadius: '999px'
+          }}>
+            {circEnabled ? 'SCHEDULE ON' : 'OFF'}
+          </span>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: '8px' }}>
+          <div style={{ minWidth: 0 }}>
+            <label style={{ fontSize: '10px', color: 'var(--text-muted)', display: 'block', marginBottom: '3px', fontWeight: 600 }}>Sleep At</label>
+            <FluxSelect
+              compact={isCompact}
+              dark={false}
+              value={circStart}
+              onChange={(e) => handleCircStartChange(e.target.value)}
+              options={startOptions}
+            />
+          </div>
+          <div style={{ minWidth: 0 }}>
+            <label style={{ fontSize: '10px', color: 'var(--text-muted)', display: 'block', marginBottom: '3px', fontWeight: 600 }}>Wake At</label>
+            <FluxSelect
+              compact={isCompact}
+              dark={false}
+              value={circEnd}
+              onChange={(e) => handleCircEndChange(e.target.value)}
+              options={endOptions}
+            />
+          </div>
+        </div>
+
+        {isEqualSchedule && (
+          <div style={{ fontSize: '10px', color: '#B45309', background: '#FEF3C7', padding: '4px 8px', borderRadius: '8px', fontWeight: 600 }}>
+            Sleep At and Wake At are identical — schedule is paused until changed.
+          </div>
+        )}
+
+        {/* Night Display Mode */}
+        <div style={{ borderTop: '1px solid var(--border-light)', paddingTop: '8px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '6px', marginBottom: nightMode === 1 ? '8px' : '0' }}>
+            <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)' }}>Night Display</span>
+            <div style={{ display: 'flex', gap: '4px', background: 'var(--card-muted)', padding: '2px', borderRadius: '8px', border: '1px solid var(--border-light)' }}>
+              {[
+                { m: 0, l: 'Same' },
+                { m: 1, l: 'Dim' },
+                { m: 2, l: 'Off' }
+              ].map((opt) => (
+                <button
+                  key={opt.m}
+                  type="button"
+                  onClick={() => handleNightModeChange(opt.m)}
+                  style={{
+                    border: 'none',
+                    borderRadius: '6px',
+                    padding: '3px 8px',
+                    fontSize: '10px',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    background: nightMode === opt.m ? 'var(--card-dark)' : 'transparent',
+                    color: nightMode === opt.m ? '#FFFFFF' : 'var(--text-muted)'
+                  }}
+                >
+                  {opt.l}
+                </button>
+              ))}
+            </div>
+          </div>
+          {nightMode === 1 && (
+            <div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10.5px', marginBottom: '4px' }}>
+                <span style={{ color: 'var(--text-muted)', fontWeight: 600 }}>Night Brightness</span>
+                <strong style={{ color: 'var(--text-dark)' }}>{nightBright}%</strong>
+              </div>
+              <WakeSlider
+                value={nightBright}
+                min={5}
+                max={100}
+                step={5}
+                bars={16}
+                height={24}
+                restHeight={12}
+                gap={3}
+                fillColor="#6366F1"
+                trackColor="var(--slider-track)"
+                crestColor="#818CF8"
+                onDragStart={() => { draggingSlidersRef.current.nightBright = true }}
+                onDragEnd={() => {
+                  draggingSlidersRef.current.nightBright = false
+                  sliderHoldUntilRef.current.nightBright = Date.now() + 1500
+                }}
+                onChange={(v) => {
+                  sliderHoldUntilRef.current.nightBright = Date.now() + 1500
+                  setNightBright(v)
+                }}
+                onCommit={(v) => {
+                  sliderHoldUntilRef.current.nightBright = Date.now() + 1500
+                  onTriggerAction(`/do?night_bright=${v}`)
+                }}
+                ariaLabel="Night OLED Brightness"
+              />
+            </div>
+          )}
+        </div>
+
+        {/* Desk Mode vs Eco Deep Sleep + Timezone */}
+        <div style={{ borderTop: '1px solid var(--border-light)', paddingTop: '8px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
+            <label className="flux-toggle">
+              <input
+                type="checkbox"
+                checked={ecoSleepEnabled}
+                onChange={(e) => handleEcoSleepToggle(e.target.checked)}
+              />
+              <span className="flux-toggle-slider" />
+              <span style={{ fontSize: '11.5px', fontWeight: 700, color: 'var(--text-dark)' }}>
+                Eco Deep Sleep
+              </span>
+            </label>
+            <span style={{ fontSize: '9.5px', fontWeight: 700, color: 'var(--text-muted)' }}>
+              {ecoSleepEnabled ? 'Battery (Wi-Fi Off)' : 'Desk (Zzz + Web)'}
+            </span>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+            <span style={{ fontSize: '10.5px', color: 'var(--text-muted)', fontWeight: 600, whiteSpace: 'nowrap' }}>Timezone</span>
+            <div style={{ flex: 1, minWidth: 0, maxWidth: '175px' }}>
+              <FluxSelect
+                compact
+                dark={false}
+                value={tzMin}
+                onChange={(e) => handleTzChange(e.target.value)}
+                options={tzOptions}
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+
   return (
 
     <div>
 
       {/* ================= DESKTOP VIEWPORT (Visible ONLY on > 768px) ================= */}
-
+      {!isMobileView ? (
       <div className="desktop-console-layout">
 
         {/* 3 EQUALLY DIVIDED COLUMNS GRID */}
@@ -519,7 +1164,7 @@ export default function HomeView({
                   flashPct, flashFreeMb, flashUsedMb, flashTotalMb, flashChipMb
                 } = vitals;
 
-                return (
+  return (
                   <div style={{
                     background: 'linear-gradient(145deg, #181B24 0%, #101218 100%)',
                     borderRadius: '18px',
@@ -910,111 +1555,9 @@ export default function HomeView({
 
 
 
-              {/* Hardware Sliders: Volume & OLED Brightness (React Bits WakeSlider) */}
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', marginBottom: '16px' }}>
-
-                <div>
-
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', marginBottom: '6px' }}>
-
-                    <span style={{ color: 'var(--text-muted)', fontWeight: 600 }}>Speaker Volume:</span>
-
-                    <strong style={{ color: 'var(--text-dark)' }}>{vol}%</strong>
-
-                  </div>
-
-                  <WakeSlider
-                    value={vol}
-                    min={0}
-                    max={100}
-                    step={5}
-                    bars={20}
-                    height={32}
-                    restHeight={16}
-                    gap={4}
-                    fillColor="var(--slider-fill)"
-                    trackColor="var(--slider-track)"
-                    crestColor="#D2FA4B"
-                    onChange={(v) => setVol(v)}
-                    onCommit={(v) => onTriggerAction(`/do?vol=${v}`)}
-                    ariaLabel="Speaker Volume"
-                  />
-                </div>
-
-                <div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', marginBottom: '6px' }}>
-                    <span style={{ color: 'var(--text-muted)', fontWeight: 600 }}>OLED Brightness:</span>
-                    <strong style={{ color: 'var(--text-dark)' }}>{bright}%</strong>
-                  </div>
-                  <WakeSlider
-                    value={bright}
-                    min={5}
-                    max={100}
-                    step={5}
-                    bars={20}
-                    height={32}
-                    restHeight={16}
-                    gap={4}
-                    fillColor="#0ea5e9"
-                    trackColor="var(--slider-track)"
-                    crestColor="#38bdf8"
-                    onChange={(v) => setBright(v)}
-                    onCommit={(v) => onTriggerAction(`/do?brightness=${v}`)}
-                    ariaLabel="OLED Brightness"
-                  />
-                </div>
-
-                {/* Pin 48 NeoPixel RGB LED */}
-                <div style={{
-                  background: 'var(--card-subtle)',
-                  border: '1px solid var(--border-light)',
-                  borderRadius: '12px',
-                  padding: '10px 12px'
-                }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                    <label className="flux-toggle">
-                      <input
-                        type="checkbox"
-                        checked={rgbEnabled}
-                        onChange={(e) => handleRgbToggle(e.target.checked)}
-                      />
-                      <span className="flux-toggle-slider" />
-                      <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-dark)' }}>
-                        Pin 48 NeoPixel RGB LED
-                      </span>
-                    </label>
-                    <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)' }}>
-                      {rgbBright}%
-                    </span>
-                  </div>
-                  <WakeSlider
-                    value={rgbBright}
-                    min={0}
-                    max={100}
-                    step={5}
-                    bars={20}
-                    height={32}
-                    restHeight={16}
-                    gap={4}
-                    disabled={!rgbEnabled}
-
-                    fillColor="#10B981"
-
-                    trackColor="var(--slider-track)"
-
-                    crestColor="#34D399"
-
-                    onChange={(v) => setRgbBright(v)}
-
-                    onCommit={(v) => onTriggerAction(`/do?rgb_bright=${v}`)}
-
-                    ariaLabel="NeoPixel RGB Brightness"
-
-                  />
-
-                </div>
-
+              {/* Hardware Sliders: Volume, OLED Brightness & NeoPixel RGB */}
+              <div style={{ marginBottom: '16px' }}>
+                {renderHardwareSliders()}
               </div>
 
             </div>
@@ -1235,148 +1778,16 @@ export default function HomeView({
 
 
 
-            {/* PUT TO SLEEP / WAKE UP ACTION */}
-            <div style={{ marginBottom: '10px' }}>
-              <button
-                type="button"
-                onClick={handleSleepToggle}
-                className="flux-btn"
-                style={{
-                  width: '100%',
-                  padding: '11px 16px',
-                  borderRadius: '12px',
-                  background: isSleeping ? 'linear-gradient(135deg, #0EA5E9 0%, #0284C7 100%)' : 'var(--card-dark)',
-                  color: '#FFFFFF',
-                  fontWeight: 800,
-                  fontSize: '12px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '8px',
-                  cursor: 'pointer',
-                  border: isSleeping ? '1px solid #38BDF8' : 'none',
-                  boxShadow: isSleeping ? '0 4px 14px rgba(14, 165, 233, 0.4)' : '0 4px 14px rgba(0, 0, 0, 0.15)',
-                  transition: 'all 0.2s ease'
-                }}
-              >
-                {isSleeping ? <Sun size={15} /> : <Moon size={15} />}
-                <span>{isSleeping ? 'Wake Kiwi Up' : 'Put to Sleep'}</span>
-              </button>
-            </div>
-
-
-
-            {/* SLEEP SCHEDULE (CIRCADIAN) PANEL */}
-
-            <div style={{
-
-              background: 'var(--card-subtle)',
-
-              border: '1px solid var(--border-light)',
-
-              borderRadius: '12px',
-
-              padding: '10px 12px'
-
-            }}>
-
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-
-                <label className="flux-toggle">
-
-                  <input
-
-                    type="checkbox"
-
-                    checked={circEnabled}
-
-                    onChange={(e) => handleCircadianToggle(e.target.checked)}
-
-                  />
-
-                  <span className="flux-toggle-slider" />
-
-                  <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-dark)' }}>
-
-                    Sleep Schedule
-
-                  </span>
-
-                </label>
-
-                <span style={{
-
-                  fontSize: '10px', fontWeight: 800,
-
-                  color: circEnabled ? '#15803D' : 'var(--text-muted)',
-
-                  background: circEnabled ? 'rgba(52, 199, 89, 0.15)' : 'var(--card-muted)',
-
-                  padding: '2px 8px', borderRadius: '999px'
-
-                }}>
-
-                  {circEnabled ? 'SCHEDULE ON' : 'OFF'}
-
-                </span>
-
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: '8px' }}>
-
-                <div style={{ minWidth: 0 }}>
-
-                  <label style={{ fontSize: '10px', color: 'var(--text-muted)', display: 'block', marginBottom: '3px', fontWeight: 600 }}>Sleep At</label>
-
-                  <FluxSelect
-
-                    compact
-
-                    dark={false}
-
-                    value={circStart}
-
-                    onChange={(e) => handleCircStartChange(e.target.value)}
-
-                    options={HOUR_OPTIONS}
-
-                  />
-
-                </div>
-
-                <div style={{ minWidth: 0 }}>
-
-                  <label style={{ fontSize: '10px', color: 'var(--text-muted)', display: 'block', marginBottom: '3px', fontWeight: 600 }}>Wake At</label>
-
-                  <FluxSelect
-
-                    compact
-
-                    dark={false}
-
-                    value={circEnd}
-
-                    onChange={(e) => handleCircEndChange(e.target.value)}
-
-                    options={HOUR_OPTIONS}
-
-                  />
-
-                </div>
-
-              </div>
-
-            </div>
+            {/* PUT TO SLEEP / SCHEDULE PANEL */}
+            {renderSleepSchedulePanel(true)}
 
           </div>
 
         </div>
 
       </div>
-
-
-
-      {/* ================= MOBILE PHONE VIEW (Visible ONLY on < 768px) ================= */}
+      ) : (
+      /* ================= MOBILE PHONE VIEW (Visible ONLY on <= 768px) ================= */
 
       <div className="mobile-console-layout">
         {/* Hero Greeting: Welcome back, {ownerName} */}
@@ -1405,7 +1816,7 @@ export default function HomeView({
                 flashPct, flashFreeMb, flashUsedMb, flashTotalMb, flashChipMb
               } = vitals;
 
-              return (
+  return (
                 <div style={{
                   background: 'var(--card-white)',
                   border: '1px solid var(--border-light)',
@@ -1941,299 +2352,49 @@ export default function HomeView({
 
 
 
-        {/* Hardware Sliders: Volume, Brightness & Pin 48 NeoPixel */}
-
+        {/* Hardware Sliders: Volume, Brightness & NeoPixel RGB */}
         <div className="flux-white-card" style={{ padding: '16px' }}>
-
           <div className="flux-card-header" style={{ marginBottom: '12px' }}>
-
             <span className="flux-card-title">
-
-              <Volume2 size={15} />
-
+              <SlidersHorizontal size={15} />
               <span>Hardware Controls</span>
-
             </span>
-
-            <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-
-              Live
-
-            </span>
-
-          </div>
-
-
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-
-            <div>
-
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', marginBottom: '6px' }}>
-
-                <span style={{ color: 'var(--text-muted)', fontWeight: 600 }}>Speaker Volume:</span>
-
-                <strong style={{ color: 'var(--text-dark)' }}>{vol}%</strong>
-
-              </div>
-
-              <WakeSlider
-                value={vol}
-                min={0}
-                max={100}
-                step={5}
-                bars={20}
-                height={32}
-                restHeight={16}
-                gap={4}
-                fillColor="var(--slider-fill)"
-                trackColor="var(--slider-track)"
-                crestColor="#D2FA4B"
-                onChange={(v) => setVol(v)}
-                onCommit={(v) => onTriggerAction(`/do?vol=${v}`)}
-                ariaLabel="Speaker Volume"
-              />
-            </div>
-
-            <div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', marginBottom: '6px' }}>
-                <span style={{ color: 'var(--text-muted)', fontWeight: 600 }}>OLED Brightness:</span>
-                <strong style={{ color: 'var(--text-dark)' }}>{bright}%</strong>
-              </div>
-              <WakeSlider
-                value={bright}
-                min={5}
-                max={100}
-                step={5}
-                bars={20}
-                height={32}
-                restHeight={16}
-                gap={4}
-                fillColor="#0ea5e9"
-                trackColor="var(--slider-track)"
-                crestColor="#38bdf8"
-                onChange={(v) => setBright(v)}
-                onCommit={(v) => onTriggerAction(`/do?brightness=${v}`)}
-                ariaLabel="OLED Brightness"
-              />
-            </div>
-
-            {/* Pin 48 NeoPixel LED */}
-            <div style={{
-              background: 'var(--card-subtle)', border: '1px solid var(--border-light)',
-              borderRadius: '12px', padding: '10px 12px'
+            <span style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '5px',
+              fontSize: '10px',
+              fontWeight: 800,
+              padding: '2px 8px',
+              borderRadius: '999px',
+              background: connected ? 'rgba(52, 199, 89, 0.14)' : 'var(--card-muted)',
+              color: connected ? '#15803D' : 'var(--text-muted)'
             }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                <label className="flux-toggle">
-                  <input
-                    type="checkbox"
-                    checked={rgbEnabled}
-                    onChange={(e) => handleRgbToggle(e.target.checked)}
-                  />
-                  <span className="flux-toggle-slider" />
-                  <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-dark)' }}>
-                    Pin 48 NeoPixel RGB
-                  </span>
-                </label>
-                <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)' }}>
-                  {rgbBright}%
-                </span>
-              </div>
-              <WakeSlider
-                value={rgbBright}
-                min={0}
-                max={100}
-                step={5}
-                bars={20}
-                height={32}
-                restHeight={16}
-                gap={4}
-                disabled={!rgbEnabled}
-
-                fillColor="#10B981"
-
-                trackColor="var(--slider-track)"
-
-                crestColor="#34D399"
-
-                onChange={(v) => setRgbBright(v)}
-
-                onCommit={(v) => onTriggerAction(`/do?rgb_bright=${v}`)}
-
-                ariaLabel="NeoPixel RGB Brightness"
-
-              />
-
-            </div>
-
+              <span style={{
+                width: '6px',
+                height: '6px',
+                borderRadius: '50%',
+                background: connected ? '#22C55E' : 'var(--text-muted)'
+              }} />
+              <span>{connected ? 'LIVE' : 'OFFLINE'}</span>
+            </span>
           </div>
 
+          {renderHardwareSliders()}
         </div>
 
 
 
         {/* Sleep Engine & Night Schedule for Mobile (Matches Desktop) */}
-
         <div className="flux-white-card" style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-
-          <div className="flux-card-header" style={{ marginBottom: '2px' }}>
-
+          <div className="flux-card-header" style={{ marginBottom: '0' }}>
             <span className="flux-card-title">
-
               <Moon size={16} color="var(--text-dark)" />
-
               <span>Sleep &amp; Night Schedule</span>
-
             </span>
-
-            <span style={{
-
-              background: isSleeping ? '#FEE2E2' : 'rgba(52, 199, 89, 0.15)',
-
-              color: isSleeping ? '#DC2626' : '#15803D',
-
-              padding: '3px 10px', borderRadius: '999px',
-
-              fontSize: '10px', fontWeight: 800
-
-            }}>
-
-              {isSleeping ? 'SLEEPING' : 'AWAKE'}
-
-            </span>
-
           </div>
 
-
-
-          {/* Put Kiwi to Sleep / Wake Up Action */}
-          <div>
-            <button
-              type="button"
-              onClick={handleSleepToggle}
-              className="flux-btn"
-              style={{
-                width: '100%',
-                padding: '12px 18px',
-                borderRadius: '12px',
-                background: isSleeping ? 'linear-gradient(135deg, #0EA5E9 0%, #0284C7 100%)' : 'var(--card-dark)',
-                color: '#FFFFFF',
-                fontWeight: 800,
-                fontSize: '13px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '8px',
-                cursor: 'pointer',
-                border: isSleeping ? '1px solid #38BDF8' : 'none',
-                boxShadow: isSleeping ? '0 4px 14px rgba(14, 165, 233, 0.4)' : '0 4px 14px rgba(0, 0, 0, 0.15)',
-                transition: 'all 0.2s ease'
-              }}
-            >
-              {isSleeping ? <Sun size={16} /> : <Moon size={16} />}
-              <span>{isSleeping ? 'Wake Kiwi Up' : 'Put to Sleep'}</span>
-            </button>
-          </div>
-
-
-
-          {/* Sleep Schedule (Circadian) Panel */}
-
-          <div style={{
-
-            background: 'var(--card-subtle)',
-
-            border: '1px solid var(--border-light)',
-
-            borderRadius: '14px',
-
-            padding: '12px 14px'
-
-          }}>
-
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-
-              <label className="flux-toggle">
-
-                <input
-
-                  type="checkbox"
-
-                  checked={circEnabled}
-
-                  onChange={(e) => handleCircadianToggle(e.target.checked)}
-
-                />
-
-                <span className="flux-toggle-slider" />
-
-                <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-dark)' }}>
-
-                  Sleep Schedule
-
-                </span>
-
-              </label>
-
-              <span style={{
-
-                fontSize: '10px', fontWeight: 800,
-
-                color: circEnabled ? '#15803D' : 'var(--text-muted)',
-
-                background: circEnabled ? 'rgba(52, 199, 89, 0.15)' : 'var(--card-muted)',
-
-                padding: '2px 8px', borderRadius: '999px'
-
-              }}>
-
-                {circEnabled ? 'SCHEDULE ON' : 'OFF'}
-
-              </span>
-
-            </div>
-
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-
-              <div>
-
-                <label style={{ fontSize: '10px', color: 'var(--text-muted)', display: 'block', marginBottom: '3px', fontWeight: 600 }}>Sleep At</label>
-
-                <FluxSelect
-
-                  dark={false}
-
-                  value={circStart}
-
-                  onChange={(e) => handleCircStartChange(e.target.value)}
-
-                  options={HOUR_OPTIONS}
-
-                />
-
-              </div>
-
-              <div>
-
-                <label style={{ fontSize: '10px', color: 'var(--text-muted)', display: 'block', marginBottom: '3px', fontWeight: 600 }}>Wake At</label>
-
-                <FluxSelect
-
-                  dark={false}
-
-                  value={circEnd}
-
-                  onChange={(e) => handleCircEndChange(e.target.value)}
-
-                  options={HOUR_OPTIONS}
-
-                />
-
-              </div>
-
-            </div>
-
-          </div>
+          {renderSleepSchedulePanel(false)}
 
 
 
@@ -2300,6 +2461,7 @@ export default function HomeView({
 
 
       </div>
+      )}
 
     </div>
 

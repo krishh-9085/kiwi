@@ -271,6 +271,10 @@ void loadConfig() {
     nightBrightness = 100;
 
   circadianSleepEnabled = prefs.getBool("circ_en", true);
+  ecoSleepEnabled = prefs.getBool("eco_slp", false);
+  tzOffsetMin = prefs.getInt("tz_min", 330);
+  if (tzOffsetMin < -720 || tzOffsetMin > 840)
+    tzOffsetMin = 330;
   greetingsEnabled = prefs.getBool("greet_en", false);
   hungerEnabled = prefs.getBool("hunger_en", true);
   soundReactiveEnabled = prefs.getBool("snd_react", false);
@@ -292,9 +296,11 @@ void loadConfig() {
   wakeWordGain = prefs.getFloat("ww_gain", 8.0f);
   wakeWordSpikeTrigger = prefs.getBool("ww_spike", false);
 
-  circadianSleepStart = prefs.getInt("circ_start", 23);
+  circadianSleepStart = constrain(prefs.getInt("circ_start", 23), 0, 23);
+  circadianSleepStartMin = constrain(prefs.getInt("circ_smin", 0), 0, 59);
 
-  circadianSleepEnd = prefs.getInt("circ_end", 7);
+  circadianSleepEnd = constrain(prefs.getInt("circ_end", 7), 0, 23);
+  circadianSleepEndMin = constrain(prefs.getInt("circ_emin", 0), 0, 59);
 
   boredomEnabled = prefs.getBool("boredom", false);
 
@@ -489,6 +495,8 @@ void saveConfigImmediate() {
   prefs.putInt("night_bright", nightBrightness);
 
   prefs.putBool("circ_en", circadianSleepEnabled);
+  prefs.putBool("eco_slp", ecoSleepEnabled);
+  prefs.putInt("tz_min", tzOffsetMin);
   prefs.putBool("greet_en", greetingsEnabled);
   prefs.putBool("hunger_en", hungerEnabled);
   prefs.putBool("snd_react", soundReactiveEnabled);
@@ -501,8 +509,10 @@ void saveConfigImmediate() {
   prefs.putUChar("rgb_bright", rgbLedBrightness);
 
   prefs.putInt("circ_start", circadianSleepStart);
+  prefs.putInt("circ_smin", circadianSleepStartMin);
 
   prefs.putInt("circ_end", circadianSleepEnd);
+  prefs.putInt("circ_emin", circadianSleepEndMin);
 
   prefs.putBool("boredom", boredomEnabled);
 
@@ -539,6 +549,8 @@ void saveConfigImmediate() {
 
   if (micSlotLocked) {
     prefs.putInt("micslot", micSlot);
+  } else {
+    prefs.remove("micslot");
   }
 
   prefs.putString("hostname", mdnsHostname);

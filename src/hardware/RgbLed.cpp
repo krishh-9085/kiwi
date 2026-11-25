@@ -122,10 +122,11 @@ void rgbLedUpdate() {
         targetR = 0.0f;
         targetG = 220.0f;
         targetB = 255.0f;
-        float micLvl = soundLevelGet();
-        float dynamicBoost = (micLvl > 0.05f) ? (micLvl * 8.0f) : 0.0f;
+        float micLvl = fmaxf(soundLevelGet(), soundLevelGetListening());
+        float dynamicBoost = (micLvl > 0.03f) ? (micLvl * 3.0f) : 0.0f;
         if (dynamicBoost > 0.6f) dynamicBoost = 0.6f;
-        breathScale = 0.50f + 0.25f * sinf(now * 0.006f) + dynamicBoost;
+        float speed = soundLevelIsSpeechLocked() ? 0.011f : 0.006f;
+        breathScale = 0.48f + 0.25f * sinf(now * speed) + dynamicBoost;
         break;
       }
 

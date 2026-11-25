@@ -23,6 +23,8 @@ export default function WakeSlider({
   defaultValue = 50,
   onChange,
   onCommit,
+  onDragStart,
+  onDragEnd,
   min = 0,
   max = 100,
   step = 5,
@@ -94,12 +96,12 @@ export default function WakeSlider({
     const r = MIN_REACH + (reach - MIN_REACH) * amp;
     const behind = r * (1 + skew);
     const ahead = r * (1 - 0.5 * skew);
-    const lit = curVal <= 0 ? -1 : Math.round(h);
+    const litCount = curVal <= 0 ? 0 : Math.min(bars, Math.max(1, Math.round((curVal / 100) * bars)));
     const flat = !force && amp < FLAT && lastAmp.current < FLAT;
     for (let i = 0; i < bars; i++) {
       const el = barEls.current[i];
       if (!el) continue;
-      const on = i <= lit ? 'true' : 'false';
+      const on = i < litCount ? 'true' : 'false';
       if (el.dataset.on !== on) el.dataset.on = on;
       if (flat) continue;
       const d = i - h;
@@ -202,7 +204,7 @@ export default function WakeSlider({
 
   useLayoutEffect(() => {
     paintRef.current(true);
-  });
+  }, [pct, bars, rest, crestColor, reduce]);
 
   const commit = next => {
     const clean = snap(next, min, max, step);
@@ -230,6 +232,7 @@ export default function WakeSlider({
   const onPointerDown = e => {
     if (disabled || pointerId.current !== null) return;
     pointerId.current = e.pointerId;
+    onDragStart?.();
     try {
       e.currentTarget.setPointerCapture(e.pointerId);
     } catch {}
@@ -248,6 +251,7 @@ export default function WakeSlider({
       e.currentTarget.releasePointerCapture(e.pointerId);
     } catch {}
     pointerId.current = null;
+    onDragEnd?.();
     onCommit?.(latest.current);
   };
 

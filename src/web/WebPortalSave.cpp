@@ -1,4 +1,5 @@
 #include "behavior/HungerEngine.h"
+#include "behavior/CircadianEngine.h"
 #include "config/AppConfig.h"
 #include "config/ConfigManager.h"
 #include "face/FaceDisplay.h"
@@ -173,8 +174,22 @@ void handleSave() {
       nb = 100;
     nightBrightness = nb;
   }
+  bool schedOrTzChanged = false;
   if (server.hasArg("circ_en")) {
     circadianSleepEnabled = parsePortalBool(server.arg("circ_en"));
+    schedOrTzChanged = true;
+  }
+  if (server.hasArg("eco_sleep")) {
+    ecoSleepEnabled = parsePortalBool(server.arg("eco_sleep"));
+  }
+  if (server.hasArg("tz_min")) {
+    int tz = server.arg("tz_min").toInt();
+    if (tz >= -720 && tz <= 840 && tz != tzOffsetMin) {
+      tzOffsetMin = tz;
+      startNtpAsync();
+      ntpNeedsRefresh = true;
+      schedOrTzChanged = true;
+    }
   }
   if (server.hasArg("greet_en")) {
     greetingsEnabled = parsePortalBool(server.arg("greet_en"));
@@ -254,10 +269,38 @@ void handleSave() {
     rgbLedBrightness = (uint8_t)((bPct * 255) / 100);
     rgbLedSetBrightness(rgbLedBrightness);
   }
-  if (server.hasArg("circ_start"))
-    circadianSleepStart = server.arg("circ_start").toInt();
-  if (server.hasArg("circ_end"))
-    circadianSleepEnd = server.arg("circ_end").toInt();
+  if (server.hasArg("circ_start")) {
+    int h = circadianSleepStart;
+    int m = circadianSleepStartMin;
+    if (parseScheduleTimeString(server.arg("circ_start"), h, m)) {
+      circadianSleepStart = h;
+      circadianSleepStartMin = m;
+      schedOrTzChanged = true;
+    }
+  }
+  if (server.hasArg("circ_smin")) {
+    int sm = server.arg("circ_smin").toInt();
+    if (sm >= 0 && sm <= 59) {
+      circadianSleepStartMin = sm;
+      schedOrTzChanged = true;
+    }
+  }
+  if (server.hasArg("circ_end")) {
+    int h = circadianSleepEnd;
+    int m = circadianSleepEndMin;
+    if (parseScheduleTimeString(server.arg("circ_end"), h, m)) {
+      circadianSleepEnd = h;
+      circadianSleepEndMin = m;
+      schedOrTzChanged = true;
+    }
+  }
+  if (server.hasArg("circ_emin")) {
+    int em = server.arg("circ_emin").toInt();
+    if (em >= 0 && em <= 59) {
+      circadianSleepEndMin = em;
+      schedOrTzChanged = true;
+    }
+  }
   if (server.hasArg("boredom")) {
     boredomEnabled = parsePortalBool(server.arg("boredom"));
   } else {
@@ -364,7 +407,11 @@ void handleSave() {
   ttsVoice.trim();
 
   saveConfigImmediate();
-  updateDisplayBrightnessMode();
+  if (schedOrTzChanged) {
+    onCircadianScheduleChanged();
+  } else {
+    updateDisplayBrightnessMode();
+  }
   invalidateStatusCache();
 
   server.sendHeader("Access-Control-Allow-Origin", "*");

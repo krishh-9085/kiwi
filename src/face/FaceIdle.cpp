@@ -2,6 +2,7 @@
 #include "config/AppConfig.h"
 #include "face/FaceExpressions.h"
 #include <math.h>
+#include <time.h>
 
 
 int eyeOpenPct = 100;
@@ -35,6 +36,19 @@ static uint32_t nextDeskSighAt = 0;
 static uint32_t deskSighStartAt = 0;
 static const uint32_t SIGH_DURATION = 2600; // 2.6s complete sigh cycle
 
+float idleYawnMouth = 0.0f;
+float idleYawnLid = 0.0f;
+float idleSleepyDroop = 0.0f;
+static uint32_t nextIdleYawnAt = 0;
+static uint32_t idleYawnStartAt = 0;
+static const uint32_t YAWN_DURATION = 2400; // 2.4s cute idle yawn
+
+static bool emotionSuppressesBlink(Emotion e) {
+  return e == EMOTION_SLEEPING || e == EMOTION_DEAD || e == EMOTION_COOL ||
+         e == EMOTION_LAUGHING || e == EMOTION_HEARTS || e == EMOTION_WINK ||
+         e == EMOTION_CRYING;
+}
+
 static void scheduleNextBlink(uint32_t now) {
   if (eyeDoubleBlinkPending) {
     eyeDoubleBlinkPending = false;
@@ -65,39 +79,46 @@ void triggerTouchBlink(uint32_t now) {
 }
 
 void eyesUpdateAnim(uint32_t now) {
-  if (!eyeBlinking && now >= eyeNextBlink) {
-    eyeBlinking = true;
-    eyeBlinkT0 = now;
-  }
-  if (eyeBlinking) {
-    uint32_t t = now - eyeBlinkT0;
-    float a;
-    if (t < BLINK_CLOSE) {
-      // Rapid downward eyelid snap (~45ms): cubic acceleration
-      float p = (float)t / (float)BLINK_CLOSE;
-      a = 1.0f - p * p * p;
-    } else if (t < BLINK_CLOSE + BLINK_HOLD) {
-      a = 0.0f;
-    } else if (t < BLINK_CLOSE + BLINK_HOLD + BLINK_OPEN) {
-      // Smooth biological ease-out (~160ms) with gentle elastic overshoot
-      float p = (float)(t - BLINK_CLOSE - BLINK_HOLD) / (float)BLINK_OPEN;
-      float q = 1.0f - p;
-      a = 1.0f - q * q * q;
-      // Gentle micro-bounce at 75-95% opening
-      if (p > 0.75f && p < 0.96f) {
-        a += 0.025f * sinf((p - 0.75f) / 0.21f * 3.14159f);
-      }
-      if (a > 1.0f) a = 1.0f;
-    } else {
-      a = 1.0f;
-      eyeBlinking = false;
-      scheduleNextBlink(now);
-    }
-    eyeOpenAmt = a;
-    eyeOpenPct = (int)(a * 100.0f + 0.5f);
-  } else {
+  if (emotionSuppressesBlink(currentEmotion)) {
+    eyeBlinking = false;
     eyeOpenAmt = 1.0f;
     eyeOpenPct = 100;
+  } else {
+    if (!eyeBlinking && now >= eyeNextBlink) {
+      eyeBlinking = true;
+      eyeBlinkT0 = now;
+    }
+    if (eyeBlinking) {
+      uint32_t blinkOpenMs = (idleSleepyDroop > 0.5f) ? 230 : BLINK_OPEN;
+      uint32_t t = now - eyeBlinkT0;
+      float a;
+      if (t < BLINK_CLOSE) {
+        // Rapid downward eyelid snap (~45ms): cubic acceleration
+        float p = (float)t / (float)BLINK_CLOSE;
+        a = 1.0f - p * p * p;
+      } else if (t < BLINK_CLOSE + BLINK_HOLD) {
+        a = 0.0f;
+      } else if (t < BLINK_CLOSE + BLINK_HOLD + blinkOpenMs) {
+        // Smooth biological ease-out (~160ms) with gentle elastic overshoot
+        float p = (float)(t - BLINK_CLOSE - BLINK_HOLD) / (float)blinkOpenMs;
+        float q = 1.0f - p;
+        a = 1.0f - q * q * q;
+        // Gentle micro-bounce at 75-95% opening
+        if (p > 0.75f && p < 0.96f) {
+          a += 0.025f * sinf((p - 0.75f) / 0.21f * 3.14159f);
+        }
+        if (a > 1.0f) a = 1.0f;
+      } else {
+        a = 1.0f;
+        eyeBlinking = false;
+        scheduleNextBlink(now);
+      }
+      eyeOpenAmt = a;
+      eyeOpenPct = (int)(a * 100.0f + 0.5f);
+    } else {
+      eyeOpenAmt = 1.0f;
+      eyeOpenPct = 100;
+    }
   }
 
   // Micro-saccades: tiny involuntary drifts that make the eyes feel alive
@@ -108,7 +129,7 @@ void eyesUpdateAnim(uint32_t now) {
   }
 
   // Active emotion micro-wink (every 6-11 seconds during non-idle emotion)
-  if (currentEmotion != EMOTION_IDLE && currentEmotion != EMOTION_SLEEPING &&
+  if (currentEmotion != EMOTION_IDLE && !emotionSuppressesBlink(currentEmotion) &&
       !busyProcessing) {
     if (activeNextWink == 0)
       activeNextWink = now + 5000 + random(0, 4000);
@@ -191,11 +212,15 @@ void resetIdleMoodTimer() { nextIdleMoodAt = 0; }
 
 void updateIdleVariety() {
   if (currentEmotion != EMOTION_IDLE) {
-    // Forget any half-finished squeeze or sigh so it can't leak into the next idle
+    // Forget any half-finished squeeze, sigh, or yawn so it can't leak into the next idle
     idleSqueezeEnd = 0;
     deskSighStartAt = 0;
     idleSighY = 0.0f;
     idleSighLid = 0.0f;
+    idleYawnStartAt = 0;
+    idleYawnMouth = 0.0f;
+    idleYawnLid = 0.0f;
+    idleSleepyDroop = 0.0f;
     return;
   }
   if (busyProcessing || inCircadianSleep || showWeatherScreen)
@@ -207,30 +232,56 @@ void updateIdleVariety() {
 
   uint32_t now = millis();
 
+  // Gentle late-night drowsiness droop when awake near/after bedtime
+  float targetSleepyDroop = 0.0f;
+  if (timeSynced) {
+    struct tm ti;
+    if (getLocalTime(&ti, 5)) {
+      int h = ti.tm_hour;
+      if (h >= 21 || h < 6 || (circadianSleepEnabled && h == (circadianSleepStart + 23) % 24)) {
+        targetSleepyDroop = 2.5f;
+      }
+    }
+  }
+  idleSleepyDroop = targetSleepyDroop;
+
   // 1. Natural eye squeeze / squint (soft organic eyelid contraction, NO mouth
   // or face mutation)
   if (idleSqueezeEnd > 0 && now >= idleSqueezeEnd) {
     faceTgt.lidIn = 0;
     faceTgt.lidOut = 0;
+    faceTgt.lidInR = 0;
+    faceTgt.lidOutR = 0;
     faceTgt.hR = 1.0f;
+    faceTgt.headTilt = 0.0f;
     idleSqueezeEnd = 0;
     nextIdleSqueezeAt = now + 4500 + random(0, 5000);
   }
 
   if (nextIdleSqueezeAt == 0) {
     nextIdleSqueezeAt = now + 3000 + random(0, 4000);
-  } else if (now >= nextIdleSqueezeAt && idleSqueezeEnd == 0) {
-    int sqType = random(0, 3);
+  } else if (now >= nextIdleSqueezeAt && idleSqueezeEnd == 0 && idleYawnStartAt == 0) {
+    int sqType = random(0, 4);
     if (sqType == 0) {
       faceTgt.lidIn = 5.0f;
       faceTgt.lidOut = 5.0f;
+      faceTgt.lidInR = 5.0f;
+      faceTgt.lidOutR = 5.0f;
     } else if (sqType == 1) {
       faceTgt.hR = 0.82f;
       faceTgt.lidIn = 3.0f;
       faceTgt.lidOut = 3.0f;
-    } else {
+      faceTgt.lidInR = 5.0f;
+      faceTgt.lidOutR = 5.0f;
+      faceTgt.headTilt = -1.5f;
+    } else if (sqType == 2) {
       faceTgt.lidIn = 6.0f;
       faceTgt.lidOut = 2.0f;
+      faceTgt.lidInR = 2.0f;
+      faceTgt.lidOutR = 1.0f;
+      faceTgt.headTilt = 1.5f;
+    } else {
+      faceTgt.headTilt = (random(0, 2) == 0) ? -2.0f : 2.0f;
     }
     uint32_t dur = 450 + random(0, 450);
     idleSqueezeEnd = now + dur;
@@ -241,7 +292,7 @@ void updateIdleVariety() {
   if (nextIdleMoodAt == 0) {
     nextIdleMoodAt = now + 20000UL + (uint32_t)random(0, 15001);
   } else if ((int32_t)(now - nextIdleMoodAt) >= 0 && !eyeBlinking &&
-             idleSqueezeEnd == 0 && deskSighStartAt == 0) {
+             idleSqueezeEnd == 0 && deskSighStartAt == 0 && idleYawnStartAt == 0) {
     int idx = (int)random(0, IDLE_MOOD_POOL_COUNT);
     if (IDLE_MOOD_POOL_COUNT > 1 && idx == lastIdleMoodIdx) {
       idx = (idx + 1 + (int)random(0, IDLE_MOOD_POOL_COUNT - 1)) %
@@ -337,5 +388,42 @@ void updateIdleVariety() {
   } else {
     idleSighY = 0.0f;
     idleSighLid = 0.0f;
+  }
+
+  // 5. Cute Idle Yawn Cycle (every 48 - 75 seconds)
+  if (nextIdleYawnAt == 0) {
+    nextIdleYawnAt = now + 35000UL + (uint32_t)random(0, 25000);
+  }
+  if (idleYawnStartAt == 0 && now >= nextIdleYawnAt && !eyeBlinking &&
+      idleSqueezeEnd == 0 && deskSighStartAt == 0) {
+    idleYawnStartAt = now;
+    nextIdleYawnAt = now + 48000UL + (uint32_t)random(0, 27000);
+    gazeTgtX = 0.0f;
+    gazeTgtY = -1.5f;
+  }
+  if (idleYawnStartAt > 0) {
+    uint32_t yt = now - idleYawnStartAt;
+    if (yt < YAWN_DURATION) {
+      float yp = (float)yt / (float)YAWN_DURATION;
+      if (yp < 0.30f) {
+        float k = sinf((yp / 0.30f) * 1.5707963f);
+        idleYawnMouth = k;
+        idleYawnLid = 10.0f * k;
+      } else if (yp < 0.68f) {
+        idleYawnMouth = 1.0f;
+        idleYawnLid = 10.0f;
+      } else {
+        float k = 1.0f - (yp - 0.68f) / 0.32f;
+        idleYawnMouth = k;
+        idleYawnLid = 10.0f * k;
+      }
+    } else {
+      idleYawnStartAt = 0;
+      idleYawnMouth = 0.0f;
+      idleYawnLid = 0.0f;
+    }
+  } else {
+    idleYawnMouth = 0.0f;
+    idleYawnLid = 0.0f;
   }
 }

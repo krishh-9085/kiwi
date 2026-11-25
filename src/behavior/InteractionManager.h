@@ -2,6 +2,7 @@
 #include <Arduino.h>
 #include "core/CoreTypes.h"
 
+void pumpUiWithoutWeb();
 void pumpUI();
 void triggerPetReaction();
 void handleQuestion(const String &q);

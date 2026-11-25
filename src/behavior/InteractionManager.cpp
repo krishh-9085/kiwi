@@ -16,7 +16,7 @@
 // ============================================================
 // UI PUMP (Display + Touch + Tone Update)
 // ============================================================
-void pumpUI() {
+void pumpUiWithoutWeb() {
   powerNotifyActivity();
   bootAnimPump();
   if (!uiTaskRunning) {
@@ -26,6 +26,10 @@ void pumpUI() {
   updateTouch();
   updateTonePlayer();
   serviceConfigManager();
+}
+
+void pumpUI() {
+  pumpUiWithoutWeb();
   pumpWeb();
 }
 
@@ -131,15 +135,17 @@ Emotion detectVocalEmotion(const String &text) {
     return EMOTION_EXCITED;
   }
 
-  // 6. Happy / Joy / Delighted / Satisfied -> Keep natural speaking/idle face
-  // (no ugly squinch)
+  // 6. Happy / Joy / Delighted / Satisfied -> Warm smiling face while speaking
   if (hasTag("happy") || hasTag("delighted") || hasTag("satisfied") ||
       hasTag("cheerful") || hasTag("joyful") || hasTag("glad")) {
-    return EMOTION_SPEAKING;
+    return EMOTION_HAPPY;
   }
 
   // 7. Surprised / Shocked / Gasp
-  if (hasTag("surprised") || hasTag("shocked") || hasTag("amazed") ||
+  if (hasTag("shocked")) {
+    return EMOTION_SHOCKED;
+  }
+  if (hasTag("surprised") || hasTag("amazed") ||
       hasTag("astonished") || hasTag("gasp") || hasTag("gasps")) {
     return EMOTION_SURPRISED;
   }
@@ -182,8 +188,34 @@ Emotion detectVocalEmotion(const String &text) {
   }
 
   // 14. Curious / Confused / Inquisitive
-  if (hasTag("curious") || hasTag("confused") || hasTag("puzzled")) {
+  if (hasTag("confused") || hasTag("puzzled")) {
+    return EMOTION_CONFUSED;
+  }
+  if (hasTag("curious") || hasTag("inquisitive")) {
     return EMOTION_CURIOUS;
+  }
+
+  // 15. Playful / Expressive moods
+  if (hasTag("smug")) {
+    return EMOTION_SMUG;
+  }
+  if (hasTag("cool")) {
+    return EMOTION_COOL;
+  }
+  if (hasTag("evil")) {
+    return EMOTION_EVIL;
+  }
+  if (hasTag("dizzy")) {
+    return EMOTION_DIZZY;
+  }
+  if (hasTag("party")) {
+    return EMOTION_PARTY;
+  }
+  if (hasTag("hearts") || hasTag("lovestruck") || hasTag("love")) {
+    return EMOTION_HEARTS;
+  }
+  if (hasTag("cute")) {
+    return EMOTION_CUTE;
   }
 
   return EMOTION_SPEAKING;
@@ -515,8 +547,6 @@ void handleQuestion(const String &qIn) {
     Emotion vocalEmotion = detectVocalEmotion(answer);
     if (actionHeldEmotion) {
       vocalEmotion = currentEmotion; // Retain timed emotion set by [ACTION: emotion/sound ...]
-    } else if (vocalEmotion == EMOTION_HAPPY || vocalEmotion == EMOTION_LAUGHING) {
-      vocalEmotion = EMOTION_SPEAKING;
     }
     setEmotion(vocalEmotion);
 
@@ -615,10 +645,14 @@ void handleQuestion(const String &qIn) {
       return;
     }
 
-    // Turn completed: return to natural IDLE unless an action timer holds an expression
+    // Turn completed: linger briefly if an expressive emotion was active, then return to IDLE
     uint32_t endNow = millis();
-    if ((returnIdleAt == 0 || (int32_t)(endNow - returnIdleAt) >= 0) &&
-        (emotionAutoReturnAt == 0 || (int32_t)(endNow - emotionAutoReturnAt) >= 0)) {
+    if (!actionHeldEmotion && currentEmotion != EMOTION_IDLE &&
+        currentEmotion != EMOTION_SPEAKING && returnIdleAt == 0 &&
+        emotionAutoReturnAt == 0) {
+      returnIdleAt = endNow + 1200;
+    } else if ((returnIdleAt == 0 || (int32_t)(endNow - returnIdleAt) >= 0) &&
+               (emotionAutoReturnAt == 0 || (int32_t)(endNow - emotionAutoReturnAt) >= 0)) {
       setEmotion(EMOTION_IDLE);
       returnIdleAt = 0;
       emotionAutoReturnAt = 0;

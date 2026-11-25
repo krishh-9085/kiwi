@@ -54,11 +54,11 @@
   flex: 1 1 0;
   min-width: 0;
   height: var(--ws-height);
-  border-radius: 4px;
+  border-radius: 5px;
   background: var(--ws-track);
   transform: scaleY(var(--ws-rest));
   transform-origin: 50% 50%;
-  transition: background-color 120ms ease;
+  transition: background-color 120ms ease, opacity 120ms ease;
 }
 
 .wake-slider__bar[data-on='true'] {

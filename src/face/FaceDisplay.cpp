@@ -14,7 +14,7 @@
 #define FACE_I2C_CLK_DURING 400000UL
 #endif
 #ifndef FACE_I2C_CLK_AFTER
-#define FACE_I2C_CLK_AFTER 100000UL
+#define FACE_I2C_CLK_AFTER FACE_I2C_CLK_DURING
 #endif
 
 // SSD1306 oscillator / clock divide (0xF0 = fastest refresh, 0x80 = library
@@ -71,12 +71,13 @@ static SemaphoreHandle_t s_displayMutex = NULL;
 bool displayLock(uint32_t waitMs) {
   if (!s_displayMutex)
     return true;
-  return xSemaphoreTake(s_displayMutex, pdMS_TO_TICKS(waitMs)) == pdTRUE;
+  return xSemaphoreTakeRecursive(s_displayMutex, pdMS_TO_TICKS(waitMs)) ==
+         pdTRUE;
 }
 
 void displayUnlock() {
   if (s_displayMutex)
-    xSemaphoreGive(s_displayMutex);
+    xSemaphoreGiveRecursive(s_displayMutex);
 }
 
 // ---- Frame presentation ----------------------------------------------------
@@ -103,6 +104,11 @@ bool presentDisplay(bool force) {
       (now - lastPresentAt) < 1000)
     return false;
 
+  // Keep SSD1306 vertical start line & display offset anchored at 0 so the
+  // top rows can never wrap/scroll into the bottom area of the panel.
+  display.ssd1306_command(SSD1306_SETSTARTLINE | 0x00);
+  display.ssd1306_command(SSD1306_SETDISPLAYOFFSET);
+  display.ssd1306_command(0x00);
   display.display();
   lastFrameHash = hsh;
   frameHashValid = true;
@@ -126,7 +132,7 @@ static uint8_t percentToContrast(uint8_t percent) {
   return out;
 }
 
-void setDisplayPower(bool on) {
+static void setDisplayPowerLocked(bool on) {
   if (!oledOK)
     return;
 
@@ -143,7 +149,7 @@ void setDisplayPower(bool on) {
     markDisplayDirty();
 }
 
-void setDisplayBrightness(uint8_t percent) {
+static void setDisplayBrightnessLocked(uint8_t percent) {
   if (!oledOK)
     return;
 
@@ -160,7 +166,7 @@ void setDisplayBrightness(uint8_t percent) {
       currentAppliedBrightness = 0;
       brightnessKnown = true;
       brightnessSentAt = now;
-      setDisplayPower(false);
+      setDisplayPowerLocked(false);
     }
     return;
   }
@@ -168,7 +174,7 @@ void setDisplayBrightness(uint8_t percent) {
   // Non-zero brightness requires the panel to be on. This check comes before
   // the cache so a power-off is never left in place by a cached brightness.
   if (!displayPowerState)
-    setDisplayPower(true);
+    setDisplayPowerLocked(true);
 
   // Skip redundant I2C traffic; refresh every 5 s in case the panel reset.
   if (brightnessKnown && percent == currentAppliedBrightness &&
@@ -183,40 +189,62 @@ void setDisplayBrightness(uint8_t percent) {
   display.ssd1306_command(percentToContrast(percent));
 }
 
+void setDisplayPower(bool on) {
+  if (!oledOK)
+    return;
+  if (!displayLock(80))
+    return;
+  setDisplayPowerLocked(on);
+  displayUnlock();
+}
+
+void setDisplayBrightness(uint8_t percent) {
+  if (!oledOK)
+    return;
+  if (!displayLock(80))
+    return;
+  setDisplayBrightnessLocked(percent);
+  displayUnlock();
+}
+
 void updateDisplayBrightnessMode() {
   if (!oledOK)
+    return;
+  if (!displayLock(80))
     return;
 
   uint32_t now = millis();
   bool isTemporarilyAwake =
-      (circadianTempWakeUntil > 0 && now < circadianTempWakeUntil);
-  bool isNight = inCircadianSleep && !isTemporarilyAwake;
+      (circadianTempWakeUntil > 0 && (int32_t)(circadianTempWakeUntil - now) > 0);
+  bool isNight = (inCircadianSleep || manualSleep) && !isTemporarilyAwake;
 
   if (isNight) {
     if (nightMode == NIGHT_SCREEN_OFF) {
-      setDisplayPower(false);
+      setDisplayPowerLocked(false);
+      displayUnlock();
       return;
     }
 
-    setDisplayPower(true);
+    setDisplayPowerLocked(true);
 
     if (nightMode == NIGHT_DIM) {
-      setDisplayBrightness((uint8_t)nightBrightness);
+      setDisplayBrightnessLocked((uint8_t)nightBrightness);
     } else {
-      setDisplayBrightness((uint8_t)displayBrightness);
+      setDisplayBrightnessLocked((uint8_t)displayBrightness);
     }
   } else {
     // Normal daytime or awake face: stays at full configured day brightness.
-    setDisplayPower(true);
-    setDisplayBrightness((uint8_t)displayBrightness);
+    setDisplayPowerLocked(true);
+    setDisplayBrightnessLocked((uint8_t)displayBrightness);
   }
+  displayUnlock();
 }
 
 // ---- Initialization --------------------------------------------------------
 
 bool initDisplay() {
   if (!s_displayMutex) {
-    s_displayMutex = xSemaphoreCreateMutex();
+    s_displayMutex = xSemaphoreCreateRecursiveMutex();
   }
   Wire.begin(PIN_OLED_SDA, PIN_OLED_SCL);
   uint32_t targetClock = FACE_I2C_CLK_DURING;

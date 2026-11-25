@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useMemo, useCallback } from 'react'
 import { Tooltip } from './Tooltip'
 import {
   OLED_FACES,
@@ -12,7 +12,7 @@ import {
 } from 'lucide-react'
 
 // Mini OLED Aperture Screen with CRT scanlines & vector glow - Expands to fill outer container
-function FaceAperture({ svgContent, color = '#38BDF8', width = '100%', height = 'auto', style = {} }) {
+const FaceAperture = React.memo(function FaceAperture({ svgContent, color = '#38BDF8', width = '100%', height = 'auto', active = false, style = {} }) {
   const isNumericWidth = typeof width === 'number'
   const isNumericHeight = typeof height === 'number'
 
@@ -59,14 +59,132 @@ function FaceAperture({ svgContent, color = '#38BDF8', width = '100%', height = 
             height: '100%',
             display: 'block',
             color: 'inherit',
-            filter: 'drop-shadow(0 0 3.5px currentColor)'
+            filter: active ? 'drop-shadow(0 0 3.5px currentColor)' : 'none'
           }}
           dangerouslySetInnerHTML={{ __html: svgContent }}
         />
       ) : null}
     </div>
   )
-}
+})
+
+const SkinCard = React.memo(function SkinCard({ skin, isActive, svgMarkup, onSelect }) {
+  return (
+    <button
+      onClick={() => onSelect(skin)}
+      style={{
+        padding: '8px 8px 10px',
+        borderRadius: '16px',
+        background: isActive ? 'rgba(14, 165, 233, 0.12)' : 'var(--card-white)',
+        border: isActive ? '2px solid #38BDF8' : '1px solid var(--border-light)',
+        boxShadow: isActive ? '0 0 16px rgba(56, 189, 248, 0.35)' : 'none',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        gap: '8px',
+        cursor: 'pointer',
+        transition: 'transform 0.15s, box-shadow 0.15s, border-color 0.15s',
+        width: '100%',
+        boxSizing: 'border-box'
+      }}
+      onMouseEnter={(e) => {
+        if (!isActive) {
+          e.currentTarget.style.transform = 'translateY(-2px)'
+          e.currentTarget.style.borderColor = 'var(--border-dark)'
+        }
+      }}
+      onMouseLeave={(e) => {
+        if (!isActive) {
+          e.currentTarget.style.transform = 'translateY(0)'
+          e.currentTarget.style.borderColor = 'var(--border-light)'
+        }
+      }}
+    >
+      <FaceAperture
+        svgContent={svgMarkup}
+        color={isActive ? '#00E5FF' : '#38BDF8'}
+        active={isActive}
+        width="100%"
+      />
+      <div style={{ textAlign: 'center', width: '100%' }}>
+        <div style={{
+          fontSize: '12px',
+          fontWeight: 700,
+          color: isActive ? 'var(--text-dark)' : 'var(--text-muted)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: '4px'
+        }}>
+          {skin.label}
+          {isActive && <Check size={12} style={{ color: '#38BDF8' }} />}
+        </div>
+      </div>
+    </button>
+  )
+})
+
+const EmotionCard = React.memo(function EmotionCard({ emo, isActive, svgMarkup, onSelect }) {
+  return (
+    <button
+      onClick={() => onSelect(emo)}
+      style={{
+        padding: '8px 8px 10px',
+        borderRadius: '16px',
+        background: isActive ? 'rgba(14, 165, 233, 0.12)' : 'var(--card-white)',
+        border: isActive ? '2px solid #38BDF8' : '1px solid var(--border-light)',
+        boxShadow: isActive ? '0 0 16px rgba(56, 189, 248, 0.35)' : 'none',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        gap: '8px',
+        cursor: 'pointer',
+        transition: 'transform 0.15s, box-shadow 0.15s, border-color 0.15s',
+        userSelect: 'none',
+        width: '100%',
+        boxSizing: 'border-box'
+      }}
+      onMouseEnter={(e) => {
+        if (!isActive) {
+          e.currentTarget.style.transform = 'translateY(-2px)'
+          e.currentTarget.style.borderColor = 'var(--border-dark)'
+        }
+      }}
+      onMouseLeave={(e) => {
+        if (!isActive) {
+          e.currentTarget.style.transform = 'translateY(0)'
+          e.currentTarget.style.borderColor = 'var(--border-light)'
+        }
+      }}
+    >
+      <FaceAperture
+        svgContent={svgMarkup}
+        color={isActive ? '#00E5FF' : '#38BDF8'}
+        active={isActive}
+        width="100%"
+      />
+      <div style={{ textAlign: 'center', width: '100%' }}>
+        <div style={{
+          fontSize: '12px',
+          fontWeight: 700,
+          color: isActive ? 'var(--text-dark)' : 'var(--text-muted)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: '4px'
+        }}>
+          <span>{emo.title}</span>
+          {isActive && (
+            <span style={{
+              width: '6px', height: '6px', borderRadius: '50%',
+              background: '#38BDF8', display: 'inline-block'
+            }} />
+          )}
+        </div>
+      </div>
+    </button>
+  )
+})
 
 export default function FacesStudioView({ status, onTriggerAction, onToast }) {
   const [bannerText, setBannerText] = useState('')
@@ -129,26 +247,28 @@ export default function FacesStudioView({ status, onTriggerAction, onToast }) {
     onToast('Restored normal Kiwi face!')
   }
 
-  const handleTriggerEmotion = async (emo) => {
+  const handleTriggerEmotion = useCallback(async (emo) => {
     setActiveScreen(null)
     await onTriggerAction(`/do?e=${encodeURIComponent(emo.id)}&s=1`)
     onToast(`Emotion triggered: ${emo.title}`)
-  }
+  }, [onTriggerAction, onToast])
 
-  const handleSwitchSkin = async (skin) => {
+  const handleSwitchSkin = useCallback(async (skin) => {
     setActiveScreen(null)
     await onTriggerAction(`/do?skin=${encodeURIComponent(skin.id)}`)
     onToast(`Switched eye skin to ${skin.label}`)
-  }
+  }, [onTriggerAction, onToast])
 
   // Filter emotions by search query
-  const filteredEmotions = ALL_42_EMOTIONS.filter((emo) => {
+  const filteredEmotions = useMemo(() => {
     const q = searchQuery.trim().toLowerCase()
-    return !q ||
+    if (!q) return ALL_42_EMOTIONS
+    return ALL_42_EMOTIONS.filter((emo) =>
       emo.title.toLowerCase().includes(q) ||
       emo.desc.toLowerCase().includes(q) ||
       emo.id.toLowerCase().includes(q)
-  })
+    )
+  }, [searchQuery])
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
@@ -330,66 +450,15 @@ export default function FacesStudioView({ status, onTriggerAction, onToast }) {
           gridTemplateColumns: 'repeat(auto-fill, minmax(135px, 1fr))',
           gap: '12px'
         }}>
-          {ALL_SKINS.map((s) => {
-            const isSkinActive = currentSkin.toLowerCase() === s.id.toLowerCase()
-            const svgMarkup = SKIN_FACES[s.id] || ''
-
-            return (
-              <button
-                key={s.id}
-                onClick={() => handleSwitchSkin(s)}
-                style={{
-                  padding: '8px 8px 10px',
-                  borderRadius: '16px',
-                  background: isSkinActive ? 'rgba(14, 165, 233, 0.12)' : 'var(--card-white)',
-                  border: isSkinActive ? '2px solid #38BDF8' : '1px solid var(--border-light)',
-                  boxShadow: isSkinActive ? '0 0 16px rgba(56, 189, 248, 0.35)' : 'none',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  gap: '8px',
-                  cursor: 'pointer',
-                  transition: 'transform 0.15s, box-shadow 0.15s, border-color 0.15s',
-                  width: '100%',
-                  boxSizing: 'border-box'
-                }}
-                onMouseEnter={(e) => {
-                  if (!isSkinActive) {
-                    e.currentTarget.style.transform = 'translateY(-2px)'
-                    e.currentTarget.style.borderColor = 'var(--border-dark)'
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  if (!isSkinActive) {
-                    e.currentTarget.style.transform = 'translateY(0)'
-                    e.currentTarget.style.borderColor = 'var(--border-light)'
-                  }
-                }}
-              >
-                {/* SVG Silhouette Display Box - Expands to fill full container */}
-                <FaceAperture
-                  svgContent={svgMarkup}
-                  color={isSkinActive ? '#00E5FF' : '#38BDF8'}
-                  width="100%"
-                />
-
-                <div style={{ textAlign: 'center', width: '100%' }}>
-                  <div style={{
-                    fontSize: '12px',
-                    fontWeight: 700,
-                    color: isSkinActive ? 'var(--text-dark)' : 'var(--text-muted)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: '4px'
-                  }}>
-                    {s.label}
-                    {isSkinActive && <Check size={12} style={{ color: '#38BDF8' }} />}
-                  </div>
-                </div>
-              </button>
-            )
-          })}
+          {ALL_SKINS.map((s) => (
+            <SkinCard
+              key={s.id}
+              skin={s}
+              isActive={currentSkin.toLowerCase() === s.id.toLowerCase()}
+              svgMarkup={SKIN_FACES[s.id] || ''}
+              onSelect={handleSwitchSkin}
+            />
+          ))}
         </div>
       </div>
 
@@ -438,72 +507,15 @@ export default function FacesStudioView({ status, onTriggerAction, onToast }) {
           gridTemplateColumns: 'repeat(auto-fill, minmax(135px, 1fr))',
           gap: '12px'
         }}>
-          {filteredEmotions.map((emo) => {
-            const isActive = currentEmotion.toLowerCase() === emo.id.toLowerCase()
-            const svgMarkup = OLED_FACES[emo.key] || OLED_FACES[emo.id] || ''
-
-            return (
-              <button
-                key={`${emo.catId}-${emo.id}-${emo.key}`}
-                onClick={() => handleTriggerEmotion(emo)}
-                style={{
-                  padding: '8px 8px 10px',
-                  borderRadius: '16px',
-                  background: isActive ? 'rgba(14, 165, 233, 0.12)' : 'var(--card-white)',
-                  border: isActive ? '2px solid #38BDF8' : '1px solid var(--border-light)',
-                  boxShadow: isActive ? '0 0 16px rgba(56, 189, 248, 0.35)' : 'none',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  gap: '8px',
-                  cursor: 'pointer',
-                  transition: 'transform 0.15s, box-shadow 0.15s, border-color 0.15s',
-                  userSelect: 'none',
-                  width: '100%',
-                  boxSizing: 'border-box'
-                }}
-                onMouseEnter={(e) => {
-                  if (!isActive) {
-                    e.currentTarget.style.transform = 'translateY(-2px)'
-                    e.currentTarget.style.borderColor = 'var(--border-dark)'
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  if (!isActive) {
-                    e.currentTarget.style.transform = 'translateY(0)'
-                    e.currentTarget.style.borderColor = 'var(--border-light)'
-                  }
-                }}
-              >
-                {/* 64x32 Miniature OLED Screen - Expands to fill full container */}
-                <FaceAperture
-                  svgContent={svgMarkup}
-                  color={isActive ? '#00E5FF' : '#38BDF8'}
-                  width="100%"
-                />
-
-                <div style={{ textAlign: 'center', width: '100%' }}>
-                  <div style={{
-                    fontSize: '12px',
-                    fontWeight: 700,
-                    color: isActive ? 'var(--text-dark)' : 'var(--text-muted)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: '4px'
-                  }}>
-                    <span>{emo.title}</span>
-                    {isActive && (
-                      <span style={{
-                        width: '6px', height: '6px', borderRadius: '50%',
-                        background: '#38BDF8', display: 'inline-block'
-                      }} />
-                    )}
-                  </div>
-                </div>
-              </button>
-            )
-          })}
+          {filteredEmotions.map((emo) => (
+            <EmotionCard
+              key={`${emo.catId}-${emo.id}-${emo.key}`}
+              emo={emo}
+              isActive={currentEmotion.toLowerCase() === emo.id.toLowerCase()}
+              svgMarkup={OLED_FACES[emo.key] || OLED_FACES[emo.id] || ''}
+              onSelect={handleTriggerEmotion}
+            />
+          ))}
         </div>
 
         {filteredEmotions.length === 0 && (

@@ -1,26 +1,28 @@
 #include "power/PowerManager.h"
+#include "behavior/CircadianEngine.h"
+#include "commands/ActionExecutor.h"
 #include "config/AppConfig.h"
 #include "config/ConfigManager.h"
-#include "hardware/AudioEngine.h"
-#include "hardware/TouchController.h"
-#include "hardware/SoundLevel.h"
-#include "hardware/WakeWordEngine.h"
+#include "face/AnimationEngine.h"
 #include "face/FaceDisplay.h"
 #include "face/FaceEngine.h"
 #include "face/SleepyWakeAnim.h"
-#include "face/AnimationEngine.h"
-#include "commands/ActionExecutor.h"
+#include "hardware/AudioEngine.h"
+#include "hardware/RgbLed.h"
+#include "hardware/SoundLevel.h"
+#include "hardware/TouchController.h"
+#include "hardware/WakeWordEngine.h"
 #include "net/WifiManager.h"
 #include "web/WebPortal.h"
-#include <WebServer.h>
 #include <DNSServer.h>
-#include <esp_sleep.h>
-#include <esp_rtc_time.h>
-#include <esp_private/esp_clk.h>
+#include <WebServer.h>
+#include <WiFi.h>
 #include <driver/gpio.h>
+#include <esp_private/esp_clk.h>
+#include <esp_rtc_time.h>
+#include <esp_sleep.h>
 #include <sys/time.h>
 #include <time.h>
-#include <WiFi.h>
 
 // ============================================================
 // RTC PERSISTENT MEMORY (survives deep sleep)
@@ -28,7 +30,7 @@
 #define POWER_RTC_MAGIC 0x4B495749 // "KIWI"
 
 RTC_DATA_ATTR uint32_t rtcMagic = 0;
-RTC_DATA_ATTR uint8_t  rtcSleepMode = 0;        // 0 = none, 1 = circadian deep, 2 = manual deep
+RTC_DATA_ATTR uint8_t rtcSleepMode = 0;        // 0 = none, 1 = circadian deep, 2 = manual deep
 RTC_DATA_ATTR uint64_t rtcEpochAtSleepUs = 0;   // epoch time in microseconds, if timeSynced
 RTC_DATA_ATTR uint64_t rtcRtcTimeAtSleepUs = 0; // esp_rtc_get_time_us() at sleep start
 
@@ -45,49 +47,14 @@ static uint32_t manualSleepElapsedSec = 0;
 static bool isOledDimmed = false;
 
 // ============================================================
-// TIME & CIRCADIAN SCHEDULE HELPERS
-// ============================================================
-static bool isCircadianWindowActive() {
-  if (!circadianSleepEnabled || !timeSynced)
-    return false;
-  struct tm ti;
-  if (!getLocalTime(&ti, 20))
-    return false;
-  int curHour = ti.tm_hour;
-  if (circadianSleepStart > circadianSleepEnd) {
-    return (curHour >= circadianSleepStart || curHour < circadianSleepEnd);
-  } else {
-    return (curHour >= circadianSleepStart && curHour < circadianSleepEnd);
-  }
-}
-
-static int computeCircadianSleepTimerSeconds() {
-  struct tm ti;
-  if (!getLocalTime(&ti, 50)) {
-    return 60;
-  }
-  int curSec = ti.tm_hour * 3600 + ti.tm_min * 60 + ti.tm_sec;
-  int endSec = circadianSleepEnd * 3600;
-  int secUntilEnd = 0;
-  if (endSec <= curSec) {
-    secUntilEnd = (24 * 3600 - curSec) + endSec;
-  } else {
-    secUntilEnd = endSec - curSec;
-  }
-  if (secUntilEnd < 60)
-    secUntilEnd = 60;
-  if (secUntilEnd > 12 * 3600)
-    secUntilEnd = 12 * 3600;
-  return secUntilEnd;
-}
-
-// ============================================================
-// SLEEP REQUEST GATE (A2)
+// SLEEP REQUEST GATE (Hardware Eco Deep/Light Sleep Only)
 // ============================================================
 bool powerIsSleepRequested() {
+  if (!ecoSleepEnabled)
+    return false;
   if (!manualSleep && !inCircadianSleep)
     return false;
-  if (busyProcessing)
+  if (busyProcessing || startRecording)
     return false;
   if (isRobotTimerActive() || isRobotTimerRinging())
     return false;
@@ -95,34 +62,35 @@ bool powerIsSleepRequested() {
     return false;
   if (kiwiIsOutputting() || isTonePlaying())
     return false;
-  if (sleepyFallAsleepIsActive())
+  if (sleepyFallAsleepIsActive() || sleepyWakeIsActive())
     return false;
-  uint32_t now = millis();
-  if (circadianTempWakeUntil > now)
+  if (showClockScreen || showWeatherScreen || bannerActive)
+    return false;
+  if (isCircadianTempWakeActive())
     return false;
   if (digitalRead(PIN_TOUCH_TOP) == HIGH)
     return false;
-  if (now - lastWebRequestAt < 2000)
+  uint32_t now = millis();
+  if (now - lastWebRequestAt < 10000)
+    return false;
+  if (now - lastUserInteractionAt < 5000)
     return false;
   return true;
 }
 
 // ============================================================
-// SLEEP EXECUTION (A4, A5, A6)
+// SLEEP EXECUTION (Light Sleep & Deep Sleep)
 // ============================================================
-
-// Light Sleep: Modem sleep, keeps STA connected and WebServer alive.
-// Web portal responds after the next wake from light sleep.
 static void enterLightSleep(uint64_t wakeUs, const char *reason) {
   powerSetCpuFreq(160);
   setDisplayPower(false);
+  rgbLedShow(0, 0, 0);
   audioSleepPrepare();
 
   WiFi.setSleep(true);
 
   Serial.printf("[POWER] Entering LIGHT sleep, reason=%s, wake_in=%llu s\n",
                 reason, (unsigned long long)(wakeUs / 1000000ULL));
-  Serial.println("[POWER] Note: Web portal will respond after the next wake from light sleep.");
   Serial.flush();
 
   gpio_wakeup_enable((gpio_num_t)PIN_TOUCH_TOP, GPIO_INTR_HIGH_LEVEL);
@@ -139,19 +107,14 @@ static void enterLightSleep(uint64_t wakeUs, const char *reason) {
 
   audioSleepWake();
 
-  // Non-blocking WiFi reconnect if disconnected
   if (wifiSSID.length() > 0 && WiFi.status() != WL_CONNECTED) {
-    Serial.println("[POWER] WiFi disconnected after light sleep, calling WiFi.reconnect()...");
+    Serial.println("[POWER] WiFi disconnected after light sleep, reconnecting...");
     WiFi.reconnect();
   }
 
   if (cause == ESP_SLEEP_WAKEUP_GPIO) {
-    // Touch wake routine (A7)
-    Serial.println("[POWER] Touch wake routine (light sleep): display active for 10 s");
-    circadianTempWakeUntil = millis() + 10000;
-    setDisplayPower(true);
-    setOledDim(false);
-    updateDisplayBrightnessMode();
+    Serial.println("[POWER] Touch wake routine (light sleep): waking briefly");
+    wakeKiwiFromSleep(false, CIRCADIAN_TEMP_WAKE_MS, true);
     resyncTouch();
     powerNotifyActivity();
   } else if (cause == ESP_SLEEP_WAKEUP_TIMER) {
@@ -164,12 +127,11 @@ static void enterLightSleep(uint64_t wakeUs, const char *reason) {
   }
 }
 
-// Deep Sleep: WiFi radio off, WebServer and DNSServer stopped.
-// Web portal is completely unreachable during deep sleep.
 static void enterDeepSleep(uint8_t mode, uint64_t wakeUs, const char *reason) {
   saveConfigImmediate();
   powerSetCpuFreq(160);
   setDisplayPower(false);
+  rgbLedShow(0, 0, 0);
   audioSleepPrepare();
 
   WiFi.disconnect(true);
@@ -186,7 +148,6 @@ static void enterDeepSleep(uint8_t mode, uint64_t wakeUs, const char *reason) {
   } else {
     rtcEpochAtSleepUs = 0;
   }
-  // Using esp_rtc_get_time_us() from esp_rtc_time.h to measure elapsed RTC time
   rtcRtcTimeAtSleepUs = esp_rtc_get_time_us();
 
   if (wakeUs > 0) {
@@ -196,7 +157,6 @@ static void enterDeepSleep(uint8_t mode, uint64_t wakeUs, const char *reason) {
   } else {
     Serial.printf("[POWER] Entering DEEP sleep, reason=%s, wake_in=none\n", reason);
   }
-  Serial.println("[POWER] Note: Web portal is UNREACHABLE during deep sleep.");
   Serial.flush();
 
 #if defined(ESP_GPIO_WAKEUP_GPIO_HIGH)
@@ -205,16 +165,26 @@ static void enterDeepSleep(uint8_t mode, uint64_t wakeUs, const char *reason) {
   esp_sleep_enable_ext0_wakeup((gpio_num_t)PIN_TOUCH_TOP, 1);
 #endif
   esp_deep_sleep_start();
-  // Never returns
 }
 
 // ============================================================
-// BOOT INITIALIZATION (A6, A8)
+// BOOT INITIALIZATION
 // ============================================================
 void powerInit() {
   esp_sleep_wakeup_cause_t cause = esp_sleep_get_wakeup_cause();
   Serial.printf("[POWER] Booting, wakeup_cause=%d, rtcMagic=0x%08lX\n",
                 (int)cause, (unsigned long)rtcMagic);
+
+  // Restore configured timezone early so localtime() matches user's zone
+  char tzStr[16];
+  int totalMin = tzOffsetMin;
+  // POSIX TZ sign is inverted relative to UTC offset (e.g. IST +5:30 -> "UTC-5:30")
+  int absMin = abs(totalMin);
+  int h = absMin / 60;
+  int m = absMin % 60;
+  snprintf(tzStr, sizeof(tzStr), "UTC%c%d:%02d", (totalMin >= 0) ? '-' : '+', h, m);
+  setenv("TZ", tzStr, 1);
+  tzset();
 
   if (cause != ESP_SLEEP_WAKEUP_UNDEFINED && rtcMagic == POWER_RTC_MAGIC) {
     uint64_t nowRtcUs = esp_rtc_get_time_us();
@@ -226,7 +196,8 @@ void powerInit() {
       tv.tv_usec = (suseconds_t)(newEpochUs % 1000000ULL);
       settimeofday(&tv, nullptr);
       timeSynced = true;
-      Serial.printf("[POWER] Wall-clock time restored from RTC: elapsed=%llu s\n",
+      ntpNeedsRefresh = true;
+      Serial.printf("[POWER] Wall-clock time restored from RTC: elapsed=%llu s (NTP refresh queued)\n",
                     (unsigned long long)(elapsedUs / 1000000ULL));
     }
 
@@ -235,48 +206,52 @@ void powerInit() {
       manualSleep = false;
     } else if (rtcSleepMode == 2) {
       manualSleep = true;
-      inCircadianSleep = true;
+      inCircadianSleep = false;
     }
 
     if (cause == ESP_SLEEP_WAKEUP_TIMER) {
-      bool inWindow = isCircadianWindowActive();
-      if (rtcSleepMode == 1 && (inWindow || !timeSynced)) {
-        Serial.printf("[POWER] Timer woke within circadian sleep window (timeSynced=%d). Returning to deep sleep.\n", timeSynced);
-        int secUntilEnd = computeCircadianSleepTimerSeconds();
-        enterDeepSleep(1, (uint64_t)secUntilEnd * 1000000ULL, "circadian_reenter");
+      bool inWindow = isCircadianScheduleActiveNow();
+      if (timeSynced && inWindow && rtcSleepMode == 1) {
+        Serial.println("[POWER] Timer woke within circadian sleep window. Returning to deep sleep.");
+        int secUntilEnd = computeSecondsUntilScheduleWake();
+        if (secUntilEnd > 0) {
+          enterDeepSleep(1, (uint64_t)secUntilEnd * 1000000ULL, "circadian_reenter");
+        }
       }
-      Serial.println("[POWER] Circadian sleep window finished. Waking up.");
+      Serial.println("[POWER] Scheduled sleep window finished (or time unsynced). Waking up.");
       inCircadianSleep = false;
       manualSleep = false;
       rtcSleepMode = 0;
       rtcMagic = 0;
-      suppressBootGreeting = true;
+      suppressBootGreeting = !greetingsEnabled;
       skipBootWakeAnim = true;
-      bootCompleted = true; // Skip boot animation on timer wake
-    } else if (cause == ESP_SLEEP_WAKEUP_GPIO) {
-      Serial.println("[POWER] Deep sleep wake by touch: Waking up fully and queuing sleepy wake anim.");
-      inCircadianSleep = false;
-      manualSleep = false;
-      rtcSleepMode = 0;
-      rtcMagic = 0;
-      suppressBootGreeting = true;
-      skipBootWakeAnim = true;
-      bootCompleted = true; // Skip cold-boot animation on touch wake so sleepyWakeAnim plays in loop()
+      bootCompleted = true;
       wakeFromDeepSleepWakeAnim = true;
+      circadianTempWakeUntil = millis() + CIRCADIAN_TEMP_WAKE_MS;
+    } else if (cause == ESP_SLEEP_WAKEUP_GPIO) {
+      Serial.println("[POWER] Deep sleep wake by touch: Waking up with sleepy wake anim.");
+      inCircadianSleep = false;
+      manualSleep = false;
+      rtcSleepMode = 0;
+      rtcMagic = 0;
+      suppressBootGreeting = true;
+      skipBootWakeAnim = true;
+      bootCompleted = true;
+      wakeFromDeepSleepWakeAnim = true;
+      circadianTempWakeUntil = millis() + CIRCADIAN_TEMP_WAKE_MS;
     }
   } else {
     rtcMagic = 0;
     rtcSleepMode = 0;
     suppressBootGreeting = false;
     skipBootWakeAnim = false;
-    // Cold boot grace period (30s) so turning on at night does not instantly sleep
     circadianTempWakeUntil = millis() + 30000;
   }
   lastActivityAt = millis();
 }
 
 // ============================================================
-// MAIN LOOP UPDATE (A1, B4, C1, C4)
+// MAIN LOOP UPDATE
 // ============================================================
 void powerUpdate() {
   uint32_t now = millis();
@@ -288,33 +263,42 @@ void powerUpdate() {
     setOledDim(false);
     updateDisplayBrightnessMode();
     sleepyWakeStart();
-    Serial.println("[POWER] Starting sleepy wake animation after touch wake from deep sleep!");
+    Serial.println("[POWER] Starting sleepy wake animation after wake from deep sleep!");
   }
 
   if (!manualSleep) {
     manualSleepElapsedSec = 0;
   }
 
-  // --- PART A: Real Sleep Check & Entry ---
+  // --- PART A: Eco Hardware Sleep Check & Entry ---
   if (powerIsSleepRequested()) {
     if (manualSleep) {
       if (manualSleepElapsedSec >= (MANUAL_LIGHT_SLEEP_MAX_MIN * 60)) {
-        enterDeepSleep(2, 0, "manual_deep_after_timeout");
+        uint64_t wakeUs = 0;
+        if (circadianSleepEnabled && timeSynced) {
+          int secUntilEnd = computeSecondsUntilScheduleWake();
+          if (secUntilEnd > 0) {
+            wakeUs = (uint64_t)secUntilEnd * 1000000ULL;
+          }
+        }
+        enterDeepSleep(2, wakeUs, "manual_deep_after_timeout");
       } else {
         enterLightSleep(60000000ULL, "manual_light");
         return;
       }
-    } else if (isCircadianWindowActive()) {
-      int secUntilEnd = computeCircadianSleepTimerSeconds();
-      enterDeepSleep(1, (uint64_t)secUntilEnd * 1000000ULL, "circadian_schedule");
+    } else if (isCircadianScheduleActiveNow()) {
+      int secUntilEnd = computeSecondsUntilScheduleWake();
+      if (secUntilEnd > 0) {
+        enterDeepSleep(1, (uint64_t)secUntilEnd * 1000000ULL, "circadian_schedule");
+      }
     } else if (inCircadianSleep && !timeSynced) {
       enterLightSleep(60000000ULL, "circadian_nosync");
       return;
     }
   }
 
-  // --- PART B4: Idle OLED Dimming (60 s) ---
-  bool faceActivity = (now - lastUserInteractionAt < 60000) ||
+  // --- PART B: Idle OLED Dimming (60 s) ---
+  bool faceActivity = ((now - lastUserInteractionAt) < 60000) ||
                       kiwiIsOutputting() || isTonePlaying() ||
                       (soundReactiveEnabled && soundLevelGet() > NOISE_GATE_THRESHOLD) ||
                       sleepyWakeIsActive() || sleepyFallAsleepIsActive() ||
@@ -339,12 +323,13 @@ void powerUpdate() {
   }
 
   // --- PART C: CPU Frequency Scaling (80 MHz / 160 MHz / 240 MHz) ---
-  // Boost to 240 MHz during active AI/TLS/OTA/audio workloads; keep calm idle
-  // at 160 MHz (or 80 MHz when dimmed & silent) to minimize heat.
   bool needTurbo = busyProcessing || startRecording || isTonePlaying() ||
                    isSpeechPlaying() || otaInProgress;
-  bool canDropTo80 = (!displayPowerState || isOledDimmed) &&
-                     !wakeWordEnabled && !wakeWordIsListening() &&
+  bool sleepQuiet = (inCircadianSleep || manualSleep) &&
+                    !sleepyFallAsleepIsActive() && !sleepyWakeIsActive() &&
+                    !showClockScreen && !showWeatherScreen;
+  bool canDropTo80 = (!displayPowerState || isOledDimmed || sleepQuiet) &&
+                     !wakeWordIsListening() &&
                      !kiwiIsOutputting() && !isTonePlaying() &&
                      !busyProcessing && (now - lastWebRequestAt >= 2000) &&
                      !isRobotTimerRinging() &&
@@ -366,7 +351,7 @@ void powerUpdate() {
 }
 
 // ============================================================
-// CPU FREQUENCY MANAGEMENT (C1, C2, C3)
+// CPU FREQUENCY MANAGEMENT
 // ============================================================
 void powerNotifyActivity() {
   lastActivityAt = millis();
@@ -381,10 +366,6 @@ void powerSetCpuFreq(uint32_t mhz) {
   if (mhz != 80 && mhz != 160 && mhz != 240)
     return;
 
-  // ESP32-C3 Note:
-  // The APB clock remains at 80 MHz whether CPU frequency is set to 160 MHz or 80 MHz.
-  // Hardware UART baud rate generator derived from APB clock remains completely stable.
-  // Built-in USB CDC / JTAG runs from an independent 48 MHz PLL, unaffected by CPU scaling.
   setCpuFrequencyMhz(mhz);
   currentCpuFreq = getCpuFrequencyMhz();
   Serial.printf("[POWER] CPU freq changed to %lu MHz (esp_clk_cpu_freq=%d Hz)\n",

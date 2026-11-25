@@ -47,14 +47,17 @@ bool isMaskedSecret(const String &s) {
 void handleRoot() {
   notifyWebRequest();
 
+  bool forceFresh = server.hasArg("_r");
   String etag =
       "\"" + String(FIRMWARE_VER) + "-" + String(DASHBOARD_HTML_GZ_LEN) + "\"";
 
   server.sendHeader("Access-Control-Allow-Origin", "*");
-  server.sendHeader("Cache-Control", "public, max-age=3600, must-revalidate");
+  server.sendHeader("Cache-Control",
+                    forceFresh ? "no-cache, no-store, must-revalidate"
+                               : "public, max-age=3600, must-revalidate");
   server.sendHeader("ETag", etag);
 
-  if (server.hasHeader("If-None-Match")) {
+  if (!forceFresh && server.hasHeader("If-None-Match")) {
     String reqEtag = server.header("If-None-Match");
     if (reqEtag == etag || reqEtag.indexOf(etag) >= 0 || reqEtag == "*") {
       server.send(304, "text/plain", "");

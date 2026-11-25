@@ -3,3 +3,4 @@
 
 String getWeatherCodeDescription(int code);
 bool fetchWeather();
+bool fetchWeatherAsync();

@@ -41,10 +41,10 @@ void updateFaceFrameRate() {
     active = true;
   }
 
-  // Keep existing speech-time gFaceFrameMs = 100 behavior working
+  // Run lip-sync & expressions smoothly at 30 FPS during active speech/output
   if (currentEmotion == EMOTION_SPEAKING ||
       (kiwiIsOutputting() && !isTonePlaying())) {
-    gFaceFrameMs = FACE_FRAME_MS_IDLE; // 100 ms
+    gFaceFrameMs = FACE_FRAME_MS_ACTIVE; // 33 ms (~30 FPS)
   } else if (active) {
     gFaceFrameMs = FACE_FRAME_MS_ACTIVE; // 33 ms
   } else {

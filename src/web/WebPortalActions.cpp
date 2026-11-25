@@ -7,6 +7,7 @@
 #include "face/FaceEngine.h"
 #include "face/FaceExpressions.h"
 #include "face/SleepyWakeAnim.h"
+#include "behavior/CircadianEngine.h"
 #include "hardware/AudioEngine.h"
 #include "hardware/RgbLed.h"
 #include "hardware/WakeWordEngine.h"
@@ -16,7 +17,6 @@
 #include "net/WifiManager.h"
 #include "web/WebPortal.h"
 #include "web/WebPortalApiInternal.h"
-#include <Preferences.h>
 #include <WebServer.h>
 #include <WiFi.h>
 
@@ -32,6 +32,10 @@ void handleDoAction() {
 
   notifyWebRequest();
   lastUserInteractionAt = millis();
+  extendTempWakeIfActive(CIRCADIAN_TEMP_WAKE_MS);
+  if (!server.hasArg("animations")) {
+    invalidateStatusCache();
+  }
 
   // Web Mic Audio Record Trigger
   if (server.hasArg("record")) {
@@ -220,10 +224,7 @@ void handleDoAction() {
   // Autonomous Boredom Live Toggle
   if (server.hasArg("boredom")) {
     boredomEnabled = parsePortalBool(server.arg("boredom"));
-    Preferences p;
-    p.begin("myrobot", false);
-    p.putBool("boredom", boredomEnabled);
-    p.end();
+    saveConfig();
     Serial.printf("[PORTAL] Boredom toggle live set to: %d\n", boredomEnabled);
     server.send(200, "application/json",
                 boredomEnabled ? "{\"ok\":true,\"boredom\":true}"
@@ -236,10 +237,7 @@ void handleDoAction() {
     int m = server.arg("boredom_mins").toInt();
     if (m >= 1 && m <= 60) {
       boredomMinutes = m;
-      Preferences p;
-      p.begin("myrobot", false);
-      p.putInt("boredom_mins", boredomMinutes);
-      p.end();
+      saveConfig();
       resetBoredomInterval();
       Serial.printf("[PORTAL] Boredom interval live set to: %d minutes\n",
                     boredomMinutes);
@@ -256,10 +254,7 @@ void handleDoAction() {
     currentEyeSkin = parseEyeSkinArg(s);
     s.toLowerCase();
 
-    Preferences p;
-    p.begin("myrobot", false);
-    p.putInt("eyeskin", (int)currentEyeSkin);
-    p.end();
+    saveConfig();
 
     soundPetSparkle();
     Serial.printf("[PORTAL] Eye skin switched to: %d\n", (int)currentEyeSkin);
@@ -271,75 +266,144 @@ void handleDoAction() {
   // Live Toggle / Set Sleep Mode
   if (server.hasArg("sleep")) {
     String slp = server.arg("sleep");
-    if (slp == "toggle") {
-      manualSleep = !manualSleep;
+    bool targetSleep = (slp == "toggle") ? !(manualSleep || inCircadianSleep)
+                                         : parsePortalBool(slp);
+    if (targetSleep) {
+      startManualSleep();
     } else {
-      manualSleep = parsePortalBool(slp);
+      wakeKiwiFromSleep(true, CIRCADIAN_TEMP_WAKE_MS, true);
     }
-    inCircadianSleep = manualSleep;
-    if (manualSleep) {
-      showClockScreen = false;
-      showWeatherScreen = false;
-      sleepyWakeCancel();
-      sleepyFallAsleepStart();
-    } else {
-      sleepyFallAsleepCancel();
-      setOledDim(false);
-      updateDisplayBrightnessMode();
-      sleepyWakeStart();
-    }
-    Serial.printf("[PORTAL] Manual sleep mode set to: %d\n", manualSleep);
+    bool sleepingNow = (manualSleep || inCircadianSleep);
+    Serial.printf("[PORTAL] Sleep mode set to: %d (skipTonight=%d)\n",
+                  sleepingNow, circadianSkipTonight);
     server.send(200, "application/json",
                 "{\"ok\":true,\"sleeping\":" +
-                    String(manualSleep ? "true" : "false") + "}");
+                    String(sleepingNow ? "true" : "false") +
+                    ",\"skip_tonight\":" +
+                    String(circadianSkipTonight ? "true" : "false") + "}");
+    return;
+  }
+
+  // Live Snooze (temporary wake from scheduled sleep without disabling it)
+  if (server.hasArg("snooze")) {
+    int mins = server.arg("snooze").toInt();
+    if (mins < 1)
+      mins = 15;
+    if (mins > 180)
+      mins = 180;
+    wakeKiwiFromSleep(false, (uint32_t)mins * 60000UL, true);
+    Serial.printf("[PORTAL] Snooze wake set for %d min\n", mins);
+    server.send(200, "application/json",
+                "{\"ok\":true,\"sleeping\":false,\"snoozeMin\":" +
+                    String(mins) + ",\"tempWakeSec\":" +
+                    String(mins * 60) + "}");
+    return;
+  }
+
+  // Live Eco Hardware Sleep Toggle (false = Desk Mode, true = Hardware Light/Deep Sleep)
+  if (server.hasArg("eco_sleep")) {
+    ecoSleepEnabled = parsePortalBool(server.arg("eco_sleep"));
+    saveConfig();
+    Serial.printf("[PORTAL] Eco Hardware Sleep set to: %d\n", ecoSleepEnabled);
+    server.send(200, "application/json",
+                "{\"ok\":true,\"eco_sleep\":" +
+                    String(ecoSleepEnabled ? "true" : "false") + "}");
+    return;
+  }
+
+  // Live Timezone Offset (minutes from UTC, e.g. 330 for IST +5:30)
+  if (server.hasArg("tz_min")) {
+    int tz = server.arg("tz_min").toInt();
+    if (tz >= -720 && tz <= 840) {
+      tzOffsetMin = tz;
+      saveConfig();
+      startNtpAsync();
+      ntpNeedsRefresh = true;
+      onCircadianScheduleChanged();
+      Serial.printf("[PORTAL] Timezone offset set to: %d min\n", tzOffsetMin);
+    }
+    char localStr[8] = "";
+    struct tm ti;
+    if (timeSynced && getLocalTime(&ti, 10)) {
+      snprintf(localStr, sizeof(localStr), "%02d:%02d", ti.tm_hour, ti.tm_min);
+    }
+    server.send(200, "application/json",
+                "{\"ok\":true,\"tz_min\":" + String(tzOffsetMin) +
+                    ",\"localTime\":\"" + String(localStr) + "\"}");
     return;
   }
 
   // Live Circadian Night Sleep Schedule
   if (server.hasArg("circ_en") || server.hasArg("circ_start") ||
-      server.hasArg("circ_end")) {
-    Preferences p;
-    p.begin("myrobot", false);
+      server.hasArg("circ_smin") || server.hasArg("circ_end") ||
+      server.hasArg("circ_emin")) {
+    bool changed = false;
     if (server.hasArg("circ_en")) {
       circadianSleepEnabled = parsePortalBool(server.arg("circ_en"));
-      p.putBool("circ_en", circadianSleepEnabled);
-      Serial.printf("[PORTAL] Circadian sleep toggle live set to: %d\n",
-                    circadianSleepEnabled);
+      changed = true;
     }
     if (server.hasArg("circ_start")) {
-      int s = server.arg("circ_start").toInt();
-      if (s >= 0 && s <= 23) {
-        circadianSleepStart = s;
-        p.putInt("circ_start", circadianSleepStart);
-        Serial.printf("[PORTAL] Circadian start hour set to: %d\n",
-                      circadianSleepStart);
+      int h = circadianSleepStart;
+      int m = circadianSleepStartMin;
+      if (parseScheduleTimeString(server.arg("circ_start"), h, m)) {
+        circadianSleepStart = h;
+        circadianSleepStartMin = m;
+        changed = true;
+      }
+    }
+    if (server.hasArg("circ_smin")) {
+      int sm = server.arg("circ_smin").toInt();
+      if (sm >= 0 && sm <= 59) {
+        circadianSleepStartMin = sm;
+        changed = true;
       }
     }
     if (server.hasArg("circ_end")) {
-      int e = server.arg("circ_end").toInt();
-      if (e >= 0 && e <= 23) {
-        circadianSleepEnd = e;
-        p.putInt("circ_end", circadianSleepEnd);
-        Serial.printf("[PORTAL] Circadian end hour set to: %d\n",
-                      circadianSleepEnd);
+      int h = circadianSleepEnd;
+      int m = circadianSleepEndMin;
+      if (parseScheduleTimeString(server.arg("circ_end"), h, m)) {
+        circadianSleepEnd = h;
+        circadianSleepEndMin = m;
+        changed = true;
       }
     }
-    p.end();
+    if (server.hasArg("circ_emin")) {
+      int em = server.arg("circ_emin").toInt();
+      if (em >= 0 && em <= 59) {
+        circadianSleepEndMin = em;
+        changed = true;
+      }
+    }
+    if (changed) {
+      saveConfig();
+      onCircadianScheduleChanged();
+      Serial.printf("[PORTAL] Circadian schedule updated: en=%d %02d:%02d -> %02d:%02d\n",
+                    circadianSleepEnabled, circadianSleepStart,
+                    circadianSleepStartMin, circadianSleepEnd,
+                    circadianSleepEndMin);
+    }
+    char startStr[8], endStr[8];
+    snprintf(startStr, sizeof(startStr), "%02d:%02d", circadianSleepStart, circadianSleepStartMin);
+    snprintf(endStr, sizeof(endStr), "%02d:%02d", circadianSleepEnd, circadianSleepEndMin);
+    bool sleepingNow = (manualSleep || inCircadianSleep);
     server.send(200, "application/json",
                 "{\"ok\":true,\"circ_en\":" +
                     String(circadianSleepEnabled ? "true" : "false") +
                     ",\"circ_start\":" + String(circadianSleepStart) +
-                    ",\"circ_end\":" + String(circadianSleepEnd) + "}");
+                    ",\"circ_smin\":" + String(circadianSleepStartMin) +
+                    ",\"circ_end\":" + String(circadianSleepEnd) +
+                    ",\"circ_emin\":" + String(circadianSleepEndMin) +
+                    ",\"startStr\":\"" + String(startStr) + "\"" +
+                    ",\"endStr\":\"" + String(endStr) + "\"" +
+                    ",\"sleeping\":" + String(sleepingNow ? "true" : "false") +
+                    ",\"active\":" + String(inCircadianSleep ? "true" : "false") + "}");
     return;
   }
 
   // Live Greetings Toggle
   if (server.hasArg("greet_en")) {
     greetingsEnabled = parsePortalBool(server.arg("greet_en"));
-    Preferences p;
-    p.begin("myrobot", false);
-    p.putBool("greet_en", greetingsEnabled);
-    p.end();
+    saveConfig();
     Serial.printf("[PORTAL] Greetings toggle live set to: %d\n",
                   greetingsEnabled);
     server.send(200, "application/json",
@@ -351,10 +415,7 @@ void handleDoAction() {
   // Live Hunger Routine Toggle
   if (server.hasArg("hunger_en")) {
     hungerEnabled = parsePortalBool(server.arg("hunger_en"));
-    Preferences p;
-    p.begin("myrobot", false);
-    p.putBool("hunger_en", hungerEnabled);
-    p.end();
+    saveConfig();
     if (!hungerEnabled && (isKiwiHungry() || isKiwiAngry())) {
       reconcileKiwi();
     }
@@ -368,10 +429,7 @@ void handleDoAction() {
   // Live Sound-Reactive Face Toggle
   if (server.hasArg("snd_react")) {
     soundReactiveEnabled = parsePortalBool(server.arg("snd_react"));
-    Preferences p;
-    p.begin("myrobot", false);
-    p.putBool("snd_react", soundReactiveEnabled);
-    p.end();
+    saveConfig();
     Serial.printf("[PORTAL] Sound reactive face live set to: %d\n",
                   soundReactiveEnabled);
     server.send(200, "application/json",
@@ -384,10 +442,7 @@ void handleDoAction() {
   if (server.hasArg("ww_en")) {
     wakeWordEnabled = parsePortalBool(server.arg("ww_en"));
     wakeWordSetEnabled(wakeWordEnabled);
-    Preferences p;
-    p.begin("myrobot", false);
-    p.putBool("ww_en", wakeWordEnabled);
-    p.end();
+    saveConfig();
     Serial.printf("[PORTAL] Wake-word live set to: %d\n", wakeWordEnabled);
     server.send(200, "application/json",
                 "{\"ok\":true,\"ww_en\":" +
@@ -398,10 +453,7 @@ void handleDoAction() {
   if (server.hasArg("ww_cutoff")) {
     wakeWordCutoff = server.arg("ww_cutoff").toFloat();
     wakeWordSetSensitivity(wakeWordCutoff);
-    Preferences p;
-    p.begin("myrobot", false);
-    p.putFloat("ww_cutoff", wakeWordCutoff);
-    p.end();
+    saveConfig();
     Serial.printf("[PORTAL] Wake-word cutoff set to: %.2f\n", wakeWordCutoff);
     server.send(200, "application/json",
                 "{\"ok\":true,\"ww_cutoff\":" + String(wakeWordCutoff, 2) +
@@ -418,11 +470,7 @@ void handleDoAction() {
                   "{\"ok\":false,\"error\":\"Model switch failed\"}");
       return;
     }
-    Preferences p;
-    p.begin("myrobot", false);
-    p.putUChar("ww_model", wakeWordModel);
-    p.putFloat("ww_cutoff", wakeWordCutoff);
-    p.end();
+    saveConfig();
     Serial.printf(
         "[PORTAL] Wake-word model switched to: %d (%s), cutoff: %.2f\n",
         wakeWordModel, wakeWordGetModelName(), wakeWordCutoff);
@@ -437,10 +485,7 @@ void handleDoAction() {
   if (server.hasArg("ww_gain")) {
     float g = server.arg("ww_gain").toFloat();
     wakeWordSetGain(g);
-    Preferences p;
-    p.begin("myrobot", false);
-    p.putFloat("ww_gain", wakeWordGain);
-    p.end();
+    saveConfig();
     server.send(200, "application/json",
                 "{\"ok\":true,\"ww_gain\":" + String(wakeWordGain, 2) + "}");
     return;
@@ -450,10 +495,7 @@ void handleDoAction() {
   if (server.hasArg("ww_spike")) {
     bool sp = parsePortalBool(server.arg("ww_spike"));
     wakeWordSetSpikeTrigger(sp);
-    Preferences p;
-    p.begin("myrobot", false);
-    p.putBool("ww_spike", wakeWordSpikeTrigger);
-    p.end();
+    saveConfig();
     server.send(200, "application/json",
                 "{\"ok\":true,\"ww_spike\":" +
                     String(wakeWordSpikeTrigger ? "true" : "false") + "}");
@@ -491,7 +533,9 @@ void handleDoAction() {
   // Live Microphone Slot Selection (0=Left, 1=Right)
   if (server.hasArg("micslot")) {
     int s = server.arg("micslot").toInt();
-    setMicSlot(s, true, true);
+    setMicSlot(s, false, true);
+    setMicSlotLocked(true);
+    saveConfig();
     server.send(200, "application/json",
                 "{\"ok\":true,\"micslot\":" + String(getMicSlot()) + "}");
     return;
@@ -501,10 +545,7 @@ void handleDoAction() {
   if (server.hasArg("micslot_lock")) {
     bool lk = parsePortalBool(server.arg("micslot_lock"));
     setMicSlotLocked(lk);
-    Preferences p;
-    p.begin("myrobot", false);
-    p.putBool("micslot_lock", lk);
-    p.end();
+    saveConfig();
     server.send(200, "application/json",
                 "{\"ok\":true,\"micslot_lock\":" +
                     String(isMicSlotLocked() ? "true" : "false") + "}");
@@ -515,10 +556,7 @@ void handleDoAction() {
   if (server.hasArg("rgb_en")) {
     rgbLedEnabled = parsePortalBool(server.arg("rgb_en"));
     rgbLedSetEnabled(rgbLedEnabled);
-    Preferences p;
-    p.begin("myrobot", false);
-    p.putBool("rgb_en", rgbLedEnabled);
-    p.end();
+    saveConfig();
     Serial.printf("[PORTAL] Pin 48 RGB LED live set to: %d\n", rgbLedEnabled);
     server.send(200, "application/json",
                 "{\"ok\":true,\"rgb_en\":" +
@@ -535,10 +573,7 @@ void handleDoAction() {
       bPct = 100;
     rgbLedBrightness = (uint8_t)((bPct * 255) / 100);
     rgbLedSetBrightness(rgbLedBrightness);
-    Preferences p;
-    p.begin("myrobot", false);
-    p.putUChar("rgb_bright", rgbLedBrightness);
-    p.end();
+    saveConfig();
     Serial.printf("[PORTAL] Pin 48 RGB LED brightness set to: %d%% (%d/255)\n",
                   bPct, rgbLedBrightness);
     server.send(200, "application/json",
@@ -580,10 +615,7 @@ void handleDoAction() {
   // Live Toggle Mouth & Lips
   if (server.hasArg("mouth")) {
     showMouth = parsePortalBool(server.arg("mouth"));
-    Preferences p;
-    p.begin("myrobot", false);
-    p.putBool("showmouth", showMouth);
-    p.end();
+    saveConfig();
     server.send(
         200, "application/json",
         "{\"ok\":true,\"mouth\":" + String(showMouth ? "true" : "false") + "}");
@@ -598,10 +630,7 @@ void handleDoAction() {
     if (b > 100)
       b = 100;
     displayBrightness = b;
-    Preferences p;
-    p.begin("myrobot", false);
-    p.putInt("disp_bright", displayBrightness);
-    p.end();
+    saveConfig();
     updateDisplayBrightnessMode();
     Serial.printf("[PORTAL] Day Brightness live set to: %d%%\n",
                   displayBrightness);
@@ -619,10 +648,7 @@ void handleDoAction() {
     if (nb > 100)
       nb = 100;
     nightBrightness = nb;
-    Preferences p;
-    p.begin("myrobot", false);
-    p.putInt("night_bright", nightBrightness);
-    p.end();
+    saveConfig();
     updateDisplayBrightnessMode();
     Serial.printf("[PORTAL] Night Brightness live set to: %d%%\n",
                   nightBrightness);
@@ -637,10 +663,7 @@ void handleDoAction() {
     int nm = server.arg("night_mode").toInt();
     if (nm >= 0 && nm <= 2) {
       nightMode = nm;
-      Preferences p;
-      p.begin("myrobot", false);
-      p.putInt("night_mode", nightMode);
-      p.end();
+      saveConfig();
       updateDisplayBrightnessMode();
       Serial.printf("[PORTAL] Night Mode live set to: %d\n", nightMode);
       server.send(200, "application/json",
@@ -658,10 +681,7 @@ void handleDoAction() {
     if (v > 100)
       v = 100;
     speakerVolume = v;
-    Preferences p;
-    p.begin("myrobot", false);
-    p.putInt("volume", speakerVolume);
-    p.end();
+    saveConfig();
     Serial.printf("[PORTAL] Speaker volume live set to: %d%%\n", speakerVolume);
     server.send(200, "application/json",
                 "{\"ok\":true,\"volume\":" + String(speakerVolume) + "}");
@@ -717,29 +737,21 @@ void handleDoAction() {
     return;
   }
   if (e == "sleep" || e == "sleeping") {
-    manualSleep = true;
-    inCircadianSleep = true;
-    showClockScreen = false;
-    showWeatherScreen = false;
-    sleepyWakeCancel();
-    sleepyFallAsleepStart();
+    startManualSleep();
     server.send(200, "application/json", "{\"ok\":true,\"sleeping\":true}");
     return;
   }
   if (e == "wake") {
-    manualSleep = false;
-    inCircadianSleep = false;
-    sleepyFallAsleepCancel();
-    setOledDim(false);
-    updateDisplayBrightnessMode();
-    sleepyWakeStart();
+    wakeKiwiFromSleep(true, CIRCADIAN_TEMP_WAKE_MS, true);
     server.send(200, "application/json", "{\"ok\":true,\"sleeping\":false}");
     return;
   }
   if (e == "clock") {
-    manualSleep = false;
-    inCircadianSleep = false;
-    setOledDim(false);
+    if (manualSleep || inCircadianSleep || sleepyFallAsleepIsActive()) {
+      wakeKiwiFromSleep(false, CIRCADIAN_TEMP_WAKE_MS, false);
+    } else {
+      setOledDim(false);
+    }
     showClockScreen = true;
     showWeatherScreen = false;
     if (snd)
@@ -750,16 +762,18 @@ void handleDoAction() {
     return;
   }
   if (e == "weather") {
-    manualSleep = false;
-    inCircadianSleep = false;
-    setOledDim(false);
+    if (manualSleep || inCircadianSleep || sleepyFallAsleepIsActive()) {
+      wakeKiwiFromSleep(false, CIRCADIAN_TEMP_WAKE_MS, false);
+    } else {
+      setOledDim(false);
+    }
     showWeatherScreen = true;
     showClockScreen = false;
     if (snd)
       soundWeather();
     if (lastWeatherFetchAt == 0 ||
         millis() - lastWeatherFetchAt > 10 * 60 * 1000 || weatherCode < 0) {
-      fetchWeather();
+      fetchWeatherAsync();
     }
     server.send(200, "application/json", "{\"ok\":true}");
     return;

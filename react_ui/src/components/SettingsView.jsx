@@ -197,8 +197,12 @@ export default function SettingsView({
     night_bright: 20,
     night_mode: 0,
     circ_start: 23,
+    circ_smin: 0,
     circ_end: 7,
+    circ_emin: 0,
     circ_en: '1',
+    eco_sleep: '0',
+    tz_min: 330,
     greet_en: '1',
     snd_react: '0',
     boredom: '1',
@@ -302,8 +306,12 @@ export default function SettingsView({
         night_bright: config.nightBrightness ?? prev.night_bright,
         night_mode: config.nightMode ?? prev.night_mode,
         circ_start: config.circadian?.start ?? prev.circ_start,
+        circ_smin: config.circadian?.startMin ?? prev.circ_smin,
         circ_end: config.circadian?.end ?? prev.circ_end,
+        circ_emin: config.circadian?.endMin ?? prev.circ_emin,
         circ_en: config.circadian?.enabled != null ? (config.circadian.enabled ? '1' : '0') : prev.circ_en,
+        eco_sleep: config.circadian?.ecoSleep != null ? (config.circadian.ecoSleep ? '1' : '0') : prev.eco_sleep,
+        tz_min: config.tzMin ?? prev.tz_min,
         greet_en: config.greetings?.enabled != null ? (config.greetings.enabled ? '1' : '0') : prev.greet_en,
         snd_react: config.soundReactive?.enabled != null ? (config.soundReactive.enabled ? '1' : '0') : prev.snd_react,
         boredom: config.boredom?.enabled != null ? (config.boredom.enabled ? '1' : '0') : prev.boredom,
@@ -499,8 +507,12 @@ export default function SettingsView({
       <input type="hidden" name="night_bright" value={formData.night_bright} />
       <input type="hidden" name="night_mode" value={formData.night_mode} />
       <input type="hidden" name="circ_start" value={formData.circ_start} />
+      <input type="hidden" name="circ_smin" value={formData.circ_smin} />
       <input type="hidden" name="circ_end" value={formData.circ_end} />
+      <input type="hidden" name="circ_emin" value={formData.circ_emin} />
       <input type="hidden" name="circ_en" value={formData.circ_en} />
+      <input type="hidden" name="eco_sleep" value={formData.eco_sleep} />
+      <input type="hidden" name="tz_min" value={formData.tz_min} />
       <input type="hidden" name="greet_en" value={formData.greet_en} />
       <input type="hidden" name="snd_react" value={formData.snd_react} />
       <input type="hidden" name="boredom" value={formData.boredom} />

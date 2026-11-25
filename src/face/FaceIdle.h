@@ -15,6 +15,9 @@ extern float gazeMicroX; // tiny involuntary eye drift (micro-saccades)
 extern float gazeMicroY;
 extern float idleSighY;   // Organic desk sigh vertical offset
 extern float idleSighLid; // Organic desk sigh eyelid droop
+extern float idleYawnMouth; // 0..1 smooth idle yawn mouth opening
+extern float idleYawnLid;   // Idle yawn eyelid droop
+extern float idleSleepyDroop; // Gentle late-night heavy eyelid droop
 
 void eyesInit(uint32_t now);
 void eyesUpdateAnim(uint32_t now);

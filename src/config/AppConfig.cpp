@@ -153,6 +153,8 @@ int displayBrightness = 40; // Daytime brightness (0-100%, default 40%)
 int nightMode = 1; // 0: Same as day, 1: Dim, 2: Screen off (Rocky default: Dim)
 int nightBrightness = 10; // Night brightness (0-100%, Rocky default 10%)
 bool circadianSleepEnabled = true;
+bool ecoSleepEnabled = false; // false = Desk Mode (Zzz face + Web live), true = Hardware Deep Sleep
+int tzOffsetMin = 330;        // Default IST (UTC +05:30)
 bool greetingsEnabled = false;
 bool hungerEnabled = true;         // NVS: hunger_en (default true)
 bool soundReactiveEnabled = false; // NVS: snd_react
@@ -166,9 +168,12 @@ uint8_t rgbLedBrightness = 160;     // NVS: rgb_bright (0-255, default 160 ~63%)
 bool bootCompleted = false;
 volatile bool uiTaskRunning = false;
 int circadianSleepStart = 23; // 11:00 PM
+int circadianSleepStartMin = 0;
 int circadianSleepEnd = 7;    // 07:00 AM
+int circadianSleepEndMin = 0;
 bool inCircadianSleep = false;
 bool manualSleep = false;
+bool circadianSkipTonight = false;
 uint32_t circadianTempWakeUntil = 0;
 
 // ---------- Live Weather ----------
@@ -187,6 +192,7 @@ bool showWeatherScreen = false;
 
 bool showClockScreen = false;
 bool timeSynced = false;
+bool ntpNeedsRefresh = false;
 uint32_t lastNtpTryAt = 0;
 
 volatile bool startRecording = false;

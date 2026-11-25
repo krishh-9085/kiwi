@@ -34,6 +34,9 @@ bool isTonePlaying();
 bool isSpeechPlaying();
 bool kiwiIsOutputting();
 float getSpeechAmplitude();
+float getSpeechBrightness();
+float getToneMouthAmplitude();
+float getTonePitchNorm();
 
 // ---------- Robotic Sound Effects ----------
 void soundPetLove();

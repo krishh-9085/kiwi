@@ -31,8 +31,10 @@
 static String getSmartActionInstruction() {
   return " ACTIONS: Append [ACTION: tag] after answer if needed: "
          "[ACTION: emotion "
-         "happy/sad/angry/cool/surprised/sleepy/wink/laughing/excited] "
-         "[ACTION: skin kiwi/vector/pixel/mecha] [ACTION: volume 0-100] "
+         "happy/sad/angry/cool/surprised/sleepy/wink/laughing/excited/curious/"
+         "confused/proud/smug/scared/nervous/cute/crying/hearts/dizzy/singing/"
+         "party/evil/shocked] "
+         "[ACTION: skin kiwi/pixel/lumina/mecha/emo] [ACTION: volume 0-100] "
          "[ACTION: timer SECS] "
          "[ACTION: sleep] (if user says so jao/sleep). Reply first, tag at "
          "end.";
@@ -51,11 +53,14 @@ static String getVoiceExpressionInstruction() {
            "bolo' -> [angry]; 'ro ke bolo' -> [sobbing]; 'has ke bolo' -> "
            "[laughing]; 'dheere bolo' -> [whisper]). "
            "Allowed emotion tags: [laughing] [giggle] [sobbing] [angry] [sad] "
-           "[whisper] [excited].";
+           "[whisper] [excited] [curious] [shy] [proud] [surprised] [scared] [cute].";
   } else {
-    return " VOICE: Plain text only. No bracketed tone or sound tags. If asked "
+    return " VOICE & MOOD: Reply in plain spoken text (no markdown). If asked "
            "to laugh, reply ONLY with '[ACTION: sound laugh]' without any "
-           "talking.";
+           "talking. For expressive replies, you may optionally place ONE mood "
+           "cue tag at the end like [happy], [excited], [curious], [smug], "
+           "[proud], [sad], [angry], [surprised], [shy], [cute], [relieved] "
+           "(Kiwi hides the tag from speech and animates its face).";
   }
 }
 

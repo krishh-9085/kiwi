@@ -1,4 +1,5 @@
 #include "face/FaceScreens.h"
+#include "behavior/CircadianEngine.h"
 #include "core/Timing.h"
 #include "face/AnimationEngine.h"
 #include "behavior/InteractionManager.h"
@@ -67,18 +68,8 @@ void drawClockScreen() {
     return;
   }
 
-  // Check if current time falls in Night Schedule
-  bool isNightTime = false;
-  if (circadianSleepEnabled) {
-    int curHour = timeinfo.tm_hour;
-    if (circadianSleepStart > circadianSleepEnd) {
-      isNightTime =
-          (curHour >= circadianSleepStart || curHour < circadianSleepEnd);
-    } else {
-      isNightTime =
-          (curHour >= circadianSleepStart && curHour < circadianSleepEnd);
-    }
-  }
+  // Check if current time falls in Night Schedule (skip screen-off during temp wake so clock stays readable)
+  bool isNightTime = isCircadianScheduleActiveNow() && !isCircadianTempWakeActive();
 
   // Apply night mode to clock screen
   if (isNightTime) {

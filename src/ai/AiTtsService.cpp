@@ -77,7 +77,7 @@ bool speakText(const String &text) {
     res = ttsSarvam(toSpeak);
 
   spkEndSpeech();
-  if (currentEmotion == EMOTION_SPEAKING || currentEmotion == EMOTION_HAPPY) {
+  if (currentEmotion == EMOTION_SPEAKING) {
     setEmotion(EMOTION_IDLE);
   }
   Serial.printf("[TTS] speakText() returned %d\n", res);
@@ -400,7 +400,7 @@ int ttsSarvam(const String &text) {
           if (currentEmotion == EMOTION_IDLE || currentEmotion == EMOTION_THINKING) {
             setEmotion(EMOTION_SPEAKING);
           }
-          gFaceFrameMs = 100;
+          gFaceFrameMs = FACE_FRAME_MS_ACTIVE;
           playing = true;
           for (size_t i = 44; i < hdrLen; i++) {
             uint8_t b2 = hdr[i];
@@ -493,17 +493,19 @@ int ttsSarvam(const String &text) {
         }
       }
     }
-    if (st != S_DONE && millis() - lastUiPump >= 60) {
+    if (st != S_DONE && millis() - lastUiPump >= 25) {
       pumpUI();
       lastUiPump = millis();
     }
   }
   client.stop();
-  prebuf.flushRemaining();
-  flushChunk();
-  spkFlush();
-  for (int i = 0; i < SAMPLE_RATE / 10; i++)
-    spkPushSample(0);
+  if (!cancelRequest) {
+    prebuf.flushRemaining();
+    flushChunk();
+    spkFlush();
+    for (int i = 0; i < SAMPLE_RATE / 10; i++)
+      spkPushSample(0);
+  }
   spkEndSpeech();
   gFaceFrameMs = 33;
   net.leave();
@@ -544,7 +546,7 @@ int ttsFishAudio(const String &text, uint32_t maxPlayMs) {
   if (currentEmotion == EMOTION_IDLE || currentEmotion == EMOTION_THINKING) {
     setEmotion(EMOTION_SPEAKING);
   }
-  gFaceFrameMs = 100;
+  gFaceFrameMs = FACE_FRAME_MS_ACTIVE;
   bool playing = false, haveLo = false;
   uint8_t lo = 0;
   uint8_t *rbuf = ttsRbuf;
@@ -588,19 +590,21 @@ int ttsFishAudio(const String &text, uint32_t maxPlayMs) {
         prebuf.push(s);
       }
     }
-    if (millis() - lastUiPump >= 60) {
+    if (millis() - lastUiPump >= 25) {
       pumpUI();
       lastUiPump = millis();
     }
   }
   client.stop();
-  if (!cancelRequest && !hitMaxPlay) {
-    prebuf.flushRemaining();
-  }
-  spkFlush();
-  if (!cancelRequest && !hitMaxPlay) {
-    for (int i = 0; i < SAMPLE_RATE / 10; i++)
-      spkPushSample(0);
+  if (!cancelRequest) {
+    if (!hitMaxPlay) {
+      prebuf.flushRemaining();
+    }
+    spkFlush();
+    if (!hitMaxPlay) {
+      for (int i = 0; i < SAMPLE_RATE / 10; i++)
+        spkPushSample(0);
+    }
   }
   spkEndSpeech();
   gFaceFrameMs = 33;

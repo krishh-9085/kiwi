@@ -177,6 +177,17 @@ void maintainWiFi() {
         lastNtpTryAt = millis();
         startNtpAsync();
       }
+    } else if (ntpNeedsRefresh && millis() - lastNtpTryAt > 30000) {
+      ntpNeedsRefresh = false;
+      lastNtpTryAt = millis();
+      startNtpAsync();
+      Serial.println("[NTP] Refreshing SNTP after RTC wake/config change");
+    } else {
+      static uint32_t lastPeriodicNtpAt = 0;
+      if (millis() - lastPeriodicNtpAt > 6UL * 3600UL * 1000UL) {
+        lastPeriodicNtpAt = millis();
+        startNtpAsync();
+      }
     }
     static uint32_t lastWeatherAttempt = 0;
     if (bootCompleted &&
@@ -185,7 +196,7 @@ void maintainWiFi() {
         (millis() - lastWeatherAttempt > 60000UL || lastWeatherAttempt == 0)) {
       if (millis() > 8000) {
         lastWeatherAttempt = millis();
-        fetchWeather();
+        fetchWeatherAsync();
       }
     }
     return;
@@ -201,10 +212,19 @@ void maintainWiFi() {
 // NTP TIME SYNC
 // ============================================================
 void startNtpAsync() {
-  if (WiFi.status() != WL_CONNECTED)
+  long offsetSec = (long)tzOffsetMin * 60L;
+  if (WiFi.status() != WL_CONNECTED) {
+    char tzStr[16];
+    int absMin = abs(tzOffsetMin);
+    snprintf(tzStr, sizeof(tzStr), "UTC%c%d:%02d", (tzOffsetMin >= 0) ? '-' : '+',
+             absMin / 60, absMin % 60);
+    setenv("TZ", tzStr, 1);
+    tzset();
     return;
-  Serial.println("[NTP] Background SNTP configured");
-  configTime(TZ_OFFSET_SEC, TZ_DST_SEC, NTP_SERVER_1, NTP_SERVER_2);
+  }
+  Serial.printf("[NTP] Background SNTP configured (UTC%+d:%02d)\n",
+                tzOffsetMin / 60, abs(tzOffsetMin) % 60);
+  configTime(offsetSec, TZ_DST_SEC, NTP_SERVER_1, NTP_SERVER_2);
 }
 
 bool checkNtpSync() {

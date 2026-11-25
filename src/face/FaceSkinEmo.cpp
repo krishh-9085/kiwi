@@ -69,7 +69,7 @@ void drawEmoEye(int cx, int cy, int w, int h, int r, int lidIn, int lidOut,
   // 2. Love / Hearts: EMO's signature glowing heart eyes
   if (currentEmotion == EMOTION_HEARTS ||
       currentEmotion == EMOTION_LOVESTRUCK ||
-      (glint && currentEmotion == EMOTION_PETTED && petMood == PET_LOVE)) {
+      (currentEmotion == EMOTION_PETTED && petMood == PET_LOVE)) {
     drawEmoHeart(cx, cy, w, h);
     return;
   }

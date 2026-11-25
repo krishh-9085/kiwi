@@ -10,6 +10,7 @@
 #include "face/FaceExpressions.h"
 #include "face/FaceScreens.h"
 #include "face/SleepyWakeAnim.h"
+#include "behavior/CircadianEngine.h"
 #include "hardware/AudioEngine.h"
 #include "hardware/WakeWordEngine.h"
 #include "ai/AiService.h"
@@ -302,15 +303,7 @@ void triggerSoundByName(const String &nameIn) {
 // ============================================================
 void triggerPendingSleepAction() {
   pendingSleepAction = false;
-  manualSleep = true;
-  inCircadianSleep = false;
-  showClockScreen = false;
-  showWeatherScreen = false;
-  setEmotion(EMOTION_IDLE);
-  emotionAutoReturnAt = 0;
-  returnIdleAt = 0;
-  sleepyWakeCancel();
-  sleepyFallAsleepStart();
+  startManualSleep();
   addTerminalLog("[ACTION] Falling asleep...");
   Serial.println("[ACTION] Sleep mode activated (manualSleep=1, fall-asleep "
                  "animation running)");
@@ -356,11 +349,6 @@ bool executeRobotAction(const String &actionCmd) {
 
   // 3. FACIAL EMOTION CHANGE
   if (actionType == "emotion" || actionType == "face" || actionType == "mood") {
-    // Suppress unwanted generic "happy" face from LLM so eyes stay natural
-    // idle/speaking
-    if (param.equalsIgnoreCase("happy") || param.equalsIgnoreCase("joy")) {
-      return true;
-    }
     if (triggerEmotionByName(param, 4000, true)) {
       addTerminalLog("[ACTION] Facial emotion set to: " + param);
       return true;
@@ -425,12 +413,7 @@ bool executeRobotAction(const String &actionCmd) {
 
   // 7. WAKE UP
   if (actionType == "wake" || actionType == "morning") {
-    manualSleep = false;
-    inCircadianSleep = false;
-    sleepyFallAsleepCancel();
-    setOledDim(false);
-    updateDisplayBrightnessMode();
-    sleepyWakeStart();
+    wakeKiwiFromSleep(true, CIRCADIAN_TEMP_WAKE_MS, true);
     addTerminalLog("[ACTION] Woke up from Sleep Mode");
     return true;
   }

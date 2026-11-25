@@ -130,15 +130,55 @@ bool kiwiIsOutputting() {
   return false;
 }
 
+// Live speech & vocal-tone envelope followers for real-time lip sync
+static volatile float s_speechAmplitude = 0.0f;
+static volatile float s_speechBrightness = 0.3f;
+static volatile float s_toneMouthAmplitude = 0.0f;
+static volatile float s_tonePitchNorm = 0.5f;
+
+struct LipSyncFrame {
+  float amp;
+  float bright;
+};
+static LipSyncFrame s_lipRing[16];
+static int s_lipWrite = 0;
+static int s_lipCount = 0;
+static int s_blkSamples = 0;
+static float s_blkAbsSum = 0.0f;
+static float s_blkPeak = 0.0f;
+static float s_blkLowSum = 0.0f;
+static float s_blkHighSum = 0.0f;
+static float s_lpState = 0.0f;
+static float s_envAmp = 0.0f;
+static float s_envBright = 0.25f;
+
+static void resetLipSyncState() {
+  s_speechAmplitude = 0.0f;
+  s_speechBrightness = 0.25f;
+  s_lipWrite = 0;
+  s_lipCount = 0;
+  s_blkSamples = 0;
+  s_blkAbsSum = 0.0f;
+  s_blkPeak = 0.0f;
+  s_blkLowSum = 0.0f;
+  s_blkHighSum = 0.0f;
+  s_lpState = 0.0f;
+  s_envAmp = 0.0f;
+  s_envBright = 0.25f;
+}
+
 void updateTonePlayer() {
-  if (!tonePlaying)
+  if (!tonePlaying) {
+    s_toneMouthAmplitude = 0.0f;
     return;
+  }
 
   // Auto-recover if speaker owner changed or hardware was detached
   if (!txHandle || spkOwner != SPK_TONE) {
     tonePlaying = false;
     toneCount = 0;
     toneIndex = 0;
+    s_toneMouthAmplitude = 0.0f;
     return;
   }
 
@@ -153,6 +193,7 @@ void updateTonePlayer() {
   if (toneIndex >= toneCount) {
     tonePlaying = false;
     spkOwner = SPK_NONE;
+    s_toneMouthAmplitude = 0.0f;
     return;
   }
 
@@ -162,6 +203,15 @@ void updateTonePlayer() {
   const float release = fminf(0.025f, duration * 0.35f);
   const float elapsed = (float)(now - toneStartTime) / 1000.0f;
   const float amp = 32767.0f * TONE_PEAK_FRACTION * volumeGain();
+
+  // Vocal/expressive robot tones drive subtle mouth opening; pure UI bells/clicks stay quiet
+  bool isVocalTone = (cur.freq > 1.0f) &&
+                     (cur.shape == SHAPE_WARM_VOCAL ||
+                      cur.shape == SHAPE_WARBLE ||
+                      cur.shape == SHAPE_CHIRP ||
+                      cur.shape == SHAPE_PURR);
+  float blockEnvSum = 0.0f;
+  float blockFreqMid = cur.freq;
 
   static int32_t buf[TONE_BLOCK_FRAMES * 2];
 
@@ -275,9 +325,24 @@ void updateTonePlayer() {
     }
 
     float s = raw * amp * env;
+    blockEnvSum += env;
+    if (i == TONE_BLOCK_FRAMES / 2) {
+      blockFreqMid = instFreq;
+    }
     int32_t v = toFrame32(s);
     buf[i * 2] = v;
     buf[i * 2 + 1] = v;
+  }
+
+  if (isVocalTone) {
+    float meanEnv = blockEnvSum / (float)TONE_BLOCK_FRAMES;
+    float pNorm = (blockFreqMid - 200.0f) / 900.0f;
+    if (pNorm < 0.0f) pNorm = 0.0f;
+    if (pNorm > 1.0f) pNorm = 1.0f;
+    s_toneMouthAmplitude = fminf(1.0f, meanEnv * 0.85f);
+    s_tonePitchNorm = pNorm;
+  } else {
+    s_toneMouthAmplitude = 0.0f;
   }
 
   spkWriteAll(buf, sizeof(buf));
@@ -756,6 +821,48 @@ void detectMicSlot() {
 static int32_t txBuf[TX_FRAMES * 2];
 static int txPos = 0;
 
+// Gentle TTS amplitude envelope & zero-ramp state (prevents pops on start/abort)
+constexpr uint16_t SPEECH_FADE_IN_SAMPLES = 240;   // 15 ms @ 16 kHz
+constexpr uint16_t SPEECH_FADE_OUT_SAMPLES = 192;  // 12 ms @ 16 kHz
+constexpr uint16_t SPEECH_TAIL_ZERO_SAMPLES = 128; // 8 ms silence tail @ 16 kHz
+static uint16_t s_speechFadeInIdx = 0;
+static float s_lastSpeechOut = 0.0f;
+
+static void spkWriteRampToZero() {
+  float startVal = s_lastSpeechOut;
+  s_lastSpeechOut = 0.0f;
+  if (!txHandle)
+    return;
+
+  const uint16_t rampLen =
+      (fabsf(startVal) > 1.0f) ? SPEECH_FADE_OUT_SAMPLES : 0;
+  const uint16_t totalFrames = rampLen + SPEECH_TAIL_ZERO_SAMPLES;
+  for (uint16_t i = 0; i < rampLen; i++) {
+    float t = (float)(i + 1) / (float)rampLen;
+    float env = 0.5f * (1.0f + cosf((float)M_PI * t));
+    int32_t v = toFrame32(startVal * env);
+    txBuf[i * 2] = v;
+    txBuf[i * 2 + 1] = v;
+  }
+  memset(&txBuf[rampLen * 2], 0,
+         (size_t)SPEECH_TAIL_ZERO_SAMPLES * 2 * sizeof(int32_t));
+
+  const uint8_t *p = (const uint8_t *)txBuf;
+  size_t bytes = (size_t)totalFrames * 2 * sizeof(int32_t);
+  size_t off = 0;
+  int stalls = 0;
+  while (off < bytes) {
+    size_t w = 0;
+    esp_err_t e = i2s_channel_write(txHandle, p + off, bytes - off, &w, 25);
+    if (e != ESP_OK && e != ESP_ERR_TIMEOUT)
+      break;
+    off += w;
+    if (w == 0 && ++stalls > 4)
+      break;
+  }
+  txPos = 0;
+}
+
 bool spkWriteAll(const void *data, size_t bytes) {
   if (!txHandle)
     return false;
@@ -790,6 +897,10 @@ void spkBeginSpeech() {
   powerNotifyActivity();
   if (spkOwner != SPK_SPEECH) {
     tonePlaying = false;
+    s_toneMouthAmplitude = 0.0f;
+    resetLipSyncState();
+    s_speechFadeInIdx = 0;
+    s_lastSpeechOut = 0.0f;
     spkOwner = SPK_SPEECH;
   }
 }
@@ -798,35 +909,60 @@ void toneStop() {
   tonePlaying = false;
   toneCount = 0;
   toneIndex = 0;
+  s_toneMouthAmplitude = 0.0f;
   if (spkOwner == SPK_TONE) {
     spkOwner = SPK_NONE;
   }
 }
 
-// Live speech envelope follower for real-time lip sync & speaking gestures
-static volatile float s_speechAmplitude = 0.0f;
-
 float getSpeechAmplitude() {
   return s_speechAmplitude;
 }
 
-// Call when a speech stream ends. Flushes remaining samples and releases
-// the speaker so tones can play again.
+float getSpeechBrightness() {
+  return s_speechBrightness;
+}
+
+float getToneMouthAmplitude() {
+  return s_toneMouthAmplitude;
+}
+
+float getTonePitchNorm() {
+  return s_tonePitchNorm;
+}
+
+// Call when a speech stream ends. Flushes remaining samples (when not cancelled),
+// smoothly ramps to zero, and releases the speaker so tones can play again.
 void spkEndSpeech() {
-  spkFlush();
-  s_speechAmplitude = 0.0f;
+  if (!cancelRequest && spkOwner == SPK_SPEECH) {
+    spkFlush();
+  } else {
+    txPos = 0;
+  }
+  if (spkOwner == SPK_SPEECH || fabsf(s_lastSpeechOut) > 1.0f) {
+    spkWriteRampToZero();
+  }
+  resetLipSyncState();
+  s_speechFadeInIdx = 0;
+  s_lastSpeechOut = 0.0f;
   if (spkOwner == SPK_SPEECH) {
     spkOwner = SPK_NONE;
   }
 }
 
-// Instantly cuts off speech without flushing remaining buffer (for fast cancel)
+// Cuts off speech with a short pop-free fade-out without flushing leftover buffer
 void spkAbortSpeech() {
   txPos = 0;
   tonePlaying = false;
   toneCount = 0;
   toneIndex = 0;
-  s_speechAmplitude = 0.0f;
+  s_toneMouthAmplitude = 0.0f;
+  if (spkOwner == SPK_SPEECH || fabsf(s_lastSpeechOut) > 1.0f) {
+    spkWriteRampToZero();
+  }
+  resetLipSyncState();
+  s_speechFadeInIdx = 0;
+  s_lastSpeechOut = 0.0f;
   spkOwner = SPK_NONE;
 }
 
@@ -837,7 +973,8 @@ void audioSleepPrepare() {
   tonePlaying = false;
   toneCount = 0;
   toneIndex = 0;
-  s_speechAmplitude = 0.0f;
+  s_toneMouthAmplitude = 0.0f;
+  resetLipSyncState();
   spkOwner = SPK_NONE;
   cancelRequest = false;
   if (txHandle) {
@@ -864,15 +1001,66 @@ void spkPushSample(int16_t s) {
   if (spkOwner != SPK_SPEECH)
     spkBeginSpeech();
 
-  // Fast-attack, smooth-decay envelope tracking for live lip sync
-  float absSample = fabsf((float)s) / 32768.0f;
-  if (absSample > s_speechAmplitude) {
-    s_speechAmplitude = s_speechAmplitude * 0.70f + absSample * 0.30f;
-  } else {
-    s_speechAmplitude *= 0.9994f; // ~45ms leaky decay
+  // Delayed 2-band envelope tracking for DMA-aligned viseme lip sync
+  float fs = (float)s * (1.0f / 32768.0f);
+  float absSample = fabsf(fs);
+  s_lpState = s_lpState * 0.82f + fs * 0.18f; // ~500 Hz crossover lowpass (DC gain = 1)
+  float highDiff = fabsf(fs - s_lpState);     // >500 Hz highpass complement
+
+  s_blkAbsSum += absSample;
+  if (absSample > s_blkPeak)
+    s_blkPeak = absSample;
+  s_blkLowSum += fabsf(s_lpState);
+  s_blkHighSum += highDiff;
+
+  if (++s_blkSamples >= 256) {
+    float meanAmp = s_blkAbsSum * (1.0f / 256.0f);
+    // Blend peak & mean so syllables punch open cleanly without clipping out pauses
+    float blkEnv = 0.55f * s_blkPeak + 0.45f * meanAmp;
+
+    float lowMean = s_blkLowSum * (1.0f / 256.0f);
+    float highMean = s_blkHighSum * (1.0f / 256.0f);
+    float denom = lowMean + highMean + 0.002f;
+    float rawBright = (highMean / denom - 0.34f) * 2.0f;
+    if (rawBright < 0.0f) rawBright = 0.0f;
+    if (rawBright > 1.0f) rawBright = 1.0f;
+
+    if (blkEnv > s_envAmp) {
+      s_envAmp = s_envAmp * 0.30f + blkEnv * 0.70f;
+    } else {
+      s_envAmp = s_envAmp * 0.65f + blkEnv * 0.35f;
+    }
+    s_envBright = s_envBright * 0.60f + rawBright * 0.40f;
+
+    s_lipRing[s_lipWrite].amp = s_envAmp;
+    s_lipRing[s_lipWrite].bright = s_envBright;
+    s_lipWrite = (s_lipWrite + 1) & 15;
+    if (s_lipCount < 16)
+      s_lipCount++;
+
+    int delaySlots = psramFound() ? 6 : 4;
+    if (delaySlots >= s_lipCount)
+      delaySlots = s_lipCount - 1;
+    int readIdx = (s_lipWrite - 1 - delaySlots + 16) & 15;
+    s_speechAmplitude = s_lipRing[readIdx].amp;
+    s_speechBrightness = s_lipRing[readIdx].bright;
+
+    s_blkSamples = 0;
+    s_blkAbsSum = 0.0f;
+    s_blkPeak = 0.0f;
+    s_blkLowSum = 0.0f;
+    s_blkHighSum = 0.0f;
   }
 
-  int32_t v = toFrame32((float)s * volumeGain());
+  float gain = volumeGain();
+  if (s_speechFadeInIdx < SPEECH_FADE_IN_SAMPLES) {
+    float t = (float)s_speechFadeInIdx / (float)SPEECH_FADE_IN_SAMPLES;
+    gain *= (t * t * (3.0f - 2.0f * t));
+    s_speechFadeInIdx++;
+  }
+  float outSample = (float)s * gain;
+  s_lastSpeechOut = outSample;
+  int32_t v = toFrame32(outSample);
   txBuf[txPos * 2] = v;
   txBuf[txPos * 2 + 1] = v;
   if (++txPos >= TX_FRAMES)

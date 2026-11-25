@@ -10,6 +10,42 @@ static float s_prevIn = 0.0f;
 static float s_prevOut = 0.0f;
 static uint32_t s_lastOutputAt = 0;
 
+static volatile float s_listenLevel = 0.0f;
+static volatile bool s_listenSpeechLocked = false;
+
+void soundLevelResetListening() {
+  s_listenLevel = 0.0f;
+  s_listenSpeechLocked = false;
+}
+
+void soundLevelUpdateListening(float batchMeanAbs, bool speechLocked) {
+  s_listenSpeechLocked = speechLocked;
+  float net = batchMeanAbs - 140.0f;
+  if (net < 0.0f)
+    net = 0.0f;
+  float raw = net / 5200.0f;
+  if (raw > 1.0f)
+    raw = 1.0f;
+
+  float cur = s_listenLevel;
+  if (raw > cur) {
+    cur += 0.55f * (raw - cur);
+  } else {
+    cur += 0.18f * (raw - cur);
+  }
+  if (cur < 0.005f)
+    cur = 0.0f;
+  s_listenLevel = cur;
+}
+
+float soundLevelGetListening() {
+  return s_listenLevel;
+}
+
+bool soundLevelIsSpeechLocked() {
+  return s_listenSpeechLocked;
+}
+
 float soundLevelGet() {
   return s_smoothedLevel;
 }

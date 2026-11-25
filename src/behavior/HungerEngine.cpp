@@ -1,4 +1,5 @@
 #include "behavior/HungerEngine.h"
+#include "behavior/CircadianEngine.h"
 #include "face/AnimationEngine.h"
 #include "config/AppConfig.h"
 #include "face/FaceEngine.h"
@@ -193,10 +194,13 @@ static String generateHungerSpeechLlm(HungerEvent event, MealType meal, const St
 static bool isNightQuietTime() {
   if (inCircadianSleep || manualSleep) return true;
   if (!timeSynced) return false;
+  if (circadianSleepEnabled) {
+    return isCircadianScheduleActiveNow();
+  }
   struct tm timeinfo;
   if (!getLocalTime(&timeinfo, 10)) return false;
   int curHour = timeinfo.tm_hour;
-  // Night Quiet Hours: 10:00 PM (22:00) to 7:00 AM (07:00)
+  // Fallback Quiet Hours when Circadian is disabled: 10:00 PM to 7:00 AM
   return (curHour >= 22 || curHour < 7);
 }
 

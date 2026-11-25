@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { flushSync } from 'react-dom'
 import Sidebar from './components/Sidebar'
 import ContentHeader from './components/ContentHeader'
@@ -67,9 +67,9 @@ export default function App() {
 
   const [robotHost, setRobotHost] = useState(() => {
     const saved = localStorage.getItem('kiwi_robot_host')
-    if (saved) return saved
-    if (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
-      return 'http://192.168.1.16'
+    if (saved && saved !== 'http://192.168.1.16') return saved
+    if (saved === 'http://192.168.1.16') {
+      localStorage.removeItem('kiwi_robot_host')
     }
     return ''
   })
@@ -82,6 +82,11 @@ export default function App() {
   const [rebootMessage, setRebootMessage] = useState('')
   const [localRecording, setLocalRecording] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
+  const toastTimerRef = useRef(null)
+  const statusInFlightRef = useRef(false)
+  const fastPollUntilRef = useRef(0)
+  const pollFastRef = useRef(false)
+  const triggerNextPollRef = useRef(null)
 
   const isMicRecording = localRecording || Boolean(
     status?.busy && (
@@ -90,6 +95,18 @@ export default function App() {
       status?.state?.toLowerCase().includes('transcrib')
     )
   )
+
+  pollFastRef.current = Boolean(
+    isMicRecording ||
+    status?.busy ||
+    status?.emotion === 'listening' ||
+    status?.emotion === 'speaking' ||
+    status?.timer_active
+  )
+
+  useEffect(() => () => {
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
+  }, [])
 
   useEffect(() => {
     const isStillBusyListening = Boolean(
@@ -104,10 +121,14 @@ export default function App() {
     }
   }, [status?.busy, status?.emotion, status?.state])
 
-  const showToast = (msg) => {
+  const showToast = useCallback((msg) => {
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
     setToastMessage(msg)
-    setTimeout(() => setToastMessage(null), 3000)
-  }
+    toastTimerRef.current = setTimeout(() => {
+      setToastMessage(null)
+      toastTimerRef.current = null
+    }, 3000)
+  }, [])
 
   const saveRobotHost = (newHost) => {
     setRobotHost(newHost)
@@ -121,6 +142,8 @@ export default function App() {
   }, [robotHost])
 
   const fetchStatus = useCallback(async () => {
+    if (statusInFlightRef.current) return
+    statusInFlightRef.current = true
     try {
       const url = getBaseUrl() ? `${getBaseUrl()}/status` : '/status'
       const res = await fetch(url, { signal: AbortSignal.timeout(2500) })
@@ -144,6 +167,8 @@ export default function App() {
         } catch {}
       }
       setConnected(false)
+    } finally {
+      statusInFlightRef.current = false
     }
   }, [getBaseUrl])
 
@@ -164,46 +189,133 @@ export default function App() {
 
   useEffect(() => {
     fetchConfig()
-    let statusTimer = null
-    const startPolling = () => {
-      if (statusTimer) clearInterval(statusTimer)
-      if (!document.hidden) {
-        fetchStatus()
-        statusTimer = setInterval(fetchStatus, 1500)
-      }
+    let timerId = null
+    let cancelled = false
+
+    const scheduleNext = (delayMs) => {
+      if (cancelled || document.hidden) return
+      if (timerId) clearTimeout(timerId)
+      const ms = delayMs ?? ((pollFastRef.current || Date.now() < fastPollUntilRef.current) ? 450 : 2000)
+      timerId = setTimeout(tickPoll, ms)
     }
+
+    const tickPoll = async () => {
+      if (cancelled || document.hidden) return
+      await fetchStatus()
+      scheduleNext()
+    }
+
+    triggerNextPollRef.current = (delayMs = 35) => scheduleNext(delayMs)
+
     const handleVisibility = () => {
       if (document.hidden) {
-        if (statusTimer) {
-          clearInterval(statusTimer)
-          statusTimer = null
+        if (timerId) {
+          clearTimeout(timerId)
+          timerId = null
         }
       } else {
-        startPolling()
+        scheduleNext(0)
       }
     }
-    startPolling()
+
+    if (!document.hidden) scheduleNext(0)
     document.addEventListener('visibilitychange', handleVisibility)
     return () => {
-      if (statusTimer) clearInterval(statusTimer)
+      cancelled = true
+      triggerNextPollRef.current = null
+      if (timerId) clearTimeout(timerId)
       document.removeEventListener('visibilitychange', handleVisibility)
     }
   }, [fetchStatus, fetchConfig])
 
-  const triggerAction = async (endpointAndQuery) => {
+  const triggerAction = useCallback(async (endpointAndQuery) => {
     try {
+      fastPollUntilRef.current = Date.now() + 2500
       const res = await fetch(`${getBaseUrl()}${endpointAndQuery}`, { method: 'POST' })
       const data = await res.json().catch(() => ({}))
-      setTimeout(() => {
-        fetchStatus()
-        if (activeTab === 'settings') fetchConfig()
-      }, 150)
+      if (data && data.ok !== false) {
+        const qIdx = endpointAndQuery.indexOf('?')
+        const params = new URLSearchParams(qIdx >= 0 ? endpointAndQuery.slice(qIdx + 1) : '')
+        setStatus(prev => {
+          const next = { ...(prev || {}) }
+          if (data.volume != null) next.volume = data.volume
+          if (data.brightness != null) next.brightness = data.brightness
+          if (data.night_mode != null) next.nightMode = data.night_mode
+          if (data.night_bright != null) next.nightBrightness = data.night_bright
+          if (data.mouth != null) next.mouth = data.mouth
+          if (data.skin != null) next.skin = data.skin
+          if (data.sleeping != null) next.sleeping = data.sleeping
+          if (data.boredom != null) next.boredom = data.boredom
+          if (data.boredom_mins != null) next.boredom_mins = data.boredom_mins
+          if (data.eco_sleep != null) {
+            next.power = { ...(next.power || {}), ecoSleep: data.eco_sleep }
+          }
+          if (data.tz_min != null || data.localTime != null) {
+            next.time = {
+              ...(next.time || {}),
+              ...(data.tz_min != null ? { tzMin: data.tz_min } : {}),
+              ...(data.localTime != null ? { localTime: data.localTime } : {})
+            }
+          }
+          if (data.rgb_en != null || data.rgb_bright != null) {
+            next.rgbLed = {
+              ...(next.rgbLed || {}),
+              ...(data.rgb_en != null ? { enabled: data.rgb_en } : {}),
+              ...(data.rgb_bright != null ? { brightness: data.rgb_bright } : {})
+            }
+          }
+          if (data.greet_en != null) {
+            next.greetings = { ...(next.greetings || {}), enabled: data.greet_en }
+          }
+          if (data.snd_react != null) {
+            next.soundReactive = { ...(next.soundReactive || {}), enabled: data.snd_react }
+          }
+          if (data.ww_en != null || data.ww_model != null || data.ww_cutoff != null) {
+            next.wakeWord = {
+              ...(next.wakeWord || {}),
+              ...(data.ww_en != null ? { enabled: data.ww_en } : {}),
+              ...(data.ww_model != null ? { model: data.ww_model } : {}),
+              ...(data.ww_cutoff != null ? { cutoff: data.ww_cutoff } : {})
+            }
+          }
+          if (data.circ_en != null || data.circ_start != null || data.circ_smin != null ||
+              data.circ_end != null || data.circ_emin != null || data.startStr != null ||
+              data.endStr != null || data.eco_sleep != null || data.skip_tonight != null ||
+              data.tempWakeSec != null || data.active != null) {
+            next.circadian = {
+              ...(next.circadian || {}),
+              ...(data.circ_en != null ? { enabled: data.circ_en } : {}),
+              ...(data.circ_start != null ? { start: data.circ_start } : {}),
+              ...(data.circ_smin != null ? { startMin: data.circ_smin } : {}),
+              ...(data.circ_end != null ? { end: data.circ_end } : {}),
+              ...(data.circ_emin != null ? { endMin: data.circ_emin } : {}),
+              ...(data.startStr != null ? { startStr: data.startStr } : {}),
+              ...(data.endStr != null ? { endStr: data.endStr } : {}),
+              ...(data.eco_sleep != null ? { ecoSleep: data.eco_sleep } : {}),
+              ...(data.skip_tonight != null ? { skipTonight: data.skip_tonight } : {}),
+              ...(data.tempWakeSec != null ? { tempWakeSec: data.tempWakeSec } : {}),
+              ...(data.active != null ? { active: data.active } : {})
+            }
+          }
+          const eParam = params.get('e')
+          if (eParam && eParam !== 'clock' && eParam !== 'weather' && eParam !== 'clear' && eParam !== 'forget') {
+            next.emotion = eParam === 'wake' ? 'idle' : eParam
+          }
+          return next
+        })
+      }
+      if (triggerNextPollRef.current) {
+        triggerNextPollRef.current(35)
+      }
+      if (activeTab === 'settings') {
+        setTimeout(() => fetchConfig(), 50)
+      }
       return data
     } catch (err) {
       console.warn('Action failed:', err)
       return null
     }
-  }
+  }, [getBaseUrl, activeTab, fetchConfig])
 
   const handleMicClick = async () => {
     if (isMicRecording) {
@@ -250,6 +362,33 @@ export default function App() {
     }
   }
 
+  useEffect(() => {
+    try {
+      const url = new URL(window.location.href)
+      if (url.searchParams.has('_r')) {
+        url.searchParams.delete('_r')
+        const clean = url.pathname + url.search + url.hash
+        window.history.replaceState(null, '', clean || '/')
+      }
+    } catch {}
+  }, [])
+
+  const handleHardRefresh = useCallback(async () => {
+    try {
+      if (typeof window !== 'undefined' && 'caches' in window) {
+        const keys = await window.caches.keys()
+        await Promise.all(keys.map((k) => window.caches.delete(k)))
+      }
+    } catch {}
+    try {
+      const url = new URL(window.location.href)
+      url.searchParams.set('_r', String(Date.now()))
+      window.location.replace(url.toString())
+    } catch {
+      window.location.reload()
+    }
+  }, [])
+
   return (
     <>
       <div className={`flux-app-window ${theme}`} data-theme={theme}>
@@ -278,12 +417,18 @@ export default function App() {
 
           {/* Mobile Top Profile Bar (Global across all tabs: Live, Faces, Settings, OTA) */}
           <div className="mobile-top-bar">
-            <div className="mobile-user-pill">
+            <button
+              type="button"
+              onClick={handleHardRefresh}
+              className="mobile-user-pill"
+              aria-label="Hard Refresh Page"
+              title="Tap to hard refresh page"
+            >
               <div className="mobile-avatar">
                 <KiwiLogo size={28} />
               </div>
               <span className="mobile-user-name">Kiwi</span>
-            </div>
+            </button>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <ThemeToggle

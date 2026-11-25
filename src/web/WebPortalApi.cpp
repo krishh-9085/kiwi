@@ -1,4 +1,6 @@
 #include "face/AnimationEngine.h"
+#include "behavior/CircadianEngine.h"
+#include "behavior/InteractionManager.h"
 #include "commands/ActionExecutor.h"
 #include "behavior/HungerEngine.h"
 #include "config/AppConfig.h"
@@ -8,13 +10,46 @@
 #include "hardware/WakeWordEngine.h"
 #include "ai/AiService.h"
 #include "memory/MemoryService.h"
+#include "power/PowerManager.h"
 #include "web/WebPortal.h"
 #include "web/WebPortalApiInternal.h"
 #include <WebServer.h>
 #include <WiFi.h>
 #include <algorithm>
 #include <esp_ota_ops.h>
+#include <time.h>
 #include <vector>
+
+static String buildCircadianJson(bool includeRuntime) {
+  char startStr[8], endStr[8];
+  snprintf(startStr, sizeof(startStr), "%02d:%02d", circadianSleepStart,
+           circadianSleepStartMin);
+  snprintf(endStr, sizeof(endStr), "%02d:%02d", circadianSleepEnd,
+           circadianSleepEndMin);
+  String c = "{\"enabled\":" +
+             String(circadianSleepEnabled ? "true" : "false") +
+             ",\"start\":" + String(circadianSleepStart) +
+             ",\"startMin\":" + String(circadianSleepStartMin) +
+             ",\"end\":" + String(circadianSleepEnd) +
+             ",\"endMin\":" + String(circadianSleepEndMin) +
+             ",\"startStr\":\"" + String(startStr) + "\"" +
+             ",\"endStr\":\"" + String(endStr) + "\"" +
+             ",\"ecoSleep\":" + String(ecoSleepEnabled ? "true" : "false");
+  if (includeRuntime) {
+    int tempSec = 0;
+    if (isCircadianTempWakeActive()) {
+      int32_t rem = (int32_t)(circadianTempWakeUntil - millis());
+      tempSec = (rem > 0) ? (rem + 999) / 1000 : 0;
+    }
+    c += ",\"active\":" + String(inCircadianSleep ? "true" : "false") +
+         ",\"manual\":" + String(manualSleep ? "true" : "false") +
+         ",\"skipTonight\":" +
+         String(circadianSkipTonight ? "true" : "false") +
+         ",\"tempWakeSec\":" + String(tempSec);
+  }
+  c += "}";
+  return c;
+}
 
 String escJson(String s) {
   s.replace("\\", "\\\\");
@@ -105,6 +140,24 @@ void handleStatus() {
        "}";
   j += ",\"rgbLed\":{\"enabled\":" + String(rgbLedEnabled ? "true" : "false") +
        ",\"brightness\":" + String((int)((rgbLedBrightness * 100) / 255)) + "}";
+  j += ",\"volume\":" + String(speakerVolume);
+  j += ",\"brightness\":" + String(displayBrightness);
+  j += ",\"nightMode\":" + String(nightMode);
+  j += ",\"nightBrightness\":" + String(nightBrightness);
+  j += ",\"circadian\":" + buildCircadianJson(true);
+  char localTimeStr[8] = "";
+  if (timeSynced) {
+    struct tm ti;
+    if (getLocalTime(&ti, 5)) {
+      snprintf(localTimeStr, sizeof(localTimeStr), "%02d:%02d", ti.tm_hour,
+               ti.tm_min);
+    }
+  }
+  j += ",\"time\":{\"synced\":" + String(timeSynced ? "true" : "false") +
+       ",\"localTime\":\"" + String(localTimeStr) + "\"" +
+       ",\"tzMin\":" + String(tzOffsetMin) + "}";
+  j += ",\"power\":{\"cpuMhz\":" + String(powerGetCpuFreq()) +
+       ",\"ecoSleep\":" + String(ecoSleepEnabled ? "true" : "false") + "}";
   j += ",\"timer_active\":" + String(isRobotTimerActive() ? "true" : "false");
   j += ",\"timer_ringing\":" + String(isRobotTimerRinging() ? "true" : "false");
   j += ",\"timer_remaining\":" + String(getRobotTimerRemainingSec());
@@ -212,10 +265,8 @@ void handleConfigApi() {
   j += "\"brightness\":" + String(displayBrightness) +
        ",\"nightMode\":" + String(nightMode) +
        ",\"nightBrightness\":" + String(nightBrightness) + ",";
-  j += "\"circadian\":{\"enabled\":" +
-       String(circadianSleepEnabled ? "true" : "false") +
-       ",\"start\":" + String(circadianSleepStart) +
-       ",\"end\":" + String(circadianSleepEnd) + "},";
+  j += "\"circadian\":" + buildCircadianJson(false) + ",";
+  j += "\"tzMin\":" + String(tzOffsetMin) + ",";
   j += "\"greetings\":{\"enabled\":" +
        String(greetingsEnabled ? "true" : "false") + "},";
   j += "\"hunger\":{\"enabled\":" + String(hungerEnabled ? "true" : "false") +
@@ -280,7 +331,18 @@ void handleConfigApi() {
 void handleScanNetworks() {
   notifyWebRequest();
   lastUserInteractionAt = millis();
-  int n = WiFi.scanNetworks(false, false);
+  WiFi.scanDelete();
+  int n = WiFi.scanNetworks(true, false);
+  if (n == WIFI_SCAN_RUNNING) {
+    uint32_t scanStart = millis();
+    while ((n = WiFi.scanComplete()) == WIFI_SCAN_RUNNING &&
+           (millis() - scanStart < 8000)) {
+      pumpUiWithoutWeb();
+      delay(15);
+    }
+  }
+  if (n < 0)
+    n = 0;
   String json = "[";
   if (n > 0) {
     struct ScannedNet {

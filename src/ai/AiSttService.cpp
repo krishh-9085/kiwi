@@ -5,6 +5,7 @@
 #include "config/AppConfig.h"
 #include "core/Timing.h"
 #include "hardware/AudioEngine.h"
+#include "hardware/SoundLevel.h"
 #include "hardware/WakeWordEngine.h"
 #include "face/FaceEngine.h"
 #include "net/WifiManager.h"
@@ -75,10 +76,11 @@ String recordAndTranscribe(uint32_t recordSeconds) {
   Serial.printf("[STT] Free heap: %u  max block: %u\n",
                 (unsigned)ESP.getFreeHeap(), (unsigned)ESP.getMaxAllocHeap());
   setEmotion(EMOTION_LISTENING);
-  // Smoothly ease face into listening pose before blocking network work
-  waitMs(120);
-
-  // Finish any active prompt tone before blocking network/TLS calls
+  bool hasPreWakeEntry = preWakeHasData();
+  if (!hasPreWakeEntry) {
+    soundListening();
+  }
+  // Finish listening chime / any active prompt tone while easing face into listening pose
   uint32_t toneWaitStart = millis();
   while (isTonePlaying() && (millis() - toneWaitStart < 250)) {
     updateTonePlayer();
@@ -96,6 +98,7 @@ String recordAndTranscribe(uint32_t recordSeconds) {
   auto bail = [&](const char *why) -> String {
     Serial.printf("[STT] FAIL: %s\n", why);
     sttFail = why;
+    soundLevelResetListening();
     client.stop();
     restoreWebAndAP(apWasUp);
     return String("");
@@ -218,29 +221,16 @@ String recordAndTranscribe(uint32_t recordSeconds) {
   setEmotion(EMOTION_LISTENING);
   pumpUI();
   if (!hasPreWake) {
-    drainMic();
+    drainMic(); // Flush prompt chime / ambient residue from mic buffer before recording
     pumpUI();
   }
   if (!micSlotLocked && getMicSlot() < 0) {
     detectMicSlot();
     pumpUI();
   }
-
-  // Play Wall-E ready chime ONLY when manually triggered (Touch/Web)
-  // When wake word triggers, user is ALREADY speaking, so chime is skipped to prevent drowning out voice!
-  if (!hasPreWake) {
-    soundListening();
-    uint32_t chimeWait = millis();
-    while (isTonePlaying() && (millis() - chimeWait < 220)) {
-      updateTonePlayer();
-      serviceUi();
-      yield();
-    }
-    delay(40);
-    drainMic(); // Flush prompt chime audio from mic buffer before recording user speech
-  }
   robotStateDesc = "Listening...";
   setEmotion(EMOTION_LISTENING);
+  soundLevelResetListening();
   Serial.printf("[STT] Recording %lu s (mic slot %d%s, gain %.1f, preWake=%s)...\n",
                 (unsigned long)recordSeconds, micSlot, micSlotLocked ? " [cached]" : "",
                 (double)MIC_GAIN, hasPreWake ? "YES" : "NO");
@@ -542,6 +532,8 @@ String recordAndTranscribe(uint32_t recordSeconds) {
     if (e != ESP_OK)
       return bail("mic read failed");
     int frames = bytesRead / (2 * sizeof(int32_t));
+    float chunkAbsSum = 0.0f;
+    int chunkFrames = 0;
     for (int i = 0; i < frames && sent < recordSamples; i++) {
       liveSent++;
       int32_t s32 = raw[i * 2 + micSlot];
@@ -563,6 +555,8 @@ String recordAndTranscribe(uint32_t recordSeconds) {
       int16_t pcm = (int16_t)y;
       uint32_t a = abs((int)pcm);
       sumAbs += a;
+      chunkAbsSum += (float)a;
+      chunkFrames++;
 
       // ---- Calibration window (first 250 ms of live mic) ----
       // Skipped when calibDone==true (pre-wake path sets calibDone=true)
@@ -611,6 +605,9 @@ String recordAndTranscribe(uint32_t recordSeconds) {
         outPos = 0;
       }
     }
+    if (chunkFrames > 0) {
+      soundLevelUpdateListening(chunkAbsSum / (float)chunkFrames, speechStarted);
+    }
     if (sent - lastProgress >= SAMPLE_RATE) {
       lastProgress = sent;
       if (currentLogLevel >= LOG_LEVEL_DEBUG) {
@@ -624,6 +621,7 @@ String recordAndTranscribe(uint32_t recordSeconds) {
   }
 
   uint32_t capturedSamples = sent;
+  soundLevelResetListening();
   if (!speechStarted) {
     Serial.println("[STT] Silence threshold not met (no speech detected), aborting upload");
     return bail("quiet");

@@ -8,6 +8,7 @@
 #include "face/FaceDisplay.h"
 #include "face/FaceEngine.h"
 #include "face/SleepyWakeAnim.h"
+#include "behavior/CircadianEngine.h"
 #include "hardware/AudioEngine.h"
 #include "hardware/WakeWordEngine.h"
 #include "power/PowerManager.h"
@@ -34,6 +35,23 @@ static volatile bool s_inTickleSpeech = false;
 
 bool isTickleActive() {
   return s_inTickleSpeech;
+}
+
+float getTopTouchHoldProgress() {
+  if (!touchT.state || busyProcessing || inCircadianSleep || manualSleep ||
+      sleepyFallAsleepIsActive() || sleepyWakeIsActive()) {
+    return 0.0f;
+  }
+  uint32_t held = millis() - touchT.startedAt;
+  if (held < 450 || touchT.sleepHandled)
+    return 0.0f;
+  if (!touchT.holdHandled && held < TOUCH_CLOCK_MS) {
+    return (float)(held - 450) / (float)(TOUCH_CLOCK_MS - 450);
+  }
+  if (held >= TOUCH_CLOCK_MS && held < SLEEP_HOLD_MS) {
+    return (float)(held - TOUCH_CLOCK_MS) / (float)(SLEEP_HOLD_MS - TOUCH_CLOCK_MS);
+  }
+  return 0.0f;
 }
 
 void triggerTickleMode() {
@@ -105,9 +123,9 @@ void resyncTouch() {
 }
 
 // ---------- Touch Gesture Action Dispatcher ----------
-// Calibrated double-tap window: 480ms provides natural, reliable multi-tap detection
-// on physical capacitive sensors without accidental single-tap misfires.
-constexpr uint32_t DOUBLE_TAP_WINDOW_MS = 480;
+// Calibrated double-tap window: 300ms for snappy single-tap dispatch while
+// keeping reliable double-tap detection on capacitive sensors.
+constexpr uint32_t DOUBLE_TAP_WINDOW_MS = 300;
 
 TouchAction getSingleTapAction(uint8_t pin) {
   if (pin == PIN_TOUCH_TOP)
@@ -154,46 +172,17 @@ void executeTouchAction(TouchAction act, uint8_t pin) {
 
   if (sleepyWakeIsActive()) {
     sleepyWakeCancel();
-    manualSleep = false;
-    inCircadianSleep = false;
-    circadianTempWakeUntil = now + 30000;
-    setEmotion(EMOTION_IDLE);
+    wakeKiwiFromSleep(false, CIRCADIAN_TEMP_WAKE_MS, false);
     soundPetSparkle();
     Serial.println(
         "[TOUCH] Second tap during sleepy wake -> Full Wake-up (Happy)");
     return;
   }
 
-  if (sleepyFallAsleepIsActive()) {
-    sleepyFallAsleepCancel();
-    manualSleep = false;
-    inCircadianSleep = false;
-    circadianTempWakeUntil = now + 30000;
-    setDisplayPower(true);
-    setOledDim(false);
-    updateDisplayBrightnessMode();
-    setEmotion(EMOTION_IDLE);
-    emotionAutoReturnAt = 0;
-    returnIdleAt = 0;
-    sleepyWakeStart();
-    Serial.println("[TOUCH] Tap during falling asleep -> Waking up with sleepy "
+  if (sleepyFallAsleepIsActive() || inCircadianSleep || manualSleep) {
+    wakeKiwiFromSleep(false, CIRCADIAN_TEMP_WAKE_MS, true);
+    Serial.println("[TOUCH] Tap during sleep -> Waking up with sleepy "
                    "wake animation!");
-    return;
-  }
-
-  if (inCircadianSleep || manualSleep) {
-    manualSleep = false;
-    inCircadianSleep = false;
-    circadianTempWakeUntil = now + 30000;
-    setDisplayPower(true);
-    setOledDim(false);
-    updateDisplayBrightnessMode();
-    setEmotion(EMOTION_IDLE);
-    emotionAutoReturnAt = 0;
-    returnIdleAt = 0;
-    sleepyWakeStart();
-    Serial.println(
-        "[TOUCH] Tap during sleep -> Waking up with sleepy wake animation!");
     return;
   }
 
@@ -272,6 +261,22 @@ void executeTouchAction(TouchAction act, uint8_t pin) {
     if (busyProcessing || startRecording || isSpeechPlaying() ||
         currentEmotion == EMOTION_SPEAKING) {
       if (pin == PIN_TOUCH_TOP) {
+        // Single-tap barge-in during active TTS playback: smoothly ramp down
+        // current speech and transition directly into listening mode.
+        if ((isSpeechPlaying() || currentEmotion == EMOTION_SPEAKING) &&
+            !startRecording) {
+          Serial.println(
+              "[TOUCH] Barge-in (Top) during TTS -> Abort speech & listen!");
+          listenStartedAt = millis();
+          cancelRequest = true;
+          toneStop();
+          spkAbortSpeech();
+          preWakeReset();
+          startRecording = true;
+          setEmotion(EMOTION_LISTENING);
+          robotStateDesc = "Listening...";
+          return;
+        }
         // Debounce cancel: only cancel if listening was initiated > 600ms ago.
         // This prevents the user's initial touch release / bounce from
         // immediately cancelling listening!
@@ -281,7 +286,7 @@ void executeTouchAction(TouchAction act, uint8_t pin) {
           cancelRequest = true;
           startRecording = false;
           toneStop();
-          spkEndSpeech();
+          spkAbortSpeech();
           setEmotion(EMOTION_IDLE);
         } else {
           Serial.println("[TOUCH] Action LISTEN -> Ignored cancel bounce (<600ms "
@@ -319,8 +324,8 @@ void executeTouchAction(TouchAction act, uint8_t pin) {
     showWeatherScreen = !showWeatherScreen;
     if (showWeatherScreen) {
       soundWeather();
-      if (millis() - lastWeatherFetchAt > 600000UL)
-        fetchWeather();
+      if (millis() - lastWeatherFetchAt > 600000UL || weatherCode < 0)
+        fetchWeatherAsync();
     } else {
       setEmotion(EMOTION_IDLE);
       returnIdleAt = 0;
@@ -457,7 +462,7 @@ static void updateOneTouch(TouchSensor &ts, uint32_t now) {
       // Instant Audio & Visual Touch Response
       static uint32_t lastTouchBlipAt = 0;
       if (!inCircadianSleep && !manualSleep) {
-        if (touchFeedbackSound && !busyProcessing &&
+        if (touchFeedbackSound && !busyProcessing && !isSpeechPlaying() &&
             (now - lastTouchBlipAt >= 200)) {
           lastTouchBlipAt = now;
           soundTouchBlip();
@@ -534,6 +539,7 @@ static void updateOneTouch(TouchSensor &ts, uint32_t now) {
   }
   if (ts.state) {
     lastUserInteractionAt = now;
+    extendTempWakeIfActive(CIRCADIAN_TEMP_WAKE_MS);
     uint32_t held = now - ts.startedAt;
 
     // Directional Gazing: Eyes look towards the touched cheek or head
@@ -571,12 +577,12 @@ static void updateOneTouch(TouchSensor &ts, uint32_t now) {
     }
 
     if (ts.pin == PIN_TOUCH_LEFT && held >= TOUCH_HOLD_MS && !ts.holdHandled &&
-        !busyProcessing) {
+        !busyProcessing && !isSpeechPlaying()) {
       ts.holdHandled = true;
       executeTouchAction(touchActLeftHold, ts.pin);
     }
     if (ts.pin == PIN_TOUCH_RIGHT && held >= TOUCH_HOLD_MS && !ts.holdHandled &&
-        !busyProcessing) {
+        !busyProcessing && !isSpeechPlaying()) {
       ts.holdHandled = true;
       executeTouchAction(touchActRightHold, ts.pin);
     }
@@ -602,21 +608,10 @@ static void updateOneTouch(TouchSensor &ts, uint32_t now) {
       showClockScreen = false;
       showWeatherScreen = false;
       if (!inCircadianSleep && !manualSleep && !sleepyFallAsleepIsActive()) {
-        manualSleep = true;
-        inCircadianSleep = false;
-        sleepyFallAsleepStart();
+        startManualSleep();
         Serial.println("[TOUCH] Held to sleep -> Kiwi is falling asleep (Z Z)");
       } else {
-        manualSleep = false;
-        inCircadianSleep = false;
-        circadianTempWakeUntil = now + 30000;
-        setDisplayPower(true);
-        setOledDim(false);
-        updateDisplayBrightnessMode();
-        setEmotion(EMOTION_IDLE);
-        emotionAutoReturnAt = 0;
-        returnIdleAt = 0;
-        sleepyWakeStart();
+        wakeKiwiFromSleep(true, CIRCADIAN_TEMP_WAKE_MS, true);
         Serial.println("[TOUCH] Held to wake -> Kiwi Woke Up!");
       }
     }

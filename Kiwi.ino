@@ -156,7 +156,9 @@ void setup() {
     Serial.println("[I2S] Audio initialization FAILED");
   } else {
     detectMicSlot();
-    playBootChime();
+    if (!wakeFromDeepSleepWakeAnim && !suppressBootGreeting) {
+      playBootChime();
+    }
     Serial.printf("[I2S] Audio OK, heap=%u\n", (unsigned)ESP.getFreeHeap());
     // P2: Always initialize wake word engine at boot so it can be enabled/disabled at runtime
     if (!wakeWordInit()) {
@@ -317,7 +319,7 @@ static void checkBootGreeting() {
     greetingTriggered = true;
     return;
   }
-  if (busyProcessing || inCircadianSleep || manualSleep)
+  if (busyProcessing || inCircadianSleep || manualSleep || sleepyWakeIsActive())
     return;
 
   // Let the boot chime finish playing first
@@ -412,6 +414,7 @@ void loop() {
 
   if (webQueuedQuestion.length() > 0 && !busyProcessing) {
     powerNotifyActivity();
+    extendTempWakeIfActive(CIRCADIAN_TEMP_WAKE_MS);
     String q = cleanTranscribedQuestion(webQueuedQuestion);
     webQueuedQuestion = "";
     busyProcessing = true;
@@ -422,13 +425,21 @@ void loop() {
     setEmotion(EMOTION_THINKING);
     handleQuestion(q);
     bool wasCancelled = cancelRequest;
+    bool bargeInListen = startRecording;
     cancelRequest = false;
     if (wasCancelled) {
       pendingSleepAction = false;
       returnIdleAt = 0;
-      setEmotion(EMOTION_IDLE);
-      robotStateDesc = "Ready";
-      Serial.println("[ROBOT] Web request cancelled");
+      if (bargeInListen) {
+        toneStop();
+        setEmotion(EMOTION_LISTENING);
+        robotStateDesc = "Listening...";
+        Serial.println("[ROBOT] Web TTS barge-in -> Immediate listening");
+      } else {
+        setEmotion(EMOTION_IDLE);
+        robotStateDesc = "Ready";
+        Serial.println("[ROBOT] Web request cancelled");
+      }
     } else if (pendingSleepAction) {
       triggerPendingSleepAction();
     } else if (returnIdleAt == 0 && emotionAutoReturnAt == 0 && !manualSleep && !inCircadianSleep &&
@@ -436,7 +447,9 @@ void loop() {
       setEmotion(EMOTION_IDLE);
     }
     resyncTouch();
-    spkEndSpeech();
+    if (!bargeInListen) {
+      spkEndSpeech();
+    }
     busyProcessing = false;
   }
 
@@ -447,6 +460,7 @@ void loop() {
       returnIdleAt = 0;
     }
     powerNotifyActivity();
+    extendTempWakeIfActive(CIRCADIAN_TEMP_WAKE_MS);
     startRecording = false;
     busyProcessing = true;
     lastProgressAt = millis();
@@ -456,11 +470,7 @@ void loop() {
                    " seconds; stops after speech ends...");
 
     setEmotion(EMOTION_LISTENING);
-    if (!preWakeHasData()) {
-      waitMs(80);
-    } else {
-      pumpUI();
-    }
+    pumpUI();
 
     if (cancelRequest) {
       Serial.println("[ROBOT] Cancelled before recording");
@@ -517,16 +527,24 @@ void loop() {
       }
     }
     bool wasCancelled = cancelRequest;
+    bool bargeInListen = startRecording;
     cancelRequest = false;
     if (wasCancelled) {
       pendingSleepAction = false;
       returnIdleAt = 0;
-      setEmotion(EMOTION_IDLE);
-      robotStateDesc = "Ready";
-      toneStop();
-      spkEndSpeech();
       wakeWordReset();
-      Serial.println("[ROBOT] Cancelled - returning to Ready");
+      if (bargeInListen) {
+        toneStop();
+        setEmotion(EMOTION_LISTENING);
+        robotStateDesc = "Listening...";
+        Serial.println("[ROBOT] Barge-in during speech -> Immediate listening");
+      } else {
+        setEmotion(EMOTION_IDLE);
+        robotStateDesc = "Ready";
+        toneStop();
+        spkEndSpeech();
+        Serial.println("[ROBOT] Cancelled - returning to Ready");
+      }
     } else if (pendingSleepAction) {
       triggerPendingSleepAction();
     } else if (returnIdleAt == 0 && emotionAutoReturnAt == 0 && !manualSleep && !inCircadianSleep &&
@@ -534,10 +552,10 @@ void loop() {
       setEmotion(EMOTION_IDLE);
     }
     resyncTouch();
-    if (!startRecording) {
+    if (!bargeInListen) {
       spkEndSpeech();
-      busyProcessing = false;
     }
+    busyProcessing = false;
   }
 
   // 30s Inactivity Watchdog

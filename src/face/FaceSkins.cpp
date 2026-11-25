@@ -130,6 +130,41 @@ static inline void maskCheek(int cx, int bot, int w, int cheek) {
   }
 }
 
+// Shared glowing heart-eye renderer for non-EMO skins (rounded or 8-bit pixel)
+static void drawSkinHeartEye(int cx, int cy, int w, int h, bool pixelated) {
+  if (pixelated) {
+    int u = maxI(2, minI(w, h) / 7);
+    int topY = cy - (u * 5) / 2;
+    // Left and right upper pixel lobes
+    display.fillRect(cx - 3 * u, topY, 2 * u, 2 * u, SSD1306_WHITE);
+    display.fillRect(cx + u, topY, 2 * u, 2 * u, SSD1306_WHITE);
+    // Middle full row
+    display.fillRect(cx - 3 * u, topY + u, 6 * u, 2 * u, SSD1306_WHITE);
+    // Tapered bottom rows
+    display.fillRect(cx - 2 * u, topY + 3 * u, 4 * u, u, SSD1306_WHITE);
+    display.fillRect(cx - u, topY + 4 * u, 2 * u, u, SSD1306_WHITE);
+    // Tiny retro glint cutout
+    display.fillRect(cx - 2 * u, topY + u, maxI(2, u / 2), maxI(2, u / 2),
+                     SSD1306_BLACK);
+    return;
+  }
+
+  int hr = maxI(3, w / 4);
+  int circleY = cy - h / 8;
+  int botY = cy + h / 2 - 1;
+  display.fillCircle(cx - hr, circleY, hr, SSD1306_WHITE);
+  display.fillCircle(cx + hr, circleY, hr, SSD1306_WHITE);
+  int bodyW = hr * 4 + 1;
+  int bodyH = maxI(2, h / 4);
+  display.fillRect(cx - hr * 2, circleY, bodyW, bodyH, SSD1306_WHITE);
+  display.fillTriangle(cx - hr * 2, circleY + bodyH - 1, cx + hr * 2,
+                       circleY + bodyH - 1, cx, botY, SSD1306_WHITE);
+  // Subtle dark heart shine dot
+  if (w >= 20) {
+    display.fillRect(cx - hr - 1, circleY - hr / 2, 2, 2, SSD1306_BLACK);
+  }
+}
+
 void drawEye(int cx, int cy, int w, int h, int r, int lidIn, int lidOut,
              int cheek, bool isLeft, bool glint) {
   int x0 = cx - w / 2;
@@ -137,11 +172,21 @@ void drawEye(int cx, int cy, int w, int h, int r, int lidIn, int lidOut,
   int top = cy - h / 2;
   int bot = top + h;
 
+  bool isHeartMood =
+      (h > 6) &&
+      (currentEmotion == EMOTION_HEARTS ||
+       currentEmotion == EMOTION_LOVESTRUCK ||
+       (currentEmotion == EMOTION_PETTED && petMood == PET_LOVE));
+
   // 1. KIWI EYES (Desk Buddy): Flat upper edge, rounded bottom base,
   // U-shaped deep pupil cutout with floating top-right catchlight glint dot.
   if (currentEyeSkin == SKIN_KIWI) {
     if (h <= 3) {
       display.fillRoundRect(x0, cy - 1, w, maxI(2, h), 1, SSD1306_WHITE);
+      return;
+    }
+    if (isHeartMood) {
+      drawSkinHeartEye(cx, cy, w, h, false);
       return;
     }
 
@@ -205,6 +250,14 @@ void drawEye(int cx, int cy, int w, int h, int r, int lidIn, int lidOut,
 
   // 2. PIXEL 8-BIT (Retro 8-Bit Arcade)
   if (currentEyeSkin == SKIN_PIXEL) {
+    if (h <= 3) {
+      display.fillRect(x0, cy - 1, w, maxI(2, h), SSD1306_WHITE);
+      return;
+    }
+    if (isHeartMood) {
+      drawSkinHeartEye(cx, cy, w, h, true);
+      return;
+    }
     int step = (w >= 22) ? 4 : 2;
     if (h > step * 2) {
       display.fillRect(x0 + step, top, w - step * 2, h, SSD1306_WHITE);
@@ -212,12 +265,34 @@ void drawEye(int cx, int cy, int w, int h, int r, int lidIn, int lidOut,
     } else {
       display.fillRect(x0, top, w, h, SSD1306_WHITE);
     }
+
+    // Stepped 8-bit gaze-tracking pupil cutout
+    if (h > 10) {
+      float pScale = clampf(faceNow.pupilScale, 0.70f, 1.35f);
+      int pw = ((int)lroundf(w * 0.34f * pScale) / 2) * 2;
+      int ph = ((int)lroundf(h * 0.42f * pScale) / 2) * 2;
+      if (pw < 4) pw = 4;
+      if (ph < 4) ph = 4;
+      if (pw > w - 8) pw = maxI(4, w - 8);
+      if (ph > h - 6) ph = maxI(4, h - 6);
+
+      int shiftX = ((int)lroundf(gazeX * 0.80f) / 2) * 2;
+      int shiftY = ((int)lroundf(gazeY * 0.70f) / 2) * 2;
+      int px = cx + shiftX - pw / 2;
+      int py = cy + shiftY - ph / 2;
+      if (px < x0 + step) px = x0 + step;
+      if (px + pw > x1 - step) px = x1 - step - pw;
+      if (py < top + 2) py = top + 2;
+      if (py + ph > bot - 2) py = bot - 2 - ph;
+
+      display.fillRect(px, py, pw, ph, SSD1306_BLACK);
+      if (pw >= 6 && ph >= 6) {
+        display.fillRect(px + pw - 3, py + 1, 2, 2, SSD1306_WHITE);
+      }
+    }
+
     maskLids(x0, x1, top, lidIn, lidOut, isLeft);
     maskCheek(cx, bot, w, cheek);
-    if (glint && h > 16) {
-      display.fillRect(x0 + 4, top + 4, 3, 3, SSD1306_BLACK);
-      display.fillRect(x0 + 8, top + 8, 2, 2, SSD1306_BLACK);
-    }
     return;
   }
 
@@ -225,6 +300,10 @@ void drawEye(int cx, int cy, int w, int h, int r, int lidIn, int lidOut,
   if (currentEyeSkin == SKIN_LUMINA_SPARK) {
     if (h <= 3) {
       display.fillRoundRect(x0, cy - 1, w, maxI(2, h), 1, SSD1306_WHITE);
+      return;
+    }
+    if (isHeartMood) {
+      drawSkinHeartEye(cx, cy, w, h, false);
       return;
     }
 
@@ -283,6 +362,10 @@ void drawEye(int cx, int cy, int w, int h, int r, int lidIn, int lidOut,
   if (currentEyeSkin == SKIN_MECHA) {
     if (h <= 3) {
       display.fillRoundRect(x0, cy - 1, w, maxI(2, h), 1, SSD1306_WHITE);
+      return;
+    }
+    if (isHeartMood) {
+      drawSkinHeartEye(cx, cy, w, h, false);
       return;
     }
 

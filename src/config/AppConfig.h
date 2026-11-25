@@ -50,7 +50,7 @@ extern uint32_t bootSetupEnterAt;
 #define OLED_ADDR 0x3C
 
 #ifndef FACE_I2C_CLK_DURING
-#define FACE_I2C_CLK_DURING 800000UL
+#define FACE_I2C_CLK_DURING 400000UL
 #endif
 
 #define FACE_TWEEN_MS 220
@@ -96,7 +96,7 @@ constexpr uint32_t CIRCADIAN_TEMP_WAKE_MS = 45000;
 constexpr uint32_t SLEEP_HOLD_MS = 7000;
 constexpr uint32_t MANUAL_LIGHT_SLEEP_MAX_MIN = 15;
 constexpr uint32_t FACE_FRAME_MS_ACTIVE = 33;
-constexpr uint32_t FACE_FRAME_MS_IDLE = 100;
+constexpr uint32_t FACE_FRAME_MS_IDLE = 45;
 
 // ============================================================
 // DEFAULT AI SERVICE ENDPOINTS & MODELS
@@ -186,6 +186,8 @@ extern int displayBrightness; // Daytime display brightness (0-100%, default 80)
 extern int nightMode;       // 0: Same as day, 1: Dim, 2: Screen off (default 1)
 extern int nightBrightness; // Night display brightness (0-100%, default 10)
 extern bool circadianSleepEnabled;
+extern bool ecoSleepEnabled;       // NVS: eco_slp (false = Desk Mode, true = Hardware Light/Deep Sleep)
+extern int tzOffsetMin;            // NVS: tz_min (minutes from UTC, default 330 = IST +05:30)
 extern bool greetingsEnabled;
 extern bool hungerEnabled;         // NVS: hunger_en (default true)
 extern bool soundReactiveEnabled; // NVS: snd_react
@@ -202,9 +204,12 @@ extern uint8_t rgbLedBrightness;  // NVS: rgb_bright (0-255, default 160)
 extern bool bootCompleted;
 extern volatile bool uiTaskRunning; // True when display & LED are offloaded to dedicated Core 0 task
 extern int circadianSleepStart;
+extern int circadianSleepStartMin; // 0-59 (NVS: circ_smin, default 0)
 extern int circadianSleepEnd;
+extern int circadianSleepEndMin;   // 0-59 (NVS: circ_emin, default 0)
 extern bool inCircadianSleep;
 extern bool manualSleep;
+extern bool circadianSkipTonight;
 extern uint32_t circadianTempWakeUntil;
 
 // ---------- Live Weather ----------
@@ -223,6 +228,7 @@ extern bool showWeatherScreen;
 
 extern bool showClockScreen;
 extern bool timeSynced;
+extern bool ntpNeedsRefresh;
 extern uint32_t lastNtpTryAt;
 
 // ESP32-S3 safe; upgrade to std::atomic<bool> if dispatched across

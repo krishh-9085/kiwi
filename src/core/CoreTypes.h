@@ -31,12 +31,23 @@ struct Tone {
       0.0f; // Vibrato / FM modulation rate in Hz (e.g. 15.0f - 35.0f)
 };
 
+enum MouthStyle : uint8_t {
+  MOUTH_NORMAL = 0,
+  MOUTH_WAVY = 1,
+  MOUTH_CAT = 2,
+  MOUTH_SMIRK = 3,
+  MOUTH_KISS = 4,
+  MOUTH_TONGUE = 5
+};
+
 struct FaceState {
   float w = 34, h = 32, gap = 30, y = 29, r = 6;
   float lidIn = 0, lidOut = 0;
+  float lidInR = 0, lidOutR = 0;
   float cheek = 0, cheekR = 0;
   float hR = 1.0f;
   float wR = 1.0f;
+  float headTilt = 0.0f;
   float glint = 0;
   float blush = 0;
   bool gazeLock = false;
@@ -45,6 +56,7 @@ struct FaceState {
   float mouthH = 2;
   float mouthCurve = 0.4f;
   float mouthY = 0;
+  uint8_t mouthStyle = MOUTH_NORMAL;
   float pupilScale = 1.0f;
 };
 

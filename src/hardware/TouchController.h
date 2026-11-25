@@ -10,4 +10,5 @@ void initTouch();
 void resyncTouch();
 void updateTouch();
 bool isTickleActive();
+float getTopTouchHoldProgress();
 extern uint32_t lastTickleTriggeredAt;

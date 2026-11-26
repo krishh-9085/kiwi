@@ -214,6 +214,7 @@ uint32_t emotionAutoReturnAt = 0;
 uint32_t lastEmotionChangeAt = 0;
 uint32_t errorFaceUntil = 0;
 uint32_t bootInfoUntil = 0;
+volatile uint32_t statusOverlayUntil = 0;
 uint32_t gFaceFrameMs = 33;
 uint32_t lastFaceDrawAt = 0;
 

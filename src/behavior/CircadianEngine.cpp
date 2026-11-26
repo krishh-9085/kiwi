@@ -184,6 +184,8 @@ void checkCircadianSleep() {
   }
 
   if (manualSleep) {
+    if (busyProcessing || isRobotTimerRinging())
+      return;
     if (currentEmotion != EMOTION_SLEEPING && returnIdleAt == 0 &&
         emotionAutoReturnAt == 0 && !showClockScreen && !showWeatherScreen &&
         !sleepyFallAsleepIsActive() && !sleepyWakeIsActive()) {

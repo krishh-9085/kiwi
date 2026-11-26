@@ -218,6 +218,7 @@ void executeTouchAction(TouchAction act, uint8_t pin) {
     if (showClockScreen || showWeatherScreen) {
       showClockScreen = false;
       showWeatherScreen = false;
+      updateDisplayBrightnessMode();
       setEmotion(EMOTION_IDLE);
       returnIdleAt = 0;
       soundTouchBlip();
@@ -227,30 +228,12 @@ void executeTouchAction(TouchAction act, uint8_t pin) {
     }
   }
 
-  // Cheek tickle rapid tap tracking (only for playful pet / idle touches, never for functional clock/weather commands)
-  if ((pin == PIN_TOUCH_LEFT || pin == PIN_TOUCH_RIGHT) && (act == TOUCH_ACT_DISMISS || act == TOUCH_ACT_PET || act == TOUCH_ACT_NONE)) {
-    if (isKiwiAngry()) {
-      cheekTapCount = 0;
-      return; // Never trigger tickle mode or single-tap actions while Kiwi is angry!
-    }
-    if (s_inTickleSpeech || isSpeechPlaying() || busyProcessing) {
-      Serial.printf("[TOUCH] Cheek pin %d tap during busy/speech -> Absorbed!\n", pin);
-      return;
-    }
-    if (now - lastCheekTouchAt < TICKLE_CHEEK_WINDOW_MS) {
-      cheekTapCount++;
-    } else {
-      cheekTapCount = 1;
-    }
-    lastCheekTouchAt = now;
-    if (cheekTapCount >= 4 &&
-        now - lastTickleTriggeredAt > TICKLE_COOLDOWN_MS && !busyProcessing &&
-        !inCircadianSleep && !manualSleep) {
-      triggerTickleMode();
-      return;
-    }
-  } else if (pin == PIN_TOUCH_LEFT || pin == PIN_TOUCH_RIGHT) {
-    cheekTapCount = 0; // Clear tickle count on functional gestures (clock, weather, etc.)
+  // Cheek angry guard (rapid 4-tap tickle tracking is handled on press so mapped
+  // tap/double-tap cheek actions do not swallow rapid tickle bursts)
+  if ((pin == PIN_TOUCH_LEFT || pin == PIN_TOUCH_RIGHT) && isKiwiAngry() &&
+      (act == TOUCH_ACT_DISMISS || act == TOUCH_ACT_PET || act == TOUCH_ACT_NONE)) {
+    cheekTapCount = 0;
+    return;
   }
 
   switch (act) {
@@ -263,6 +246,7 @@ void executeTouchAction(TouchAction act, uint8_t pin) {
     if (showClockScreen || showWeatherScreen) {
       showClockScreen = false;
       showWeatherScreen = false;
+      updateDisplayBrightnessMode();
       setEmotion(EMOTION_IDLE);
       returnIdleAt = 0;
       soundPetSparkle();
@@ -327,6 +311,7 @@ void executeTouchAction(TouchAction act, uint8_t pin) {
       if (!timeSynced && WiFi.status() == WL_CONNECTED)
         syncTimeFromNTP();
     } else {
+      updateDisplayBrightnessMode();
       setEmotion(EMOTION_IDLE);
       returnIdleAt = 0;
     }
@@ -340,6 +325,7 @@ void executeTouchAction(TouchAction act, uint8_t pin) {
       if (millis() - lastWeatherFetchAt > 600000UL || weatherCode < 0)
         fetchWeatherAsync();
     } else {
+      updateDisplayBrightnessMode();
       setEmotion(EMOTION_IDLE);
       returnIdleAt = 0;
     }
@@ -394,8 +380,10 @@ void executeTouchAction(TouchAction act, uint8_t pin) {
       setEmotion(EMOTION_IDLE);
     } else if (showClockScreen) {
       showClockScreen = false;
+      updateDisplayBrightnessMode();
     } else if (showWeatherScreen) {
       showWeatherScreen = false;
+      updateDisplayBrightnessMode();
     } else if (currentEmotion != EMOTION_IDLE && !busyProcessing) {
       setEmotion(EMOTION_IDLE);
       emotionAutoReturnAt = 0;
@@ -468,9 +456,20 @@ static void updateOneTouch(TouchSensor &ts, uint32_t now) {
                       ts.pin);
         showClockScreen = false;
         showWeatherScreen = false;
+        updateDisplayBrightnessMode();
         ts.holdHandled = true;
         ts.sleepHandled = true;
         ts.pendingSingleTap = false;
+        bool isCheek = (ts.pin == PIN_TOUCH_LEFT || ts.pin == PIN_TOUCH_RIGHT);
+        if (isCheek && !isKiwiAngry() && !busyProcessing &&
+            !inCircadianSleep && !manualSleep &&
+            cheekTapCount > 0 &&
+            (now - lastCheekTouchAt < TICKLE_CHEEK_WINDOW_MS)) {
+          cheekTapCount++;
+          lastCheekTouchAt = now;
+        } else if (isCheek) {
+          cheekTapCount = 0;
+        }
         setEmotion(EMOTION_IDLE);
         returnIdleAt = 0;
         soundPetSparkle();
@@ -499,22 +498,49 @@ static void updateOneTouch(TouchSensor &ts, uint32_t now) {
           triggerTouchBlink(now);
         }
 
-        // Left-Right alternating apology combo when angry
+        // Left-Right alternating apology combo when angry (leave holdHandled unset
+        // until reconciled so simultaneous dual-cheek hold can trigger handleAngryFeedAttempt)
         if (isKiwiAngry() &&
             (ts.pin == PIN_TOUCH_LEFT || ts.pin == PIN_TOUCH_RIGHT)) {
-          ts.holdHandled = true; // Mark handled so release never triggers
-                                 // single-tap or tickle actions!
-          ts.sleepHandled = true;
-          ts.pendingSingleTap = false;
-          cheekTapCount = 0; // Prevent tickle counter from accumulating
+          touchL.pendingSingleTap = false;
+          touchR.pendingSingleTap = false;
+          cheekTapCount = 0;
           if (checkCheekComboLRLR()) {
             Serial.println("[TOUCH] Alternating cheek combo triggered! "
                            "Reconciling angry Kiwi!");
+            ts.holdHandled = true;
+            ts.sleepHandled = true;
             lastTickleTriggeredAt = now;
             s_tickleSuppressUntil = now + 10000UL; // 10s cooldown for tickle mode
             reconcileKiwi();
           }
           return;
+        }
+
+        // Rapid 4-tap cheek tickle tracking independent of tap/double-tap mappings
+        if ((ts.pin == PIN_TOUCH_LEFT || ts.pin == PIN_TOUCH_RIGHT) &&
+            !busyProcessing && !s_inTickleSpeech && !isSpeechPlaying() &&
+            !isKiwiHungry()) {
+          if (now - lastCheekTouchAt < TICKLE_CHEEK_WINDOW_MS) {
+            cheekTapCount++;
+          } else {
+            cheekTapCount = 1;
+          }
+          lastCheekTouchAt = now;
+          if (cheekTapCount >= 4 &&
+              (s_tickleSuppressUntil == 0 ||
+               (int32_t)(now - s_tickleSuppressUntil) >= 0) &&
+              now - lastTickleTriggeredAt > TICKLE_COOLDOWN_MS) {
+            showClockScreen = false;
+            showWeatherScreen = false;
+            updateDisplayBrightnessMode();
+            touchL.pendingSingleTap = false;
+            touchR.pendingSingleTap = false;
+            ts.holdHandled = true;
+            ts.sleepHandled = true;
+            triggerTickleMode();
+            return;
+          }
         }
       }
     } else {
@@ -538,6 +564,11 @@ static void updateOneTouch(TouchSensor &ts, uint32_t now) {
           ts.pendingSingleTap = false;
           return;
         }
+        if (isKiwiAngry() &&
+            (ts.pin == PIN_TOUCH_LEFT || ts.pin == PIN_TOUCH_RIGHT)) {
+          ts.pendingSingleTap = false;
+          return;
+        }
 
         TouchAction dblAct = getDoubleTapAction(ts.pin);
         bool isSecondTap = ts.pendingSingleTap &&
@@ -547,7 +578,6 @@ static void updateOneTouch(TouchSensor &ts, uint32_t now) {
 
         if (isSecondTap) {
           ts.pendingSingleTap = false;
-          cheekTapCount = 0;
           Serial.printf("[TOUCH] Pin %d DOUBLE TAP triggered!\n", ts.pin);
           executeTouchAction(dblAct, ts.pin);
         } else if (dblAct == TOUCH_ACT_NONE) {
@@ -601,12 +631,12 @@ static void updateOneTouch(TouchSensor &ts, uint32_t now) {
     }
 
     if (ts.pin == PIN_TOUCH_LEFT && held >= TOUCH_HOLD_MS && !ts.holdHandled &&
-        !busyProcessing && !isSpeechPlaying()) {
+        !busyProcessing && !isSpeechPlaying() && !isKiwiAngry()) {
       ts.holdHandled = true;
       executeTouchAction(touchActLeftHold, ts.pin);
     }
     if (ts.pin == PIN_TOUCH_RIGHT && held >= TOUCH_HOLD_MS && !ts.holdHandled &&
-        !busyProcessing && !isSpeechPlaying()) {
+        !busyProcessing && !isSpeechPlaying() && !isKiwiAngry()) {
       ts.holdHandled = true;
       executeTouchAction(touchActRightHold, ts.pin);
     }
@@ -631,6 +661,7 @@ static void updateOneTouch(TouchSensor &ts, uint32_t now) {
       sleepyFallAsleepCancel();
       showClockScreen = false;
       showWeatherScreen = false;
+      updateDisplayBrightnessMode();
       if (!inCircadianSleep && !manualSleep && !sleepyFallAsleepIsActive()) {
         startManualSleep();
         Serial.println("[TOUCH] Held to sleep -> Kiwi is falling asleep (Z Z)");

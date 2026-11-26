@@ -285,15 +285,22 @@ void loadConfig() {
 
   float defCutoff = 0.90f;
   wakeWordCutoff = prefs.getFloat("ww_cutoff", defCutoff);
-  if (fabsf(wakeWordCutoff - 0.40f) < 0.05f ||
-      fabsf(wakeWordCutoff - 0.82f) < 0.005f) {
-    wakeWordCutoff = 0.90f;
+  if (!prefs.getBool("ww_mig_v1", false)) {
+    bool didMig = false;
+    if (fabsf(wakeWordCutoff - 0.40f) < 0.05f ||
+        fabsf(wakeWordCutoff - 0.82f) < 0.005f) {
+      wakeWordCutoff = 0.90f;
+      didMig = true;
+    }
     prefs.end();
     prefs.begin("myrobot", false);
-    prefs.putFloat("ww_cutoff", 0.90f);
+    if (didMig) {
+      prefs.putFloat("ww_cutoff", 0.90f);
+      Serial.println("[CONFIG] Migrated wake-word cutoff to 0.90 (Alexa)");
+    }
+    prefs.putBool("ww_mig_v1", true);
     prefs.end();
     prefs.begin("myrobot", true);
-    Serial.println("[CONFIG] Migrated wake-word cutoff to 0.90 (Alexa)");
   }
 
   rgbLedEnabled = prefs.getBool("rgb_en", true);
@@ -346,18 +353,18 @@ void loadConfig() {
 
   touchActTopTap =
       (TouchAction)prefs.getInt("act_top_tap", (int)TOUCH_ACT_LISTEN);
-  if (touchActTopTap >= TOUCH_ACT_NONE) {
+  if ((int)touchActTopTap < 0 || (int)touchActTopTap > (int)TOUCH_ACT_NONE) {
     touchActTopTap = TOUCH_ACT_LISTEN;
   }
   touchActTopDbl =
       (TouchAction)prefs.getInt("act_top_dbl", (int)TOUCH_ACT_NONE);
+  if ((int)touchActTopDbl < 0 || (int)touchActTopDbl > (int)TOUCH_ACT_NONE) {
+    touchActTopDbl = TOUCH_ACT_NONE;
+  }
   touchActTopHold =
       (TouchAction)prefs.getInt("act_top_hld", (int)TOUCH_ACT_CYCLE_SKIN);
-  if (touchActTopHold >= TOUCH_ACT_NONE) {
+  if ((int)touchActTopHold < 0 || (int)touchActTopHold > (int)TOUCH_ACT_NONE) {
     touchActTopHold = TOUCH_ACT_CYCLE_SKIN;
-  }
-  if (touchActTopDbl == TOUCH_ACT_CYCLE_SKIN) {
-    touchActTopDbl = TOUCH_ACT_NONE;
   }
   touchActLeftTap =
       (TouchAction)prefs.getInt("act_lt_tap", (int)TOUCH_ACT_DISMISS);
@@ -560,8 +567,10 @@ void saveConfigImmediate() {
 
   if (micSlotLocked) {
     prefs.putInt("micslot", micSlot);
+    prefs.putBool("micslot_lock", true);
   } else {
     prefs.remove("micslot");
+    prefs.putBool("micslot_lock", false);
   }
 
   prefs.putString("hostname", mdnsHostname);

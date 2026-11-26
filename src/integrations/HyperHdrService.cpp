@@ -2,6 +2,7 @@
 #include "integrations/WledService.h"
 #include "config/AppConfig.h"
 #include "core/Timing.h"
+#include "net/WifiManager.h"
 #include <ESPmDNS.h>
 #include <HTTPClient.h>
 #include <WiFi.h>
@@ -82,58 +83,49 @@ static void hyperHdrDiscoveryTask(void *param) {
   s_hyperHdrDiscoveryActive = true;
   Serial.println("[HYPERHDR] Auto-discovering HyperHDR in background via mDNS...");
 
-  // 1. Primary mDNS service query for HyperHDR
-  int n = MDNS.queryService("hyperhdr-http", "tcp");
-  if (n > 0) {
-    String foundIp = MDNS.address(0).toString();
-    uint16_t p = MDNS.port(0);
-    uint16_t foundPort = (p > 0) ? p : 8090;
-    String host = MDNS.hostname(0);
+  String foundIp = "";
+  uint16_t foundPort = 8090;
+  String foundHost = "";
+
+  if (mdnsQueryLock(15000)) {
+    // 1. Primary mDNS service query for HyperHDR
+    int n = MDNS.queryService("hyperhdr-http", "tcp");
+    if (n > 0) {
+      foundIp = MDNS.address(0).toString();
+      uint16_t p = MDNS.port(0);
+      foundPort = (p > 0) ? p : 8090;
+      foundHost = MDNS.hostname(0);
+    } else {
+      // 2. Fallback query for hyperiond-http
+      n = MDNS.queryService("hyperiond-http", "tcp");
+      if (n > 0) {
+        foundIp = MDNS.address(0).toString();
+        uint16_t p = MDNS.port(0);
+        foundPort = (p > 0) ? p : 8090;
+        foundHost = MDNS.hostname(0);
+      } else {
+        // 3. Fallback: Hostname query for 'hyperhdr.local'
+        IPAddress hostIp = MDNS.queryHost("hyperhdr", 800);
+        if (hostIp != INADDR_NONE && hostIp != IPAddress(0, 0, 0, 0)) {
+          foundIp = hostIp.toString();
+          foundPort = 8090;
+          foundHost = "hyperhdr.local";
+        }
+      }
+    }
+    mdnsQueryUnlock();
+  }
+
+  if (foundIp.length() > 0) {
     if (hyperLock()) {
       s_discoveredHyperHdrIp = foundIp;
       s_discoveredHyperHdrPort = foundPort;
       hyperUnlock();
     }
     Serial.printf("[HYPERHDR] Found HyperHDR: %s:%u (%s)\n",
-                  foundIp.c_str(), foundPort, host.c_str());
-    addTerminalLog("[HYPERHDR] Service found at " + foundIp + ":" + String(foundPort));
-    s_hyperHdrDiscoveryActive = false;
-    s_hyperHdrDiscoveryTaskHandle = NULL;
-    vTaskDelete(NULL);
-    return;
-  }
-
-  // 2. Fallback query for hyperiond-http
-  n = MDNS.queryService("hyperiond-http", "tcp");
-  if (n > 0) {
-    String foundIp = MDNS.address(0).toString();
-    uint16_t p = MDNS.port(0);
-    uint16_t foundPort = (p > 0) ? p : 8090;
-    if (hyperLock()) {
-      s_discoveredHyperHdrIp = foundIp;
-      s_discoveredHyperHdrPort = foundPort;
-      hyperUnlock();
-    }
-    Serial.printf("[HYPERHDR] Found Hyperion service: %s:%u\n",
-                  foundIp.c_str(), foundPort);
-    addTerminalLog("[HYPERHDR] Server found at " + foundIp);
-    s_hyperHdrDiscoveryActive = false;
-    s_hyperHdrDiscoveryTaskHandle = NULL;
-    vTaskDelete(NULL);
-    return;
-  }
-
-  // 3. Fallback: Hostname query for 'hyperhdr.local'
-  IPAddress hostIp = MDNS.queryHost("hyperhdr", 800);
-  if (hostIp != INADDR_NONE && hostIp != IPAddress(0, 0, 0, 0)) {
-    String foundIp = hostIp.toString();
-    if (hyperLock()) {
-      s_discoveredHyperHdrIp = foundIp;
-      s_discoveredHyperHdrPort = 8090;
-      hyperUnlock();
-    }
-    Serial.printf("[HYPERHDR] Resolved host 'hyperhdr.local': %s:8090\n", foundIp.c_str());
-    addTerminalLog("[HYPERHDR] Server found at " + foundIp);
+                  foundIp.c_str(), foundPort, foundHost.c_str());
+    addTerminalLog("[HYPERHDR] Service found at " + foundIp + ":" +
+                   String(foundPort));
   } else {
     Serial.println("[HYPERHDR] No HyperHDR server found on network (scan complete)");
   }

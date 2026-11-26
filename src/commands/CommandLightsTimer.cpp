@@ -31,13 +31,18 @@ bool handleTimerCommand(const String &qIn) {
   if (hasWord(q, {"stop", "cancel", "off", "dismiss"}) ||
       hasAny(q,
              {"band", "hatao", "rok", "बंद", "रोको", "हटाओ", "कैंसिल", "स्टॉप"})) {
+    bool prevCancel = cancelRequest;
     if (isRobotTimerRinging()) {
       stopRobotTimerAlarm();
+      if (!prevCancel)
+        cancelRequest = false;
       speakText((sttLang == "hi") ? "Alarm band kar diya!" : "Alarm stopped!");
       return true;
     }
     if (isRobotTimerActive()) {
       cancelRobotTimer();
+      if (!prevCancel)
+        cancelRequest = false;
       speakText((sttLang == "hi") ? "Timer cancel kar diya!"
                                   : "Timer cancelled!");
       return true;

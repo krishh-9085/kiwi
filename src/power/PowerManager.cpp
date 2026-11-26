@@ -4,6 +4,7 @@
 #include "config/AppConfig.h"
 #include "config/ConfigManager.h"
 #include "face/AnimationEngine.h"
+#include "face/BootWakeAnim.h"
 #include "face/FaceDisplay.h"
 #include "face/FaceEngine.h"
 #include "face/SleepyWakeAnim.h"
@@ -53,6 +54,8 @@ bool powerIsHardwareSleeping() { return s_inHardwareSleep; }
 // SLEEP REQUEST GATE (Hardware Eco Deep/Light Sleep Only)
 // ============================================================
 bool powerIsSleepRequested() {
+  if (!bootCompleted)
+    return false;
   if (!ecoSleepEnabled)
     return false;
   if (!manualSleep && !inCircadianSleep)
@@ -239,6 +242,7 @@ void powerInit() {
       suppressBootGreeting = !greetingsEnabled;
       skipBootWakeAnim = true;
       bootCompleted = true;
+      bootWakeForceDone();
       wakeFromDeepSleepWakeAnim = true;
       circadianTempWakeUntil = millis() + CIRCADIAN_TEMP_WAKE_MS;
     } else if (cause == ESP_SLEEP_WAKEUP_GPIO || cause == ESP_SLEEP_WAKEUP_EXT0) {
@@ -250,6 +254,7 @@ void powerInit() {
       suppressBootGreeting = true;
       skipBootWakeAnim = true;
       bootCompleted = true;
+      bootWakeForceDone();
       wakeFromDeepSleepWakeAnim = true;
       circadianTempWakeUntil = millis() + CIRCADIAN_TEMP_WAKE_MS;
     }
@@ -313,7 +318,7 @@ void powerUpdate() {
   // --- PART B: Idle OLED Dimming (60 s) ---
   bool faceActivity = ((now - lastUserInteractionAt) < 60000) ||
                       kiwiIsOutputting() || isTonePlaying() ||
-                      (soundReactiveEnabled && soundLevelGet() > NOISE_GATE_THRESHOLD) ||
+                      (soundReactiveEnabled && soundLevelGet() > SOUND_REACT_ACTIVE_LEVEL) ||
                       sleepyWakeIsActive() || sleepyFallAsleepIsActive() ||
                       animationIsActive() || showClockScreen || showWeatherScreen || bannerActive ||
                       (currentEmotion != EMOTION_IDLE && currentEmotion != EMOTION_SLEEPING);

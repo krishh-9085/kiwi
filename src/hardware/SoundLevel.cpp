@@ -1,7 +1,7 @@
 #include "hardware/SoundLevel.h"
+#include "config/AppConfig.h"
 #include "hardware/AudioEngine.h"
 #include "hardware/WakeWordEngine.h"
-#include "config/AppConfig.h"
 #include <driver/i2s_std.h>
 #include <math.h>
 
@@ -38,17 +38,11 @@ void soundLevelUpdateListening(float batchMeanAbs, bool speechLocked) {
   s_listenLevel = cur;
 }
 
-float soundLevelGetListening() {
-  return s_listenLevel;
-}
+float soundLevelGetListening() { return s_listenLevel; }
 
-bool soundLevelIsSpeechLocked() {
-  return s_listenSpeechLocked;
-}
+bool soundLevelIsSpeechLocked() { return s_listenSpeechLocked; }
 
-float soundLevelGet() {
-  return s_smoothedLevel;
-}
+float soundLevelGet() { return s_smoothedLevel; }
 
 void soundLevelTick() {
   uint32_t now = millis();
@@ -65,7 +59,8 @@ void soundLevelTick() {
     return;
   }
 
-  // If wake-word engine or pre-wake bridge is actively reading I2S, don't compete for rxHandle
+  // If wake-word engine or pre-wake bridge is actively reading I2S, don't
+  // compete for rxHandle
   if (wakeWordIsListening() || preWakeIsBridgeActive()) {
     return;
   }
@@ -110,7 +105,8 @@ void soundLevelTick() {
     rawLevel = 1.0f;
   }
 
-  // Smooth with attack and release: rise quickly (alpha 0.5) and fall slowly (alpha 0.08)
+  // Smooth with attack and release: rise quickly (alpha 0.5) and fall slowly
+  // (alpha 0.08)
   if (rawLevel > s_smoothedLevel) {
     s_smoothedLevel += 0.5f * (rawLevel - s_smoothedLevel);
   } else {
@@ -143,10 +139,13 @@ void soundLevelFeedSamples(const int16_t *pcm, int count) {
   float meanAbs = sumAbs / (float)count;
   float scaled = meanAbs * SOUND_REACT_GAIN;
   float net = scaled - (float)NOISE_GATE_THRESHOLD;
-  if (net < 0.0f) net = 0.0f;
+  if (net < 0.0f)
+    net = 0.0f;
   float rawLevel = net / 16000.0f;
-  if (rawLevel < 0.0f) rawLevel = 0.0f;
-  else if (rawLevel > 1.0f) rawLevel = 1.0f;
+  if (rawLevel < 0.0f)
+    rawLevel = 0.0f;
+  else if (rawLevel > 1.0f)
+    rawLevel = 1.0f;
 
   if (rawLevel > s_smoothedLevel) {
     s_smoothedLevel += 0.5f * (rawLevel - s_smoothedLevel);
@@ -157,4 +156,3 @@ void soundLevelFeedSamples(const int16_t *pcm, int count) {
     s_smoothedLevel = 0.0f;
   }
 }
-

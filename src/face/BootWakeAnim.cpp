@@ -39,6 +39,8 @@ bool bootWakeTick() {
 
 bool bootWakeDone() { return (bootState == BootWakeState::Done); }
 
+void bootWakeForceDone() { bootState = BootWakeState::Done; }
+
 void bootWakeDraw(Adafruit_SSD1306 &d) {
   if (!oledOK || bootState == BootWakeState::Idle)
     return;

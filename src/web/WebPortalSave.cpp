@@ -199,7 +199,7 @@ void handleSave() {
   if (server.hasArg("hunger_en")) {
     hungerEnabled = parsePortalBool(server.arg("hunger_en"));
     if (!hungerEnabled && (isKiwiHungry() || isKiwiAngry())) {
-      reconcileKiwi();
+      clearHungerState(true);
     }
   }
   if (server.hasArg("snd_react")) {

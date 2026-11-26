@@ -6,7 +6,7 @@ import {
   Zap, Moon, Volume2, VolumeX, Sun,
   Mic, MicOff, Send, SlidersHorizontal,
   Radio, Sparkles, Clock, RotateCw,
-  Cpu, Wifi, WifiOff
+  Cpu, Wifi, WifiOff, Utensils, Heart
 } from 'lucide-react'
 
 import FluxSelect from './FluxSelect'
@@ -143,6 +143,10 @@ export default function HomeView({
   config,
 
   connected = true,
+
+  isListening: isListeningProp,
+
+  onMicToggle,
 
   onTriggerAction,
 
@@ -292,7 +296,7 @@ export default function HomeView({
 
   const isBusy = status?.busy
 
-  const isListening = status?.state?.toLowerCase().includes('listen') || status?.emotion === 'listening'
+  const isListening = isListeningProp ?? Boolean(status?.state?.toLowerCase().includes('listen') || status?.emotion === 'listening')
 
   const isSpeaking = status?.state?.toLowerCase().includes('speak') || status?.emotion === 'speaking'
 
@@ -318,6 +322,7 @@ export default function HomeView({
 
 
   const [localGreetings, setLocalGreetings] = useState(null)
+  const [localHungerEnabled, setLocalHungerEnabled] = useState(null)
   const [localWwEnabled, setLocalWwEnabled] = useState(null)
   const [localBoredomEnabled, setLocalBoredomEnabled] = useState(null)
   const [localBoredomMins, setLocalBoredomMins] = useState(null)
@@ -325,6 +330,9 @@ export default function HomeView({
   useEffect(() => {
     if (status?.greetings?.enabled != null) setLocalGreetings(status.greetings.enabled)
     else if (config?.greetings?.enabled != null) setLocalGreetings((prev) => (prev === null ? config.greetings.enabled : prev))
+
+    if (status?.hunger_en != null) setLocalHungerEnabled(status.hunger_en)
+    else if (config?.hunger?.enabled != null) setLocalHungerEnabled((prev) => (prev === null ? config.hunger.enabled : prev))
 
     if (status?.wakeWord?.enabled != null) setLocalWwEnabled(status.wakeWord.enabled)
     else if (config?.wakeWord?.enabled != null) setLocalWwEnabled((prev) => (prev === null ? config.wakeWord.enabled : prev))
@@ -360,8 +368,15 @@ export default function HomeView({
   const boredomEnabled = localBoredomEnabled ?? status?.boredom ?? config?.boredom?.enabled ?? true
   const boredomMins = String(localBoredomMins ?? status?.boredom_mins ?? config?.boredom?.minutes ?? 2)
 
-  // Greetings state (CRITICAL)
-  const greetingsEnabled = localGreetings ?? status?.greetings?.enabled ?? config?.greetings?.enabled ?? true
+  // Greetings state (CRITICAL - matches firmware default false until status/config arrives)
+  const greetingsEnabled = localGreetings ?? status?.greetings?.enabled ?? config?.greetings?.enabled ?? false
+
+  // Hunger state (matches firmware default true until status/config arrives)
+  const hungerEnabled = localHungerEnabled ?? status?.hunger_en ?? config?.hunger?.enabled ?? true
+  const hungerState = status?.hunger || 'satisfied'
+  const hungerSec = Math.max(0, Number(status?.hunger_sec ?? 0))
+  const hungerMeal = status?.meal && status.meal !== 'generic' ? status.meal : 'snack'
+  const hungerTimerStr = `${String(Math.floor(hungerSec / 60)).padStart(2, '0')}:${String(hungerSec % 60).padStart(2, '0')}`
 
   // Circadian & Timezone state
   const circEnabled = status?.circadian?.enabled ?? config?.circadian?.enabled ?? true
@@ -419,11 +434,27 @@ export default function HomeView({
 
 
   const handleMicToggle = async () => {
-    if (status?.busy || status?.emotion === 'listening' || status?.state?.toLowerCase().includes('listen')) {
-      await onTriggerAction('/do?record=0')
+    if (onMicToggle) {
+      await onMicToggle()
+      return
+    }
+    if (isListening) {
+      const res = await onTriggerAction('/do?record=0')
+      if (!res || res.ok === false) {
+        onToast('Failed to stop listening — check connection')
+        return
+      }
       onToast('Listening stopped')
     } else {
-      await onTriggerAction('/do?record=1')
+      if (!connected) {
+        onToast('Kiwi is offline — cannot start listening')
+        return
+      }
+      const res = await onTriggerAction('/do?record=1')
+      if (!res || res.ok === false) {
+        onToast('Failed to reach Kiwi')
+        return
+      }
       onToast('Kiwi is listening...')
     }
   }
@@ -436,13 +467,23 @@ export default function HomeView({
 
     if (!q) return
 
+    if (!connected) {
+      onToast('Kiwi is offline — check connection before sending')
+      return
+    }
+
     setSendingPrompt(true)
 
-    await onTriggerAction(`/do?ask=${encodeURIComponent(q)}`)
-
-    setPromptText('')
+    const res = await onTriggerAction(`/do?ask=${encodeURIComponent(q)}`)
 
     setSendingPrompt(false)
+
+    if (!res || res.ok === false) {
+      onToast(res?.reason === 'ota_in_progress' ? 'OTA update in progress' : 'Failed to send prompt to Kiwi')
+      return
+    }
+
+    if (!textToSend) setPromptText('')
 
     onToast(`Sent prompt: "${q}"`)
 
@@ -472,6 +513,39 @@ export default function HomeView({
     setLocalGreetings(checked)
     await onTriggerAction(`/do?greet_en=${checked ? '1' : '0'}`)
     onToast(`Greetings ${checked ? 'Enabled' : 'Disabled'}`)
+  }
+
+  const handleHungerToggle = async (checked) => {
+    setLocalHungerEnabled(checked)
+    await onTriggerAction(`/do?hunger_en=${checked ? '1' : '0'}`)
+    onToast(`Meal & Hunger Routine ${checked ? 'Enabled' : 'Disabled'}`)
+  }
+
+  const handleFeedKiwi = async () => {
+    const res = await onTriggerAction('/do?feed=1')
+    if (res?.fed) {
+      onToast('Yummy! Kiwi is fed and happy!')
+    } else {
+      onToast(hungerState === 'angry' ? 'Kiwi is angry! Apologize or tickle cheeks first.' : 'Kiwi is already full!')
+    }
+  }
+
+  const handleApologizeKiwi = async () => {
+    const res = await onTriggerAction('/do?apologize=1')
+    if (res?.reconciled) {
+      onToast('Kiwi forgave you and is giggling!')
+    } else {
+      onToast('Kiwi is not angry right now.')
+    }
+  }
+
+  const handleTriggerSnack = async () => {
+    if (!hungerEnabled) {
+      onToast('Enable Meal & Hunger Routine first')
+      return
+    }
+    await onTriggerAction('/do?hunger=snack')
+    onToast('Kiwi feels hungry! Feed within 2 minutes.')
   }
 
   const handleCircadianToggle = async (checked) => {
@@ -797,6 +871,155 @@ export default function HomeView({
     sleepBadgeText = 'OVERRIDE'
     sleepBadgeColor = '#0284C7'
     sleepBadgeBg = 'rgba(14, 165, 233, 0.15)'
+  }
+
+  const renderHungerPanel = (isCompact = true) => {
+    const isHungry = hungerEnabled && hungerState === 'hungry'
+    const isAngry = hungerEnabled && hungerState === 'angry'
+    const badgeBg = !hungerEnabled
+      ? 'var(--card-muted)'
+      : isAngry
+        ? 'rgba(239, 68, 68, 0.16)'
+        : isHungry
+          ? 'rgba(245, 158, 11, 0.18)'
+          : 'rgba(16, 185, 129, 0.15)'
+    const badgeColor = !hungerEnabled
+      ? 'var(--text-muted)'
+      : isAngry
+        ? '#EF4444'
+        : isHungry
+          ? '#D97706'
+          : '#10B981'
+    const badgeLabel = !hungerEnabled
+      ? 'OFF'
+      : isAngry
+        ? 'ANGRY'
+        : isHungry
+          ? `HUNGRY · ${hungerTimerStr}`
+          : 'SATISFIED'
+
+    return (
+      <div style={{
+        background: isCompact ? 'var(--card-subtle)' : 'transparent',
+        border: isCompact ? `1px solid ${isAngry ? 'rgba(239,68,68,0.35)' : (isHungry ? 'rgba(245,158,11,0.38)' : 'var(--border-light)')}` : 'none',
+        borderRadius: isCompact ? '12px' : 0,
+        padding: isCompact ? '10px 12px' : 0,
+        marginBottom: isCompact ? '10px' : 0
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+          <label className="flux-toggle" style={{ '--toggle-accent': isAngry ? '#EF4444' : '#F59E0B' }}>
+            <input
+              type="checkbox"
+              checked={hungerEnabled}
+              onChange={(e) => handleHungerToggle(e.target.checked)}
+            />
+            <span className="flux-toggle-slider" />
+            <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-dark)', display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+              <Utensils size={12} color={isAngry ? '#EF4444' : (hungerEnabled ? '#F59E0B' : 'var(--text-muted)')} />
+              <span>Meal &amp; Hunger</span>
+            </span>
+          </label>
+
+          <span style={{
+            fontSize: '9.5px',
+            fontWeight: 800,
+            padding: '2px 7px',
+            borderRadius: '999px',
+            background: badgeBg,
+            color: badgeColor,
+            fontVariantNumeric: 'tabular-nums',
+            whiteSpace: 'nowrap'
+          }}>
+            {badgeLabel}
+          </span>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap' }}>
+          <span style={{ fontSize: '11px', color: 'var(--text-muted)', lineHeight: 1.35, flex: 1, minWidth: '140px' }}>
+            {!hungerEnabled
+              ? 'Meal reminders paused.'
+              : isAngry
+                ? `Missed ${hungerMeal}! Tickle cheeks or apologize to make up.`
+                : isHungry
+                  ? `Asking for ${hungerMeal}! Hold cheeks or feed within ${hungerTimerStr}.`
+                  : 'Breakfast 8:30 · Lunch 1:00 · Dinner 8:00'}
+          </span>
+
+          {hungerEnabled && (
+            isHungry ? (
+              <button
+                type="button"
+                onClick={handleFeedKiwi}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '5px',
+                  padding: '5px 11px',
+                  borderRadius: '999px',
+                  border: '1px solid rgba(245, 158, 11, 0.45)',
+                  background: 'linear-gradient(135deg, #F59E0B 0%, #D97706 100%)',
+                  color: '#FFFFFF',
+                  fontSize: '11px',
+                  fontWeight: 700,
+                  fontFamily: 'inherit',
+                  cursor: 'pointer',
+                  flexShrink: 0
+                }}
+              >
+                <Utensils size={11} />
+                <span>Feed Now</span>
+              </button>
+            ) : isAngry ? (
+              <button
+                type="button"
+                onClick={handleApologizeKiwi}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '5px',
+                  padding: '5px 11px',
+                  borderRadius: '999px',
+                  border: '1px solid rgba(239, 68, 68, 0.45)',
+                  background: 'linear-gradient(135deg, #EF4444 0%, #DC2626 100%)',
+                  color: '#FFFFFF',
+                  fontSize: '11px',
+                  fontWeight: 700,
+                  fontFamily: 'inherit',
+                  cursor: 'pointer',
+                  flexShrink: 0
+                }}
+              >
+                <Heart size={11} />
+                <span>Apologize</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={handleTriggerSnack}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  padding: '4px 9px',
+                  borderRadius: '999px',
+                  border: '1px solid var(--border-light)',
+                  background: 'var(--card-white)',
+                  color: 'var(--text-dark)',
+                  fontSize: '10.5px',
+                  fontWeight: 700,
+                  fontFamily: 'inherit',
+                  cursor: 'pointer',
+                  flexShrink: 0
+                }}
+              >
+                <Utensils size={10} color="#F59E0B" />
+                <span>Ask Snack</span>
+              </button>
+            )
+          )}
+        </div>
+      </div>
+    )
   }
 
   const renderSleepSchedulePanel = (isCompact = true) => (
@@ -1131,16 +1354,16 @@ export default function HomeView({
                   </span>
                 </div>
 
-                {/* Stats Grid */}
+                {/* Stats Grid (2x2 avoids horizontal clipping on narrow laptop widths) */}
                 <div style={{
                   display: 'grid',
-                  gridTemplateColumns: vitals.hasPsram ? '72px 1fr 1fr 1fr' : '85px 1fr 1fr',
-                  gap: '12px',
+                  gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+                  gap: '10px 14px',
                   marginTop: '12px',
                   alignItems: 'center'
                 }}>
                   {/* CPU Core Temp */}
-                  <div>
+                  <div style={{ minWidth: 0 }}>
                     <span style={{ fontSize: '11px', opacity: 0.8, fontWeight: 600, display: 'block' }}>CPU Temp</span>
                     <span style={{ fontSize: '22px', fontWeight: 800, letterSpacing: '-0.02em', color: vitals.tempColor, fontVariantNumeric: 'tabular-nums' }}>
                       {vitals.cpuTemp}°<span style={{ fontSize: '13px', fontWeight: 600, opacity: 0.85 }}>C</span>
@@ -1148,7 +1371,7 @@ export default function HomeView({
                   </div>
 
                   {/* Internal SRAM Usage */}
-                  <div>
+                  <div style={{ minWidth: 0 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '3px' }}>
                       <span style={{ fontSize: '11px', opacity: 0.8, fontWeight: 600 }}>SRAM (Heap)</span>
                       <span style={{ fontSize: '11px', fontWeight: 700, color: '#38BDF8', fontVariantNumeric: 'tabular-nums' }}>
@@ -1178,7 +1401,7 @@ export default function HomeView({
 
                   {/* External PSRAM Usage */}
                   {vitals.hasPsram && (
-                    <div>
+                    <div style={{ minWidth: 0 }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '3px' }}>
                         <span style={{ fontSize: '11px', opacity: 0.8, fontWeight: 600, color: '#34D399' }}>2MB PSRAM</span>
                         <span style={{ fontSize: '11px', fontWeight: 700, color: '#34D399', fontVariantNumeric: 'tabular-nums' }}>
@@ -1208,7 +1431,7 @@ export default function HomeView({
                   )}
 
                   {/* Flash App Partition Usage */}
-                  <div>
+                  <div style={{ minWidth: 0 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '3px' }}>
                       <span style={{ fontSize: '11px', opacity: 0.8, fontWeight: 600 }}>Flash App</span>
                       <span style={{ fontSize: '11px', fontWeight: 700, color: '#A78BFA', fontVariantNumeric: 'tabular-nums' }}>
@@ -1249,21 +1472,47 @@ export default function HomeView({
                   placeholder={isListening ? 'Listening...' : 'Ask Kiwi anything...'}
                   style={{
                     flex: 1,
+                    minWidth: 0,
                     height: '38px',
                     boxSizing: 'border-box',
                     padding: '0 16px',
                     borderRadius: '999px',
                     background: 'var(--card-muted)',
-                    border: '1px solid var(--border-light)',
+                    border: `1px solid ${isListening ? 'rgba(16, 185, 129, 0.5)' : 'var(--border-light)'}`,
                     color: 'var(--text-dark)',
                     fontSize: '13px',
                     outline: 'none'
                   }}
                 />
                 <button
+                  type="button"
+                  onClick={handleMicToggle}
+                  aria-label={isListening ? 'Stop voice listening' : 'Start voice listening'}
+                  title={isListening ? 'Stop listening' : 'Tap to speak'}
+                  style={{
+                    width: '38px',
+                    height: '38px',
+                    padding: 0,
+                    borderRadius: '50%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0,
+                    cursor: 'pointer',
+                    background: isListening ? 'rgba(239, 68, 68, 0.14)' : 'var(--card-muted)',
+                    border: `1px solid ${isListening ? 'rgba(239, 68, 68, 0.45)' : 'var(--border-light)'}`,
+                    color: isListening ? '#EF4444' : '#0EA5E9',
+                    boxShadow: isListening ? '0 0 12px rgba(239, 68, 68, 0.28)' : 'none',
+                    transition: 'all 0.16s ease'
+                  }}
+                >
+                  {isListening ? <MicOff size={15} /> : <Mic size={15} />}
+                </button>
+                <button
                   type="submit"
                   disabled={sendingPrompt || !promptText.trim()}
                   className="flux-btn"
+                  aria-label="Send prompt"
                   style={{
                     width: '38px',
                     height: '38px',
@@ -1349,13 +1598,19 @@ export default function HomeView({
                 </div>
               ) : null}
 
-              <div className="flux-progress-row">
-                <span className="flux-progress-val">85%</span>
-                <div className="flux-progress-track">
-                  <div className="flux-progress-fill-dark" style={{ width: '85%' }} />
-                </div>
-                <span className="flux-progress-label">Wi-Fi Signal</span>
-              </div>
+              {(() => {
+                const wifiUp = Boolean(connected && status?.wifi?.connected)
+                const wifiPct = wifiUp && status?.wifi?.pct != null ? Math.max(0, Math.min(100, status.wifi.pct)) : null
+                return (
+                  <div className="flux-progress-row">
+                    <span className="flux-progress-val">{wifiPct != null ? `${wifiPct}%` : '--'}</span>
+                    <div className="flux-progress-track">
+                      <div className="flux-progress-fill-dark" style={{ width: `${wifiPct ?? 0}%` }} />
+                    </div>
+                    <span className="flux-progress-label">{wifiUp ? 'Wi-Fi Signal' : 'Wi-Fi Off'}</span>
+                  </div>
+                )
+              })()}
 
               <div className="flux-progress-row">
                 <span className="flux-progress-val">{vol}%</span>
@@ -1390,9 +1645,11 @@ export default function HomeView({
 
                 <span style={{
 
-                  background: wwEnabled ? 'rgba(52,199,89,0.15)' : '#F3F4F6',
+                  background: wwEnabled ? 'rgba(52,199,89,0.15)' : 'var(--card-muted)',
 
-                  color: wwEnabled ? '#15803D' : 'var(--text-muted)',
+                  color: wwEnabled ? '#10B981' : 'var(--text-muted)',
+
+                  border: '1px solid ' + (wwEnabled ? 'rgba(16,185,129,0.28)' : 'var(--border-light)'),
 
                   fontSize: '10px',
 
@@ -1651,7 +1908,7 @@ export default function HomeView({
 
               <div style={{ fontSize: '11px', color: 'var(--text-muted)', lineHeight: 1.35, marginBottom: '8px' }}>
 
-                Kiwi bolega Good morning / afternoon / night, din mein ek baar.
+                Kiwi bolega Good morning / afternoon / evening / night, har time slot mein ek baar.
 
               </div>
 
@@ -1708,6 +1965,9 @@ export default function HomeView({
             </div>
 
 
+
+            {/* MEAL & HUNGER PANEL */}
+            {renderHungerPanel(true)}
 
             {/* PUT TO SLEEP / SCHEDULE PANEL */}
             {renderSleepSchedulePanel(true)}
@@ -2204,6 +2464,11 @@ export default function HomeView({
         </div>
 
 
+        {/* Mobile Meal & Hunger Routine Card */}
+        <div className="flux-white-card" style={{ padding: '14px 16px' }}>
+          {renderHungerPanel(false)}
+        </div>
+
         {/* Voice & Text Prompt Box for Mobile */}
         {(() => {
           const canSend = Boolean(promptText.trim()) && !sendingPrompt
@@ -2344,6 +2609,28 @@ export default function HomeView({
                   </button>
                 ))}
               </div>
+
+              {(status?.question || status?.answer) && (
+                <div style={{
+                  background: 'var(--card-subtle)',
+                  border: '1px solid var(--border-light)',
+                  borderRadius: '12px',
+                  padding: '10px 12px',
+                  fontSize: '12px',
+                  lineHeight: 1.45,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '4px',
+                  wordBreak: 'break-word'
+                }}>
+                  {status.question && (
+                    <div><strong style={{ color: 'var(--text-muted)' }}>You:</strong> {status.question}</div>
+                  )}
+                  {status.answer && (
+                    <div><strong style={{ color: 'var(--text-dark)' }}>Kiwi:</strong> {status.answer}</div>
+                  )}
+                </div>
+              )}
             </div>
           )
         })()}

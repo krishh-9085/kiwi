@@ -349,16 +349,33 @@ String cleanTranscribedQuestion(const String &rawQ) {
   if (!q.length())
     return q;
 
-  // Strip leading dialogue quotes (Whisper frequently wraps Hindi dialogue in quotes)
-  while (q.startsWith("\"") || q.startsWith("'") || q.startsWith("“") || q.startsWith("‘") ||
-         q.startsWith("`") || q.startsWith(",") || q.startsWith(" ")) {
-    q.remove(0, 1);
-    q.trim();
+  // Strip leading dialogue quotes (handles multi-byte UTF-8 smart quotes properly)
+  static const char *const leadQuotes[] = {"\"", "'", "\xE2\x80\x9C", "\xE2\x80\x98", "`", ",", " ", nullptr};
+  static const char *const trailQuotes[] = {"\"", "'", "\xE2\x80\x9D", "\xE2\x80\x99", "`", " ", nullptr};
+  bool trimmed = true;
+  while (trimmed && q.length() > 0) {
+    trimmed = false;
+    for (int i = 0; leadQuotes[i] != nullptr; i++) {
+      if (q.startsWith(leadQuotes[i])) {
+        q.remove(0, strlen(leadQuotes[i]));
+        q.trim();
+        trimmed = true;
+        break;
+      }
+    }
   }
-  while (q.endsWith("\"") || q.endsWith("'") || q.endsWith("”") || q.endsWith("’") ||
-         q.endsWith("`") || q.endsWith(" ")) {
-    q.remove(q.length() - 1);
-    q.trim();
+  trimmed = true;
+  while (trimmed && q.length() > 0) {
+    trimmed = false;
+    for (int i = 0; trailQuotes[i] != nullptr; i++) {
+      if (q.endsWith(trailQuotes[i])) {
+        size_t qLen = strlen(trailQuotes[i]);
+        q.remove(q.length() - qLen, qLen);
+        q.trim();
+        trimmed = true;
+        break;
+      }
+    }
   }
 
   // 1. Guard: If query is asking about the robot's identity or wake word (e.g. "Who is Alexa", "Kiwi kaun hai", "who are you"), do NOT strip!

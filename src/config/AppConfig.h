@@ -70,6 +70,7 @@ extern const char *NTP_SERVER_2;
 #define LLM_MAX_TOKENS 800
 #define TTS_MAX_CHARS 600
 #define NOISE_GATE_THRESHOLD 60
+#define SOUND_REACT_ACTIVE_LEVEL 0.05f
 #define SOUND_REACT_GAIN 1.0f
 #define SOUND_REACT_MAX_OPEN 3
 
@@ -251,6 +252,7 @@ extern uint32_t emotionAutoReturnAt;
 extern uint32_t lastEmotionChangeAt;
 extern uint32_t errorFaceUntil;
 extern uint32_t bootInfoUntil;
+extern volatile uint32_t statusOverlayUntil;
 extern uint32_t gFaceFrameMs;
 extern uint32_t lastFaceDrawAt;
 

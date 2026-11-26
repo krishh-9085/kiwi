@@ -34,7 +34,7 @@ static String getSmartActionInstruction() {
          "happy/sad/angry/cool/surprised/sleepy/wink/laughing/excited/curious/"
          "confused/proud/smug/scared/nervous/cute/crying/hearts/dizzy/singing/"
          "party/evil/shocked] "
-         "[ACTION: skin kiwi/pixel/lumina/mecha/emo] [ACTION: volume 0-100] "
+         "[ACTION: skin kiwi/pixel/lumina/mecha/emo/kiwi_plus] [ACTION: volume 0-100] "
          "[ACTION: timer SECS] "
          "[ACTION: sleep] (if user says so jao/sleep). Reply first, tag at "
          "end.";
@@ -142,6 +142,35 @@ static String extractSseDeltaToken(const String &json) {
           token += '\t';
 
         else if (next == 'r') {
+        }
+
+        else if (next == 'u' && i + 5 < (int)json.length()) {
+          long cp = strtol(json.substring(i + 2, i + 6).c_str(), NULL, 16);
+          if (cp >= 0xD800 && cp <= 0xDBFF && i + 11 < (int)json.length() &&
+              json[i + 6] == '\\' && json[i + 7] == 'u') {
+            long lo = strtol(json.substring(i + 8, i + 12).c_str(), NULL, 16);
+            if (lo >= 0xDC00 && lo <= 0xDFFF) {
+              cp = 0x10000 + ((cp - 0xD800) << 10) + (lo - 0xDC00);
+              i += 6;
+            }
+          }
+          if (cp < 0x80)
+            token += (char)cp;
+          else if (cp < 0x800) {
+            token += (char)(0xC0 | (cp >> 6));
+            token += (char)(0x80 | (cp & 0x3F));
+          } else if (cp < 0x10000) {
+            token += (char)(0xE0 | (cp >> 12));
+            token += (char)(0x80 | ((cp >> 6) & 0x3F));
+            token += (char)(0x80 | (cp & 0x3F));
+          } else {
+            token += (char)(0xF0 | (cp >> 18));
+            token += (char)(0x80 | ((cp >> 12) & 0x3F));
+            token += (char)(0x80 | ((cp >> 6) & 0x3F));
+            token += (char)(0x80 | (cp & 0x3F));
+          }
+          i += 6;
+          continue;
         }
 
         else {

@@ -4,6 +4,7 @@
 #include <WiFi.h>
 #include "config/AppConfig.h"
 #include "core/Timing.h"
+#include "net/WifiManager.h"
 #include <freertos/FreeRTOS.h>
 #include <freertos/semphr.h>
 #include <freertos/task.h>
@@ -141,33 +142,32 @@ static void wledDiscoveryTask(void *param) {
   s_wledDiscoveryActive = true;
   Serial.println("[WLED] Auto-discovering WLED in background via mDNS...");
 
-  // 1. Try discovering via standard WLED mDNS service '_wled._tcp'
-  int n = MDNS.queryService("wled", "tcp");
-  if (n > 0) {
-    String foundIp = MDNS.address(0).toString();
-    String host = MDNS.hostname(0);
-    if (wledLock()) {
-      discoveredWledIp = foundIp;
-      wledUnlock();
+  String foundIp = "";
+  String foundHost = "";
+  if (mdnsQueryLock(15000)) {
+    // 1. Try discovering via standard WLED mDNS service '_wled._tcp'
+    int n = MDNS.queryService("wled", "tcp");
+    if (n > 0) {
+      foundIp = MDNS.address(0).toString();
+      foundHost = MDNS.hostname(0);
+    } else {
+      // 2. Fallback: Query default hostname 'wled.local' with short 800ms timeout
+      IPAddress hostIp = MDNS.queryHost("wled", 800);
+      if (hostIp != INADDR_NONE && hostIp != IPAddress(0, 0, 0, 0)) {
+        foundIp = hostIp.toString();
+        foundHost = "wled.local";
+      }
     }
-    Serial.printf("[WLED] Found WLED service: %s (%s)\n", foundIp.c_str(), host.c_str());
-    addTerminalLog("[WLED] Light found at " + foundIp);
-    fetchWledEffectsList();
-    s_wledDiscoveryActive = false;
-    s_wledDiscoveryTaskHandle = NULL;
-    vTaskDelete(NULL);
-    return;
+    mdnsQueryUnlock();
   }
 
-  // 2. Fallback: Query default hostname 'wled.local' with short 800ms timeout
-  IPAddress hostIp = MDNS.queryHost("wled", 800);
-  if (hostIp != INADDR_NONE && hostIp != IPAddress(0, 0, 0, 0)) {
-    String foundIp = hostIp.toString();
+  if (foundIp.length() > 0) {
     if (wledLock()) {
       discoveredWledIp = foundIp;
       wledUnlock();
     }
-    Serial.printf("[WLED] Resolved host 'wled.local': %s\n", foundIp.c_str());
+    Serial.printf("[WLED] Found WLED: %s (%s)\n", foundIp.c_str(),
+                  foundHost.c_str());
     addTerminalLog("[WLED] Light found at " + foundIp);
     fetchWledEffectsList();
   } else {

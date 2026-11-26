@@ -43,6 +43,7 @@ void soundPetLove();
 void soundPetGiggle();
 void soundPetShy();
 void soundPetSparkle();
+void soundFeedHappy();
 void soundPetKiss();
 void soundPetCuddle();
 void soundPetPlayful();

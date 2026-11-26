@@ -13,6 +13,61 @@ import KiwiLogo from './components/KiwiLogo'
 import ThemeToggle from './components/ThemeToggle'
 import { RotateCw } from 'lucide-react'
 
+class TabErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props)
+    this.state = { error: null }
+  }
+
+  static getDerivedStateFromError(error) {
+    return { error }
+  }
+
+  componentDidCatch(error, info) {
+    if (typeof console !== 'undefined' && console.error) {
+      console.error('[Kiwi UI] Tab render error:', error, info)
+    }
+  }
+
+  componentDidUpdate(prevProps) {
+    if (prevProps.resetKey !== this.props.resetKey && this.state.error) {
+      this.setState({ error: null })
+    }
+  }
+
+  render() {
+    if (this.state.error) {
+      return (
+        <div
+          style={{
+            padding: '24px',
+            margin: '16px 0',
+            borderRadius: '16px',
+            border: '1px solid rgba(239, 68, 68, 0.45)',
+            background: 'rgba(239, 68, 68, 0.10)',
+            color: 'var(--text-primary, #f8fafc)',
+          }}
+        >
+          <div style={{ fontWeight: 700, fontSize: '15px', marginBottom: '6px' }}>
+            Something went wrong rendering this tab
+          </div>
+          <div style={{ fontSize: '13px', opacity: 0.85, marginBottom: '12px', fontFamily: 'monospace' }}>
+            {String(this.state.error?.message || this.state.error)}
+          </div>
+          <button
+            type="button"
+            className="btn-secondary"
+            onClick={() => this.setState({ error: null })}
+          >
+            Retry
+          </button>
+        </div>
+      )
+    }
+    return this.props.children
+  }
+}
+
 export default function App() {
   const [theme, setTheme] = useState(() => {
     const saved = localStorage.getItem('kiwi_theme')
@@ -88,6 +143,7 @@ export default function App() {
   const fastPollUntilRef = useRef(0)
   const pollFastRef = useRef(false)
   const triggerNextPollRef = useRef(null)
+  const localRecordingUntilRef = useRef(0)
 
   const isMicRecording = localRecording || Boolean(
     status?.busy && (
@@ -114,6 +170,7 @@ export default function App() {
   }, [])
 
   useEffect(() => {
+    if (Date.now() < localRecordingUntilRef.current) return
     const isStillBusyListening = Boolean(
       status?.busy && (
         status?.emotion === 'listening' ||
@@ -278,6 +335,27 @@ export default function App() {
           if (data.greet_en != null) {
             next.greetings = { ...(next.greetings || {}), enabled: data.greet_en }
           }
+          if (data.hunger_en != null) {
+            next.hunger_en = data.hunger_en
+            if (!data.hunger_en) {
+              next.hunger = 'satisfied'
+              next.hunger_sec = 0
+              next.meal = 'generic'
+            }
+          }
+          if (data.fed === true || data.reconciled === true) {
+            next.hunger = 'satisfied'
+            next.hunger_sec = 0
+            next.meal = 'generic'
+            next.emotion = data.fed ? 'hearts' : 'laughing'
+          }
+          if (data.hunger === true) {
+            next.hunger = 'hungry'
+            next.hunger_sec = 120
+            const hParam = params.get('hunger')
+            next.meal = (hParam === 'breakfast' || hParam === 'lunch' || hParam === 'dinner') ? hParam : 'generic'
+            next.emotion = 'cute'
+          }
           if (data.snd_react != null) {
             next.soundReactive = { ...(next.soundReactive || {}), enabled: data.snd_react }
           }
@@ -328,26 +406,40 @@ export default function App() {
       if (triggerNextPollRef.current) {
         triggerNextPollRef.current(35)
       }
-      if (activeTab === 'settings') {
-        setTimeout(() => fetchConfig(), 50)
-      }
       return data
     } catch (err) {
       console.warn('Action failed:', err)
       return null
     }
-  }, [getBaseUrl, activeTab, fetchConfig])
+  }, [getBaseUrl])
 
   const handleMicClick = async () => {
     if (isMicRecording) {
+      localRecordingUntilRef.current = 0
       setLocalRecording(false)
       setStatus(prev => prev ? { ...prev, busy: false, emotion: 'idle', state: 'Ready' } : prev)
-      await triggerAction('/do?record=0')
+      const res = await triggerAction('/do?record=0')
+      if (!res || res.ok === false) {
+        showToast('Failed to stop listening — check connection')
+        return
+      }
       showToast('Listening cancelled')
     } else {
+      if (!connected) {
+        showToast('Kiwi is offline — cannot start listening')
+        return
+      }
+      localRecordingUntilRef.current = Date.now() + 1800
       setLocalRecording(true)
       setStatus(prev => prev ? { ...prev, busy: true, emotion: 'listening', state: 'Listening...' } : prev)
-      await triggerAction('/do?record=1')
+      const res = await triggerAction('/do?record=1')
+      if (!res || res.ok === false) {
+        localRecordingUntilRef.current = 0
+        setLocalRecording(false)
+        setStatus(prev => prev ? { ...prev, busy: false, emotion: 'idle', state: 'Ready' } : prev)
+        showToast(res?.reason === 'ota_in_progress' ? 'OTA update in progress' : 'Failed to reach Kiwi')
+        return
+      }
       showToast('Kiwi is listening...')
     }
   }
@@ -482,44 +574,48 @@ export default function App() {
             className="flux-tab-enter"
             style={{ width: '100%', flex: 1, display: 'flex', flexDirection: 'column' }}
           >
-            {activeTab === 'live' && (
-              <HomeView
-                status={status}
-                config={config}
-                connected={connected}
-                onTriggerAction={triggerAction}
-                onToast={showToast}
-                onRefresh={handleRefreshTelemetry}
-              />
-            )}
+            <TabErrorBoundary resetKey={activeTab}>
+              {activeTab === 'live' && (
+                <HomeView
+                  status={status}
+                  config={config}
+                  connected={connected}
+                  isListening={isMicRecording}
+                  onMicToggle={handleMicClick}
+                  onTriggerAction={triggerAction}
+                  onToast={showToast}
+                  onRefresh={handleRefreshTelemetry}
+                />
+              )}
 
-            {activeTab === 'faces' && (
-              <FacesStudioView
-                status={status}
-                activeScreen={activeOledScreen}
-                onSetActiveScreen={setActiveOledScreen}
-                onTriggerAction={triggerAction}
-                onToast={showToast}
-              />
-            )}
+              {activeTab === 'faces' && (
+                <FacesStudioView
+                  status={status}
+                  activeScreen={activeOledScreen}
+                  onSetActiveScreen={setActiveOledScreen}
+                  onTriggerAction={triggerAction}
+                  onToast={showToast}
+                />
+              )}
 
-            {activeTab === 'settings' && (
-              <SettingsView
-                config={config}
-                onSaveConfig={handleSaveConfig}
-                onTriggerAction={triggerAction}
-                onToast={showToast}
-                getBaseUrl={getBaseUrl}
-              />
-            )}
+              {activeTab === 'settings' && (
+                <SettingsView
+                  config={config}
+                  onSaveConfig={handleSaveConfig}
+                  onTriggerAction={triggerAction}
+                  onToast={showToast}
+                  getBaseUrl={getBaseUrl}
+                />
+              )}
 
-            {activeTab === 'ota' && (
-              <OtaUpdateView
-                status={status}
-                getBaseUrl={getBaseUrl}
-                onToast={showToast}
-              />
-            )}
+              {activeTab === 'ota' && (
+                <OtaUpdateView
+                  status={status}
+                  getBaseUrl={getBaseUrl}
+                  onToast={showToast}
+                />
+              )}
+            </TabErrorBoundary>
           </div>
         </div>
       </div>

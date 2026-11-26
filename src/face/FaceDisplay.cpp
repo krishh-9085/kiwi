@@ -1,4 +1,5 @@
 #include "face/FaceDisplay.h"
+#include "commands/ActionExecutor.h"
 #include "config/AppConfig.h"
 #include "web/WebPortal.h"
 #include <Adafruit_GFX.h>
@@ -214,6 +215,12 @@ void updateDisplayBrightnessMode() {
     return;
 
   uint32_t now = millis();
+  if (isRobotTimerRinging()) {
+    setDisplayPowerLocked(true);
+    setDisplayBrightnessLocked((uint8_t)displayBrightness);
+    displayUnlock();
+    return;
+  }
   bool isTemporarilyAwake =
       (circadianTempWakeUntil > 0 && (int32_t)(circadianTempWakeUntil - now) > 0);
   bool isNight = (inCircadianSleep || manualSleep) && !isTemporarilyAwake;

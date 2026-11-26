@@ -148,9 +148,10 @@ enum EyeSkin : uint8_t {
   SKIN_PIXEL = 1,         // Pixel 8-Bit (#2, arcade retro)
   SKIN_LUMINA_SPARK = 2,  // Lumina Spark (#3, dual glint)
   SKIN_MECHA = 3,         // Mecha (#4, Cirrectangle Solid with floating rounded pupil & glint)
-  SKIN_EMO = 4            // EMO-style (#5, Large rounded-rectangular eyes, no pupils, expressive procedural eyelids)
+  SKIN_EMO = 4,           // EMO-style (#5, Large rounded-rectangular eyes, no pupils, expressive procedural eyelids)
+  SKIN_KIWI_PLUS = 5      // Kiwi+ (#6, Soft-shouldered plush Kiwi eye, upper lash-rim, deep rounded iris & dual anime glints)
 };
-#define SKIN_COUNT 5
+#define SKIN_COUNT 6
 
 // Compatibility aliases
 #define SKIN_DEFAULT SKIN_KIWI

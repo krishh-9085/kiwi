@@ -52,6 +52,7 @@ export default function OtaUpdateView({ status, getBaseUrl, onToast }) {
   const [otaProgressText, setOtaProgressText] = useState('')
   const fileInputRef = useRef(null)
   const pollTimerRef = useRef(null)
+  const reloadTimerRef = useRef(null)
 
   const currentVer = (status?.version || '2.0').replace(/^[vV]/, '')
   const displayVersion = `v${currentVer}`
@@ -95,6 +96,7 @@ export default function OtaUpdateView({ status, getBaseUrl, onToast }) {
     checkGithubReleases()
     return () => {
       if (pollTimerRef.current) clearInterval(pollTimerRef.current)
+      if (reloadTimerRef.current) clearTimeout(reloadTimerRef.current)
     }
   }, [checkGithubReleases])
 
@@ -217,34 +219,70 @@ export default function OtaUpdateView({ status, getBaseUrl, onToast }) {
 
       onToast('OTA started! Streaming firmware from GitHub...')
       if (pollTimerRef.current) clearInterval(pollTimerRef.current)
+      if (reloadTimerRef.current) clearTimeout(reloadTimerRef.current)
+      let sawActive = false
+      let disconnectCount = 0
+      let idleAfterStartCount = 0
+
       pollTimerRef.current = setInterval(async () => {
         try {
-          const sRes = await fetch(`${getBaseUrl()}/ota/status`)
+          const sRes = await fetch(`${getBaseUrl()}/ota/status`, {
+            signal: AbortSignal.timeout(2500)
+          })
           if (sRes.ok) {
             const sData = await sRes.json()
             setOtaProgress(sData)
-            if (sData.state === 'downloading') {
-              setOtaProgressText(`Downloading... ${sData.progress || 0}% (${((sData.bytes_read || 0) / 1024).toFixed(0)} KB / ${((sData.bytes_total || 1) / 1024).toFixed(0)} KB)`)
+            if (sData.state === 'starting') {
+              sawActive = true
+              setOtaProgressText('Preparing GitHub OTA download...')
+            } else if (sData.state === 'downloading') {
+              sawActive = true
+              const readKb = ((sData.bytes_read || 0) / 1024).toFixed(0)
+              const totalText = sData.bytes_total > 0
+                ? ` (${readKb} KB / ${(sData.bytes_total / 1024).toFixed(0)} KB)`
+                : ` (${readKb} KB)`
+              setOtaProgressText(`Downloading... ${sData.progress || 0}%${totalText}`)
             } else if (sData.state === 'flashing') {
+              sawActive = true
               setOtaProgressText(`Flashing OTA partition... ${sData.progress || 0}%`)
             } else if (sData.state === 'success') {
               clearInterval(pollTimerRef.current)
               pollTimerRef.current = null
               setOtaProgressText('Update installed! Kiwi is rebooting...')
               onToast('OTA Update successful! Rebooting...')
-              setTimeout(() => window.location.reload(), 6000)
+              reloadTimerRef.current = setTimeout(() => window.location.reload(), 5000)
             } else if (sData.state === 'error') {
               clearInterval(pollTimerRef.current)
               pollTimerRef.current = null
               setOtaProgressText(`OTA Error: ${sData.error || 'Download failed'}`)
               setInstallingGithub(false)
               onToast(`OTA Error: ${sData.error || 'Failed'}`)
+            } else if (sData.state === 'idle') {
+              if (sawActive || disconnectCount >= 2) {
+                clearInterval(pollTimerRef.current)
+                pollTimerRef.current = null
+                setOtaProgressText('Kiwi rebooted with updated firmware! Reloading...')
+                onToast('OTA update complete! Reloading console...')
+                reloadTimerRef.current = setTimeout(() => window.location.reload(), 1200)
+              } else {
+                idleAfterStartCount += 1
+                if (idleAfterStartCount >= 5) {
+                  clearInterval(pollTimerRef.current)
+                  pollTimerRef.current = null
+                  setOtaProgressText('')
+                  setInstallingGithub(false)
+                  onToast('OTA session returned idle — check connection and retry.')
+                }
+              }
             }
           }
         } catch {
-          // Ignore transient network errors while device reboots
+          disconnectCount += 1
+          if (sawActive) {
+            setOtaProgressText('Kiwi is rebooting... Waiting for reconnect...')
+          }
         }
-      }, 1200)
+      }, 800)
     } catch (e) {
       onToast(`OTA install error: ${e.message}`)
       setInstallingGithub(false)

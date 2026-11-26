@@ -47,38 +47,44 @@ function RebootOverlayInner({ message, getBaseUrl }) {
       left: 0,
       right: 0,
       bottom: 0,
-      background: 'rgba(5, 7, 12, 0.92)',
+      background: 'rgba(5, 7, 12, 0.84)',
       backdropFilter: 'blur(12px)',
+      WebkitBackdropFilter: 'blur(12px)',
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
-      zIndex: 9999
+      padding: '20px',
+      zIndex: 1000000
     }}>
-      <div className="glass-panel" style={{
-        maxWidth: '440px',
-        padding: '36px 30px',
+      <div style={{
+        width: '100%',
+        maxWidth: '420px',
+        padding: '32px 28px',
         textAlign: 'center',
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
-        gap: '16px',
-        border: '1px solid rgba(56, 189, 248, 0.4)',
-        boxShadow: '0 0 40px rgba(56, 189, 248, 0.25)'
+        gap: '14px',
+        borderRadius: '24px',
+        background: 'var(--card-white)',
+        color: 'var(--text-dark)',
+        border: '1px solid var(--border-light)',
+        boxShadow: '0 24px 60px rgba(0, 0, 0, 0.45), 0 0 36px rgba(56, 189, 248, 0.16)'
       }}>
         {reconnected ? (
-          <CheckCircle size={48} color="#34d399" />
+          <CheckCircle size={48} color="#10B981" />
         ) : (
           <div style={{
             width: '56px', height: '56px', borderRadius: '50%',
-            background: 'linear-gradient(135deg, #0284c7, #0f172a)',
+            background: 'linear-gradient(135deg, #0284C7, #0F172A)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             border: '2px solid rgba(56, 189, 248, 0.5)'
           }}>
-            <RefreshCw size={28} color="var(--accent-cyan)" className="pulse-active" />
+            <RefreshCw size={26} color="#38BDF8" className="spin-fast" />
           </div>
         )}
 
-        <h3 style={{ fontSize: '18px', fontWeight: 700, margin: 0, letterSpacing: '0.5px' }}>
+        <h3 style={{ fontSize: '18px', fontWeight: 800, margin: 0, color: 'var(--text-dark)', letterSpacing: '-0.01em' }}>
           {reconnected ? 'Kiwi Reconnected!' : 'Restarting Kiwi...'}
         </h3>
 
@@ -89,7 +95,7 @@ function RebootOverlayInner({ message, getBaseUrl }) {
         </p>
 
         {!reconnected && (
-          <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>
+          <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)' }}>
             Polling reconnection attempt #{attempts}...
           </span>
         )}

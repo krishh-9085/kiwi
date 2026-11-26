@@ -71,16 +71,15 @@ void drawClockScreen() {
   // Check if current time falls in Night Schedule (skip screen-off during temp wake so clock stays readable)
   bool isNightTime = isCircadianScheduleActiveNow() && !isCircadianTempWakeActive();
 
-  // Apply night mode to clock screen
+  // Apply night mode to clock screen (keep display ON when clock was requested)
   if (isNightTime) {
-    if (nightMode == NIGHT_SCREEN_OFF) {
-      setDisplayPower(false);
-      return;
-    } else if (nightMode == NIGHT_DIM) {
-      setDisplayPower(true);
+    setDisplayPower(true);
+    if (nightMode == NIGHT_DIM) {
       setDisplayBrightness((uint8_t)nightBrightness);
+    } else if (nightMode == NIGHT_SCREEN_OFF) {
+      int clkNight = (nightBrightness > 0) ? nightBrightness : 10;
+      setDisplayBrightness((uint8_t)clkNight);
     } else {
-      setDisplayPower(true);
       setDisplayBrightness((uint8_t)displayBrightness);
     }
   } else {
@@ -403,9 +402,13 @@ void drawConnectedNotice(const char *title, uint32_t holdMs) {
 }
 
 void showStatus(const char *l1, const char *l2, uint32_t ms) {
-  displayLock(100);
-  drawMessage(l1, l2);
-  displayUnlock();
+  if (displayLock(100)) {
+    statusOverlayUntil = millis() + ms;
+    drawMessage(l1, l2);
+    displayUnlock();
+  } else {
+    statusOverlayUntil = millis() + ms;
+  }
   soundError();
   uint32_t t0 = millis();
   uint32_t lastTick = 0;
@@ -420,6 +423,8 @@ void showStatus(const char *l1, const char *l2, uint32_t ms) {
     }
     yield();
   }
+  statusOverlayUntil = 0;
+  markDisplayDirty();
 }
 
 void showBootInfo(uint32_t holdMs) {

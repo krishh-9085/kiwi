@@ -107,6 +107,7 @@ void setup() {
   if (!initDisplay()) {
     Serial.println("[OLED] FAILED to initialize");
     bootCompleted = true;
+    bootWakeForceDone();
   } else {
     Serial.println("[OLED] Display ready");
   }
@@ -197,6 +198,7 @@ static void updateBootFlow() {
       finalizeWifiOffline();
     }
     bootCompleted = true;
+    bootWakeForceDone();
     eyesInit(now);
     setEmotion(EMOTION_IDLE);
     markDisplayDirty();
@@ -319,11 +321,14 @@ static void checkBootGreeting() {
     greetingTriggered = true;
     return;
   }
-  if (busyProcessing || inCircadianSleep || manualSleep || sleepyWakeIsActive())
+  if (busyProcessing || startRecording || inCircadianSleep || manualSleep ||
+      sleepyWakeIsActive() || sleepyFallAsleepIsActive() ||
+      animationIsActive() || showClockScreen || showWeatherScreen ||
+      bannerActive || isRobotTimerActive() || isRobotTimerRinging())
     return;
 
-  // Let the boot chime finish playing first
-  if (isTonePlaying())
+  // Let the boot chime or any active audio finish playing first
+  if (isTonePlaying() || isSpeechPlaying())
     return;
 
   // Give up to 10 seconds for WiFi NTP time sync so the greeting matches the
@@ -345,32 +350,16 @@ static void checkBootGreeting() {
 
   String owner = getOwnerName();
   owner.trim();
+  String fallback = buildBootGreeting(hour, owner);
 
-  String speech = "";
-  if (WiFi.status() == WL_CONNECTED && (llmKey.length() || groqKey.length())) {
-    speech = generateLlmGreeting(hour, minute, wday, owner);
-  }
-  if (speech.length() == 0) {
-    speech = buildBootGreeting(hour, owner);
-  }
-
-  Serial.printf("[BOOT] Greeting: %s (hour=%d)\n", speech.c_str(), hour);
-  setEmotion(EMOTION_HAPPY);
-  flourish = FL_STAR;
-  flourishT0 = millis();
-
-  if (WiFi.status() == WL_CONNECTED &&
-      (ttsKey.length() || sttKey.length() || llmKey.length())) {
-    speakText(speech);
-  }
-  setEmotion(EMOTION_IDLE);
+  Serial.printf("[BOOT] Triggering greeting (hour=%d)\n", hour);
+  deliverGreeting(hour, minute, wday, owner, fallback, "[BOOT]");
 }
 
 // ============================================================
 // MAIN EVENT LOOP
 // ============================================================
 void loop() {
-  powerUpdate();
   if (!uiTaskRunning) {
     rgbLedUpdate();
   }
@@ -379,6 +368,7 @@ void loop() {
   maintainWiFi();
 
   if (!bootCompleted) {
+    powerUpdate();
     updateBootFlow();
     updateTonePlayer();
     yield();
@@ -393,6 +383,7 @@ void loop() {
   checkBootGreeting();
 
   checkCircadianSleep();
+  powerUpdate();
   checkGreetings();
   updateTouch();
   checkRobotTimer();
@@ -443,7 +434,7 @@ void loop() {
     } else if (pendingSleepAction) {
       triggerPendingSleepAction();
     } else if (returnIdleAt == 0 && emotionAutoReturnAt == 0 && !manualSleep && !inCircadianSleep &&
-               !sleepyFallAsleepIsActive()) {
+               !sleepyFallAsleepIsActive() && !isKiwiHungry() && !isKiwiAngry()) {
       setEmotion(EMOTION_IDLE);
     }
     resyncTouch();
@@ -544,7 +535,7 @@ void loop() {
         } else if (pendingSleepAction) {
           triggerPendingSleepAction();
         } else if (returnIdleAt == 0 && emotionAutoReturnAt == 0 && !manualSleep && !inCircadianSleep &&
-                   !sleepyFallAsleepIsActive()) {
+                   !sleepyFallAsleepIsActive() && !isKiwiHungry() && !isKiwiAngry()) {
           setEmotion(EMOTION_IDLE);
         }
         resyncTouch();
@@ -619,8 +610,8 @@ void loop() {
     }
   }
 
-  if (!busyProcessing && !startRecording && !isTonePlaying() &&
-      !isSpeechPlaying() && !otaInProgress) {
+  if (!busyProcessing && !startRecording && !isSpeechPlaying() &&
+      !otaInProgress) {
     vTaskDelay(pdMS_TO_TICKS(2));
   } else {
     yield();

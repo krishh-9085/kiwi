@@ -3,6 +3,15 @@ import { Globe, RefreshCw } from 'lucide-react'
 import { Tooltip } from './Tooltip'
 import ThemeToggle from './ThemeToggle'
 
+function formatProviderBadge(p) {
+  const k = String(p || '').toLowerCase()
+  if (k === 'fish' || k === 'fishaudio') return 'Fish Audio'
+  if (k === 'gemini') return 'Gemini'
+  if (k === 'groq') return 'Groq'
+  if (k === 'sarvam') return 'Sarvam'
+  return p
+}
+
 export default function ContentHeader({
   status,
   config,
@@ -26,10 +35,10 @@ export default function ContentHeader({
     setEditingHost(false)
   }
 
-  const apBadge = config?.apSSID || status?.host || 'kiwi.local'
-  const llmBadge = config?.llmProvider ? `${config.llmProvider}` : (status?.llm || 'Gemini')
-  const sttBadge = config?.sttProvider ? `${config.sttProvider}` : (status?.stt || 'Sarvam')
-  const ttsBadge = config?.ttsProvider ? `${config.ttsProvider}` : (status?.tts || 'Bulbul')
+  const apBadge = status?.host || config?.host || (config?.hostname ? `${config.hostname}.local` : null) || config?.apSSID || 'kiwi.local'
+  const llmBadge = formatProviderBadge(config?.llm?.provider || config?.llmProvider || status?.llm || 'Gemini')
+  const sttBadge = formatProviderBadge(config?.stt?.provider || config?.sttProvider || status?.stt || 'Sarvam')
+  const ttsBadge = formatProviderBadge(config?.tts?.provider || config?.ttsProvider || status?.tts || 'Sarvam')
 
   return (
     <header className="flux-header">

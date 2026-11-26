@@ -196,7 +196,7 @@ static void otaDownloadTask(void *param) {
       s_otaState = OTA_SUCCESS;
       otaShowOled("OTA COMPLETE", "Rebooting Kiwi...");
       saveConfigImmediate();
-      vTaskDelay(1500 / portTICK_PERIOD_MS);
+      vTaskDelay(2800 / portTICK_PERIOD_MS);
       ESP.restart();
     } else {
       s_otaState = OTA_ERROR;

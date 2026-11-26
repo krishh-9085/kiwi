@@ -11,9 +11,40 @@
 #include <ESPmDNS.h>
 #include <WiFi.h>
 #include <esp_mac.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/semphr.h>
 #include <time.h>
 
 DNSServer dnsServer;
+
+static SemaphoreHandle_t s_mdnsQueryMutex = NULL;
+static portMUX_TYPE s_mdnsInitMux = portMUX_INITIALIZER_UNLOCKED;
+
+static void ensureMdnsQueryMutex() {
+  if (s_mdnsQueryMutex)
+    return;
+  SemaphoreHandle_t created = xSemaphoreCreateMutex();
+  portENTER_CRITICAL(&s_mdnsInitMux);
+  if (!s_mdnsQueryMutex) {
+    s_mdnsQueryMutex = created;
+    created = NULL;
+  }
+  portEXIT_CRITICAL(&s_mdnsInitMux);
+  if (created)
+    vSemaphoreDelete(created);
+}
+
+bool mdnsQueryLock(uint32_t waitMs) {
+  ensureMdnsQueryMutex();
+  if (!s_mdnsQueryMutex)
+    return true;
+  return xSemaphoreTake(s_mdnsQueryMutex, pdMS_TO_TICKS(waitMs)) == pdTRUE;
+}
+
+void mdnsQueryUnlock() {
+  if (s_mdnsQueryMutex)
+    xSemaphoreGive(s_mdnsQueryMutex);
+}
 
 static const wifi_power_t WIFI_TX = WIFI_POWER_8_5dBm;
 static bool wifiConnecting = false;
@@ -30,6 +61,8 @@ void pumpDns() {
 // mDNS RESPONDER
 // ============================================================
 void initMdns(const char *mode) {
+  ensureMdnsQueryMutex();
+  bool locked = mdnsQueryLock(3000);
   MDNS.end();
   String h = sanitizeHostname(mdnsHostname);
   if (h.length() == 0)
@@ -38,10 +71,14 @@ void initMdns(const char *mode) {
     Serial.printf(
         "[MDNS] WARN: Failed to start mDNS responder for %s.local (%s)\n",
         h.c_str(), mode);
+    if (locked)
+      mdnsQueryUnlock();
     return;
   }
   MDNS.addService("http", "tcp", 80);
   MDNS.addServiceTxt("http", "tcp", "path", "/");
+  if (locked)
+    mdnsQueryUnlock();
   Serial.printf("[MDNS] %s responder active: http://%s.local\n", mode,
                 h.c_str());
 }

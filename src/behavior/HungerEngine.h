@@ -24,14 +24,15 @@ MealType getCurrentMeal();
 const char *getCurrentMealName();
 
 void triggerHunger(MealType meal = MEAL_GENERIC);
-bool feedKiwi();
+bool feedKiwi(bool deferSpeech = true);
 void markCurrentMealFed();
 void saveHungerDays();
 void loadHungerDays();
 void resetHungerForToday();
-bool reconcileKiwi();
-void handleAngryRejection();
-void handleAngryFeedAttempt();
+void clearHungerState(bool resetFace = true);
+bool reconcileKiwi(bool deferSpeech = true);
+void handleAngryRejection(bool deferSpeech = true);
+void handleAngryFeedAttempt(bool deferSpeech = true);
 
 // Alternating cheek tap combo tracking (Left -> Right -> Left -> Right)
 void recordCheekTapForCombo(uint8_t pin, uint32_t now);

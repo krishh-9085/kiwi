@@ -512,6 +512,96 @@ void drawEye(int cx, int cy, int w, int h, int r, int lidIn, int lidOut,
     return;
   }
 
+  // 8. KIWI+ (Kiwi Evolution): Soft-shouldered plush U-sclera, bright upper
+  // rim, deep rounded U-iris with 3D parallax & dual glossy anime catchlights.
+  if (currentEyeSkin == SKIN_KIWI_PLUS) {
+    if (h <= 3) {
+      display.fillRoundRect(x0, cy - 1, w, maxI(2, h), 1, SSD1306_WHITE);
+      return;
+    }
+    if (isHeartMood) {
+      drawSkinHeartEye(cx, cy, w, h, false);
+      return;
+    }
+
+    // Gentle upward expansion for plush fullness when open
+    int extraTop = 0;
+    if (h >= 20) {
+      extraTop = minI(2, maxI(0, top - 2));
+    }
+    top -= extraTop;
+    h = bot - top;
+
+    // Soft curved top shoulders + deep pillowy U-bottom contour
+    int rTop = maxI(2, minI(5, w / 7));
+    int rBottom = maxI(rTop + 1, minI(13, (minI(w, h) * 42) / 100));
+    if (rBottom * 2 > h) rBottom = h / 2;
+    if (rBottom * 2 > w) rBottom = w / 2;
+    if (rTop * 2 > h) rTop = h / 2;
+
+    int upperH = maxI(rTop * 2, (h * 2) / 3);
+    int lowerY = top + h / 4;
+    int lowerH = h - h / 4;
+    display.fillRoundRect(x0, top, w, upperH, rTop, SSD1306_WHITE);
+    display.fillRoundRect(x0, lowerY, w, lowerH, rBottom, SSD1306_WHITE);
+
+    // Oversized plush rounded iris tucked cleanly 1-2px below upper rim
+    float pScale = clampf(faceNow.pupilScale, 0.65f, 1.42f);
+    int pw = maxI(6, minI((int)lroundf(w * 0.54f * pScale), w - 6));
+    int ph = maxI(5, minI((int)lroundf(h * 0.62f * pScale), h - 4));
+    int prTop = maxI(2, minI(5, pw / 4));
+    int prBot = maxI(prTop, minI(8, (minI(pw, ph) * 45) / 100));
+    if (prBot * 2 > ph) prBot = ph / 2;
+    if (prBot * 2 > pw) prBot = pw / 2;
+
+    int maxShiftX = maxI(0, (w - pw) / 2 - 2);
+    int shiftX = maxI(-maxShiftX, minI(maxShiftX, (int)lroundf(gazeX * 0.85f)));
+    int px = cx + shiftX - pw / 2;
+
+    int rimGap = (h >= 18) ? 2 : 1;
+    int maxShiftY = maxI(0, h - ph - rimGap - 2);
+    int shiftY = maxI(0, minI(maxShiftY, (int)lroundf((gazeY + 1.0f) * 0.70f)));
+    int py = top + rimGap + shiftY;
+    if (py + ph > bot - 2) py = maxI(top + 1, bot - 2 - ph);
+
+    int pUpperH = maxI(prTop * 2, ph / 2 + 1);
+    if (pUpperH > ph) pUpperH = ph;
+    int pLowerY = py + ph / 3;
+    int pLowerH = ph - ph / 3;
+    display.fillRoundRect(px, py, pw, pUpperH, prTop, SSD1306_BLACK);
+    display.fillRoundRect(px, pLowerY, pw, pLowerH, prBot, SSD1306_BLACK);
+
+    // Dual liquid-glass anime catchlights (main upper-right pearl + lower-left sparkle)
+    if (h > 12 && pw >= 10 && ph >= 10) {
+      int dotSize = (pw >= 14 && ph >= 14) ? 4 : 3;
+      int dotX = px + pw - dotSize - 2;
+      int dotY = py + 2;
+      if (dotSize >= 4) {
+        display.fillRoundRect(dotX, dotY, 4, 4, 1, SSD1306_WHITE);
+      } else {
+        display.fillRect(dotX, dotY, dotSize, dotSize, SSD1306_WHITE);
+      }
+
+      // Secondary diagonal bounce glint
+      if (pw >= 12 && ph >= 13) {
+        int secX = px + 3;
+        int secY = py + ph - 4;
+        if (secX + 1 < dotX && secY > dotY + 2) {
+          display.fillRect(secX, secY, 2, 2, SSD1306_WHITE);
+        }
+      }
+
+      // Excited sparkle wing pixel
+      if ((glint || pScale > 1.15f) && dotX > px + 2 && dotY + dotSize + 1 < py + ph) {
+        display.drawPixel(dotX - 1, dotY + dotSize, SSD1306_WHITE);
+      }
+    }
+
+    maskLids(x0, x1, top, lidIn, lidOut, isLeft);
+    maskCheek(cx, bot, w, cheek);
+    return;
+  }
+
   // DEFAULT FALLBACK: Render Kiwi eyes if unknown skin enum is encountered
   if (h <= 3) {
     display.fillRoundRect(x0, cy - 1, w, maxI(2, h), 1, SSD1306_WHITE);

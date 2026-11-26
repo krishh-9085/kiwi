@@ -99,6 +99,10 @@ EyeSkin parseEyeSkinArg(const String &raw) {
     return SKIN_MECHA;
   if (s == "emo" || s == "emo_style" || s == "emo-style" || s == "emostyle")
     return SKIN_EMO;
+  if (s == "kiwi_plus" || s == "kiwi+" || s == "kiwi plus" || s == "kiwiplus" ||
+      s == "kiwi_pro" || s == "plus" || s == "pro" || s == "glow" ||
+      s == "nova")
+    return SKIN_KIWI_PLUS;
   return SKIN_KIWI;
 }
 
@@ -122,19 +126,19 @@ void handleStatus() {
       "scared",    "suspicious", "relieved", "proud",    "dizzy", "lovestruck",
       "evil",      "crying",     "hearts",   "dead",     "cool",  "shocked",
       "singing",   "party",      "nervous",  "cute"};
-  int idx = (int)currentEmotion;
+  int idx = startRecording ? (int)EMOTION_LISTENING : (int)currentEmotion;
   if (idx < 0 || idx > 33)
     idx = 0;
   String j;
-  j.reserve(1024);
+  j.reserve(1152);
   j = "{\"host\":\"" + escJson(mdnsHostname + ".local") + "\",\"emotion\":\"" +
       String(names[idx]) + "\",\"busy\":";
-  j += busyProcessing ? "true," : "false,";
+  j += (busyProcessing || startRecording) ? "true," : "false,";
   j += "\"sleeping\":";
   j += (inCircadianSleep || manualSleep) ? "true," : "false,";
   j += "\"history\":" + String(getConversationHistoryCount());
   const char *skinNames[SKIN_COUNT] = {"kiwi", "pixel", "squircle_glint",
-                                       "mecha", "emo"};
+                                       "mecha", "emo", "kiwi_plus"};
   int skIdx = (int)currentEyeSkin;
   if (skIdx < 0 || skIdx >= SKIN_COUNT)
     skIdx = 0;
@@ -181,12 +185,19 @@ void handleStatus() {
        String(isKiwiAngry() ? "angry"
                             : (isKiwiHungry() ? "hungry" : "satisfied")) +
        "\"";
+  j += ",\"hunger_en\":" + String(hungerEnabled ? "true" : "false");
   j += ",\"hunger_sec\":" + String(getHungerRemainingSec());
   j += ",\"meal\":\"" + String(getCurrentMealName()) + "\"";
-  j += ",\"state\":\"" + escJson(robotStateDesc) + "\"";
+  j += ",\"state\":\"" +
+       escJson(startRecording ? String("Listening...") : robotStateDesc) + "\"";
   j += ",\"question\":\"" + escJson(lastTranscribedQuestion) + "\"";
   j += ",\"answer\":\"" + escJson(lastLlmAnswer) + "\"";
   j += ",\"version\":\"" + String(FIRMWARE_VER) + "\"";
+  bool wifiUp = (WiFi.status() == WL_CONNECTED);
+  int wifiRssi = wifiUp ? WiFi.RSSI() : -100;
+  int wifiPct = wifiUp ? constrain(2 * (wifiRssi + 100), 0, 100) : 0;
+  j += ",\"wifi\":{\"connected\":" + String(wifiUp ? "true" : "false") +
+       ",\"rssi\":" + String(wifiRssi) + ",\"pct\":" + String(wifiPct) + "}";
 
   // Real-time hardware telemetry: Heap RAM & On-chip CPU Temperature
   uint32_t freeHeap = ESP.getFreeHeap();
@@ -322,7 +333,7 @@ void handleConfigApi() {
        "\",\"sound\":" + String(touchFeedbackSound ? "true" : "false") +
        ",\"deb\":" + String(touchDebounceMs) + "},";
   const char *skinNames[SKIN_COUNT] = {"kiwi", "pixel", "squircle_glint",
-                                       "mecha", "emo"};
+                                       "mecha", "emo", "kiwi_plus"};
   int skinIndex = (int)currentEyeSkin;
   if (skinIndex < 0 || skinIndex >= SKIN_COUNT)
     skinIndex = 0;

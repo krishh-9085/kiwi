@@ -444,7 +444,9 @@ bool handleSleepCommand(const String &qIn) {
                      ? "Theek hai, shubh ratri! Main sone ja raha hoon."
                      : "Alright, going to sleep. Good night!";
   speakText(reply);
-  triggerPendingSleepAction();
+  if (!cancelRequest) {
+    triggerPendingSleepAction();
+  }
   return true;
 }
 
@@ -460,15 +462,12 @@ bool handleHungerCommand(const String &qIn) {
                  "stop hunger", "bhook mat mango", "bhook mat maango",
                  "khana mat mango", "khana mat maango"})) {
     hungerEnabled = false;
-    Preferences p;
-    p.begin("myrobot", false);
-    p.putBool("hunger_en", false);
-    p.end();
-    if (isKiwiHungry() || isKiwiAngry()) {
-      reconcileKiwi();
-    }
+    saveConfig();
+    clearHungerState(false);
     speakText("Theek hai! Ab main khane ke liye pareshaan nahi karunga.");
     setEmotion(EMOTION_IDLE);
+    returnIdleAt = 0;
+    emotionAutoReturnAt = 0;
     return true;
   }
 
@@ -476,10 +475,7 @@ bool handleHungerCommand(const String &qIn) {
   if (hasAny(q, {"bhook chalu", "bhookh chalu", "hunger chalu", "enable hunger",
                  "start hunger", "khana maango", "khana mango"})) {
     hungerEnabled = true;
-    Preferences p;
-    p.begin("myrobot", false);
-    p.putBool("hunger_en", true);
-    p.end();
+    saveConfig();
     speakText("Yay! Ab main time par apna khana maangunga!");
     setEmotion(EMOTION_IDLE);
     return true;
@@ -490,10 +486,10 @@ bool handleHungerCommand(const String &qIn) {
              {"khana khao", "khana kha lo", "kuch khao", "feed kiwi",
               "khana khila", "pet bhar lo", "kuch khale", "bhook lagi hai"})) {
     if (isKiwiHungry()) {
-      feedKiwi();
+      feedKiwi(false);
       return true;
     } else if (isKiwiAngry()) {
-      handleAngryFeedAttempt();
+      handleAngryFeedAttempt(false);
       return true;
     } else {
       markCurrentMealFed();
@@ -507,7 +503,7 @@ bool handleHungerCommand(const String &qIn) {
   if (hasAny(q, {"maaf kardo", "maaf kar do", "sorry kiwi", "maan jao",
                  "man jao", "gussa mat ho", "gussa thook do"})) {
     if (isKiwiAngry()) {
-      reconcileKiwi();
+      reconcileKiwi(false);
       return true;
     } else {
       speakText("Arey main to gussa hoon hi nahi!");

@@ -40,6 +40,7 @@ void triggerPetReaction() {
   if (busyProcessing)
     return;
   petMood = (PetMood)random(0, PET_MOOD_COUNT - 1); // Exclude PET_SURPRISED
+  flourishT0 = millis();
   setEmotion(EMOTION_PETTED);
   switch (petMood) {
   case PET_LOVE:

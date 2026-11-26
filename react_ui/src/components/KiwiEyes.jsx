@@ -105,6 +105,19 @@ export default function KiwiEyes({ emotion = 'idle', skin = 'kiwi', sleeping = f
       )
     }
 
+    // Kiwi+: Plush arched Kiwi evolution with bright upper rim, deep rounded U-pupil & dual anime catchlights
+    if (skin === 'kiwi_plus') {
+      const eyeTilt = side === 'left' ? 'rotate(3.5 32 34)' : 'rotate(-3.5 32 34)'
+      return (
+        <g transform={eyeTilt}>
+          <path d="M14 21 Q14 12 23 12 H41 Q50 12 50 21 V38 C50 50 42 56 32 56 C22 56 14 50 14 38 Z" fill={glowColor} />
+          <rect x="21" y="15" width="22" height="27" rx="10" fill="#0b0f19" />
+          <circle cx="36" cy="21" r="3.2" fill="#ffffff" opacity="0.96" />
+          <circle cx="26.5" cy="34.5" r="1.7" fill="#ffffff" opacity="0.88" />
+        </g>
+      )
+    }
+
     // Kiwi (Default): Flat upper edge, rounded bottom, U-shaped dark pupil cutout + specular glint
     const eyeTilt = side === 'left' ? 'rotate(3 32 34)' : 'rotate(-3 32 34)'
     return (

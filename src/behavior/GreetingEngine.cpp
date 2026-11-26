@@ -1,8 +1,12 @@
 #include "behavior/GreetingEngine.h"
+#include "behavior/HungerEngine.h"
 #include "commands/ActionExecutor.h"
 #include "config/AppConfig.h"
-#include "face/FaceExpressions.h"
+#include "face/AnimationEngine.h"
+#include "face/FaceEngine.h"
+#include "face/SleepyWakeAnim.h"
 #include "hardware/AudioEngine.h"
+#include "hardware/TouchController.h"
 #include "ai/AiTtsService.h"
 #include "ai/AiLlmService.h"
 #include "ai/AiTextTools.h"
@@ -33,7 +37,7 @@ static const char *const GREETINGS_NIGHT[] = {
     "Hey night owl{n}! Ab so jao, good night!"};
 
 static int lastGreetPeriod = -1;
-static int lastGreetDay = -1;
+static int lastGreetLogicalDay = -1;
 
 static inline int getGreetPeriod(int hour) {
   if (hour >= 5 && hour < 12)
@@ -43,6 +47,14 @@ static inline int getGreetPeriod(int hour) {
   if (hour >= 17 && hour < 21)
     return 2; // 17:00 to 20:59 -> evening
   return 3;   // 21:00 to 04:59 -> night
+}
+
+// Shifts clock back by 5h so 21:00..04:59 shares one continuous night key across midnight.
+static int getLogicalGreetDayKey() {
+  time_t shifted = time(nullptr) - 5L * 3600L;
+  struct tm adj;
+  localtime_r(&shifted, &adj);
+  return adj.tm_year * 400 + adj.tm_yday;
 }
 
 static String buildPeriodicGreeting(int period, const String &ownerName) {
@@ -79,6 +91,13 @@ static bool hasActiveLlmKey() {
     return groqKey.length() > 0;
   }
   return llmKey.length() > 0;
+}
+
+static bool hasActiveTtsKey() {
+  if (ttsProvider == "fish" || ttsProvider == "fishaudio") {
+    return fishKey.length() > 0;
+  }
+  return (ttsKey.length() > 0 || sttKey.length() > 0 || llmKey.length() > 0);
 }
 
 String generateLlmGreeting(int hour, int minute, int wday, const String &ownerName) {
@@ -132,20 +151,115 @@ String generateLlmGreeting(int hour, int minute, int wday, const String &ownerNa
   res.replace("*", "");
   res.trim();
 
-  // If LLM returned multiple sentences, take only the first sentence for a punchy greeting
-  int periodIdx = res.indexOf('.');
-  int exclamIdx = res.indexOf('!');
-  int qIdx = res.indexOf('?');
-  int cut = -1;
-  if (periodIdx > 0 && (cut == -1 || periodIdx < cut)) cut = periodIdx;
-  if (exclamIdx > 0 && (cut == -1 || exclamIdx < cut)) cut = exclamIdx;
-  if (qIdx > 0 && (cut == -1 || qIdx < cut)) cut = qIdx;
-  if (cut >= 20 && cut < (int)res.length() - 1) {
+  // Keep a single punchy sentence (allow one short opener like "Hey!" before trimming).
+  auto nextTerminator = [&](int from) -> int {
+    int p = res.indexOf('.', from);
+    int e = res.indexOf('!', from);
+    int q = res.indexOf('?', from);
+    int best = -1;
+    if (p > 0 && (best == -1 || p < best)) best = p;
+    if (e > 0 && (best == -1 || e < best)) best = e;
+    if (q > 0 && (best == -1 || q < best)) best = q;
+    return best;
+  };
+  int cut = nextTerminator(0);
+  if (cut >= 0 && cut < 15) {
+    int secondCut = nextTerminator(cut + 1);
+    if (secondCut > 0) cut = secondCut;
+  }
+  if (cut >= 15 && cut < (int)res.length() - 1) {
     res = res.substring(0, cut + 1);
   }
 
   Serial.printf("[GREETING] Dynamic LLM greeting generated: \"%s\"\n", res.c_str());
   return res;
+}
+
+bool deliverGreeting(int hour, int minute, int wday, const String &ownerName,
+                     const String &fallbackText, const char *logTag) {
+  bool wifiOk = (WiFi.status() == WL_CONNECTED);
+  bool canSpeak = wifiOk && (speakerVolume > 0) && hasActiveTtsKey();
+  bool canLlm = canSpeak && hasActiveLlmKey();
+
+  String greeting = "";
+  bool spoken = false;
+  bool cancelled = false;
+
+  if (canSpeak) {
+    busyProcessing = true;
+    lastProgressAt = millis();
+    cancelRequest = false;
+    robotStateDesc = "Greeting...";
+    setEmotion(EMOTION_HAPPY);
+    flourish = FL_STAR;
+    flourishT0 = millis();
+
+    if (canLlm) {
+      greeting = generateLlmGreeting(hour, minute, wday, ownerName);
+      lastProgressAt = millis();
+    }
+
+    cancelled = cancelRequest || startRecording || inCircadianSleep || manualSleep;
+    if (!cancelled) {
+      if (greeting.length() == 0) {
+        greeting = fallbackText;
+      }
+      Serial.printf("%s Firing spoken greeting: %s\n", logTag, greeting.c_str());
+      spoken = speakText(greeting);
+      cancelled = cancelRequest || startRecording;
+    }
+
+    resyncTouch();
+    if (cancelled || cancelRequest) {
+      cancelRequest = false;
+      if (startRecording) {
+        toneStop();
+        setEmotion(EMOTION_LISTENING);
+        robotStateDesc = "Listening...";
+      } else {
+        spkEndSpeech();
+        setEmotion(EMOTION_IDLE);
+        robotStateDesc = "Ready";
+        returnIdleAt = 0;
+      }
+      busyProcessing = false;
+      return false;
+    }
+
+    busyProcessing = false;
+    robotStateDesc = "Ready";
+    if (spoken) {
+      setEmotion(EMOTION_HAPPY);
+      returnIdleAt = millis() + 1200;
+      emotionAutoReturnAt = returnIdleAt;
+      return true;
+    }
+    Serial.printf("%s TTS failed -> falling back to OLED banner\n", logTag);
+  }
+
+  // Offline / Muted / Missing TTS key / TTS failure -> clean ASCII banner + sparkle fallback
+  String visualText = fallbackText;
+  visualText.trim();
+  if (visualText.length() == 0) {
+    visualText = greeting;
+  }
+  Serial.printf("%s Firing banner greeting: %s\n", logTag, visualText.c_str());
+  setEmotion(EMOTION_HAPPY);
+  flourish = FL_STAR;
+  flourishT0 = millis();
+  if (visualText.length() > 0) {
+    bannerText = visualText;
+    bannerScrollX = SCREEN_WIDTH + 10;
+    bannerLoops = 0;
+    bannerActive = true;
+  } else {
+    returnIdleAt = millis() + 1200;
+    emotionAutoReturnAt = returnIdleAt;
+  }
+  if (speakerVolume > 0) {
+    soundPetSparkle();
+  }
+  return true;
 }
 
 void checkGreetings() {
@@ -157,61 +271,45 @@ void checkGreetings() {
     return;
 
   int curHour = timeinfo.tm_hour;
-  int curDay = timeinfo.tm_yday;
   int curPeriod = getGreetPeriod(curHour);
+  int curLogicalDay = getLogicalGreetDayKey();
 
-  // Do NOT greet at boot: on first valid time sync, record current period & day
+  // Do NOT greet at boot: on first valid time sync, record current period & logical day
   if (lastGreetPeriod == -1) {
     lastGreetPeriod = curPeriod;
-    lastGreetDay = curDay;
+    lastGreetLogicalDay = curLogicalDay;
     Serial.printf("[GREETINGS] Initialized at boot: period=%d (%s), day=%d. No "
                   "boot greeting.\n",
-                  curPeriod, PERIOD_NAMES[curPeriod], curDay);
+                  curPeriod, PERIOD_NAMES[curPeriod], curLogicalDay);
     return;
   }
 
-  // Fire at most ONCE per period per day: only proceed if the period has
-  // changed
-  if (curPeriod == lastGreetPeriod)
+  // Fire at most ONCE per period per logical day
+  if (curPeriod == lastGreetPeriod && curLogicalDay == lastGreetLogicalDay)
     return;
 
-  // Skip the greeting (and do not mark it as done) if conditions are not met;
-  // retry on the next loop
+  // Skip (and retry later) if disabled, busy, sleeping, mid-animation, or displaying a screen
   if (!greetingsEnabled)
     return;
-  if (busyProcessing || isRobotTimerActive() || isRobotTimerRinging())
+  if (busyProcessing || startRecording || isRobotTimerActive() || isRobotTimerRinging())
     return;
-  if (inCircadianSleep || manualSleep)
+  if (inCircadianSleep || manualSleep || sleepyWakeIsActive() || sleepyFallAsleepIsActive())
     return;
-  if (bannerActive || currentEmotion == EMOTION_SPEAKING || isTonePlaying())
+  if (bannerActive || animationIsActive() || showClockScreen || showWeatherScreen ||
+      isKiwiHungry() || isKiwiAngry())
+    return;
+  if (currentEmotion == EMOTION_SPEAKING || isSpeechPlaying() || isTonePlaying())
     return;
 
-  // Successfully triggering greeting: record period and day
+  // Record period & logical day before firing so cancelled/completed greetings don't re-trigger in the same slot
   lastGreetPeriod = curPeriod;
-  lastGreetDay = curDay;
+  lastGreetLogicalDay = curLogicalDay;
 
   String owner = getOwnerName();
   owner.trim();
-  String greeting = "";
-  if (WiFi.status() == WL_CONNECTED && hasActiveLlmKey()) {
-    greeting = generateLlmGreeting(curHour, timeinfo.tm_min, timeinfo.tm_wday, owner);
-  }
-  if (greeting.length() == 0) {
-    greeting = buildPeriodicGreeting(curPeriod, owner);
-  }
+  String fallback = buildPeriodicGreeting(curPeriod, owner);
 
-  Serial.printf("[GREETINGS] Firing %s greeting (hour=%02d:%02d, day=%d): %s\n",
-                PERIOD_NAMES[curPeriod], curHour, timeinfo.tm_min, curDay,
-                greeting.c_str());
-
-  if (WiFi.status() == WL_CONNECTED) {
-    setEmotion(EMOTION_HAPPY);
-    speakText(greeting);
-  } else {
-    bannerText = greeting;
-    bannerScrollX = SCREEN_WIDTH + 10;
-    bannerLoops = 0;
-    bannerActive = true;
-    soundPetSparkle();
-  }
+  Serial.printf("[GREETINGS] Triggering %s greeting (hour=%02d:%02d, day=%d)\n",
+                PERIOD_NAMES[curPeriod], curHour, timeinfo.tm_min, curLogicalDay);
+  deliverGreeting(curHour, timeinfo.tm_min, timeinfo.tm_wday, owner, fallback, "[GREETINGS]");
 }

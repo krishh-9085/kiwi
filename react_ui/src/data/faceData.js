@@ -50,7 +50,8 @@ export const SKIN_FACES = {
   "pixel": "<rect x=\"14\" y=\"8\" width=\"12\" height=\"16\" fill=\"currentColor\"/><rect x=\"11\" y=\"11\" width=\"18\" height=\"10\" fill=\"currentColor\"/><rect x=\"14\" y=\"11\" width=\"4\" height=\"4\" fill=\"#000\"/><rect x=\"38\" y=\"8\" width=\"12\" height=\"16\" fill=\"currentColor\"/><rect x=\"35\" y=\"11\" width=\"18\" height=\"10\" fill=\"currentColor\"/><rect x=\"38\" y=\"11\" width=\"4\" height=\"4\" fill=\"#000\"/>",
   "squircle_glint": "<rect x=\"12\" y=\"9\" width=\"15\" height=\"13\" rx=\"5\" fill=\"currentColor\"/><rect x=\"37\" y=\"9\" width=\"15\" height=\"13\" rx=\"5\" fill=\"currentColor\"/><rect x=\"17\" y=\"13\" width=\"5\" height=\"5\" fill=\"#000\"/><rect x=\"42\" y=\"13\" width=\"5\" height=\"5\" fill=\"#000\"/><rect x=\"20\" y=\"13\" width=\"1.5\" height=\"1.5\" fill=\"currentColor\"/><rect x=\"45\" y=\"13\" width=\"1.5\" height=\"1.5\" fill=\"currentColor\"/>",
   "mecha": "<rect x=\"13\" y=\"4\" width=\"15\" height=\"22\" rx=\"4\" fill=\"currentColor\"/><rect x=\"17\" y=\"8\" width=\"7\" height=\"14\" rx=\"2\" fill=\"#000\"/><rect x=\"20.5\" y=\"10\" width=\"2\" height=\"2\" fill=\"currentColor\"/><rect x=\"36\" y=\"4\" width=\"15\" height=\"22\" rx=\"4\" fill=\"currentColor\"/><rect x=\"40\" y=\"8\" width=\"7\" height=\"14\" rx=\"2\" fill=\"#000\"/><rect x=\"43.5\" y=\"10\" width=\"2\" height=\"2\" fill=\"currentColor\"/>",
-  "emo": "<rect x=\"11\" y=\"8\" width=\"18\" height=\"16\" rx=\"5\" fill=\"currentColor\"/><rect x=\"35\" y=\"8\" width=\"18\" height=\"16\" rx=\"5\" fill=\"currentColor\"/>"
+  "emo": "<rect x=\"11\" y=\"8\" width=\"18\" height=\"16\" rx=\"5\" fill=\"currentColor\"/><rect x=\"35\" y=\"8\" width=\"18\" height=\"16\" rx=\"5\" fill=\"currentColor\"/>",
+  "kiwi_plus": "<path d=\"M11 11 Q11 6.5 15.5 6.5 H24.5 Q29 6.5 29 11 V17 C29 22 25.5 25 20 25 C14.5 25 11 22 11 17 Z\" fill=\"currentColor\"/><rect x=\"14.5\" y=\"8\" width=\"11\" height=\"12.5\" rx=\"5.2\" fill=\"#000\"/><circle cx=\"22.3\" cy=\"11.2\" r=\"1.6\" fill=\"currentColor\"/><circle cx=\"17.2\" cy=\"17.4\" r=\"0.85\" fill=\"currentColor\"/><path d=\"M35 11 Q35 6.5 39.5 6.5 H48.5 Q53 6.5 53 11 V17 C53 22 49.5 25 44 25 C38.5 25 35 22 35 17 Z\" fill=\"currentColor\"/><rect x=\"38.5\" y=\"8\" width=\"11\" height=\"12.5\" rx=\"5.2\" fill=\"#000\"/><circle cx=\"46.3\" cy=\"11.2\" r=\"1.6\" fill=\"currentColor\"/><circle cx=\"41.2\" cy=\"17.4\" r=\"0.85\" fill=\"currentColor\"/>"
 };
 
 export const ALL_42_EMOTIONS = [
@@ -459,6 +460,11 @@ export const ALL_SKINS = [
     "id": "emo",
     "label": "EMO Style",
     "sub": "Curved Squoval"
+  },
+  {
+    "id": "kiwi_plus",
+    "label": "Kiwi+",
+    "sub": "Plush Dual Glint"
   }
 ];
 

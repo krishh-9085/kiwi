@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import {
   Wifi, Key, Mic, Brain, Volume2, Hand, CloudSun, User, Save, RefreshCw,
   Plus, Trash2, CheckCircle2, Eye, EyeOff, ChevronDown, X
@@ -287,9 +287,14 @@ export default function SettingsView({
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [customFishVoice, setCustomFishVoice] = useState(false)
+  const dirtyFieldsRef = useRef(new Set())
+  const dirtyFactsRef = useRef(false)
 
   useEffect(() => {
     if (!config) return
+    const dirty = dirtyFieldsRef.current
+    const pick = (name, nextVal) => (dirty.has(name) ? undefined : nextVal)
+
     setFormData((prev) => {
       const loadedLlmModel = config.llm?.model || config.llmModel || prev.llmmodel
       let loadedLlmUrl = config.llm?.url || config.llmEndpoint || prev.llmurl
@@ -297,8 +302,7 @@ export default function SettingsView({
         loadedLlmUrl = `https://generativelanguage.googleapis.com/v1beta/models/${loadedLlmModel}:generateContent`
       }
 
-      return {
-        ...prev,
+      const incoming = {
         ssid: config.wifi?.ssid || config.wifiSSID || config.ssid || prev.ssid,
         pass: config.wifi?.password || config.wifiPassword || config.pass || prev.pass,
         llmkey: config.llm?.key || config.llmKey || prev.llmkey,
@@ -345,9 +349,16 @@ export default function SettingsView({
         mem_name: config.memory?.name ?? config.ownerName ?? prev.mem_name,
         mem_friends: config.memory?.friends ?? prev.mem_friends
       }
+
+      const next = { ...prev }
+      Object.entries(incoming).forEach(([k, v]) => {
+        const chosen = pick(k, v)
+        if (chosen !== undefined) next[k] = chosen
+      })
+      return next
     })
 
-    if (config.memory?.facts && Array.isArray(config.memory.facts)) {
+    if (!dirtyFactsRef.current && config.memory?.facts && Array.isArray(config.memory.facts)) {
       setFacts(config.memory.facts)
     }
     setPendingFollowUp(config.memory?.followUp || '')
@@ -356,10 +367,12 @@ export default function SettingsView({
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target
     const val = type === 'checkbox' ? (checked ? '1' : '0') : value
+    dirtyFieldsRef.current.add(name)
     setFormData((prev) => {
       const updated = { ...prev, [name]: val }
       if (name === 'llmmodel' && (!prev.llmurl || prev.llmurl.includes('generativelanguage.googleapis.com'))) {
         updated.llmurl = `https://generativelanguage.googleapis.com/v1beta/models/${val}:generateContent`
+        dirtyFieldsRef.current.add('llmurl')
       }
       return updated
     })
@@ -422,6 +435,7 @@ export default function SettingsView({
     else nextList.push(entry)
 
     const updated = nextList.join(', ')
+    dirtyFieldsRef.current.add('mem_friends')
     setFormData((prev) => ({ ...prev, mem_friends: updated }))
     resetFamilyDraft()
     if (onTriggerAction) onTriggerAction('/do?setfriends=' + encodeURIComponent(updated))
@@ -430,6 +444,7 @@ export default function SettingsView({
 
   const handleRemoveFamily = (idx) => {
     const updated = familyMembers.filter((_, i) => i !== idx).join(', ')
+    dirtyFieldsRef.current.add('mem_friends')
     setFormData((prev) => ({ ...prev, mem_friends: updated }))
     if (editingFamIdx !== null) resetFamilyDraft()
     if (onTriggerAction) onTriggerAction('/do?setfriends=' + encodeURIComponent(updated))
@@ -444,6 +459,8 @@ export default function SettingsView({
       onToast('Already in memory!')
       return
     }
+    dirtyFactsRef.current = true
+    dirtyFieldsRef.current.add('new_mem')
     setFacts((prev) => [...prev, txt])
     setFormData((prev) => ({ ...prev, new_mem: '' }))
     if (onTriggerAction) onTriggerAction('/do?addmem=' + encodeURIComponent(txt))
@@ -451,6 +468,7 @@ export default function SettingsView({
   }
 
   const handleDeleteFact = (idx) => {
+    dirtyFactsRef.current = true
     setFacts((prev) => prev.filter((_, i) => i !== idx))
     if (onTriggerAction) onTriggerAction('/do?delmem=' + idx)
     onToast('Fact removed!')
@@ -470,6 +488,10 @@ export default function SettingsView({
     }
     setConfirmClearMem(false)
     resetFamilyDraft()
+    dirtyFieldsRef.current.delete('mem_name')
+    dirtyFieldsRef.current.delete('mem_friends')
+    dirtyFieldsRef.current.delete('new_mem')
+    dirtyFactsRef.current = false
     setFormData((prev) => ({ ...prev, mem_name: '', mem_friends: '', new_mem: '' }))
     setFacts([])
     setPendingFollowUp('')
@@ -479,29 +501,34 @@ export default function SettingsView({
 
   const handleSubmit = async (e) => {
     e.preventDefault()
+    if (!config) {
+      onToast('Device configuration not loaded yet — check connection and try again.')
+      return
+    }
     setSaving(true)
     const payload = new URLSearchParams()
-    const memoryKeys = new Set(['mem_name', 'mem_friends'])
     Object.entries(formData).forEach(([k, v]) => {
-      if (!config && memoryKeys.has(k)) return
       payload.append(k, String(v))
     })
-    if (config) {
-      payload.append('facts_present', '1')
-      facts.forEach((f) => payload.append('facts[]', f))
-    }
+    payload.append('facts_present', '1')
+    facts.forEach((f) => payload.append('facts[]', f))
 
     const oldSsid = config?.wifi?.ssid || config?.wifiSSID || config?.ssid || ''
     const oldPass = config?.wifi?.password || config?.wifiPassword || config?.pass || ''
     const nextSsid = String(formData.ssid || '').trim()
     const nextPass = String(formData.pass || '').trim()
     const expectsReboot = Boolean(
-      (nextSsid && oldSsid && nextSsid !== oldSsid) ||
+      (nextSsid && nextSsid !== oldSsid) ||
       (nextPass && nextPass !== oldPass && !/^\*+$/.test(nextPass))
     )
 
     try {
       await onSaveConfig(payload, expectsReboot)
+      dirtyFieldsRef.current.clear()
+      dirtyFactsRef.current = false
+      if (formData.new_mem) {
+        setFormData((prev) => ({ ...prev, new_mem: '' }))
+      }
       setSaved(true)
       onToast('Configuration saved & applied successfully!')
       setTimeout(() => setSaved(false), 3000)

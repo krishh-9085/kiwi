@@ -295,23 +295,28 @@ export default function RgbControlCard({
   const activeHex = (isOverride ? hexString : moodHex).toUpperCase()
 
   const { r, g, b } = hexToRgb(activeHex)
+  const luminance = 0.299 * r + 0.587 * g + 0.114 * b
+  const isUltraLight = luminance > 210
 
   const cardBgImage = rgbEnabled
-    ? `radial-gradient(circle at top right, rgba(${r}, ${g}, ${b}, 0.24), transparent 72%)`
+    ? `radial-gradient(circle at top right, rgba(${r}, ${g}, ${b}, ${isUltraLight ? 0.14 : 0.24}), transparent 72%)`
     : 'none'
   const cardBorder = rgbEnabled
-    ? `1px solid rgba(${r}, ${g}, ${b}, 0.36)`
+    ? (isUltraLight ? '1px solid var(--border-dark)' : `1px solid rgba(${r}, ${g}, ${b}, 0.36)`)
     : '1px solid var(--border-light)'
   const badgeBg = !rgbEnabled
     ? 'var(--card-muted)'
-    : (isOverride ? 'rgba(56, 189, 248, 0.16)' : `rgba(${r}, ${g}, ${b}, 0.18)`)
+    : (isOverride ? 'rgba(56, 189, 248, 0.16)' : (isUltraLight ? 'var(--card-muted)' : `rgba(${r}, ${g}, ${b}, 0.18)`))
   const badgeColor = !rgbEnabled
     ? 'var(--text-muted)'
-    : (isOverride ? '#38BDF8' : activeHex)
+    : (isOverride ? '#0EA5E9' : (isUltraLight ? 'var(--text-dark)' : activeHex))
+  const iconColor = !rgbEnabled
+    ? 'var(--text-muted)'
+    : (isUltraLight ? '#64748B' : activeHex)
 
-  const emotionLabel = currentEmotion
-    ? `${currentEmotion.charAt(0).toUpperCase() + currentEmotion.slice(1)} mood`
-    : 'Mood sync'
+  const emotionName = currentEmotion
+    ? `${currentEmotion.charAt(0).toUpperCase() + currentEmotion.slice(1)}`
+    : 'Auto'
 
   return (
     <div
@@ -362,8 +367,8 @@ export default function RgbControlCard({
             height="13"
             viewBox="0 0 24 24"
             style={{
-              color: rgbEnabled ? activeHex : 'var(--text-muted)',
-              filter: rgbEnabled ? `drop-shadow(0 0 5px ${activeHex}66)` : 'none',
+              color: iconColor,
+              filter: (rgbEnabled && !isUltraLight) ? `drop-shadow(0 0 5px ${activeHex}66)` : 'none',
               display: 'block',
               flexShrink: 0,
               transition: 'color 0.3s ease'
@@ -666,8 +671,10 @@ export default function RgbControlCard({
                   height: '16px',
                   borderRadius: '50%',
                   background: p.hex,
-                  border: isSel ? '2px solid #FFFFFF' : '1px solid rgba(255, 255, 255, 0.25)',
-                  boxShadow: isSel ? `0 0 8px ${p.hex}` : 'none',
+                  border: isSel
+                    ? `2px solid ${p.hex === '#FFFFFF' ? '#64748B' : '#FFFFFF'}`
+                    : `1px solid ${p.hex === '#FFFFFF' ? 'var(--border-dark)' : 'rgba(255, 255, 255, 0.25)'}`,
+                  boxShadow: isSel ? `0 0 8px ${p.hex === '#FFFFFF' ? 'rgba(100,116,139,0.55)' : p.hex}` : 'none',
                   cursor: 'pointer',
                   padding: 0,
                   flexShrink: 0,
@@ -687,7 +694,7 @@ export default function RgbControlCard({
           ? (compactFooterMode ? 'LED off' : 'LED turned off')
           : (isOverride
               ? (compactFooterMode ? hexString : `Manual · ${hexString}`)
-              : (compactFooterMode ? `${emotionLabel} mood` : `${emotionLabel} active`))
+              : (compactFooterMode ? `${emotionName} mood` : `${emotionName} mood active`))
         return (
           <div
             style={{

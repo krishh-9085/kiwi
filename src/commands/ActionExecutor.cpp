@@ -246,6 +246,13 @@ bool setEyeSkinByName(const String &nameIn) {
     currentEyeSkin = SKIN_EMO;
     return true;
   }
+  // 6. Kiwi+ (#6)
+  if (n == "kiwi+" || n == "kiwi plus" || n == "kiwi_plus" || n == "kiwi pro" ||
+      n == "kiwi glow" || n == "plus" || n == "pro" || n == "nova" ||
+      n == "कीवी प्लस") {
+    currentEyeSkin = SKIN_KIWI_PLUS;
+    return true;
+  }
 
   // Gracefully fallback to Kiwi for any unrecognized or retired theme name
   currentEyeSkin = SKIN_KIWI;

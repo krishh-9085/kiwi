@@ -422,7 +422,7 @@ void handleDoAction() {
     hungerEnabled = parsePortalBool(server.arg("hunger_en"));
     saveConfig();
     if (!hungerEnabled && (isKiwiHungry() || isKiwiAngry())) {
-      reconcileKiwi();
+      clearHungerState(true);
     }
     Serial.printf("[PORTAL] Hunger toggle live set to: %d\n", hungerEnabled);
     server.send(200, "application/json",

@@ -3,6 +3,7 @@
 #include "config/AppConfig.h"
 #include "core/CoreTypes.h"
 #include "core/Timing.h"
+#include "face/FaceDisplay.h"
 #include "face/FaceEngine.h"
 #include "face/FaceExpressions.h"
 #include "face/FaceScreens.h"
@@ -69,6 +70,7 @@ void handleOfflineBuddyTap() {
     // Loving Wink & Kiss
     setEmotion(EMOTION_WINK);
     flourish = FL_HEART;
+    flourishT0 = millis();
     soundPetKiss();
     break;
 
@@ -76,6 +78,7 @@ void handleOfflineBuddyTap() {
     // Kawaii Puppy Eyes & Sparkle
     setEmotion(EMOTION_CUTE);
     flourish = FL_SPARKLE;
+    flourishT0 = millis();
     soundPetSparkle();
     break;
 
@@ -83,6 +86,7 @@ void handleOfflineBuddyTap() {
     // Musical Giggle & Laugh
     setEmotion(EMOTION_LAUGHING);
     flourish = FL_NOTE;
+    flourishT0 = millis();
     soundLaughing();
     break;
 
@@ -90,6 +94,7 @@ void handleOfflineBuddyTap() {
     // Lovestruck Hearts
     setEmotion(EMOTION_HEARTS);
     flourish = FL_HEART;
+    flourishT0 = millis();
     soundPetLove();
     break;
 
@@ -97,15 +102,24 @@ void handleOfflineBuddyTap() {
     // Cheerful Desk Party
     setEmotion(EMOTION_PARTY);
     flourish = FL_STAR;
+    flourishT0 = millis();
     soundPetPlayful();
     break;
 
   case 5:
   default:
     // Cute Desk Buddy Toast Notice (non-intrusive, friendly)
-    drawMessage("Kiwi Desk Buddy", "Offline Mode <3");
+    if (displayLock(100)) {
+      statusOverlayUntil = millis() + 1200;
+      drawMessage("Kiwi Desk Buddy", "Offline Mode <3");
+      displayUnlock();
+    } else {
+      statusOverlayUntil = millis() + 1200;
+    }
     soundPetSparkle();
     waitMs(1200, []() -> bool { return (bool)cancelRequest; });
+    statusOverlayUntil = 0;
+    markDisplayDirty();
     setEmotion(EMOTION_HAPPY);
     break;
   }

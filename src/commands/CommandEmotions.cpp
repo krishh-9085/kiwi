@@ -95,7 +95,7 @@ bool handleEmotionCommand(const String &qIn) {
       Serial.println("[CMD/Laugh] No Fish Audio key configured -> fallback synth");
     }
 
-    if (!spoke) {
+    if (!spoke && !cancelRequest) {
       // Fallback high-fidelity robot synthesizer laughter paired with laughing -> happy face
       spkEndSpeech();
       setEmotion(EMOTION_LAUGHING);
@@ -400,6 +400,11 @@ bool handleSkinCommand(const String &qIn) {
                                      hasAny(q, {"ईमो", "इमो"})))) {
     targetSkin = SKIN_EMO;
     name = "EMO Style";
+  } else if (hasWord(q, {"kiwi+", "kiwi_plus", "nova"}) ||
+             hasAny(q, {"kiwi plus", "kiwi pro", "kiwi glow", "कीवी प्लस"}) ||
+             (isExplicitSkinWord && hasWord(q, {"plus", "pro", "glow"}))) {
+    targetSkin = SKIN_KIWI_PLUS;
+    name = "Kiwi+";
   }
 
   // Check for generic "cycle / next / change" eyes command
@@ -416,7 +421,7 @@ bool handleSkinCommand(const String &qIn) {
   if (name.length() == 0 && isCycleCommand) {
     targetSkin = (EyeSkin)(((uint8_t)currentEyeSkin + 1) % SKIN_COUNT);
     const char *skinNames[SKIN_COUNT] = {"Kiwi", "Pixel 8-Bit", "Lumina Spark",
-                                         "Mecha", "EMO Style"};
+                                         "Mecha", "EMO Style", "Kiwi+"};
     name = skinNames[targetSkin];
   }
 

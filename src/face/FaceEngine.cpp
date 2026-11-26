@@ -33,7 +33,7 @@ void updateFaceFrameRate() {
     active = true;
   }
   // Sound-reactive enabled and above noise gate
-  else if (soundReactiveEnabled && soundLevelGet() > NOISE_GATE_THRESHOLD) {
+  else if (soundReactiveEnabled && soundLevelGet() > SOUND_REACT_ACTIVE_LEVEL) {
     active = true;
   }
   // Sleepy or wake animation active
@@ -80,11 +80,19 @@ void tickFace() {
   }
   uint32_t now = millis();
   if (bootInfoUntil) {
-    if (now < bootInfoUntil) {
+    if ((int32_t)(now - bootInfoUntil) < 0) {
       displayUnlock();
       return;
     }
     bootInfoUntil = 0;
+    markDisplayDirty();
+  }
+  if (statusOverlayUntil) {
+    if ((int32_t)(now - statusOverlayUntil) < 0) {
+      displayUnlock();
+      return;
+    }
+    statusOverlayUntil = 0;
     markDisplayDirty();
   }
   if (animationIsActive()) {

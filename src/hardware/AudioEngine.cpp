@@ -81,10 +81,20 @@ static Tone toneQueue[32];
 static int toneCount = 0;
 static int toneIndex = 0;
 static uint32_t toneStartTime = 0;
+static uint32_t toneNoteSamplesWritten = 0;
+static uint32_t toneNoteTotalSamples = 0;
+static uint32_t toneTotalSamplesSent = 0;
+static uint32_t toneTailUntilMs = 0;
 static volatile bool tonePlaying = false;
 static float tonePhase = 0.0f;
 static float vibPhase = 0.0f;
 static float tremPhase = 0.0f;
+
+static inline uint32_t toneMsToSamples(int ms) {
+  if (ms <= 0)
+    return 0;
+  return (uint32_t)(((uint64_t)ms * (uint64_t)SAMPLE_RATE + 500ULL) / 1000ULL);
+}
 
 void playToneQueue(Tone *tones, int count) {
   powerNotifyActivity();
@@ -105,6 +115,10 @@ void playToneQueue(Tone *tones, int count) {
   toneCount = count;
   toneIndex = 0;
   toneStartTime = millis();
+  toneNoteSamplesWritten = 0;
+  toneNoteTotalSamples = toneMsToSamples(toneQueue[0].ms);
+  toneTotalSamplesSent = 0;
+  toneTailUntilMs = 0;
   tonePhase = 0.0f;
   vibPhase = 0.0f;
   tremPhase = 0.0f;
@@ -178,142 +192,192 @@ void updateTonePlayer() {
     tonePlaying = false;
     toneCount = 0;
     toneIndex = 0;
+    toneNoteSamplesWritten = 0;
+    toneNoteTotalSamples = 0;
+    toneTotalSamplesSent = 0;
+    toneTailUntilMs = 0;
     s_toneMouthAmplitude = 0.0f;
     return;
   }
 
   uint32_t now = millis();
 
-  // Advance past finished tones, keeping exact timing across boundaries.
-  while (toneIndex < toneCount &&
-         (now - toneStartTime) >= (uint32_t)toneQueue[toneIndex].ms) {
-    toneStartTime += (uint32_t)toneQueue[toneIndex].ms;
-    toneIndex++;
-  }
-  if (toneIndex >= toneCount) {
-    tonePlaying = false;
-    spkOwner = SPK_NONE;
-    s_toneMouthAmplitude = 0.0f;
+  // Wait cleanly for buffered DMA tail after final note samples were queued
+  if (toneTailUntilMs != 0) {
+    if ((int32_t)(now - toneTailUntilMs) >= 0) {
+      tonePlaying = false;
+      toneTailUntilMs = 0;
+      spkOwner = SPK_NONE;
+      s_toneMouthAmplitude = 0.0f;
+    }
     return;
   }
 
-  const Tone &cur = toneQueue[toneIndex];
-  const float duration = cur.ms / 1000.0f;
-  const float attack = fminf(0.015f, duration * 0.25f);
-  const float release = fminf(0.025f, duration * 0.35f);
-  const float elapsed = (float)(now - toneStartTime) / 1000.0f;
-  const float amp = 32767.0f * TONE_PEAK_FRACTION * volumeGain();
-
-  // Vocal/expressive robot tones drive subtle mouth opening; pure UI bells/clicks stay quiet
-  bool isVocalTone = (cur.freq > 1.0f) &&
-                     (cur.shape == SHAPE_WARM_VOCAL ||
-                      cur.shape == SHAPE_WARBLE ||
-                      cur.shape == SHAPE_CHIRP ||
-                      cur.shape == SHAPE_PURR);
-  float blockEnvSum = 0.0f;
-  float blockFreqMid = cur.freq;
+  // Pace synthesis to at most ~48ms ahead of wall-clock audio consumption so
+  // short chimes never dump all 256ms of DMA in 1ms or repeat t=0 envelopes.
+  uint32_t elapsedMs = now - toneStartTime;
+  uint32_t sentMs = (uint32_t)(((uint64_t)toneTotalSamplesSent * 1000ULL) /
+                               (uint64_t)SAMPLE_RATE);
+  if (sentMs > elapsedMs + 48) {
+    return;
+  }
 
   static int32_t buf[TONE_BLOCK_FRAMES * 2];
+  const float amp = 32767.0f * TONE_PEAK_FRACTION * volumeGain();
 
-  for (int i = 0; i < TONE_BLOCK_FRAMES; i++) {
-    // Silence / rest pause if freq <= 1.0f
-    if (cur.freq <= 1.0f) {
-      buf[i * 2] = 0;
-      buf[i * 2 + 1] = 0;
-      continue;
+  for (int blk = 0; blk < 2; blk++) {
+    elapsedMs = millis() - toneStartTime;
+    sentMs = (uint32_t)(((uint64_t)toneTotalSamplesSent * 1000ULL) /
+                        (uint64_t)SAMPLE_RATE);
+    if (sentMs > elapsedMs + 48) {
+      break;
     }
 
-    // Per-sample time keeps the envelope and pitch smooth within the block.
-    float t = elapsed + (float)i / (float)SAMPLE_RATE;
-
-    // Smooth Hann-tapered envelope eliminates sharp digital click transients
-    float env = 1.0f;
-    if (cur.shape == SHAPE_BELL) {
-      // Natural acoustic bell/chime percussive envelope:
-      // Rapid 4ms anti-click attack, followed by natural exponential decay
-      const float bellAttack = 0.004f;
-      if (t < bellAttack) {
-        env = 0.5f * (1.0f - cosf((float)M_PI * (t / bellAttack)));
+    while (toneIndex < toneCount && toneNoteTotalSamples == 0) {
+      toneIndex++;
+      toneNoteSamplesWritten = 0;
+      if (toneIndex < toneCount) {
+        toneNoteTotalSamples = toneMsToSamples(toneQueue[toneIndex].ms);
+      }
+    }
+    if (toneIndex >= toneCount) {
+      uint32_t remainMs = (sentMs > elapsedMs) ? (sentMs - elapsedMs) : 0;
+      if (remainMs == 0) {
+        tonePlaying = false;
+        spkOwner = SPK_NONE;
+        s_toneMouthAmplitude = 0.0f;
       } else {
-        float decayProgress = (duration > bellAttack) ? ((t - bellAttack) / (duration - bellAttack)) : 1.0f;
-        if (decayProgress < 0.0f) decayProgress = 0.0f;
-        if (decayProgress > 1.0f) decayProgress = 1.0f;
-        float d = 1.0f - decayProgress;
-        env = d * d * (0.85f * d + 0.15f);
+        toneTailUntilMs = millis() + remainMs;
       }
-    } else {
-      if (attack > 0.001f && t < attack) {
-        env = 0.5f * (1.0f - cosf((float)M_PI * (t / attack)));
-      } else if (release > 0.001f && t > duration - release) {
-        float rProg = (t - (duration - release)) / release;
-        if (rProg > 1.0f) rProg = 1.0f;
-        env = 0.5f * (1.0f + cosf((float)M_PI * rProg));
+      return;
+    }
+
+    bool blockHasVocal = false;
+    float blockEnvSum = 0.0f;
+    float blockFreqMid = toneQueue[toneIndex].freq;
+    int activeFrames = 0;
+
+    for (int i = 0; i < TONE_BLOCK_FRAMES; i++) {
+      while (toneIndex < toneCount &&
+             toneNoteSamplesWritten >= toneNoteTotalSamples) {
+        toneIndex++;
+        toneNoteSamplesWritten = 0;
+        tonePhase = 0.0f;
+        vibPhase = 0.0f;
+        if (toneIndex < toneCount) {
+          toneNoteTotalSamples = toneMsToSamples(toneQueue[toneIndex].ms);
+        }
       }
-    }
-    if (env < 0.0f)
-      env = 0.0f;
-    else if (env > 1.0f)
-      env = 1.0f;
+      if (toneIndex >= toneCount) {
+        buf[i * 2] = 0;
+        buf[i * 2 + 1] = 0;
+        continue;
+      }
 
-    // Smooth pitch interpolation (glissando / slide)
-    float progress = (duration > 0.0001f) ? (t / duration) : 1.0f;
-    if (progress < 0.0f)
-      progress = 0.0f;
-    else if (progress > 1.0f)
-      progress = 1.0f;
+      const Tone &cur = toneQueue[toneIndex];
+      uint32_t sampleIdx = toneNoteSamplesWritten++;
+      activeFrames++;
 
-    float instFreq = cur.freq;
-    if (cur.endFreq > 1.0f) {
-      instFreq = cur.freq + (cur.endFreq - cur.freq) * progress;
-    }
+      // Silence / rest pause if freq <= 1.0f
+      if (cur.freq <= 1.0f) {
+        buf[i * 2] = 0;
+        buf[i * 2 + 1] = 0;
+        continue;
+      }
 
-    // Vibrato / FM modulation
-    if (cur.vibDepth > 0.1f && cur.vibRate > 0.1f) {
-      instFreq += sinf(vibPhase) * cur.vibDepth;
-      vibPhase += 2.0f * (float)M_PI * cur.vibRate / (float)SAMPLE_RATE;
-      if (vibPhase >= 2.0f * (float)M_PI)
-        vibPhase -= 2.0f * (float)M_PI;
-    }
+      const float duration =
+          (float)toneNoteTotalSamples / (float)SAMPLE_RATE;
+      const float attack = fminf(0.015f, duration * 0.25f);
+      const float release = fminf(0.025f, duration * 0.35f);
+      const float t = (float)sampleIdx / (float)SAMPLE_RATE;
 
-    // Phase step accumulator
-    float phaseStep = 2.0f * (float)M_PI * instFreq / (float)SAMPLE_RATE;
-    tonePhase += phaseStep;
-    if (tonePhase >= 2.0f * (float)M_PI)
-      tonePhase -= 2.0f * (float)M_PI;
+      // Smooth Hann-tapered envelope eliminates sharp digital click transients
+      float env = 1.0f;
+      if (cur.shape == SHAPE_BELL) {
+        // Natural acoustic bell/chime percussive envelope
+        const float bellAttack = fminf(0.004f, duration * 0.25f);
+        if (bellAttack > 0.0001f && t < bellAttack) {
+          env = 0.5f * (1.0f - cosf((float)M_PI * (t / bellAttack)));
+        } else {
+          float decayDur = duration - bellAttack;
+          float decayProgress =
+              (decayDur > 0.0001f) ? ((t - bellAttack) / decayDur) : 1.0f;
+          if (decayProgress < 0.0f)
+            decayProgress = 0.0f;
+          if (decayProgress > 1.0f)
+            decayProgress = 1.0f;
+          float d = 1.0f - decayProgress;
+          env = d * d * (0.85f * d + 0.15f);
+        }
+      } else {
+        if (attack > 0.001f && t < attack) {
+          env = 0.5f * (1.0f - cosf((float)M_PI * (t / attack)));
+        } else if (release > 0.001f && t > duration - release) {
+          float rProg = (t - (duration - release)) / release;
+          if (rProg > 1.0f)
+            rProg = 1.0f;
+          env = 0.5f * (1.0f + cosf((float)M_PI * rProg));
+        }
+      }
+      if (env < 0.0f)
+        env = 0.0f;
+      else if (env > 1.0f)
+        env = 1.0f;
 
-    // Harmonic & timbre shaping
-    float raw = 0.0f;
-    switch (cur.shape) {
+      // Smooth pitch interpolation (glissando / slide)
+      float progress = (duration > 0.0001f) ? (t / duration) : 1.0f;
+      if (progress < 0.0f)
+        progress = 0.0f;
+      else if (progress > 1.0f)
+        progress = 1.0f;
+
+      float instFreq = cur.freq;
+      if (cur.endFreq > 1.0f) {
+        instFreq = cur.freq + (cur.endFreq - cur.freq) * progress;
+      }
+
+      // Vibrato / FM modulation
+      if (cur.vibDepth > 0.1f && cur.vibRate > 0.1f) {
+        instFreq += sinf(vibPhase) * cur.vibDepth;
+        vibPhase += 2.0f * (float)M_PI * cur.vibRate / (float)SAMPLE_RATE;
+        if (vibPhase >= 2.0f * (float)M_PI)
+          vibPhase -= 2.0f * (float)M_PI;
+      }
+
+      // Phase step accumulator
+      float phaseStep = 2.0f * (float)M_PI * instFreq / (float)SAMPLE_RATE;
+      tonePhase += phaseStep;
+      if (tonePhase >= 2.0f * (float)M_PI)
+        tonePhase -= 2.0f * (float)M_PI;
+
+      // Harmonic & timbre shaping
+      float raw = 0.0f;
+      switch (cur.shape) {
       case SHAPE_WARM_VOCAL: {
-        // Organic vocal formant overtones (Wall-E warm coo / vowel timbre)
         raw = sinf(tonePhase) * 0.70f +
               sinf(2.0f * tonePhase) * 0.22f +
               sinf(3.0f * tonePhase) * 0.08f;
         break;
       }
       case SHAPE_PURR: {
-        // Soft kitten robot motor: low rumble with amplitude tremolo
         tremPhase += 2.0f * (float)M_PI * 25.0f / (float)SAMPLE_RATE;
         if (tremPhase >= 2.0f * (float)M_PI)
           tremPhase -= 2.0f * (float)M_PI;
         float tremolo = 0.55f + 0.45f * sinf(tremPhase);
-        raw = (sinf(tonePhase) * 0.75f + sinf(2.0f * tonePhase) * 0.25f) * tremolo;
+        raw = (sinf(tonePhase) * 0.75f + sinf(2.0f * tonePhase) * 0.25f) *
+              tremolo;
         break;
       }
       case SHAPE_CHIRP: {
-        // Bright expressive robot chirp (bright 2nd harmonic)
         raw = sinf(tonePhase) * 0.82f + sinf(2.0f * tonePhase) * 0.18f;
         break;
       }
       case SHAPE_WARBLE: {
-        // Dynamic FM robotic warble (R2-D2 / Wall-E chatter)
         float fmMod = sinf(tonePhase * 1.5f) * 1.6f;
         raw = sinf(tonePhase + fmMod) * 0.85f;
         break;
       }
       case SHAPE_BELL: {
-        // Acoustic glockenspiel / chime / marimba timbre:
-        // Fundamental (pure warm core) + inharmonic bell overtone (2.756x) + 2nd harmonic (2x)
         raw = sinf(tonePhase) * 0.74f +
               sinf(2.0f * tonePhase) * 0.16f +
               sinf(2.756f * tonePhase) * 0.10f;
@@ -322,33 +386,47 @@ void updateTonePlayer() {
       default: // SHAPE_SINE
         raw = sinf(tonePhase);
         break;
+      }
+
+      bool isVocalTone = (cur.shape == SHAPE_WARM_VOCAL ||
+                          cur.shape == SHAPE_WARBLE ||
+                          cur.shape == SHAPE_CHIRP ||
+                          cur.shape == SHAPE_PURR);
+      if (isVocalTone) {
+        blockHasVocal = true;
+        blockEnvSum += env;
+        if (i == TONE_BLOCK_FRAMES / 2) {
+          blockFreqMid = instFreq;
+        }
+      }
+
+      float s = raw * amp * env;
+      int32_t v = toFrame32(s);
+      buf[i * 2] = v;
+      buf[i * 2 + 1] = v;
     }
 
-    float s = raw * amp * env;
-    blockEnvSum += env;
-    if (i == TONE_BLOCK_FRAMES / 2) {
-      blockFreqMid = instFreq;
+    if (blockHasVocal && activeFrames > 0) {
+      float meanEnv = blockEnvSum / (float)activeFrames;
+      float pNorm = (blockFreqMid - 200.0f) / 900.0f;
+      if (pNorm < 0.0f)
+        pNorm = 0.0f;
+      if (pNorm > 1.0f)
+        pNorm = 1.0f;
+      s_toneMouthAmplitude = fminf(1.0f, meanEnv * 0.85f);
+      s_tonePitchNorm = pNorm;
+    } else {
+      s_toneMouthAmplitude = 0.0f;
     }
-    int32_t v = toFrame32(s);
-    buf[i * 2] = v;
-    buf[i * 2 + 1] = v;
-  }
 
-  if (isVocalTone) {
-    float meanEnv = blockEnvSum / (float)TONE_BLOCK_FRAMES;
-    float pNorm = (blockFreqMid - 200.0f) / 900.0f;
-    if (pNorm < 0.0f) pNorm = 0.0f;
-    if (pNorm > 1.0f) pNorm = 1.0f;
-    s_toneMouthAmplitude = fminf(1.0f, meanEnv * 0.85f);
-    s_tonePitchNorm = pNorm;
-  } else {
-    s_toneMouthAmplitude = 0.0f;
-  }
-
-  if (!spkWriteAll(buf, sizeof(buf))) {
-    tonePlaying = false;
-    spkOwner = SPK_NONE;
-    s_toneMouthAmplitude = 0.0f;
+    if (!spkWriteAll(buf, sizeof(buf))) {
+      tonePlaying = false;
+      toneTailUntilMs = 0;
+      spkOwner = SPK_NONE;
+      s_toneMouthAmplitude = 0.0f;
+      return;
+    }
+    toneTotalSamplesSent += TONE_BLOCK_FRAMES;
   }
 }
 
@@ -400,6 +478,19 @@ void soundPetSparkle() {
     {1318, 110, 1318, SHAPE_WARM_VOCAL, 20, 12} // E6 warm bell ring
   };
   playToneQueue(t, 4);
+}
+
+// Combined non-blocking coin + sparkle chime when fed
+void soundFeedHappy() {
+  Tone t[] = {
+    {523.3f, 65, 0, SHAPE_BELL, 0, 0},          // C5
+    {784.0f, 115, 0, SHAPE_BELL, 10, 7},        // G5
+    {659, 42, 784, SHAPE_WARM_VOCAL, 0, 0},     // E5 -> G5
+    {784, 42, 988, SHAPE_WARM_VOCAL, 0, 0},     // G5 -> B5
+    {988, 48, 1175, SHAPE_WARM_VOCAL, 0, 0},    // B5 -> D6
+    {1318, 110, 1318, SHAPE_WARM_VOCAL, 20, 12} // E6
+  };
+  playToneQueue(t, 6);
 }
 
 // Cute "Mwah / Squeak-Pop"
@@ -733,6 +824,7 @@ static void saveMicSlot(int slot) {
   Preferences p;
   p.begin("myrobot", false);
   p.putInt("micslot", slot);
+  p.putBool("micslot_lock", true);
   p.end();
 }
 
@@ -934,6 +1026,10 @@ void toneStop() {
   tonePlaying = false;
   toneCount = 0;
   toneIndex = 0;
+  toneNoteSamplesWritten = 0;
+  toneNoteTotalSamples = 0;
+  toneTotalSamplesSent = 0;
+  toneTailUntilMs = 0;
   s_toneMouthAmplitude = 0.0f;
   if (spkOwner == SPK_TONE) {
     spkOwner = SPK_NONE;
@@ -981,6 +1077,10 @@ void spkAbortSpeech() {
   tonePlaying = false;
   toneCount = 0;
   toneIndex = 0;
+  toneNoteSamplesWritten = 0;
+  toneNoteTotalSamples = 0;
+  toneTotalSamplesSent = 0;
+  toneTailUntilMs = 0;
   s_toneMouthAmplitude = 0.0f;
   if (spkOwner == SPK_SPEECH || fabsf(s_lastSpeechOut) > 1.0f) {
     spkWriteRampToZero();
@@ -998,6 +1098,10 @@ void audioSleepPrepare() {
   tonePlaying = false;
   toneCount = 0;
   toneIndex = 0;
+  toneNoteSamplesWritten = 0;
+  toneNoteTotalSamples = 0;
+  toneTotalSamplesSent = 0;
+  toneTailUntilMs = 0;
   s_toneMouthAmplitude = 0.0f;
   resetLipSyncState();
   spkOwner = SPK_NONE;

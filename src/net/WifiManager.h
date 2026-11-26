@@ -10,6 +10,8 @@ void pumpDns();
 
 // ---------- mDNS & AP/STA Lifecycle ----------
 void initMdns(const char *mode);
+bool mdnsQueryLock(uint32_t waitMs = 15000);
+void mdnsQueryUnlock();
 void createAPName();
 void startAP();
 void startAPParallel();

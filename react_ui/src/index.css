@@ -583,7 +583,7 @@ body::-webkit-scrollbar {
 .flux-progress-track {
   flex: 1;
   height: 7px;
-  background: #ECEEF2;
+  background: var(--slider-track);
   border-radius: var(--radius-pill);
   overflow: hidden;
 }
@@ -598,6 +598,11 @@ body::-webkit-scrollbar {
   height: 100%;
   background: var(--sidebar-bg);
   border-radius: var(--radius-pill);
+}
+
+[data-theme="dark"] .flux-progress-fill-dark,
+.dark .flux-progress-fill-dark {
+  background: var(--accent-cyan);
 }
 
 .flux-progress-fill-lime {
@@ -2197,6 +2202,33 @@ input[type="range"]::-webkit-slider-thumb:hover {
   to {
     clip-path: polygon(0% 0%, 100% 0%, 100% 100%, 0% 100%);
   }
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes pulseActive {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+
+  50% {
+    transform: scale(1.06);
+    opacity: 0.85;
+  }
+}
+
+.pulse-active {
+  animation: pulseActive 1.4s ease-in-out infinite;
 }
 
 .spin-fast {

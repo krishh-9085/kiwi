@@ -523,8 +523,8 @@ void drawFace(float soundLevel) {
 
   float eyeOffset = 0.0f;
   float mouthPulse = 0.0f;
-  if (soundReactiveEnabled && bootWakeDone() && soundLevel > 0.05f) {
-    float norm = (soundLevel - 0.05f) / 0.95f;
+  if (soundReactiveEnabled && bootWakeDone() && soundLevel > SOUND_REACT_ACTIVE_LEVEL) {
+    float norm = (soundLevel - SOUND_REACT_ACTIVE_LEVEL) / (1.0f - SOUND_REACT_ACTIVE_LEVEL);
     if (norm > 1.0f)
       norm = 1.0f;
     if (norm > 0.78f) {

@@ -241,7 +241,7 @@ export default function WakeSlider({
     onDragStart?.();
     try {
       e.currentTarget.setPointerCapture(e.pointerId);
-    } catch {}
+    } catch { }
     rootRef.current?.removeAttribute('data-instant');
     handleRef.current?.focus({ preventScroll: true });
     commitFromX(e.clientX);
@@ -255,7 +255,7 @@ export default function WakeSlider({
     if (e.pointerId !== pointerId.current) return;
     try {
       e.currentTarget.releasePointerCapture(e.pointerId);
-    } catch {}
+    } catch { }
     pointerId.current = null;
     onDragEnd?.();
     onCommit?.(latest.current);

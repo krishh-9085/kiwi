@@ -420,7 +420,8 @@ void checkAutonomousBoredom() {
       recordRecentIdleThought(cleanThought);
       lastLlmAnswer = cleanThought;
 
-      if (returnIdleAt <= millis() || currentEmotion == EMOTION_THINKING) {
+      if (returnIdleAt == 0 || (int32_t)(millis() - returnIdleAt) >= 0 ||
+          currentEmotion == EMOTION_THINKING) {
         setEmotion(detectVocalEmotion(cleanThought));
       }
 
@@ -431,7 +432,7 @@ void checkAutonomousBoredom() {
         finalizeIdleSpeechExit(true);
         return;
       }
-      if (returnIdleAt <= millis()) {
+      if (returnIdleAt == 0 || (int32_t)(millis() - returnIdleAt) >= 0) {
         setEmotion(EMOTION_HAPPY);
         returnIdleAt = millis() + 2500;
       }

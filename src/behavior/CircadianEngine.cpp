@@ -59,8 +59,8 @@ int computeSecondsUntilScheduleWake() {
                                        : (endSec - curSec);
   if (secUntilEnd < 60)
     secUntilEnd = 60;
-  if (secUntilEnd > 12 * 3600)
-    secUntilEnd = 12 * 3600;
+  if (secUntilEnd > 24 * 3600)
+    secUntilEnd = 24 * 3600;
   return secUntilEnd;
 }
 

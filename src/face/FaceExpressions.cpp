@@ -489,23 +489,23 @@ void maybeChangeEmotion() {
     return;
   }
   uint32_t now = millis();
-  if (errorFaceUntil && now < errorFaceUntil)
+  if (errorFaceUntil != 0 && (int32_t)(now - errorFaceUntil) < 0)
     return;
-  if (errorFaceUntil && now >= errorFaceUntil) {
+  if (errorFaceUntil != 0 && (int32_t)(now - errorFaceUntil) >= 0) {
     errorFaceUntil = 0;
     setEmotion(EMOTION_IDLE);
     return;
   }
-  if (bootInfoUntil && now < bootInfoUntil)
+  if (bootInfoUntil != 0 && (int32_t)(now - bootInfoUntil) < 0)
     return;
-  if (gazeLockUntil > now)
+  if (gazeLockUntil != 0 && (int32_t)(gazeLockUntil - now) > 0)
     return;
-  if (emotionAutoReturnAt && now >= emotionAutoReturnAt) {
+  if (emotionAutoReturnAt != 0 && (int32_t)(now - emotionAutoReturnAt) >= 0) {
     emotionAutoReturnAt = 0;
     setEmotion(EMOTION_IDLE);
     return;
   }
-  if (returnIdleAt && now >= returnIdleAt) {
+  if (returnIdleAt != 0 && (int32_t)(now - returnIdleAt) >= 0) {
     returnIdleAt = 0;
     setEmotion(EMOTION_IDLE);
     return;

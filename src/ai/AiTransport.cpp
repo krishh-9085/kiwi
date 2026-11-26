@@ -33,15 +33,18 @@ void initMbedTlsPsram() {
 bool httpReadLine(WiFiClient &c, String &line, uint32_t timeoutMs) {
   line = "";
   uint32_t start = millis();
-  uint32_t idleT0 = millis();
+  uint32_t idleT0 = start;
   while ((uint32_t)(millis() - start) < timeoutMs) {
+    if (cancelRequest)
+      return false;
     if (c.available()) {
       char ch = c.read();
       if (ch == '\n') {
         line.trim();
         return true;
       }
-      line += ch;
+      if (line.length() < 4096)
+        line += ch;
       idleT0 = millis();
     } else {
       if (!c.connected())
@@ -89,7 +92,11 @@ int httpReadBlock(HttpStream &s, uint8_t *buf, size_t maxLen) {
     return 0;
   }
   int n = s.c->read(buf, want);
-  if (n <= 0)
+  if (n < 0) {
+    s.finished = true;
+    return -1;
+  }
+  if (n == 0)
     return 0;
   if (s.chunked)
     s.chunkLeft -= n;
@@ -180,6 +187,8 @@ bool clientWriteAll(WiFiClient &c, const uint8_t *p, size_t n) {
   size_t off = 0;
   uint32_t t0 = millis();
   while (off < n) {
+    if (cancelRequest || !c.connected())
+      return false;
     int w = c.write(p + off, n - off);
     if (w <= 0) {
       if (millis() - t0 > 8000)

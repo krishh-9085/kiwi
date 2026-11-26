@@ -65,7 +65,9 @@ export default function WakeSlider({
   const pointerId = useRef(null);
   const lastAmp = useRef(0);
   const latest = useRef(value);
-  latest.current = value;
+  useEffect(() => {
+    latest.current = value;
+  }, [value]);
 
   const springRef = useRef({
     target: pct,
@@ -114,7 +116,10 @@ export default function WakeSlider({
     lastAmp.current = amp;
   };
   const paintRef = useRef(paint);
-  paintRef.current = paint;
+  useLayoutEffect(() => {
+    paintRef.current = paint;
+    paint(true);
+  });
 
   const stopAnim = useCallback(() => {
     const st = springRef.current;
@@ -202,9 +207,10 @@ export default function WakeSlider({
 
   useEffect(() => stopAnim, [stopAnim]);
 
-  useLayoutEffect(() => {
-    paintRef.current(true);
-  }, [pct, bars, rest, crestColor, reduce]);
+  useEffect(() => {
+    barEls.current.length = bars;
+    crestEls.current.length = bars;
+  }, [bars]);
 
   const commit = next => {
     const clean = snap(next, min, max, step);
@@ -285,8 +291,6 @@ export default function WakeSlider({
   };
 
   const barNodes = useMemo(() => {
-    barEls.current.length = bars;
-    crestEls.current.length = bars;
     return Array.from({ length: bars }, (_, i) => (
       <span
         key={i}

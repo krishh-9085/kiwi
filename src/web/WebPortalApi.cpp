@@ -52,11 +52,27 @@ static String buildCircadianJson(bool includeRuntime) {
 }
 
 String escJson(String s) {
-  s.replace("\\", "\\\\");
-  s.replace("\"", "\\\"");
-  s.replace("\r", "");
-  s.replace("\n", "\\n");
-  return s;
+  String out;
+  out.reserve(s.length() + 8);
+  for (size_t i = 0; i < s.length(); i++) {
+    unsigned char uc = (unsigned char)s[i];
+    if (uc == '\\') {
+      out += "\\\\";
+    } else if (uc == '"') {
+      out += "\\\"";
+    } else if (uc == '\n') {
+      out += "\\n";
+    } else if (uc == '\t') {
+      out += "\\t";
+    } else if (uc == '\r') {
+      continue;
+    } else if (uc < 0x20) {
+      continue;
+    } else {
+      out += (char)uc;
+    }
+  }
+  return out;
 }
 
 static uint32_t lastStatusGen = 0;
@@ -139,7 +155,7 @@ void handleStatus() {
        ",\"listening\":" + String(wakeWordIsListening() ? "true" : "false") +
        "}";
   j += ",\"rgbLed\":{\"enabled\":" + String(rgbLedEnabled ? "true" : "false") +
-       ",\"brightness\":" + String((int)((rgbLedBrightness * 100) / 255)) + "}";
+       ",\"brightness\":" + String((int)((rgbLedBrightness * 100 + 127) / 255)) + "}";
   j += ",\"volume\":" + String(speakerVolume);
   j += ",\"brightness\":" + String(displayBrightness);
   j += ",\"nightMode\":" + String(nightMode);
@@ -279,7 +295,7 @@ void handleConfigApi() {
        String(wakeWordGetModelName()) + "\"" +
        ",\"cutoff\":" + String(wakeWordCutoff, 2) + "},";
   j += "\"rgbLed\":{\"enabled\":" + String(rgbLedEnabled ? "true" : "false") +
-       ",\"brightness\":" + String((int)((rgbLedBrightness * 100) / 255)) +
+       ",\"brightness\":" + String((int)((rgbLedBrightness * 100 + 127) / 255)) +
        ",\"pin\":48},";
   j += "\"boredom\":{\"enabled\":" + String(boredomEnabled ? "true" : "false") +
        ",\"minutes\":" + String(boredomMinutes) + "},";

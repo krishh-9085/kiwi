@@ -65,15 +65,30 @@ String utf8Truncate(const String &s, int maxChars) {
 
 String jsonTextField(const String &json, const char *key) {
   String needle = "\"" + String(key) + "\"";
-  int p = json.indexOf(needle);
-  if (p < 0)
-    return "";
-  p = json.indexOf(':', p);
-  if (p < 0)
-    return "";
-  p = json.indexOf('"', p);
-  if (p < 0)
-    return "";
+  int searchPos = 0;
+  int p = -1;
+  while (true) {
+    p = json.indexOf(needle, searchPos);
+    if (p < 0)
+      return "";
+    int colon = json.indexOf(':', p + needle.length());
+    if (colon < 0)
+      return "";
+    int qPos = colon + 1;
+    while (qPos < (int)json.length()) {
+      char ws = json[qPos];
+      if (ws == ' ' || ws == '\t' || ws == '\r' || ws == '\n') {
+        qPos++;
+        continue;
+      }
+      break;
+    }
+    if (qPos < (int)json.length() && json[qPos] == '"') {
+      p = qPos;
+      break;
+    }
+    searchPos = p + needle.length();
+  }
   String out;
   int e = p + 1;
   while (e < (int)json.length()) {

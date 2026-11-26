@@ -222,13 +222,22 @@ static bool readTtsHttpResponse(const char *tag, WiFiClientSecure &client,
   int sp = line.indexOf(' ');
   int status = sp > 0 ? line.substring(sp + 1).toInt() : 0;
   hs.c = &client;
-  while (httpReadLine(client, line, 10000) && line.length() > 0) {
+  bool gotBlank = false;
+  while (httpReadLine(client, line, 10000)) {
+    if (line.length() == 0) {
+      gotBlank = true;
+      break;
+    }
     String l = line;
     l.toLowerCase();
     if (l.startsWith("transfer-encoding:") && l.indexOf("chunked") > 0)
       hs.chunked = true;
     if (l.startsWith("content-length:"))
       hs.contentLeft = l.substring(15).toInt();
+  }
+  if (!gotBlank) {
+    client.stop();
+    return false;
   }
   if (logChunked) {
     Serial.printf("[TTS] HTTP %d%s\n", status, hs.chunked ? " (chunked)" : "");
@@ -318,8 +327,12 @@ int ttsSarvam(const String &text) {
   static const char KEY[] = "\"audios\"";
   int keyPos = 0;
   int b64val = 0, b64bits = 0;
-  static uint8_t hdr[64];
-  size_t hdrLen = 0;
+  enum WavState { WP_RIFF, WP_CH_HDR, WP_FMT, WP_SKIP, WP_DATA };
+  WavState wp = WP_RIFF;
+  uint8_t wpBuf[16];
+  size_t wpPos = 0;
+  uint32_t wpChunkLeft = 0;
+  uint32_t wpFmtRead = 0;
   bool fmtSeen = false, dataSeen = false;
   uint32_t srcRate = 0;
   uint16_t channels = 1, bits = 16;
@@ -372,50 +385,7 @@ int ttsSarvam(const String &text) {
   auto onWavByte = [&](uint8_t b) {
     if (aborted)
       return;
-    if (!dataSeen) {
-      if (hdrLen < sizeof(hdr))
-        hdr[hdrLen++] = b;
-      if (!fmtSeen && hdrLen >= 36) {
-        if (hdrLen >= 12 &&
-            (memcmp(hdr, "RIFF", 4) != 0 || memcmp(hdr + 8, "WAVE", 4) != 0)) {
-          aborted = true;
-          return;
-        }
-        if (hdrLen >= 36 && memcmp(hdr + 12, "fmt ", 4) == 0) {
-          channels = hdr[22] | (hdr[23] << 8);
-          srcRate = hdr[24] | (hdr[25] << 8) | (hdr[26] << 16) |
-                    ((uint32_t)hdr[27] << 24);
-          bits = hdr[34] | (hdr[35] << 8);
-          fmtSeen = true;
-          if (bits != 16 || srcRate < 8000 || srcRate > 96000) {
-            aborted = true;
-            return;
-          }
-        }
-      }
-      if (fmtSeen && !dataSeen && hdrLen >= 44) {
-        if (memcmp(hdr + 36, "data", 4) == 0) {
-          dataSeen = true;
-          step = (float)srcRate / (float)SAMPLE_RATE;
-          if (currentEmotion == EMOTION_IDLE || currentEmotion == EMOTION_THINKING) {
-            setEmotion(EMOTION_SPEAKING);
-          }
-          gFaceFrameMs = FACE_FRAME_MS_ACTIVE;
-          playing = true;
-          for (size_t i = 44; i < hdrLen; i++) {
-            uint8_t b2 = hdr[i];
-            if (!haveLo) {
-              lo = b2;
-              haveLo = true;
-            } else {
-              int16_t s = (int16_t)(lo | (b2 << 8));
-              haveLo = false;
-              emitSample(s);
-            }
-          }
-        }
-      }
-    } else {
+    if (wp == WP_DATA) {
       if (!haveLo) {
         lo = b;
         haveLo = true;
@@ -423,6 +393,82 @@ int ttsSarvam(const String &text) {
         int16_t s = (int16_t)(lo | (b << 8));
         haveLo = false;
         emitSample(s);
+      }
+      return;
+    }
+
+    if (wp == WP_RIFF) {
+      wpBuf[wpPos++] = b;
+      if (wpPos == 12) {
+        if (memcmp(wpBuf, "RIFF", 4) != 0 || memcmp(wpBuf + 8, "WAVE", 4) != 0) {
+          aborted = true;
+          return;
+        }
+        wp = WP_CH_HDR;
+        wpPos = 0;
+      }
+    } else if (wp == WP_CH_HDR) {
+      wpBuf[wpPos++] = b;
+      if (wpPos == 8) {
+        uint32_t chunkSize = (uint32_t)wpBuf[4] | ((uint32_t)wpBuf[5] << 8) |
+                             ((uint32_t)wpBuf[6] << 16) |
+                             ((uint32_t)wpBuf[7] << 24);
+        wpPos = 0;
+        if (memcmp(wpBuf, "fmt ", 4) == 0 && chunkSize >= 16) {
+          wp = WP_FMT;
+          wpChunkLeft = chunkSize;
+          wpFmtRead = 0;
+        } else if (memcmp(wpBuf, "data", 4) == 0 && fmtSeen) {
+          wp = WP_DATA;
+          dataSeen = true;
+          step = (float)srcRate / (float)SAMPLE_RATE;
+          if (currentEmotion == EMOTION_IDLE ||
+              currentEmotion == EMOTION_THINKING) {
+            setEmotion(EMOTION_SPEAKING);
+          }
+          gFaceFrameMs = FACE_FRAME_MS_ACTIVE;
+          playing = true;
+        } else {
+          if (chunkSize == 0) {
+            wp = WP_CH_HDR;
+          } else {
+            wp = WP_SKIP;
+            wpChunkLeft = chunkSize + (chunkSize & 1U);
+          }
+        }
+      }
+    } else if (wp == WP_FMT) {
+      if (wpFmtRead < 16) {
+        wpBuf[wpFmtRead] = b;
+      }
+      wpFmtRead++;
+      wpChunkLeft--;
+      if (wpFmtRead == 16) {
+        channels = wpBuf[2] | (wpBuf[3] << 8);
+        srcRate = (uint32_t)wpBuf[4] | ((uint32_t)wpBuf[5] << 8) |
+                  ((uint32_t)wpBuf[6] << 16) | ((uint32_t)wpBuf[7] << 24);
+        bits = wpBuf[14] | (wpBuf[15] << 8);
+        fmtSeen = true;
+        if (bits != 16 || channels == 0 || srcRate < 8000 || srcRate > 96000) {
+          aborted = true;
+          return;
+        }
+      }
+      if (wpChunkLeft == 0) {
+        if ((wpFmtRead & 1U) != 0) {
+          wp = WP_SKIP;
+          wpChunkLeft = 1;
+        } else {
+          wp = WP_CH_HDR;
+          wpPos = 0;
+        }
+      }
+    } else if (wp == WP_SKIP) {
+      if (wpChunkLeft > 0)
+        wpChunkLeft--;
+      if (wpChunkLeft == 0) {
+        wp = WP_CH_HDR;
+        wpPos = 0;
       }
     }
   };
@@ -499,17 +545,19 @@ int ttsSarvam(const String &text) {
     }
   }
   client.stop();
-  if (!cancelRequest) {
-    prebuf.flushRemaining();
+  bool audioPlayed = false;
+  if (!cancelRequest && playing) {
     flushChunk();
+    prebuf.flushRemaining();
     spkFlush();
+    audioPlayed = true;
     for (int i = 0; i < SAMPLE_RATE / 10; i++)
       spkPushSample(0);
   }
   spkEndSpeech();
   gFaceFrameMs = 33;
   net.leave();
-  return playing ? 1 : 0;
+  return audioPlayed ? 1 : 0;
 }
 
 int ttsFishAudio(const String &text, uint32_t maxPlayMs) {
@@ -596,9 +644,13 @@ int ttsFishAudio(const String &text, uint32_t maxPlayMs) {
     }
   }
   client.stop();
-  if (!cancelRequest) {
+  bool audioPlayed = false;
+  if (!cancelRequest && playing) {
     if (!hitMaxPlay) {
       prebuf.flushRemaining();
+      audioPlayed = true;
+    } else if (prebuf.done) {
+      audioPlayed = true;
     }
     spkFlush();
     if (!hitMaxPlay) {
@@ -609,7 +661,7 @@ int ttsFishAudio(const String &text, uint32_t maxPlayMs) {
   spkEndSpeech();
   gFaceFrameMs = 33;
   net.leave();
-  return playing ? 1 : 0;
+  return audioPlayed ? 1 : 0;
 }
 
 bool speakFishAudio(const String &text, uint32_t maxPlayMs) {

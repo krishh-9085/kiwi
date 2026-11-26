@@ -190,7 +190,7 @@ void startWeb() {
             otaInProgress = true;
             Serial.printf("[OTA] Update: %s\n", upload.filename.c_str());
             if (server.hasHeader("Content-Length") &&
-                (size_t)server.header("Content-Length").toInt() > 0x1F0000UL) {
+                (size_t)server.header("Content-Length").toInt() > (0x1F0000UL + 8192UL)) {
               Serial.println("[OTA] Update rejected: upload size exceeds app "
                              "partition (1.98MB)");
               otaInProgress = false;
@@ -213,6 +213,7 @@ void startWeb() {
                 upload.currentSize) {
               otaInProgress = false;
               Update.printError(Serial);
+              Update.abort();
             }
           } else if (upload.status == UPLOAD_FILE_END) {
             otaInProgress = false;
@@ -223,6 +224,7 @@ void startWeb() {
             }
           } else if (upload.status == UPLOAD_FILE_ABORTED) {
             otaInProgress = false;
+            Update.abort();
           }
         });
 

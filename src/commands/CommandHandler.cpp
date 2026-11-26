@@ -310,7 +310,7 @@ bool handleVolumeCommand(const String &qIn) {
 
   bool hasVolWord = hasWord(q, {"volume", "vol", "aawaz", "awaz", "sound",
                                 "loudness", "mute", "audio"}) ||
-                    hasAny(q, {"volume", "vol", "aawaz", "awaz", "awaaz",
+                    hasAny(q, {"volume", "aawaz", "awaz", "awaaz",
                                "avaz", "आवाज़", "आवाज", "वॉल्यूम", "म्यूट"});
 
   // Also support direct "tez bolo", "dheere bolo", "chup ho jao", "shant ho

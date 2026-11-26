@@ -45,9 +45,10 @@ uint32_t getRobotTimerRemainingSec() {
   if (!robotTimerActive)
     return 0;
   uint32_t now = millis();
-  if (now >= robotTimerEndMs)
+  int32_t rem = (int32_t)(robotTimerEndMs - now);
+  if (rem <= 0)
     return 0;
-  return (robotTimerEndMs - now) / 1000;
+  return (uint32_t)rem / 1000;
 }
 
 void stopRobotTimerAlarm() {
@@ -105,7 +106,7 @@ void checkRobotTimer() {
   uint32_t now = millis();
 
   // 1. Transition from countdown to ringing alarm
-  if (robotTimerActive && now >= robotTimerEndMs) {
+  if (robotTimerActive && (int32_t)(now - robotTimerEndMs) >= 0) {
     robotTimerActive = false;
     robotTimerRinging = true;
     robotTimerRingingStartMs = now;
@@ -366,16 +367,17 @@ bool executeRobotAction(const String &actionCmd) {
       return true;
     }
     int pSpace = param.indexOf(' ');
-    uint32_t sec = 0;
+    long parsedSec = 0;
     String lbl = "Timer";
     if (pSpace > 0) {
-      sec = (uint32_t)param.substring(0, pSpace).toInt();
+      parsedSec = param.substring(0, pSpace).toInt();
       lbl = param.substring(pSpace + 1);
       lbl.trim();
     } else {
-      sec = (uint32_t)param.toInt();
+      parsedSec = param.toInt();
     }
-    if (sec > 0) {
+    if (parsedSec > 0) {
+      uint32_t sec = (uint32_t)parsedSec;
       startRobotTimer(sec, lbl);
       addTerminalLog("[ACTION] Timer set for " + String(sec) + "s (" + lbl +
                      ")");

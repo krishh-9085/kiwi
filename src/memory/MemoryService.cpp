@@ -11,6 +11,8 @@ void initMemory() {
   kiwiMemory.userName = memPrefs.getString("name", "");
   kiwiMemory.friendsFamily = memPrefs.getString("friends", "");
   kiwiMemory.memoryCount = memPrefs.getInt("count", 0);
+  if (kiwiMemory.memoryCount < 0)
+    kiwiMemory.memoryCount = 0;
   if (kiwiMemory.memoryCount > MAX_PERSISTENT_MEMORIES)
     kiwiMemory.memoryCount = MAX_PERSISTENT_MEMORIES;
 

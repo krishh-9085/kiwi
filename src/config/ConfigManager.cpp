@@ -1,8 +1,9 @@
 #include "config/ConfigManager.h"
+#include "ai/AiChatHistory.h"
 #include "config/AppConfig.h"
 #include "hardware/AudioEngine.h"
 #include "hardware/RgbLed.h"
-#include "ai/AiChatHistory.h"
+#include "web/WebPortal.h"
 #include <Preferences.h>
 #include <WiFi.h>
 
@@ -190,8 +191,9 @@ void loadConfig() {
 
   // Auto-sync standard Google Gemini endpoint with the loaded llmModel
   if (llmEndpoint.indexOf("generativelanguage.googleapis.com") >= 0) {
-    String expectedEp = "https://generativelanguage.googleapis.com/v1beta/models/" +
-                        llmModel + ":generateContent";
+    String expectedEp =
+        "https://generativelanguage.googleapis.com/v1beta/models/" + llmModel +
+        ":generateContent";
     if (llmEndpoint != expectedEp) {
       llmEndpoint = expectedEp;
     }
@@ -283,9 +285,14 @@ void loadConfig() {
 
   float defCutoff = 0.90f;
   wakeWordCutoff = prefs.getFloat("ww_cutoff", defCutoff);
-  if (fabsf(wakeWordCutoff - 0.40f) < 0.05f || fabsf(wakeWordCutoff - 0.82f) < 0.005f) {
+  if (fabsf(wakeWordCutoff - 0.40f) < 0.05f ||
+      fabsf(wakeWordCutoff - 0.82f) < 0.005f) {
     wakeWordCutoff = 0.90f;
+    prefs.end();
+    prefs.begin("myrobot", false);
     prefs.putFloat("ww_cutoff", 0.90f);
+    prefs.end();
+    prefs.begin("myrobot", true);
     Serial.println("[CONFIG] Migrated wake-word cutoff to 0.90 (Alexa)");
   }
 
@@ -336,10 +343,6 @@ void loadConfig() {
     touchDebounceMs = 200;
 
   touchFeedbackSound = prefs.getBool("tch_snd", true);
-  if (!touchFeedbackSound) {
-    touchFeedbackSound = true;
-    prefs.putBool("tch_snd", true);
-  }
 
   touchActTopTap =
       (TouchAction)prefs.getInt("act_top_tap", (int)TOUCH_ACT_LISTEN);
@@ -376,9 +379,13 @@ void loadConfig() {
 
   int savedMic = prefs.getInt("micslot", -1);
   if (savedMic == 0 || savedMic == 1) {
+    bool lockMic = prefs.isKey("micslot_lock")
+                       ? prefs.getBool("micslot_lock", true)
+                       : true;
     setMicSlot(savedMic, false, true);
-    setMicSlotLocked(true);
-    Serial.printf("[MIC] Slot %d cached from NVS (locked)\n", micSlot);
+    setMicSlotLocked(lockMic);
+    Serial.printf("[MIC] Slot %d cached from NVS (%s)\n", micSlot,
+                  lockMic ? "locked" : "unlocked");
   } else {
     setMicSlot(0, false, true);
     setMicSlotLocked(false);
@@ -408,14 +415,18 @@ void loadConfig() {
     faceTweenMs = FACE_TWEEN_MS;
 
   // STT Adaptive Endpointer Parameters
-  sttTrailingMs   = prefs.getInt("stt_trail_ms", 450);
-  if (sttTrailingMs < 100 || sttTrailingMs > 3000) sttTrailingMs = 450;
-  sttNoiseK       = prefs.getFloat("stt_noise_k", 2.2f);
-  if (sttNoiseK < 1.1f || sttNoiseK > 10.0f) sttNoiseK = 2.2f;
-  sttRelK         = prefs.getFloat("stt_rel_k", 0.20f);
-  if (sttRelK < 0.0f || sttRelK > 1.0f) sttRelK = 0.20f;
+  sttTrailingMs = prefs.getInt("stt_trail_ms", 450);
+  if (sttTrailingMs < 100 || sttTrailingMs > 3000)
+    sttTrailingMs = 450;
+  sttNoiseK = prefs.getFloat("stt_noise_k", 2.2f);
+  if (sttNoiseK < 1.1f || sttNoiseK > 10.0f)
+    sttNoiseK = 2.2f;
+  sttRelK = prefs.getFloat("stt_rel_k", 0.20f);
+  if (sttRelK < 0.0f || sttRelK > 1.0f)
+    sttRelK = 0.20f;
   sttMaxSilenceMs = prefs.getInt("stt_max_sil", 1200);
-  if (sttMaxSilenceMs < 300 || sttMaxSilenceMs > 5000) sttMaxSilenceMs = 1200;
+  if (sttMaxSilenceMs < 300 || sttMaxSilenceMs > 5000)
+    sttMaxSilenceMs = 1200;
 
   prefs.end();
 }
@@ -580,7 +591,8 @@ void serviceConfigManager() {
 
   // Defer if audio or AI speech is outputting or processing to prevent SPI bus
   // latency clicks
-  if (kiwiIsOutputting() || busyProcessing || isTonePlaying()) {
+  if (kiwiIsOutputting() || busyProcessing || isTonePlaying() ||
+      otaInProgress) {
     return;
   }
 

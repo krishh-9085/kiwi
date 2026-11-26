@@ -8,6 +8,7 @@ bool powerIsSleepRequested();
 void powerNotifyActivity();
 void powerSetCpuFreq(uint32_t mhz);
 uint32_t powerGetCpuFreq();
+bool powerIsHardwareSleeping();
 
 extern bool suppressBootGreeting;
 extern bool skipBootWakeAnim;

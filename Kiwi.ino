@@ -474,92 +474,90 @@ void loop() {
 
     if (cancelRequest) {
       Serial.println("[ROBOT] Cancelled before recording");
+      preWakeReset();
       setEmotion(EMOTION_IDLE);
       robotStateDesc = "Ready";
       resyncTouch();
       busyProcessing = false;
-      return;
-    }
-
-    if (WiFi.status() != WL_CONNECTED) {
+    } else if (WiFi.status() != WL_CONNECTED) {
+      preWakeReset();
       handleOfflineBuddyTap();
-      return;
-    }
-
-    SttCfg cfg = resolveStt();
-    if (!cfg.key.length()) {
-      robotStateDesc = "No STT API Key";
-      addTerminalLog("[REC] Error: No STT API Key configured");
-      Serial.println("[ROBOT] Top tap: No STT API Key configured!");
-      setEmotion(EMOTION_CONFUSED);
-      showStatus("No STT API Key", "Add in Web Portal", 2500);
-      setEmotion(EMOTION_IDLE);
-      resyncTouch();
-      busyProcessing = false;
-      return;
-    }
-
-    robotStateDesc = "Listening...";
-    addTerminalLog("[STT] Listening with " + sttProvider +
-                   " (" + cfg.model + ")...");
-    String question = recordAndTranscribe(RECORD_SECONDS);
-    if (!cancelRequest && question.length()) {
-      question = cleanTranscribedQuestion(question);
-      lastTranscribedQuestion = question;
-      addTerminalLog("[STT] User: \"" + question + "\"");
-      handleQuestion(question);
-    } else if (!cancelRequest) {
-      robotStateDesc = "STT: " + sttFail;
-      addTerminalLog("[STT] Speech not recognized: " + sttFail);
-      Serial.printf("[ROBOT] STT failed: %s\n", sttFail.c_str());
-      if (sttFail == "quiet") {
-        // Siri / Alexa style: user didn't speak within timeout window, smoothly return to idle
+    } else {
+      SttCfg cfg = resolveStt();
+      if (!cfg.key.length()) {
+        robotStateDesc = "No STT API Key";
+        addTerminalLog("[REC] Error: No STT API Key configured");
+        Serial.println("[ROBOT] Top tap: No STT API Key configured!");
+        preWakeReset();
+        setEmotion(EMOTION_CONFUSED);
+        showStatus("No STT API Key", "Add in Web Portal", 2500);
         setEmotion(EMOTION_IDLE);
-        robotStateDesc = "Ready";
-      } else if (sttFail == "empty") {
-        setEmotion(EMOTION_CONFUSED);
-        speakText("Maine kuch suna, par samajh nahi aaya. Firse bolo?");
-        returnIdleAt = millis() + 2500;
+        resyncTouch();
+        busyProcessing = false;
       } else {
-        setEmotion(EMOTION_CONFUSED);
-        speakText("Awaaz theek se nahi aayi, ek baar firse try karo!");
-        returnIdleAt = millis() + 2000;
-      }
-    }
-    bool wasCancelled = cancelRequest;
-    bool bargeInListen = startRecording;
-    cancelRequest = false;
-    if (wasCancelled) {
-      pendingSleepAction = false;
-      returnIdleAt = 0;
-      wakeWordReset();
-      if (bargeInListen) {
-        toneStop();
-        setEmotion(EMOTION_LISTENING);
         robotStateDesc = "Listening...";
-        Serial.println("[ROBOT] Barge-in during speech -> Immediate listening");
-      } else {
-        setEmotion(EMOTION_IDLE);
-        robotStateDesc = "Ready";
-        toneStop();
-        spkEndSpeech();
-        Serial.println("[ROBOT] Cancelled - returning to Ready");
+        addTerminalLog("[STT] Listening with " + sttProvider +
+                       " (" + cfg.model + ")...");
+        String question = recordAndTranscribe(RECORD_SECONDS);
+        if (!cancelRequest && question.length()) {
+          question = cleanTranscribedQuestion(question);
+          lastTranscribedQuestion = question;
+          addTerminalLog("[STT] User: \"" + question + "\"");
+          handleQuestion(question);
+        } else if (!cancelRequest) {
+          robotStateDesc = "STT: " + sttFail;
+          addTerminalLog("[STT] Speech not recognized: " + sttFail);
+          Serial.printf("[ROBOT] STT failed: %s\n", sttFail.c_str());
+          if (sttFail == "quiet") {
+            // Siri / Alexa style: user didn't speak within timeout window, smoothly return to idle
+            setEmotion(EMOTION_IDLE);
+            robotStateDesc = "Ready";
+          } else if (sttFail == "empty") {
+            setEmotion(EMOTION_CONFUSED);
+            speakText("Maine kuch suna, par samajh nahi aaya. Firse bolo?");
+            returnIdleAt = millis() + 2500;
+          } else {
+            setEmotion(EMOTION_CONFUSED);
+            speakText("Awaaz theek se nahi aayi, ek baar firse try karo!");
+            returnIdleAt = millis() + 2000;
+          }
+        }
+        bool wasCancelled = cancelRequest;
+        bool bargeInListen = startRecording;
+        cancelRequest = false;
+        if (wasCancelled) {
+          pendingSleepAction = false;
+          returnIdleAt = 0;
+          wakeWordReset();
+          if (bargeInListen) {
+            toneStop();
+            setEmotion(EMOTION_LISTENING);
+            robotStateDesc = "Listening...";
+            Serial.println("[ROBOT] Barge-in during speech -> Immediate listening");
+          } else {
+            setEmotion(EMOTION_IDLE);
+            robotStateDesc = "Ready";
+            toneStop();
+            spkEndSpeech();
+            Serial.println("[ROBOT] Cancelled - returning to Ready");
+          }
+        } else if (pendingSleepAction) {
+          triggerPendingSleepAction();
+        } else if (returnIdleAt == 0 && emotionAutoReturnAt == 0 && !manualSleep && !inCircadianSleep &&
+                   !sleepyFallAsleepIsActive()) {
+          setEmotion(EMOTION_IDLE);
+        }
+        resyncTouch();
+        if (!bargeInListen) {
+          spkEndSpeech();
+        }
+        busyProcessing = false;
       }
-    } else if (pendingSleepAction) {
-      triggerPendingSleepAction();
-    } else if (returnIdleAt == 0 && emotionAutoReturnAt == 0 && !manualSleep && !inCircadianSleep &&
-               !sleepyFallAsleepIsActive()) {
-      setEmotion(EMOTION_IDLE);
     }
-    resyncTouch();
-    if (!bargeInListen) {
-      spkEndSpeech();
-    }
-    busyProcessing = false;
   }
 
-  // 30s Inactivity Watchdog
-  if (busyProcessing) {
+  // 30s Inactivity Watchdog (never interrupt an active firmware flash)
+  if (busyProcessing && !otaInProgress) {
     if (millis() - lastProgressAt > 30000UL) {
       Serial.println(
           "[WATCHDOG] Inactive for >30s! Force recovering Kiwi to Ready.");
@@ -576,7 +574,7 @@ void loop() {
     }
   }
 
-  if (returnIdleAt && millis() >= returnIdleAt && !busyProcessing) {
+  if (returnIdleAt != 0 && (int32_t)(millis() - returnIdleAt) >= 0 && !busyProcessing) {
     returnIdleAt = 0;
     robotStateDesc = "Ready";
     if (!showClockScreen && !showWeatherScreen)

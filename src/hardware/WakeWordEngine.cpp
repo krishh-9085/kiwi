@@ -81,22 +81,25 @@ alignas(16) static uint8_t s_variable_arena[VARIABLE_ARENA_SIZE];
 // ============================================================
 static const size_t PRE_WAKE_RING_SAMPLES = 24000; // 1.5s @ 16kHz (48KB)
 static int16_t *s_preWakeRingBuf = nullptr;
+static size_t s_preWakeCap = 0;
 static size_t s_preWakeHead = 0;
 static size_t s_preWakeTotalCount = 0;
 static portMUX_TYPE s_preWakeMux = portMUX_INITIALIZER_UNLOCKED;
 static volatile bool s_preWakeBridgeActive = false;
+static volatile bool s_bridgeInRead = false;
 static uint32_t s_bridgeStartAt = 0;
 static volatile bool s_wakeWordDetectedTrigger = false;
 
 bool preWakeBufferInit() {
-  if (s_preWakeRingBuf)
+  if (s_preWakeRingBuf && s_preWakeCap > 0)
     return true;
   if (psramFound()) {
     s_preWakeRingBuf =
         (int16_t *)heap_caps_malloc(PRE_WAKE_RING_SAMPLES * sizeof(int16_t),
                                     MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
     if (s_preWakeRingBuf) {
-      memset(s_preWakeRingBuf, 0, PRE_WAKE_RING_SAMPLES * sizeof(int16_t));
+      s_preWakeCap = PRE_WAKE_RING_SAMPLES;
+      memset(s_preWakeRingBuf, 0, s_preWakeCap * sizeof(int16_t));
       Serial.printf(
           "[PRE-WAKE] 1.5s (48KB) Audio Ring-Buffer allocated in PSRAM!\n");
       return true;
@@ -105,17 +108,19 @@ bool preWakeBufferInit() {
   // Fallback to internal heap if no PSRAM (0.5s = 8000 samples = 16KB)
   s_preWakeRingBuf = (int16_t *)malloc(8000 * sizeof(int16_t));
   if (s_preWakeRingBuf) {
-    memset(s_preWakeRingBuf, 0, 8000 * sizeof(int16_t));
+    s_preWakeCap = 8000;
+    memset(s_preWakeRingBuf, 0, s_preWakeCap * sizeof(int16_t));
     Serial.printf("[PRE-WAKE] 0.5s (16KB) fallback buffer allocated in SRAM\n");
     return true;
   }
+  s_preWakeCap = 0;
   return false;
 }
 
 void preWakePush(const int16_t *samples, size_t count) {
-  if (!s_preWakeRingBuf || count == 0)
+  if (!s_preWakeRingBuf || s_preWakeCap == 0 || count == 0)
     return;
-  size_t cap = psramFound() ? PRE_WAKE_RING_SAMPLES : 8000;
+  size_t cap = s_preWakeCap;
   portENTER_CRITICAL(&s_preWakeMux);
   for (size_t i = 0; i < count; i++) {
     s_preWakeRingBuf[s_preWakeHead] = samples[i];
@@ -131,8 +136,20 @@ bool preWakeIsBridgeActive() { return s_preWakeBridgeActive; }
 
 void preWakeStopBridge() { s_preWakeBridgeActive = false; }
 
+bool preWakeWaitBridgeStop(uint32_t maxWaitMs) {
+  s_preWakeBridgeActive = false;
+  uint32_t t0 = millis();
+  while (s_bridgeInRead && (millis() - t0 < maxWaitMs)) {
+    vTaskDelay(pdMS_TO_TICKS(5));
+  }
+  return !s_bridgeInRead;
+}
+
 bool preWakeHasData() {
-  return s_wakeWordDetectedTrigger && (s_preWakeTotalCount > 0);
+  portENTER_CRITICAL(&s_preWakeMux);
+  bool has = s_wakeWordDetectedTrigger && (s_preWakeTotalCount > 0);
+  portEXIT_CRITICAL(&s_preWakeMux);
+  return has;
 }
 
 void preWakeReset() {
@@ -145,9 +162,9 @@ void preWakeReset() {
 }
 
 size_t preWakeDrain(int16_t *dest, size_t maxSamples) {
-  if (!s_preWakeRingBuf || !dest || maxSamples == 0)
+  if (!s_preWakeRingBuf || s_preWakeCap == 0 || !dest || maxSamples == 0)
     return 0;
-  size_t cap = psramFound() ? PRE_WAKE_RING_SAMPLES : 8000;
+  size_t cap = s_preWakeCap;
   portENTER_CRITICAL(&s_preWakeMux);
   size_t count = s_preWakeTotalCount;
   if (count > maxSamples)
@@ -396,6 +413,10 @@ bool wakeWordInit() {
     s_op_resolver = new tflite::MicroMutableOpResolver<20>();
     if (!registerOps(*s_op_resolver)) {
       Serial.println("[WAKEWORD] ERROR: Failed to register TFLite Micro ops!");
+      delete s_op_resolver;
+      s_op_resolver = nullptr;
+      FrontendFreeStateContents(&s_frontend_state);
+      s_frontend_initialized = false;
       return false;
     }
   }
@@ -404,6 +425,8 @@ bool wakeWordInit() {
   float savedCutoff = wakeWordCutoff;
   if (!loadModelInternal(wakeWordModel, savedCutoff)) {
     Serial.println("[WAKEWORD] ERROR: Initial loadModelInternal failed!");
+    FrontendFreeStateContents(&s_frontend_state);
+    s_frontend_initialized = false;
     return false;
   }
 
@@ -702,9 +725,11 @@ static void wakeWordTask(void *params) {
       if (millis() - s_bridgeStartAt > 2500) {
         s_preWakeBridgeActive = false;
       } else {
+        s_bridgeInRead = true;
         size_t bytesRead = 0;
         esp_err_t err = i2s_channel_read(rxHandle, raw_i2s, sizeof(raw_i2s),
                                          &bytesRead, pdMS_TO_TICKS(50));
+        s_bridgeInRead = false;
         if (err == ESP_OK && bytesRead > 0) {
           int frames = bytesRead / (2 * sizeof(int32_t));
           int currentSlot = getMicSlot();
@@ -967,11 +992,9 @@ static void wakeWordTask(void *params) {
                   s_preWakeBridgeActive = true;
                   s_bridgeStartAt = millis();
 
-                  // Trigger speech recording & listening face immediately
-                  powerNotifyActivity();
+                  // Trigger speech recording on Core 1 loop (handles power & listening face cleanly)
                   showClockScreen = false;
                   showWeatherScreen = false;
-                  setEmotion(EMOTION_LISTENING);
                   startRecording = true;
                   break; // Exit while loop for this frame block
                 }

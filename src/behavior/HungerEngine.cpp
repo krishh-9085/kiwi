@@ -531,11 +531,23 @@ void checkHungerBehavior() {
 
         if (!s_bootMealsInitialized) {
           s_bootMealsInitialized = true;
+          bool mealsChanged = false;
           // If robot booted after a meal window, mark that past meal as done today
-          if (curHour >= 10 && s_lastBreakfastDay < 0) s_lastBreakfastDay = curDay;
-          if (curHour >= 14 && s_lastLunchDay < 0) s_lastLunchDay = curDay;
-          if (curHour >= 21 && s_lastDinnerDay < 0) s_lastDinnerDay = curDay;
-          saveHungerDays();
+          if (curHour >= 10 && s_lastBreakfastDay < 0) {
+            s_lastBreakfastDay = curDay;
+            mealsChanged = true;
+          }
+          if (curHour >= 14 && s_lastLunchDay < 0) {
+            s_lastLunchDay = curDay;
+            mealsChanged = true;
+          }
+          if (curHour >= 21 && s_lastDinnerDay < 0) {
+            s_lastDinnerDay = curDay;
+            mealsChanged = true;
+          }
+          if (mealsChanged) {
+            saveHungerDays();
+          }
         }
 
         // Boot grace period: don't trigger meal alarms within the first 3 minutes of boot

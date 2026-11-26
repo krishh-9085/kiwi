@@ -28,6 +28,13 @@ static String s_otaTargetUrl = "";
 static volatile bool s_otaTaskActive = false;
 static TaskHandle_t s_otaTaskHandle = NULL;
 
+static void otaShowOled(const char *l1, const char *l2) {
+  if (displayLock(80)) {
+    drawMessage(l1, l2);
+    displayUnlock();
+  }
+}
+
 static void otaDownloadTask(void *param) {
   otaInProgress = true;
   s_otaTaskActive = true;
@@ -37,10 +44,10 @@ static void otaDownloadTask(void *param) {
   s_otaBytesTotal = 0;
   s_otaError = "";
   busyProcessing = true;
+  lastProgressAt = millis();
 
   Serial.printf("[OTA-URL] Starting OTA from: %s\n", s_otaTargetUrl.c_str());
-  drawMessage("OTA UPDATE", "Connecting...");
-  presentDisplay(true);
+  otaShowOled("OTA UPDATE", "Connecting...");
 
   WiFiClientSecure client;
   client.setInsecure(); // GitHub & AWS use public TLS; disable strict cert
@@ -57,8 +64,7 @@ static void otaDownloadTask(void *param) {
     s_otaState = OTA_ERROR;
     s_otaError = "Failed to begin HTTPClient connection";
     Serial.println("[OTA-URL] http.begin failed");
-    drawMessage("OTA ERROR", "Connect Failed");
-    presentDisplay(true);
+    otaShowOled("OTA ERROR", "Connect Failed");
     busyProcessing = false;
     s_otaTaskActive = false;
     otaInProgress = false;
@@ -74,8 +80,7 @@ static void otaDownloadTask(void *param) {
     s_otaError =
         "HTTP error " + String(httpCode) + ": " + http.errorToString(httpCode);
     Serial.printf("[OTA-URL] %s\n", s_otaError.c_str());
-    drawMessage("OTA ERROR", ("HTTP " + String(httpCode)).c_str());
-    presentDisplay(true);
+    otaShowOled("OTA ERROR", ("HTTP " + String(httpCode)).c_str());
     http.end();
     busyProcessing = false;
     s_otaTaskActive = false;
@@ -93,8 +98,7 @@ static void otaDownloadTask(void *param) {
     s_otaError = "Firmware binary too large (" + String(totalLen / 1024) +
                  " KB). Partition limit is 1.98MB.";
     Serial.printf("[OTA-URL] %s\n", s_otaError.c_str());
-    drawMessage("OTA ERROR", "File Too Large");
-    presentDisplay(true);
+    otaShowOled("OTA ERROR", "File Too Large");
     http.end();
     busyProcessing = false;
     s_otaTaskActive = false;
@@ -108,8 +112,7 @@ static void otaDownloadTask(void *param) {
     s_otaState = OTA_ERROR;
     s_otaError = String("Update.begin failed: ") + Update.errorString();
     Serial.printf("[OTA-URL] %s\n", s_otaError.c_str());
-    drawMessage("OTA ERROR", Update.errorString());
-    presentDisplay(true);
+    otaShowOled("OTA ERROR", Update.errorString());
     http.end();
     busyProcessing = false;
     s_otaTaskActive = false;
@@ -145,6 +148,7 @@ static void otaDownloadTask(void *param) {
       int bytesRead = stream->read(buff, want);
       if (bytesRead > 0) {
         lastDataTime = millis();
+        lastProgressAt = lastDataTime;
         size_t written = Update.write(buff, bytesRead);
         if (written != (size_t)bytesRead) {
           s_otaState = OTA_ERROR;
@@ -163,8 +167,7 @@ static void otaDownloadTask(void *param) {
           char line2[32];
           snprintf(line2, sizeof(line2), "%d%% (%d KB)", s_otaProgress,
                    (int)(s_otaBytesRead / 1024));
-          drawMessage("OTA UPDATING", line2);
-          presentDisplay(true);
+          otaShowOled("OTA UPDATING", line2);
         }
       }
     } else {
@@ -184,16 +187,14 @@ static void otaDownloadTask(void *param) {
 
   if (s_otaState != OTA_ERROR) {
     s_otaState = OTA_FLASHING;
-    drawMessage("OTA VERIFYING", "Checking flash...");
-    presentDisplay(true);
+    otaShowOled("OTA VERIFYING", "Checking flash...");
 
     if (Update.end(true)) {
       Serial.printf("[OTA-URL] Flashed %u bytes successfully!\n",
                     (unsigned)s_otaBytesRead);
       s_otaProgress = 100;
       s_otaState = OTA_SUCCESS;
-      drawMessage("OTA COMPLETE", "Rebooting Kiwi...");
-      presentDisplay(true);
+      otaShowOled("OTA COMPLETE", "Rebooting Kiwi...");
       saveConfigImmediate();
       vTaskDelay(1500 / portTICK_PERIOD_MS);
       ESP.restart();
@@ -201,13 +202,13 @@ static void otaDownloadTask(void *param) {
       s_otaState = OTA_ERROR;
       s_otaError = String("Update.end failed: ") + Update.errorString();
       Serial.printf("[OTA-URL] %s\n", s_otaError.c_str());
-      drawMessage("OTA FAILED", Update.errorString());
-      presentDisplay(true);
+      otaShowOled("OTA FAILED", Update.errorString());
     }
   }
 
   busyProcessing = false;
   s_otaTaskActive = false;
+  otaInProgress = false;
   vTaskDelete(NULL);
 }
 
@@ -246,10 +247,17 @@ void handleOtaStatus() {
   json += "\"running\":" + String(s_otaTaskActive ? "true" : "false") + ",";
   json += "\"error\":\"";
   for (size_t i = 0; i < s_otaError.length(); i++) {
-    char c = s_otaError[i];
-    if (c == '"' || c == '\\')
+    unsigned char uc = (unsigned char)s_otaError[i];
+    if (uc == '"' || uc == '\\') {
       json += '\\';
-    json += c;
+      json += (char)uc;
+    } else if (uc == '\n') {
+      json += "\\n";
+    } else if (uc == '\t') {
+      json += "\\t";
+    } else if (uc >= 0x20) {
+      json += (char)uc;
+    }
   }
   json += "\"}";
 

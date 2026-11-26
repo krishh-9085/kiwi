@@ -1,12 +1,12 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react'
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 
 import WakeSlider from './ui/WakeSlider'
 
 import {
   Zap, Moon, Volume2, VolumeX, Sun,
   Mic, MicOff, Send, SlidersHorizontal,
-  Radio, Sparkles, Clock, RotateCw, Check,
-  Bot, Smile, Cpu, Wifi, WifiOff
+  Radio, Sparkles, Clock, RotateCw,
+  Cpu, Wifi, WifiOff
 } from 'lucide-react'
 
 import FluxSelect from './FluxSelect'
@@ -180,7 +180,7 @@ export default function HomeView({
     })
   }, [])
 
-  const pushSliderValue = (key, url, immediate = false) => {
+  const pushSliderValue = useCallback((key, url, immediate = false) => {
     const rec = sliderCommitThrottleRef.current[key] || { lastAt: 0, lastUrl: '', timer: null }
     sliderCommitThrottleRef.current[key] = rec
     if (immediate) {
@@ -214,9 +214,9 @@ export default function HomeView({
         onTriggerAction?.(url)
       }, wait)
     }
-  }
+  }, [onTriggerAction])
 
-  const handleToggleMute = () => {
+  const handleToggleMute = useCallback(() => {
     sliderHoldUntilRef.current.vol = Date.now() + 1500
     if (vol > 0) {
       lastUnmutedVol.current = vol
@@ -227,7 +227,7 @@ export default function HomeView({
       setVol(restoreVol)
       pushSliderValue('vol', `/do?vol=${restoreVol}`, true)
     }
-  }
+  }, [vol, pushSliderValue])
 
   const [bright, setBright] = useState(90)
   const [nightBright, setNightBright] = useState(10)
@@ -319,25 +319,21 @@ export default function HomeView({
 
   const [localGreetings, setLocalGreetings] = useState(null)
   const [localWwEnabled, setLocalWwEnabled] = useState(null)
-  const [localWwModel, setLocalWwModel] = useState(null)
   const [localBoredomEnabled, setLocalBoredomEnabled] = useState(null)
   const [localBoredomMins, setLocalBoredomMins] = useState(null)
 
   useEffect(() => {
     if (status?.greetings?.enabled != null) setLocalGreetings(status.greetings.enabled)
-    else if (config?.greetings?.enabled != null && localGreetings === null) setLocalGreetings(config.greetings.enabled)
+    else if (config?.greetings?.enabled != null) setLocalGreetings((prev) => (prev === null ? config.greetings.enabled : prev))
 
     if (status?.wakeWord?.enabled != null) setLocalWwEnabled(status.wakeWord.enabled)
-    else if (config?.wakeWord?.enabled != null && localWwEnabled === null) setLocalWwEnabled(config.wakeWord.enabled)
-
-    if (status?.wakeWord?.model != null) setLocalWwModel(String(status.wakeWord.model))
-    else if (config?.wakeWord?.model != null && localWwModel === null) setLocalWwModel(String(config.wakeWord.model))
+    else if (config?.wakeWord?.enabled != null) setLocalWwEnabled((prev) => (prev === null ? config.wakeWord.enabled : prev))
 
     if (status?.boredom != null) setLocalBoredomEnabled(status.boredom)
-    else if (config?.boredom?.enabled != null && localBoredomEnabled === null) setLocalBoredomEnabled(config.boredom.enabled)
+    else if (config?.boredom?.enabled != null) setLocalBoredomEnabled((prev) => (prev === null ? config.boredom.enabled : prev))
 
     if (status?.boredom_mins != null) setLocalBoredomMins(String(status.boredom_mins))
-    else if (config?.boredom?.minutes != null && localBoredomMins === null) setLocalBoredomMins(String(config.boredom.minutes))
+    else if (config?.boredom?.minutes != null) setLocalBoredomMins((prev) => (prev === null ? String(config.boredom.minutes) : prev))
 
     if (status?.sleeping != null) setLocalSleeping(null)
   }, [status, config])
@@ -355,11 +351,10 @@ export default function HomeView({
 
   // Wake Word state
   const wwEnabled = localWwEnabled ?? status?.wakeWord?.enabled ?? config?.wakeWord?.enabled ?? true
-  const wwModel = String(localWwModel ?? status?.wakeWord?.model ?? config?.wakeWord?.model ?? 0)
 
   const getWakeWordName = () => 'Alexa'
 
-  const currentWakeWordName = status?.wakeWord?.name || getWakeWordName(wwModel)
+  const currentWakeWordName = status?.wakeWord?.name || getWakeWordName()
 
   // Boredom state
   const boredomEnabled = localBoredomEnabled ?? status?.boredom ?? config?.boredom?.enabled ?? true
@@ -2018,12 +2013,44 @@ export default function HomeView({
             </div>
 
             {/* Card 4: Bottom Right - Quick Auto Controls */}
-            {(() => {
-              const wwLiveListening = Boolean(status?.wakeWord?.listening)
-              const speakerOn = vol > 0
-              const activeCount = [greetingsEnabled, wwEnabled, boredomEnabled, speakerOn].filter(Boolean).length
+            <div style={{
+              background: 'var(--card-white)',
+              border: '1px solid var(--border-light)',
+              borderRadius: '22px',
+              padding: '11px 11px',
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'space-between',
+              gap: '6px',
+              boxShadow: 'var(--shadow-card)',
+              width: '100%',
+              flex: 1,
+              boxSizing: 'border-box'
+            }}>
+              {/* Header */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2px' }}>
+                <span style={{ fontSize: '10.5px', fontWeight: 800, color: 'var(--text-dark)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                  Quick Modes
+                </span>
+                {(() => {
+                  const activeCount = [greetingsEnabled, wwEnabled, boredomEnabled, vol > 0].filter(Boolean).length
+                  return (
+                    <span style={{
+                      fontSize: '9px',
+                      fontWeight: 800,
+                      padding: '2px 7px',
+                      borderRadius: '999px',
+                      background: activeCount > 0 ? 'rgba(16, 185, 129, 0.14)' : 'var(--card-muted)',
+                      color: activeCount > 0 ? '#10B981' : 'var(--text-muted)',
+                      border: '1px solid ' + (activeCount > 0 ? 'rgba(16, 185, 129, 0.25)' : 'var(--border-light)')
+                    }}>
+                      {activeCount}/4 ON
+                    </span>
+                  )
+                })()}
+              </div>
 
-              const quickTiles = [
+              {[
                 {
                   key: 'greetings',
                   title: 'Greetings',
@@ -2055,14 +2082,14 @@ export default function HomeView({
                   sub: (
                     <div style={{
                       fontSize: '9px',
-                      color: wwEnabled ? (wwLiveListening ? '#38BDF8' : '#F59E0B') : 'var(--text-muted)',
+                      color: wwEnabled ? (status?.wakeWord?.listening ? '#38BDF8' : '#F59E0B') : 'var(--text-muted)',
                       fontWeight: wwEnabled ? 700 : 500,
                       marginTop: '1px',
                       whiteSpace: 'nowrap',
                       overflow: 'hidden',
                       textOverflow: 'ellipsis'
                     }}>
-                      {wwEnabled ? `Alexa · ${wwLiveListening ? 'Live' : 'Paused'}` : 'Off'}
+                      {wwEnabled ? `Alexa · ${status?.wakeWord?.listening ? 'Live' : 'Paused'}` : 'Off'}
                     </div>
                   )
                 },
@@ -2096,121 +2123,83 @@ export default function HomeView({
                 {
                   key: 'speaker',
                   title: 'Speaker',
-                  on: speakerOn,
-                  onToggle: handleToggleMute,
+                  on: vol > 0,
+                  onToggle: () => handleToggleMute(),
                   accent: '#65A30D',
-                  icon: speakerOn
+                  icon: vol > 0
                     ? <Volume2 size={11} color="#84CC16" />
                     : <VolumeX size={11} color="#F43F5E" />,
                   sub: (
                     <div style={{
                       fontSize: '9px',
-                      color: speakerOn ? '#10B981' : '#F43F5E',
+                      color: vol > 0 ? '#10B981' : '#F43F5E',
                       fontWeight: 700,
                       marginTop: '1px',
                       fontVariantNumeric: 'tabular-nums'
                     }}>
-                      {speakerOn ? `On · ${vol}%` : 'Muted'}
+                      {vol > 0 ? `On · ${vol}%` : 'Muted'}
                     </div>
                   )
                 }
-              ]
-
-              return (
-                <div style={{
-                  background: 'var(--card-white)',
-                  border: '1px solid var(--border-light)',
-                  borderRadius: '22px',
-                  padding: '11px 11px',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  justifyContent: 'space-between',
-                  gap: '6px',
-                  boxShadow: 'var(--shadow-card)',
-                  width: '100%',
-                  flex: 1,
-                  boxSizing: 'border-box'
-                }}>
-                  {/* Header */}
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2px' }}>
-                    <span style={{ fontSize: '10.5px', fontWeight: 800, color: 'var(--text-dark)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                      Quick Modes
-                    </span>
-                    <span style={{
-                      fontSize: '9px',
-                      fontWeight: 800,
-                      padding: '2px 7px',
-                      borderRadius: '999px',
-                      background: activeCount > 0 ? 'rgba(16, 185, 129, 0.14)' : 'var(--card-muted)',
-                      color: activeCount > 0 ? '#10B981' : 'var(--text-muted)',
-                      border: '1px solid ' + (activeCount > 0 ? 'rgba(16, 185, 129, 0.25)' : 'var(--border-light)')
+              ].map((tile) => (
+                <div
+                  key={tile.key}
+                  onClick={tile.onToggle}
+                  style={{
+                    background: 'var(--card-muted)',
+                    border: '1px solid var(--border-light)',
+                    borderRadius: '11px',
+                    padding: '6px 7px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: '5px',
+                    cursor: 'pointer',
+                    boxSizing: 'border-box',
+                    transition: 'border-color 0.18s ease, background 0.18s ease'
+                  }}
+                >
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                      fontSize: '10px',
+                      fontWeight: 700,
+                      color: 'var(--text-dark)',
+                      lineHeight: 1.2
                     }}>
-                      {activeCount}/4 ON
-                    </span>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', flexShrink: 0 }}>
+                        {tile.icon}
+                      </span>
+                      <span style={{
+                        minWidth: 0,
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis'
+                      }}>
+                        {tile.title}
+                      </span>
+                    </div>
+                    {tile.sub}
                   </div>
 
-                  {/* Unified Feature Rows */}
-                  {quickTiles.map((tile) => (
-                    <div
-                      key={tile.key}
-                      onClick={tile.onToggle}
-                      style={{
-                        background: 'var(--card-muted)',
-                        border: '1px solid var(--border-light)',
-                        borderRadius: '11px',
-                        padding: '6px 7px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        gap: '5px',
-                        cursor: 'pointer',
-                        boxSizing: 'border-box',
-                        transition: 'border-color 0.18s ease, background 0.18s ease'
-                      }}
-                    >
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '4px',
-                          fontSize: '10px',
-                          fontWeight: 700,
-                          color: 'var(--text-dark)',
-                          lineHeight: 1.2
-                        }}>
-                          <span style={{ display: 'inline-flex', alignItems: 'center', flexShrink: 0 }}>
-                            {tile.icon}
-                          </span>
-                          <span style={{
-                            minWidth: 0,
-                            whiteSpace: 'nowrap',
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis'
-                          }}>
-                            {tile.title}
-                          </span>
-                        </div>
-                        {tile.sub}
-                      </div>
-
-                      <label
-                        className="flux-toggle flux-toggle-sm"
-                        onClick={(e) => e.stopPropagation()}
-                        style={{ gap: 0, flexShrink: 0, '--toggle-accent': tile.accent }}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={tile.on}
-                          onChange={tile.onToggle}
-                          aria-label={tile.title}
-                        />
-                        <span className="flux-toggle-slider" />
-                      </label>
-                    </div>
-                  ))}
+                  <label
+                    className="flux-toggle flux-toggle-sm"
+                    onClick={(e) => e.stopPropagation()}
+                    style={{ gap: 0, flexShrink: 0, '--toggle-accent': tile.accent }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={tile.on}
+                      onChange={tile.onToggle}
+                      aria-label={tile.title}
+                    />
+                    <span className="flux-toggle-slider" />
+                  </label>
                 </div>
-              )
-            })()}
+              ))}
+            </div>
           </div>
         </div>
 

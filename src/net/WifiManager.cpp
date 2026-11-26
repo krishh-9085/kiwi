@@ -130,9 +130,14 @@ bool isWifiConnecting() {
   return true;
 }
 
+static bool s_wifiBootFinalized = false;
+static bool s_everConnected = false;
+
 void finalizeWifiConnected() {
   wifiConnecting = false;
   apMode = false;
+  s_wifiBootFinalized = true;
+  s_everConnected = true;
   WiFi.setSleep(false);
   initMdns("STA");
   startAPParallel();
@@ -147,6 +152,7 @@ void finalizeWifiConnected() {
 
 void finalizeWifiOffline() {
   wifiConnecting = false;
+  s_wifiBootFinalized = true;
   if (WiFi.status() != WL_CONNECTED && !apMode) {
     Serial.println(
         "[WIFI] Connect timed out or unavailable. Starting AP mode.");
@@ -166,8 +172,12 @@ void maintainWiFi() {
   if (!wifiSSID.length())
     return;
   if (WiFi.status() == WL_CONNECTED) {
-    if (!wasConnected) {
+    if (!s_wifiBootFinalized) {
       wasConnected = true;
+      finalizeWifiConnected();
+    } else if (!wasConnected) {
+      wasConnected = true;
+      WiFi.setSleep(false);
       initMdns("STA");
     }
     if (!timeSynced) {
@@ -202,6 +212,9 @@ void maintainWiFi() {
     return;
   }
   wasConnected = false;
+  if (!s_wifiBootFinalized && !s_everConnected && !isWifiConnecting() && !apMode) {
+    finalizeWifiOffline();
+  }
   if (millis() - lastTry < 15000)
     return;
   lastTry = millis();
@@ -287,7 +300,6 @@ bool suspendLocalNet() {
 
 void restoreWebAndAP(bool apWasUp) {
   if (psramFound()) {
-    startWeb();
     return;
   }
   if (--netSuspendDepth <= 0) {

@@ -97,13 +97,17 @@ export default function App() {
     )
   )
 
-  pollFastRef.current = Boolean(
+  const isFastPoll = Boolean(
     isMicRecording ||
     status?.busy ||
     status?.emotion === 'listening' ||
     status?.emotion === 'speaking' ||
     status?.timer_active
   )
+
+  useEffect(() => {
+    pollFastRef.current = isFastPoll
+  }, [isFastPoll])
 
   useEffect(() => () => {
     if (toastTimerRef.current) clearTimeout(toastTimerRef.current)

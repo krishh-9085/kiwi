@@ -9,7 +9,8 @@ export function ThemeToggle({
   onToggle,
   className = '',
   mobile = false,
-  style = {}
+  style = {},
+  ...rest
 }) {
   const [internalIsDark, setInternalIsDark] = useState(false)
   const isDark = controlledIsDark !== undefined ? controlledIsDark : internalIsDark
@@ -24,6 +25,7 @@ export function ThemeToggle({
 
   return (
     <button
+      {...rest}
       type="button"
       role="switch"
       aria-checked={isDark}
@@ -31,7 +33,10 @@ export function ThemeToggle({
       title={isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
       className={`flux-theme-btn-4 ${isDark ? 'is-dark' : 'is-light'} ${mobile ? 'mobile-size' : ''} ${className}`}
       style={style}
-      onClick={handleClick}
+      onClick={(e) => {
+        rest.onClick?.(e)
+        handleClick(e)
+      }}
     >
       <svg
         xmlns="http://www.w3.org/2000/svg"

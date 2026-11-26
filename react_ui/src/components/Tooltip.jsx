@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, cloneElement } from 'react'
+import React, { useState, useRef, useEffect, useCallback, cloneElement } from 'react'
 import { createPortal } from 'react-dom'
 
 /**
@@ -8,7 +8,7 @@ export const Tooltip = ({
   title,
   description,
   children,
-  arrow = true,
+  arrow: _arrow = true,
   delay = 180,
   placement = 'top',
   offset = 8,
@@ -16,13 +16,13 @@ export const Tooltip = ({
 }) => {
   const [isOpen, setIsOpen] = useState(false)
   const [coords, setCoords] = useState({ top: 0, left: 0 })
-  const triggerRef = useRef(null)
+  const [triggerEl, setTriggerEl] = useState(null)
   const tooltipRef = useRef(null)
   const timeoutRef = useRef(null)
 
-  const updatePosition = () => {
-    if (!triggerRef.current) return
-    const rect = triggerRef.current.getBoundingClientRect()
+  const updatePosition = useCallback(() => {
+    if (!triggerEl) return
+    const rect = triggerEl.getBoundingClientRect()
     const tooltipEl = tooltipRef.current
     const ttWidth = tooltipEl ? tooltipEl.offsetWidth : 160
     const ttHeight = tooltipEl ? tooltipEl.offsetHeight : 34
@@ -54,7 +54,7 @@ export const Tooltip = ({
     }
 
     setCoords({ top, left })
-  }
+  }, [triggerEl, offset, placement])
 
   const isTouchDevice = () => {
     if (typeof window === 'undefined') return false
@@ -92,7 +92,7 @@ export const Tooltip = ({
         window.removeEventListener('resize', handleScrollOrResize)
       }
     }
-  }, [isOpen])
+  }, [isOpen, updatePosition])
 
   useEffect(() => {
     return () => clearTimeout(timeoutRef.current)
@@ -103,17 +103,13 @@ export const Tooltip = ({
   }
 
   const trigger = cloneElement(children, {
-    ref: (node) => {
-      triggerRef.current = node
-      const { ref } = children
-      if (typeof ref === 'function') ref(node)
-      else if (ref) ref.current = node
-    },
     onMouseEnter: (e) => {
+      setTriggerEl(e.currentTarget)
       handleMouseEnter()
       if (children.props && children.props.onMouseEnter) children.props.onMouseEnter(e)
     },
     onMouseOver: (e) => {
+      setTriggerEl(e.currentTarget)
       handleMouseEnter()
       if (children.props && children.props.onMouseOver) children.props.onMouseOver(e)
     },
@@ -123,6 +119,7 @@ export const Tooltip = ({
     },
     onFocus: (e) => {
       if (isTouchDevice()) return
+      setTriggerEl(e.currentTarget)
       handleMouseEnter()
       if (children.props && children.props.onFocus) children.props.onFocus(e)
     },

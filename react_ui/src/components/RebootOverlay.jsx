@@ -1,42 +1,44 @@
 import React, { useEffect, useState } from 'react'
-import { RefreshCw, Bot, CheckCircle } from 'lucide-react'
+import { RefreshCw, CheckCircle } from 'lucide-react'
 
-export default function RebootOverlay({ open, message, getBaseUrl }) {
+function RebootOverlayInner({ message, getBaseUrl }) {
   const [reconnected, setReconnected] = useState(false)
   const [attempts, setAttempts] = useState(0)
 
   useEffect(() => {
-    if (!open) {
-      setReconnected(false)
-      setAttempts(0)
-      return
-    }
+    let pollInterval = null
+    let reloadTimer = null
+    let cancelled = false
 
-    // Wait 3 seconds for ESP32 to restart, then poll /status
+    // Wait 2.5 seconds for ESP32 to restart, then poll /status
     const timer = setTimeout(() => {
-      const pollInterval = setInterval(async () => {
+      if (cancelled) return
+      pollInterval = setInterval(async () => {
+        if (cancelled) return
         setAttempts((a) => a + 1)
         try {
           const res = await fetch(`${getBaseUrl()}/status`, { signal: AbortSignal.timeout(1500) })
-          if (res.ok) {
+          if (res.ok && !cancelled) {
             clearInterval(pollInterval)
+            pollInterval = null
             setReconnected(true)
-            setTimeout(() => {
+            reloadTimer = setTimeout(() => {
               window.location.reload()
             }, 1200)
           }
-        } catch (e) {
+        } catch {
           // Still rebooting
         }
       }, 1500)
-
-      return () => clearInterval(pollInterval)
     }, 2500)
 
-    return () => clearTimeout(timer)
-  }, [open, getBaseUrl])
-
-  if (!open) return null
+    return () => {
+      cancelled = true
+      clearTimeout(timer)
+      if (pollInterval) clearInterval(pollInterval)
+      if (reloadTimer) clearTimeout(reloadTimer)
+    }
+  }, [getBaseUrl])
 
   return (
     <div style={{
@@ -94,4 +96,9 @@ export default function RebootOverlay({ open, message, getBaseUrl }) {
       </div>
     </div>
   )
+}
+
+export default function RebootOverlay({ open, message, getBaseUrl }) {
+  if (!open) return null
+  return <RebootOverlayInner message={message} getBaseUrl={getBaseUrl} />
 }

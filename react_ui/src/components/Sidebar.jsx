@@ -1,5 +1,5 @@
 import React from 'react'
-import { LayoutDashboard, Smile, Settings, UploadCloud, Sparkles, Moon, Sun } from 'lucide-react'
+import { LayoutDashboard, Smile, Settings, UploadCloud, Sparkles } from 'lucide-react'
 import { Tooltip } from './Tooltip'
 import KiwiLogo from './KiwiLogo'
 

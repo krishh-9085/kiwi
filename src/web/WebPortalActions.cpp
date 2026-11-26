@@ -39,13 +39,16 @@ void handleDoAction() {
 
   // Web Mic Audio Record Trigger
   if (server.hasArg("record")) {
+    if (otaInProgress) {
+      server.send(409, "application/json", "{\"ok\":false,\"reason\":\"ota_in_progress\"}");
+      return;
+    }
     String rVal = server.arg("record");
     rVal.trim();
     if (rVal == "0" || rVal.equalsIgnoreCase("stop") ||
         rVal.equalsIgnoreCase("cancel")) {
       startRecording = false;
       cancelRequest = true;
-      busyProcessing = false;
       setEmotion(EMOTION_IDLE);
       robotStateDesc = "Ready";
       toneStop();
@@ -59,7 +62,6 @@ void handleDoAction() {
     if (busyProcessing) {
       startRecording = false;
       cancelRequest = true;
-      busyProcessing = false;
       setEmotion(EMOTION_IDLE);
       robotStateDesc = "Ready";
       toneStop();
@@ -81,6 +83,10 @@ void handleDoAction() {
 
   // Web Text Prompt Trigger
   if (server.hasArg("ask")) {
+    if (otaInProgress) {
+      server.send(409, "application/json", "{\"ok\":false,\"reason\":\"ota_in_progress\"}");
+      return;
+    }
     String q = server.arg("ask");
     q.trim();
     if (q.length() == 0) {
@@ -88,14 +94,13 @@ void handleDoAction() {
                   "{\"ok\":false,\"reason\":\"empty\"}");
       return;
     }
+    webQueuedQuestion = q;
     if (busyProcessing) {
       cancelRequest = true;
-      addTerminalLog(
-          "[WEB] Mic clicked while busy -> Cancel request / Interrupt");
-      server.send(200, "application/json", "{\"ok\":true,\"cancelled\":true}");
+      addTerminalLog("[WEB] Interrupting active task -> Queued prompt: \"" + q + "\"");
+      server.send(200, "application/json", "{\"ok\":true,\"queued\":true,\"interrupted\":true}");
       return;
     }
-    webQueuedQuestion = q;
     addTerminalLog("[WEB] Queued prompt: \"" + q + "\"");
     server.send(200, "application/json", "{\"ok\":true,\"queued\":true}");
     return;
@@ -259,7 +264,7 @@ void handleDoAction() {
     soundPetSparkle();
     Serial.printf("[PORTAL] Eye skin switched to: %d\n", (int)currentEyeSkin);
     server.send(200, "application/json",
-                "{\"ok\":true,\"skin\":\"" + s + "\"}");
+                "{\"ok\":true,\"skin\":\"" + escJson(s) + "\"}");
     return;
   }
 
@@ -599,7 +604,7 @@ void handleDoAction() {
         "[PORTAL] Pin 48 RGB LED color set to: #%06X (R:%d, G:%d, B:%d)\n",
         (unsigned int)hexVal, r, g, b);
     server.send(200, "application/json",
-                "{\"ok\":true,\"rgb_color\":\"#" + c + "\"}");
+                "{\"ok\":true,\"rgb_color\":\"#" + escJson(c) + "\"}");
     return;
   }
 

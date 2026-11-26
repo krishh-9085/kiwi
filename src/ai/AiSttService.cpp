@@ -214,8 +214,7 @@ String recordAndTranscribe(uint32_t recordSeconds) {
 
   bool hasPreWake = preWakeHasData();
   if (hasPreWake) {
-    preWakeStopBridge();
-    vTaskDelay(pdMS_TO_TICKS(15));
+    preWakeWaitBridgeStop(60);
   }
 
   setEmotion(EMOTION_LISTENING);
@@ -534,9 +533,10 @@ String recordAndTranscribe(uint32_t recordSeconds) {
     int frames = bytesRead / (2 * sizeof(int32_t));
     float chunkAbsSum = 0.0f;
     int chunkFrames = 0;
+    int activeSlot = getMicSlot();
     for (int i = 0; i < frames && sent < recordSamples; i++) {
       liveSent++;
-      int32_t s32 = raw[i * 2 + micSlot];
+      int32_t s32 = raw[i * 2 + activeSlot];
       float x = (float)(s32 >> 8) / 256.0f;
       float y = x - prevIn + 0.995f * prevOut;
       prevIn = x;
@@ -690,13 +690,50 @@ String recordAndTranscribe(uint32_t recordSeconds) {
                 (unsigned long)(millis() - waitStart), client.connected(), client.available());
 
   String response;
+  response.reserve(512);
   uint32_t readStart = millis();
+  int hdrEndIdx = -1;
+  long expectedContentLen = -1;
+  bool isChunkedResp = false;
   while ((client.connected() || client.available()) &&
          millis() - readStart < 10000 && response.length() < 6000) {
     if (cancelRequest)
       break;
-    while (client.available() && response.length() < 6000)
+    while (client.available() && response.length() < 6000) {
       response += (char)client.read();
+      readStart = millis();
+    }
+    if (hdrEndIdx < 0) {
+      hdrEndIdx = response.indexOf("\r\n\r\n");
+      if (hdrEndIdx >= 0) {
+        String hdrLower = response.substring(0, hdrEndIdx);
+        hdrLower.toLowerCase();
+        if (hdrLower.indexOf("transfer-encoding:") >= 0 &&
+            hdrLower.indexOf("chunked") >= 0) {
+          isChunkedResp = true;
+        }
+        int clPos = hdrLower.indexOf("content-length:");
+        if (clPos >= 0) {
+          int clEnd = hdrLower.indexOf('\n', clPos);
+          String clVal = (clEnd > clPos) ? hdrLower.substring(clPos + 15, clEnd)
+                                         : hdrLower.substring(clPos + 15);
+          clVal.trim();
+          expectedContentLen = clVal.toInt();
+        }
+      }
+    }
+    if (hdrEndIdx >= 0) {
+      size_t bodyOff = (size_t)hdrEndIdx + 4;
+      if (expectedContentLen >= 0 &&
+          response.length() >= bodyOff + (size_t)expectedContentLen) {
+        break;
+      }
+      if (isChunkedResp &&
+          (response.indexOf("\r\n0\r\n\r\n", hdrEndIdx) >= 0 ||
+           response.startsWith("0\r\n\r\n", bodyOff))) {
+        break;
+      }
+    }
     serviceUi();
     yield();
   }
@@ -718,6 +755,25 @@ String recordAndTranscribe(uint32_t recordSeconds) {
   int body = response.indexOf("\r\n\r\n");
   if (body >= 0)
     response = response.substring(body + 4);
+  if (isChunkedResp && response.length() > 0) {
+    String decoded;
+    decoded.reserve(response.length());
+    size_t pos = 0;
+    while (pos < response.length()) {
+      int lineEnd = response.indexOf("\r\n", pos);
+      if (lineEnd < 0)
+        break;
+      long cLen = strtol(response.substring(pos, lineEnd).c_str(), NULL, 16);
+      pos = (size_t)lineEnd + 2;
+      if (cLen <= 0)
+        break;
+      size_t take = min((size_t)cLen, response.length() - pos);
+      decoded += response.substring(pos, pos + take);
+      pos += take + 2;
+    }
+    if (decoded.length() > 0)
+      response = decoded;
+  }
   if (statusCode != 200) {
     Serial.print("[STT] Error body: ");
     Serial.println(response.substring(0, 300));

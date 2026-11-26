@@ -6,7 +6,22 @@
 #include <HTTPClient.h>
 #include <WiFi.h>
 #include <freertos/FreeRTOS.h>
+#include <freertos/semphr.h>
 #include <freertos/task.h>
+
+static SemaphoreHandle_t s_hyperMutex = NULL;
+static inline void ensureHyperMutex() {
+  if (!s_hyperMutex)
+    s_hyperMutex = xSemaphoreCreateMutex();
+}
+static inline bool hyperLock(uint32_t ms = 100) {
+  ensureHyperMutex();
+  return !s_hyperMutex || xSemaphoreTake(s_hyperMutex, pdMS_TO_TICKS(ms)) == pdTRUE;
+}
+static inline void hyperUnlock() {
+  if (s_hyperMutex)
+    xSemaphoreGive(s_hyperMutex);
+}
 
 static String s_discoveredHyperHdrIp = "";
 static uint16_t s_discoveredHyperHdrPort = 8090;
@@ -19,29 +34,47 @@ static volatile bool s_hyperHdrDiscoveryActive = false;
 static bool s_screenSyncActive = true;
 
 bool isHyperHdrDiscovered() {
-  return (s_manualHyperHdrIp.length() > 0) || (s_discoveredHyperHdrIp.length() > 0);
+  bool ok = false;
+  if (hyperLock()) {
+    ok = (s_manualHyperHdrIp.length() > 0) || (s_discoveredHyperHdrIp.length() > 0);
+    hyperUnlock();
+  }
+  return ok;
 }
 
 String getHyperHdrIp() {
-  if (s_manualHyperHdrIp.length() > 0)
-    return s_manualHyperHdrIp;
-  return s_discoveredHyperHdrIp;
+  String ip;
+  if (hyperLock()) {
+    ip = (s_manualHyperHdrIp.length() > 0) ? s_manualHyperHdrIp : s_discoveredHyperHdrIp;
+    hyperUnlock();
+  }
+  return ip;
 }
 
 uint16_t getHyperHdrPort() {
-  if (s_manualHyperHdrIp.length() > 0)
-    return s_manualHyperHdrPort;
-  return s_discoveredHyperHdrPort;
+  uint16_t p = 8090;
+  if (hyperLock()) {
+    p = (s_manualHyperHdrIp.length() > 0) ? s_manualHyperHdrPort : s_discoveredHyperHdrPort;
+    hyperUnlock();
+  }
+  return p;
 }
 
 void setHyperHdrManualHost(const String &ip, uint16_t port) {
-  s_manualHyperHdrIp = ip;
-  s_manualHyperHdrIp.trim();
-  s_manualHyperHdrPort = (port > 0) ? port : 8090;
-  if (s_manualHyperHdrIp.length() > 0) {
-    s_discoveredHyperHdrIp = s_manualHyperHdrIp;
-    s_discoveredHyperHdrPort = s_manualHyperHdrPort;
-    Serial.printf("[HYPERHDR] Manual host set: %s:%u\n", s_manualHyperHdrIp.c_str(), s_manualHyperHdrPort);
+  String trimmed = ip;
+  trimmed.trim();
+  uint16_t p = (port > 0) ? port : 8090;
+  if (hyperLock()) {
+    s_manualHyperHdrIp = trimmed;
+    s_manualHyperHdrPort = p;
+    if (s_manualHyperHdrIp.length() > 0) {
+      s_discoveredHyperHdrIp = s_manualHyperHdrIp;
+      s_discoveredHyperHdrPort = s_manualHyperHdrPort;
+    }
+    hyperUnlock();
+  }
+  if (trimmed.length() > 0) {
+    Serial.printf("[HYPERHDR] Manual host set: %s:%u\n", trimmed.c_str(), p);
   }
 }
 
@@ -52,13 +85,18 @@ static void hyperHdrDiscoveryTask(void *param) {
   // 1. Primary mDNS service query for HyperHDR
   int n = MDNS.queryService("hyperhdr-http", "tcp");
   if (n > 0) {
-    s_discoveredHyperHdrIp = MDNS.address(0).toString();
+    String foundIp = MDNS.address(0).toString();
     uint16_t p = MDNS.port(0);
-    s_discoveredHyperHdrPort = (p > 0) ? p : 8090;
+    uint16_t foundPort = (p > 0) ? p : 8090;
     String host = MDNS.hostname(0);
+    if (hyperLock()) {
+      s_discoveredHyperHdrIp = foundIp;
+      s_discoveredHyperHdrPort = foundPort;
+      hyperUnlock();
+    }
     Serial.printf("[HYPERHDR] Found HyperHDR: %s:%u (%s)\n",
-                  s_discoveredHyperHdrIp.c_str(), s_discoveredHyperHdrPort, host.c_str());
-    addTerminalLog("[HYPERHDR] Service found at " + s_discoveredHyperHdrIp + ":" + String(s_discoveredHyperHdrPort));
+                  foundIp.c_str(), foundPort, host.c_str());
+    addTerminalLog("[HYPERHDR] Service found at " + foundIp + ":" + String(foundPort));
     s_hyperHdrDiscoveryActive = false;
     s_hyperHdrDiscoveryTaskHandle = NULL;
     vTaskDelete(NULL);
@@ -68,12 +106,17 @@ static void hyperHdrDiscoveryTask(void *param) {
   // 2. Fallback query for hyperiond-http
   n = MDNS.queryService("hyperiond-http", "tcp");
   if (n > 0) {
-    s_discoveredHyperHdrIp = MDNS.address(0).toString();
+    String foundIp = MDNS.address(0).toString();
     uint16_t p = MDNS.port(0);
-    s_discoveredHyperHdrPort = (p > 0) ? p : 8090;
+    uint16_t foundPort = (p > 0) ? p : 8090;
+    if (hyperLock()) {
+      s_discoveredHyperHdrIp = foundIp;
+      s_discoveredHyperHdrPort = foundPort;
+      hyperUnlock();
+    }
     Serial.printf("[HYPERHDR] Found Hyperion service: %s:%u\n",
-                  s_discoveredHyperHdrIp.c_str(), s_discoveredHyperHdrPort);
-    addTerminalLog("[HYPERHDR] Server found at " + s_discoveredHyperHdrIp);
+                  foundIp.c_str(), foundPort);
+    addTerminalLog("[HYPERHDR] Server found at " + foundIp);
     s_hyperHdrDiscoveryActive = false;
     s_hyperHdrDiscoveryTaskHandle = NULL;
     vTaskDelete(NULL);
@@ -83,10 +126,14 @@ static void hyperHdrDiscoveryTask(void *param) {
   // 3. Fallback: Hostname query for 'hyperhdr.local'
   IPAddress hostIp = MDNS.queryHost("hyperhdr", 800);
   if (hostIp != INADDR_NONE && hostIp != IPAddress(0, 0, 0, 0)) {
-    s_discoveredHyperHdrIp = hostIp.toString();
-    s_discoveredHyperHdrPort = 8090;
-    Serial.printf("[HYPERHDR] Resolved host 'hyperhdr.local': %s:8090\n", s_discoveredHyperHdrIp.c_str());
-    addTerminalLog("[HYPERHDR] Server found at " + s_discoveredHyperHdrIp);
+    String foundIp = hostIp.toString();
+    if (hyperLock()) {
+      s_discoveredHyperHdrIp = foundIp;
+      s_discoveredHyperHdrPort = 8090;
+      hyperUnlock();
+    }
+    Serial.printf("[HYPERHDR] Resolved host 'hyperhdr.local': %s:8090\n", foundIp.c_str());
+    addTerminalLog("[HYPERHDR] Server found at " + foundIp);
   } else {
     Serial.println("[HYPERHDR] No HyperHDR server found on network (scan complete)");
   }
@@ -104,13 +151,22 @@ bool discoverHyperHdrAsync(bool force) {
   if (WiFi.status() != WL_CONNECTED)
     return false;
 
-  if (s_manualHyperHdrIp.length() > 0) {
-    s_discoveredHyperHdrIp = s_manualHyperHdrIp;
-    s_discoveredHyperHdrPort = s_manualHyperHdrPort;
-    return true;
+  bool hasIp = false;
+  bool isManual = false;
+  if (hyperLock()) {
+    if (s_manualHyperHdrIp.length() > 0) {
+      s_discoveredHyperHdrIp = s_manualHyperHdrIp;
+      s_discoveredHyperHdrPort = s_manualHyperHdrPort;
+      isManual = true;
+    }
+    hasIp = s_discoveredHyperHdrIp.length() > 0;
+    hyperUnlock();
   }
 
-  if (s_discoveredHyperHdrIp.length() > 0 && !force)
+  if (isManual)
+    return true;
+
+  if (hasIp && !force)
     return true;
 
   if (s_hyperHdrDiscoveryActive)
@@ -134,13 +190,22 @@ bool discoverHyperHdr(bool force) {
   if (WiFi.status() != WL_CONNECTED)
     return false;
 
-  if (s_manualHyperHdrIp.length() > 0) {
-    s_discoveredHyperHdrIp = s_manualHyperHdrIp;
-    s_discoveredHyperHdrPort = s_manualHyperHdrPort;
-    return true;
+  bool hasIp = false;
+  bool isManual = false;
+  if (hyperLock()) {
+    if (s_manualHyperHdrIp.length() > 0) {
+      s_discoveredHyperHdrIp = s_manualHyperHdrIp;
+      s_discoveredHyperHdrPort = s_manualHyperHdrPort;
+      isManual = true;
+    }
+    hasIp = s_discoveredHyperHdrIp.length() > 0;
+    hyperUnlock();
   }
 
-  if (s_discoveredHyperHdrIp.length() > 0 && !force)
+  if (isManual)
+    return true;
+
+  if (hasIp && !force)
     return true;
 
   if (!s_hyperHdrDiscoveryActive) {
@@ -191,8 +256,11 @@ bool sendHyperHdrJson(const String &jsonPayload, String *outResponse) {
     Serial.printf("[HYPERHDR] Command OK (%d): %s\n", code, jsonPayload.c_str());
   } else {
     Serial.printf("[HYPERHDR] Command failed (%d) url=%s body=%s\n", code, url.c_str(), jsonPayload.c_str());
-    if (!s_manualHyperHdrIp.length()) {
-      s_discoveredHyperHdrIp = ""; // allow re-scan next time
+    if (hyperLock()) {
+      if (!s_manualHyperHdrIp.length()) {
+        s_discoveredHyperHdrIp = ""; // allow re-scan next time
+      }
+      hyperUnlock();
     }
   }
   http.end();
@@ -376,18 +444,22 @@ bool executeUnifiedLightAction(const String &paramIn) {
   }
 
   if (isColor) {
+    bool hOk = false;
     if (isHyperHdrDiscovered()) {
-      setHyperHdrColor(r, g, b, 50);
+      hOk = setHyperHdrColor(r, g, b, 50);
     }
-    setWledColor(r, g, b);
-    return true;
+    bool wOk = setWledColor(r, g, b);
+    return hOk || wOk;
   }
 
   // 5. Effects / Animations
-  // When running a standalone WLED animation, pause HyperHDR's LED streaming so WLED isn't overridden!
-  if (isHyperHdrDiscovered()) {
-    setHyperHdrLedDevice(false);
+  // Run WLED action first so unknown commands don't pause HyperHDR
+  if (executeWledAction(p)) {
+    if (isHyperHdrDiscovered()) {
+      setHyperHdrLedDevice(false);
+    }
+    return true;
   }
-  return executeWledAction(p);
+  return false;
 }
 

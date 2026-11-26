@@ -65,8 +65,8 @@ void soundLevelTick() {
     return;
   }
 
-  // If wake-word engine is actively listening, it feeds samples directly
-  if (wakeWordIsListening()) {
+  // If wake-word engine or pre-wake bridge is actively reading I2S, don't compete for rxHandle
+  if (wakeWordIsListening() || preWakeIsBridgeActive()) {
     return;
   }
 
@@ -82,9 +82,10 @@ void soundLevelTick() {
     return;
   }
 
+  int slot = getMicSlot();
   float sumAbs = 0.0f;
   for (int i = 0; i < frames; i++) {
-    int32_t s32 = buf[i * 2 + micSlot];
+    int32_t s32 = buf[i * 2 + slot];
     float x = (float)(s32 >> 8) / 256.0f;
     float y = x - s_prevIn + 0.995f * s_prevOut;
     s_prevIn = x;

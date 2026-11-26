@@ -39,8 +39,8 @@ bool handleEmotionCommand(const String &qIn) {
 
     while (millis() - t0 < CRY_TARGET_MS) {
       serviceUi();
-      cancelRequest = false;
-      startRecording = false;
+      if (cancelRequest)
+        break;
       yield();
     }
 
@@ -48,12 +48,18 @@ bool handleEmotionCommand(const String &qIn) {
     spkAbortSpeech();
     spkEndSpeech();
 
-    setEmotion(EMOTION_IDLE);
+    bool interrupted = cancelRequest;
+    bool bargeInListen = interrupted && startRecording;
+    cancelRequest = false;
+    if (!bargeInListen) {
+      startRecording = false;
+      setEmotion(EMOTION_IDLE);
+    } else {
+      setEmotion(EMOTION_LISTENING);
+    }
     returnIdleAt = 0;
     emotionAutoReturnAt = 0;
 
-    cancelRequest = false;
-    startRecording = false;
     wakeWordReset();
     preWakeReset();
     wakeWordSuppressUntil(millis() + 1500UL);
@@ -102,6 +108,8 @@ bool handleEmotionCommand(const String &qIn) {
       bool switchedToHappy = false;
       while (millis() - t0 < LAUGH_TARGET_MS) {
         serviceUi();
+        if (cancelRequest)
+          break;
 
         uint32_t elapsed = millis() - t0;
         if (!secondGigglePlayed && elapsed >= 2000UL) {
@@ -113,8 +121,6 @@ bool handleEmotionCommand(const String &qIn) {
           switchedToHappy = true;
         }
 
-        cancelRequest = false;
-        startRecording = false;
         yield();
       }
     } else {
@@ -124,24 +130,30 @@ bool handleEmotionCommand(const String &qIn) {
       uint32_t settleStart = millis();
       while (millis() - settleStart < 450UL) {
         serviceUi();
-        cancelRequest = false;
-        startRecording = false;
+        if (cancelRequest)
+          break;
         yield();
       }
     }
 
-    // Clean stop and return to neutral idle
+    // Clean stop and return to neutral idle (or barge-in listening if requested)
     toneStop();
     spkAbortSpeech();
     spkEndSpeech();
 
-    setEmotion(EMOTION_IDLE);
+    bool interrupted = cancelRequest;
+    bool bargeInListen = interrupted && startRecording;
+    cancelRequest = false;
+    if (!bargeInListen) {
+      startRecording = false;
+      setEmotion(EMOTION_IDLE);
+    } else {
+      setEmotion(EMOTION_LISTENING);
+    }
     returnIdleAt = 0;
     emotionAutoReturnAt = 0;
 
     // Reset audio queues and protect against echo
-    cancelRequest = false;
-    startRecording = false;
     wakeWordReset();
     preWakeReset();
     wakeWordSuppressUntil(millis() + 1500UL);
@@ -152,13 +164,12 @@ bool handleEmotionCommand(const String &qIn) {
 
   bool isCryReq =
       hasAny(q, {"ro kr",      "ro kar",    "ro ke",  "ro k ",   "rokar",
-                 "roke",       "rone ki",   "ro do",  "ro lo",   "rona dikha",
-                 "rona shuru", "rone lago", "ro pad", "ro pado", "cry",
-                 "crying",     "rona",      "रोना",   "रो के",    "रो कर",
-                 "रोकर",       "रोने की",    "रो दो",  "रो पड़",   "रो पड़ो",
-                 "रो"}) ||
+                 "rone ki",    "ro do",     "ro lo",  "rona dikha",
+                 "rona shuru", "rone lago", "ro pad", "ro pado",
+                 "रो के",       "रो कर",     "रोकर",   "रोने की",  "रो दो",
+                 "रो पड़",      "रो पड़ो"}) ||
       hasWord(q, {"cry", "crying", "sob", "sobbing", "weep", "tears", "rona",
-                  "ro"});
+                  "roke", "ro", "रो", "रोना"});
 
   if (isCryReq) {
     return executeCryAction();
@@ -174,44 +185,41 @@ bool handleEmotionCommand(const String &qIn) {
                  "has ke dikhao", "hass ke dikhao", "haske dikhao", "hans ke dikhao", "hanske dikhao",
                  "has ke dikha",  "hass ke dikha",  "haske dikha",  "hans ke dikha",  "hanske dikha",
                  "has kar dikhao","hass kar dikhao","haskar dikhao",
-                 "haste",       "hanste",      "haste hue",   "hanste hue",
-                 "haste raho",  "hasne",       "hansne",      "hasne ki",
-                 "hansne ki",   "hasne lago",  "hasne wala",  "hasna",
-                 "hansna",      "hasna dikhao","hassna dikhao","hansna dikhao",
-                 "hasna sunao", "haso",        "hanso",       "hasso",
+                 "haste hue",   "hanste hue",
+                 "haste raho",  "hasne ki",
+                 "hansne ki",   "hasne lago",  "hasne wala",
+                 "hasna dikhao","hassna dikhao","hansna dikhao",
+                 "hasna sunao",
                  "haso na",     "hanso na",    "hasso na",    "thoda haso",
                  "thoda hasso", "thoda hanso", "zara haso",   "zara hasso",
                  "has do",      "hans do",     "hass do",     "has do na",
-                 "has lo",      "hans lo",     "hasao",       "hansao",
-                 "mujhe hasao", "hasi",        "hansi",       "hasi sunao",
+                 "has lo",      "hans lo",
+                 "mujhe hasao", "hasi sunao",
                  "hansi sunao", "hasi dikhao", "hansi dikhao",
                  "thoda has",   "thoda hass",  "thoda hans",
                  "zara has",    "zara hass",   "zara hans",
                  "ek baar has", "ek baar hass","ek baar hans",
                  "laugh for me","can you laugh","please laugh","make me laugh",
-                 "laugh",       "laughing",    "laughter",    "giggle",
-                 "giggling",    "chuckle",
                  "हंस के दिखाओ",  "हंस के दिखा",   "हंसकर दिखाओ",  "हंसके दिखाओ",
                  "हस के दिखाओ",   "हस के दिखा",    "हसकर दिखाओ",   "हसके दिखाओ",
                  "हँस के दिखाओ",  "हँस के दिखा",   "हँसकर दिखाओ",  "हँसके दिखाओ",
                  "हंस के",        "हंस कर",
-                 "हंसकर",        "हंसके",         "हंसते",
+                 "हंसकर",        "हंसके",
                  "हंसने",         "हंसना",
                  "हंसी",         "हंस दो",
-                 "हंसो",         "हंस",
                  "हस के",        "हस कर",
-                 "हसकर",        "हसके",          "हसते",
+                 "हसकर",        "हसके",
                  "हसने",         "हसना",
                  "हसी",         "हस दो",
-                 "हसो",         "हस",
                  "हँस के",       "हँस कर",
-                 "हँसकर",       "हँसके",          "हँसते",
+                 "हँसकर",       "हँसके",
                  "हँसने",        "हँसना",
-                 "हँसी",        "हँस दो",
-                 "हँसो",        "हँस"}) ||
+                 "हँसी",        "हँस दो"}) ||
       hasWord(q, {"laugh", "laughing", "laughter", "giggle", "giggling",
                   "chuckle", "haso", "hanso", "hasso", "hasna", "hansna",
-                  "hasi", "hansi", "hass", "hans", "haste", "hanste"});
+                  "hasne", "hansne", "hasao", "hansao", "hasi", "hansi",
+                  "hass", "hans", "haste", "hanste", "हंस", "हंसो", "हंसते",
+                  "हस", "हसो", "हसते", "हँस", "हँसो", "हँसते"});
 
   if (isLaughReq) {
     return executeLaughAction();
@@ -358,29 +366,38 @@ bool handleSkinCommand(const String &qIn) {
   bool isThemeIntent = hasWord(q, {"skin", "eyes", "eye skin", "looks", "theme",
                                    "look", "face"}) ||
                        hasAny(q, {"थीम", "स्किन", "आंखें", "चश्मा", "चेहरा"});
+  bool isExplicitSkinWord = hasWord(q, {"skin", "eyes", "eye", "eye skin", "theme"}) ||
+                            hasAny(q, {"थीम", "स्किन", "आंखें"});
 
   String name = "";
   EyeSkin targetSkin = currentEyeSkin;
 
-  if (hasWord(q, {"kiwi", "desk buddy", "deskbuddy", "buddy", "cute"}) ||
-      hasAny(q, {"कीवी"})) {
+  if (hasWord(q, {"desk buddy", "deskbuddy"}) ||
+      hasAny(q, {"kiwi skin", "kiwi eyes", "kiwi theme", "cute skin", "cute eyes",
+                 "default skin", "default eyes", "normal skin", "normal eyes",
+                 "कीवी स्किन", "कीवी थीम"}) ||
+      (isExplicitSkinWord && (hasWord(q, {"kiwi", "buddy", "cute", "default"}) ||
+                              hasAny(q, {"कीवी"})))) {
     targetSkin = SKIN_KIWI;
     name = "Kiwi";
-  } else if (hasWord(q, {"pixel", "pixel 8-bit", "arcade", "retro", "8bit",
-                         "8-bit"}) ||
-             hasAny(q, {"रेट्रो", "पिक्सेल"})) {
+  } else if (!hasWord(q, {"phone", "camera", "photo", "picture"}) &&
+             (hasWord(q, {"pixel", "pixel 8-bit", "arcade", "retro", "8bit",
+                          "8-bit"}) ||
+              hasAny(q, {"रेट्रो", "पिक्सेल"}))) {
     targetSkin = SKIN_PIXEL;
     name = "Pixel 8-Bit";
-  } else if (hasAny(q, {"lumina spark", "squircle glint", "spark", "lumina",
-                        "glint"})) {
+  } else if (hasAny(q, {"lumina spark", "squircle glint", "lumina"}) ||
+             (isExplicitSkinWord && hasAny(q, {"spark", "glint"}))) {
     targetSkin = SKIN_LUMINA_SPARK;
     name = "Lumina Spark";
   } else if (hasWord(q, {"mecha", "circtangle", "circrect"}) ||
              hasAny(q, {"मेका", "मैका"})) {
     targetSkin = SKIN_MECHA;
     name = "Mecha";
-  } else if (hasWord(q, {"emo", "emo-style", "emostyle"}) ||
-             hasAny(q, {"emo style", "ईमो", "इमो"})) {
+  } else if (hasWord(q, {"emo-style", "emostyle"}) ||
+             hasAny(q, {"emo style"}) ||
+             (isExplicitSkinWord && (hasWord(q, {"emo"}) ||
+                                     hasAny(q, {"ईमो", "इमो"})))) {
     targetSkin = SKIN_EMO;
     name = "EMO Style";
   }

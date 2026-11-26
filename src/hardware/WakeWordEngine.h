@@ -55,6 +55,7 @@ bool preWakeBufferInit();
 void preWakePush(const int16_t *samples, size_t count);
 bool preWakeIsBridgeActive();
 void preWakeStopBridge();
+bool preWakeWaitBridgeStop(uint32_t maxWaitMs = 60);
 bool preWakeHasData();
 void preWakeReset();
 size_t preWakeDrain(int16_t *dest, size_t maxSamples);

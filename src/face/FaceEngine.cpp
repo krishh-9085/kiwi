@@ -65,6 +65,7 @@ void updateFaceFrameRate() {
 }
 
 #include "hardware/RgbLed.h"
+#include "power/PowerManager.h"
 
 void tickFace() {
   if (!oledOK || otaInProgress)
@@ -153,7 +154,7 @@ static void uiDisplayTask(void *params) {
   const TickType_t xFrequency = pdMS_TO_TICKS(25); // 40 FPS
 
   for (;;) {
-    if (bootCompleted) {
+    if (bootCompleted && !powerIsHardwareSleeping()) {
       rgbLedUpdate();
       tickFace();
     }

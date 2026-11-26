@@ -45,6 +45,9 @@ static uint32_t currentCpuFreq = 240;
 static uint32_t lastActivityAt = 0;
 static uint32_t manualSleepElapsedSec = 0;
 static bool isOledDimmed = false;
+static volatile bool s_inHardwareSleep = false;
+
+bool powerIsHardwareSleeping() { return s_inHardwareSleep; }
 
 // ============================================================
 // SLEEP REQUEST GATE (Hardware Eco Deep/Light Sleep Only)
@@ -82,6 +85,7 @@ bool powerIsSleepRequested() {
 // SLEEP EXECUTION (Light Sleep & Deep Sleep)
 // ============================================================
 static void enterLightSleep(uint64_t wakeUs, const char *reason) {
+  s_inHardwareSleep = true;
   powerSetCpuFreq(160);
   setDisplayPower(false);
   rgbLedShow(0, 0, 0);
@@ -113,6 +117,8 @@ static void enterLightSleep(uint64_t wakeUs, const char *reason) {
   }
 
   if (cause == ESP_SLEEP_WAKEUP_GPIO) {
+    s_inHardwareSleep = false;
+    WiFi.setSleep(false);
     Serial.println("[POWER] Touch wake routine (light sleep): waking briefly");
     wakeKiwiFromSleep(false, CIRCADIAN_TEMP_WAKE_MS, true);
     resyncTouch();
@@ -124,10 +130,16 @@ static void enterLightSleep(uint64_t wakeUs, const char *reason) {
                     (unsigned long)manualSleepElapsedSec,
                     (unsigned long)(MANUAL_LIGHT_SLEEP_MAX_MIN * 60));
     }
+    s_inHardwareSleep = false;
+    WiFi.setSleep(false);
+  } else {
+    s_inHardwareSleep = false;
+    WiFi.setSleep(false);
   }
 }
 
 static void enterDeepSleep(uint8_t mode, uint64_t wakeUs, const char *reason) {
+  s_inHardwareSleep = true;
   saveConfigImmediate();
   powerSetCpuFreq(160);
   setDisplayPower(false);
@@ -155,6 +167,7 @@ static void enterDeepSleep(uint8_t mode, uint64_t wakeUs, const char *reason) {
                   reason, (unsigned long long)(wakeUs / 1000000ULL));
     esp_sleep_enable_timer_wakeup(wakeUs);
   } else {
+    esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_TIMER);
     Serial.printf("[POWER] Entering DEEP sleep, reason=%s, wake_in=none\n", reason);
   }
   Serial.flush();
@@ -211,11 +224,11 @@ void powerInit() {
 
     if (cause == ESP_SLEEP_WAKEUP_TIMER) {
       bool inWindow = isCircadianScheduleActiveNow();
-      if (timeSynced && inWindow && rtcSleepMode == 1) {
+      if (timeSynced && inWindow && (rtcSleepMode == 1 || rtcSleepMode == 2)) {
         Serial.println("[POWER] Timer woke within circadian sleep window. Returning to deep sleep.");
         int secUntilEnd = computeSecondsUntilScheduleWake();
         if (secUntilEnd > 0) {
-          enterDeepSleep(1, (uint64_t)secUntilEnd * 1000000ULL, "circadian_reenter");
+          enterDeepSleep(rtcSleepMode, (uint64_t)secUntilEnd * 1000000ULL, "circadian_reenter");
         }
       }
       Serial.println("[POWER] Scheduled sleep window finished (or time unsynced). Waking up.");
@@ -228,7 +241,7 @@ void powerInit() {
       bootCompleted = true;
       wakeFromDeepSleepWakeAnim = true;
       circadianTempWakeUntil = millis() + CIRCADIAN_TEMP_WAKE_MS;
-    } else if (cause == ESP_SLEEP_WAKEUP_GPIO) {
+    } else if (cause == ESP_SLEEP_WAKEUP_GPIO || cause == ESP_SLEEP_WAKEUP_EXT0) {
       Serial.println("[POWER] Deep sleep wake by touch: Waking up with sleepy wake anim.");
       inCircadianSleep = false;
       manualSleep = false;

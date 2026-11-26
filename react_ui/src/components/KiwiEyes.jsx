@@ -22,7 +22,6 @@ export default function KiwiEyes({ emotion = 'idle', skin = 'kiwi', sleeping = f
   // Natural blink loop (every 3–6 seconds) with leak-free timer cleanup
   useEffect(() => {
     if (sleeping || emotion === 'sleeping') {
-      setBlink(false)
       return
     }
 
@@ -52,12 +51,13 @@ export default function KiwiEyes({ emotion = 'idle', skin = 'kiwi', sleeping = f
   }, [sleeping, emotion])
 
   const isSleeping = sleeping || emotion === 'sleeping'
+  const effectiveBlink = !isSleeping && blink
   const glowColor = emotionColor(emotion, sleeping)
   const oledKey = emotion === 'proud' ? 'proud_regal' : emotion
-  const usePresetFace = !isSleeping && !blink && emotion !== 'idle' && Boolean(OLED_FACES[oledKey])
+  const usePresetFace = !isSleeping && !effectiveBlink && emotion !== 'idle' && Boolean(OLED_FACES[oledKey])
 
   const renderSkinEye = (side = 'left') => {
-    if (isSleeping || blink) {
+    if (isSleeping || effectiveBlink) {
       return <rect x="10" y="38" width="44" height="6" rx="3" fill={glowColor} />
     }
 

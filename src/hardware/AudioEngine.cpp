@@ -36,7 +36,7 @@ i2s_chan_handle_t txHandle = nullptr;
 // are never interleaved, which would produce garbled audio.
 
 enum SpkOwner : uint8_t { SPK_NONE, SPK_TONE, SPK_SPEECH };
-static SpkOwner spkOwner = SPK_NONE;
+static volatile SpkOwner spkOwner = SPK_NONE;
 
 // ---- Sample helpers ---------------------------------------------------------
 
@@ -81,7 +81,7 @@ static Tone toneQueue[32];
 static int toneCount = 0;
 static int toneIndex = 0;
 static uint32_t toneStartTime = 0;
-static bool tonePlaying = false;
+static volatile bool tonePlaying = false;
 static float tonePhase = 0.0f;
 static float vibPhase = 0.0f;
 static float tremPhase = 0.0f;
@@ -345,7 +345,11 @@ void updateTonePlayer() {
     s_toneMouthAmplitude = 0.0f;
   }
 
-  spkWriteAll(buf, sizeof(buf));
+  if (!spkWriteAll(buf, sizeof(buf))) {
+    tonePlaying = false;
+    spkOwner = SPK_NONE;
+    s_toneMouthAmplitude = 0.0f;
+  }
 }
 
 // ============================================================
@@ -680,13 +684,29 @@ bool startAudio() {
                                          .ws = (gpio_num_t)PIN_I2S_WS,
                                          .dout = I2S_GPIO_UNUSED,
                                          .din = (gpio_num_t)PIN_MIC_SD}};
+  auto failInit = [&](bool txEnabled, bool rxEnabled) -> bool {
+    if (txEnabled && txHandle)
+      i2s_channel_disable(txHandle);
+    if (rxEnabled && rxHandle)
+      i2s_channel_disable(rxHandle);
+    if (txHandle) {
+      i2s_del_channel(txHandle);
+      txHandle = nullptr;
+    }
+    if (rxHandle) {
+      i2s_del_channel(rxHandle);
+      rxHandle = nullptr;
+    }
+    return false;
+  };
   if (i2s_channel_init_std_mode(txHandle, &txCfg) != ESP_OK)
-    return false;
+    return failInit(false, false);
   if (i2s_channel_init_std_mode(rxHandle, &rxCfg) != ESP_OK)
-    return false;
-  if (i2s_channel_enable(txHandle) != ESP_OK ||
-      i2s_channel_enable(rxHandle) != ESP_OK)
-    return false;
+    return failInit(false, false);
+  if (i2s_channel_enable(txHandle) != ESP_OK)
+    return failInit(false, false);
+  if (i2s_channel_enable(rxHandle) != ESP_OK)
+    return failInit(true, false);
   return true;
 }
 
@@ -694,6 +714,8 @@ bool startAudio() {
 // MICROPHONE
 // ============================================================
 void drainMic() {
+  if (!rxHandle)
+    return;
   static int32_t tmp[64];
   size_t br = 0;
   int guard = 0;
@@ -740,7 +762,10 @@ bool setMicSlot(int slot, bool persist, bool force) {
 }
 
 int getMicSlot() {
-  return micSlot;
+  portENTER_CRITICAL(&s_micMux);
+  int slot = micSlot;
+  portEXIT_CRITICAL(&s_micMux);
+  return slot;
 }
 
 bool isMicSlotLocked() {

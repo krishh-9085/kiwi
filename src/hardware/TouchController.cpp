@@ -31,21 +31,30 @@ void triggerPetReaction();
 static uint32_t lastCheekTouchAt = 0;
 static uint8_t cheekTapCount = 0;
 uint32_t lastTickleTriggeredAt = 0;
+static uint32_t s_tickleSuppressUntil = 0;
 static volatile bool s_inTickleSpeech = false;
+static portMUX_TYPE s_touchMux = portMUX_INITIALIZER_UNLOCKED;
 
 bool isTickleActive() {
   return s_inTickleSpeech;
 }
 
 float getTopTouchHoldProgress() {
-  if (!touchT.state || busyProcessing || inCircadianSleep || manualSleep ||
+  portENTER_CRITICAL(&s_touchMux);
+  bool tState = touchT.state;
+  uint32_t tStarted = touchT.startedAt;
+  bool tHold = touchT.holdHandled;
+  bool tSleep = touchT.sleepHandled;
+  portEXIT_CRITICAL(&s_touchMux);
+
+  if (!tState || busyProcessing || inCircadianSleep || manualSleep ||
       sleepyFallAsleepIsActive() || sleepyWakeIsActive()) {
     return 0.0f;
   }
-  uint32_t held = millis() - touchT.startedAt;
-  if (held < 450 || touchT.sleepHandled)
+  uint32_t held = millis() - tStarted;
+  if (held < 450 || tSleep)
     return 0.0f;
-  if (!touchT.holdHandled && held < TOUCH_CLOCK_MS) {
+  if (!tHold && held < TOUCH_CLOCK_MS) {
     return (float)(held - 450) / (float)(TOUCH_CLOCK_MS - 450);
   }
   if (held >= TOUCH_CLOCK_MS && held < SLEEP_HOLD_MS) {
@@ -74,7 +83,16 @@ void triggerTickleMode() {
       "Hehe haha! Cheeks mat chhedo, gudgudi lagti hai!"};
   int idx = random(0, 3);
   speakText(tickleReplies[idx]);
-  setEmotion(EMOTION_IDLE);
+  bool wasCancelled = cancelRequest;
+  bool bargeInListen = startRecording;
+  cancelRequest = false;
+  if (wasCancelled && bargeInListen) {
+    toneStop();
+    setEmotion(EMOTION_LISTENING);
+    robotStateDesc = "Listening...";
+  } else {
+    setEmotion(EMOTION_IDLE);
+  }
   returnIdleAt = 0;
   resyncTouch();
   s_inTickleSpeech = false;
@@ -96,30 +114,25 @@ void initTouch() {
   touchT.armed = true;
 }
 
+static void resyncOneTouch(TouchSensor &ts, uint32_t now) {
+  bool raw = (digitalRead(ts.pin) != 0);
+  portENTER_CRITICAL(&s_touchMux);
+  ts.lastRaw = raw;
+  ts.state = raw;
+  ts.holdHandled = raw;
+  ts.sleepHandled = raw;
+  ts.changedAt = now;
+  ts.startedAt = raw ? now : 0;
+  ts.lastReleaseAt = 0;
+  ts.pendingSingleTap = false;
+  portEXIT_CRITICAL(&s_touchMux);
+}
+
 void resyncTouch() {
-  touchL.state = false;
-  touchL.lastRaw = digitalRead(PIN_TOUCH_LEFT);
-  touchL.holdHandled = (touchL.lastRaw != 0);
-  touchL.sleepHandled = (touchL.lastRaw != 0);
-  touchL.startedAt = 0;
-  touchL.lastReleaseAt = 0;
-  touchL.pendingSingleTap = false;
-
-  touchR.state = false;
-  touchR.lastRaw = digitalRead(PIN_TOUCH_RIGHT);
-  touchR.holdHandled = (touchR.lastRaw != 0);
-  touchR.sleepHandled = (touchR.lastRaw != 0);
-  touchR.startedAt = 0;
-  touchR.lastReleaseAt = 0;
-  touchR.pendingSingleTap = false;
-
-  touchT.state = false;
-  touchT.lastRaw = digitalRead(PIN_TOUCH_TOP);
-  touchT.holdHandled = (touchT.lastRaw != 0);
-  touchT.sleepHandled = (touchT.lastRaw != 0);
-  touchT.startedAt = 0;
-  touchT.lastReleaseAt = 0;
-  touchT.pendingSingleTap = false;
+  uint32_t now = millis();
+  resyncOneTouch(touchL, now);
+  resyncOneTouch(touchR, now);
+  resyncOneTouch(touchT, now);
 }
 
 // ---------- Touch Gesture Action Dispatcher ----------
@@ -368,10 +381,14 @@ void executeTouchAction(TouchAction act, uint8_t pin) {
       Serial.printf("[TOUCH] Cheek pin %d touched during busy/speech -> Dismiss ignored to protect speech\n", pin);
       return;
     }
-    if (busyProcessing || startRecording) {
+    if (busyProcessing) {
       Serial.println(
           "[TOUCH] Action DISMISS -> Cancel current request / listening");
       cancelRequest = true;
+      startRecording = false;
+      setEmotion(EMOTION_IDLE);
+    } else if (startRecording) {
+      Serial.println("[TOUCH] Action DISMISS -> Cancel pending listen");
       startRecording = false;
       soundPetSparkle();
       setEmotion(EMOTION_IDLE);
@@ -420,11 +437,13 @@ static void updateOneTouch(TouchSensor &ts, uint32_t now) {
       (touchDebounceMs > 0) ? (uint32_t)touchDebounceMs : TOUCH_DEBOUNCE;
   if (now - ts.changedAt >= deb && raw != ts.state) {
     powerNotifyActivity();
-    ts.state = raw;
-    if (ts.state) {
+    if (raw) {
+      portENTER_CRITICAL(&s_touchMux);
+      ts.state = true;
       ts.startedAt = now;
       ts.holdHandled = false;
       ts.sleepHandled = false;
+      portEXIT_CRITICAL(&s_touchMux);
       returnIdleAt = 0;
       if (bootInfoUntil > 0) {
         bootInfoUntil = 0;
@@ -491,15 +510,18 @@ static void updateOneTouch(TouchSensor &ts, uint32_t now) {
           if (checkCheekComboLRLR()) {
             Serial.println("[TOUCH] Alternating cheek combo triggered! "
                            "Reconciling angry Kiwi!");
-            lastTickleTriggeredAt =
-                now + 10000UL; // 10s cooldown for tickle mode
+            lastTickleTriggeredAt = now;
+            s_tickleSuppressUntil = now + 10000UL; // 10s cooldown for tickle mode
             reconcileKiwi();
           }
           return;
         }
       }
     } else {
+      portENTER_CRITICAL(&s_touchMux);
+      ts.state = false;
       uint32_t held = now - ts.startedAt;
+      portEXIT_CRITICAL(&s_touchMux);
       if (!touchL.state && !touchR.state && !touchT.state) {
         if (currentEmotion == EMOTION_IDLE || currentEmotion == EMOTION_HAPPY) {
           gazeTgtX = 0.0f;
@@ -568,6 +590,8 @@ static void updateOneTouch(TouchSensor &ts, uint32_t now) {
           handleAngryFeedAttempt();
           return;
         } else if (!busyProcessing && !s_inTickleSpeech &&
+                   (s_tickleSuppressUntil == 0 ||
+                    (int32_t)(now - s_tickleSuppressUntil) >= 0) &&
                    now - lastTickleTriggeredAt > TICKLE_COOLDOWN_MS &&
                    !inCircadianSleep && !manualSleep) {
           triggerTickleMode();
@@ -619,11 +643,11 @@ static void updateOneTouch(TouchSensor &ts, uint32_t now) {
 }
 
 void updateTouch() {
-  uint32_t now = millis();
-  updateOneTouch(touchL, now);
-  updateOneTouch(touchR, now);
-  updateOneTouch(touchT, now);
+  updateOneTouch(touchL, millis());
+  updateOneTouch(touchR, millis());
+  updateOneTouch(touchT, millis());
 
+  uint32_t now = millis();
   checkPendingSingleTap(touchL, now);
   checkPendingSingleTap(touchR, now);
   checkPendingSingleTap(touchT, now);

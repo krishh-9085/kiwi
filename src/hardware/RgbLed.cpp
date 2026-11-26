@@ -2,7 +2,22 @@
 #include "config/AppConfig.h"
 #include "hardware/AudioEngine.h"
 #include "hardware/SoundLevel.h"
+#include <freertos/FreeRTOS.h>
+#include <freertos/semphr.h>
 #include <math.h>
+
+static SemaphoreHandle_t s_rgbMutex = NULL;
+
+static inline bool rgbLock(uint32_t waitMs = 15) {
+  if (!s_rgbMutex)
+    return true;
+  return xSemaphoreTake(s_rgbMutex, pdMS_TO_TICKS(waitMs)) == pdTRUE;
+}
+
+static inline void rgbUnlock() {
+  if (s_rgbMutex)
+    xSemaphoreGive(s_rgbMutex);
+}
 
 // Current smoothed RGB output (for buttery smooth transitions)
 static float s_currR = 0.0f;
@@ -24,7 +39,7 @@ static uint8_t s_lastSentG = 0;
 static uint8_t s_lastSentB = 0;
 static bool s_hasSentRgb = false;
 
-static inline void rgbWriteIfChanged(uint8_t r, uint8_t g, uint8_t b) {
+static inline void rgbWriteIfChangedLocked(uint8_t r, uint8_t g, uint8_t b) {
   if (!s_hasSentRgb || r != s_lastSentR || g != s_lastSentG || b != s_lastSentB) {
     s_lastSentR = r;
     s_lastSentG = g;
@@ -35,6 +50,9 @@ static inline void rgbWriteIfChanged(uint8_t r, uint8_t g, uint8_t b) {
 }
 
 void rgbLedInit() {
+  if (!s_rgbMutex) {
+    s_rgbMutex = xSemaphoreCreateMutex();
+  }
   pinMode(PIN_RGB_LED, OUTPUT);
   // Turn off initially
   rgbLedShow(0, 0, 0);
@@ -53,7 +71,12 @@ bool rgbLedIsEnabled() {
 }
 
 void rgbLedSetBrightness(uint8_t b) {
-  s_brightness = b;
+  if (rgbLock()) {
+    s_brightness = b;
+    rgbUnlock();
+  } else {
+    s_brightness = b;
+  }
 }
 
 uint8_t rgbLedGetBrightness() {
@@ -61,35 +84,60 @@ uint8_t rgbLedGetBrightness() {
 }
 
 void rgbLedSetOverride(uint8_t r, uint8_t g, uint8_t b) {
+  if (!rgbLock())
+    return;
   s_overrideActive = true;
   s_overrideR = r;
   s_overrideG = g;
   s_overrideB = b;
-  rgbLedShow(r, g, b);
+  uint8_t sr = rgbLedEnabled ? (uint8_t)(((uint16_t)r * s_brightness) / 255) : 0;
+  uint8_t sg = rgbLedEnabled ? (uint8_t)(((uint16_t)g * s_brightness) / 255) : 0;
+  uint8_t sb = rgbLedEnabled ? (uint8_t)(((uint16_t)b * s_brightness) / 255) : 0;
+  s_currR = (float)sr;
+  s_currG = (float)sg;
+  s_currB = (float)sb;
+  rgbWriteIfChangedLocked(sr, sg, sb);
+  rgbUnlock();
 }
 
 void rgbLedClearOverride() {
-  s_overrideActive = false;
+  if (rgbLock()) {
+    s_overrideActive = false;
+    rgbUnlock();
+  } else {
+    s_overrideActive = false;
+  }
 }
 
 void rgbLedShow(uint8_t r, uint8_t g, uint8_t b) {
+  if (!rgbLock())
+    return;
   s_currR = (float)r;
   s_currG = (float)g;
   s_currB = (float)b;
-  rgbWriteIfChanged(r, g, b);
+  rgbWriteIfChangedLocked(r, g, b);
+  rgbUnlock();
 }
 
 void rgbLedUpdate() {
+  if (!rgbLock(0))
+    return;
   if (!rgbLedEnabled) {
-    if (s_currR > 0.0f || s_currG > 0.0f || s_currB > 0.0f) {
-      rgbLedShow(0, 0, 0);
+    if (s_currR > 0.0f || s_currG > 0.0f || s_currB > 0.0f || !s_hasSentRgb ||
+        s_lastSentR != 0 || s_lastSentG != 0 || s_lastSentB != 0) {
+      s_currR = 0.0f;
+      s_currG = 0.0f;
+      s_currB = 0.0f;
+      rgbWriteIfChangedLocked(0, 0, 0);
     }
+    rgbUnlock();
     return;
   }
 
   uint32_t now = millis();
   // 50Hz update rate (every 20ms) is ideal for butter-smooth animation without CPU load
   if (now - s_lastUpdate < 20) {
+    rgbUnlock();
     return;
   }
   s_lastUpdate = now;
@@ -232,6 +280,7 @@ void rgbLedUpdate() {
   uint8_t outG = (uint8_t)fminf(fmaxf(s_currG, 0.0f), 255.0f);
   uint8_t outB = (uint8_t)fminf(fmaxf(s_currB, 0.0f), 255.0f);
 
-  rgbWriteIfChanged(outR, outG, outB);
+  rgbWriteIfChangedLocked(outR, outG, outB);
+  rgbUnlock();
 }
 

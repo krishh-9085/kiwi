@@ -94,25 +94,36 @@ bool fetchWeather() {
   int tIdx = cur.indexOf("\"temperature_2m\":");
   if (tIdx >= 0) {
     int comma = cur.indexOf(',', tIdx);
-    newTemp = cur.substring(tIdx + 17, comma).toFloat();
+    if (comma < 0)
+      comma = cur.indexOf('}', tIdx);
+    if (comma > tIdx + 17)
+      newTemp = cur.substring(tIdx + 17, comma).toFloat();
   }
   int hIdx = cur.indexOf("\"relative_humidity_2m\":");
   if (hIdx >= 0) {
     int comma = cur.indexOf(',', hIdx);
-    newHumidity = cur.substring(hIdx + 23, comma).toInt();
+    if (comma < 0)
+      comma = cur.indexOf('}', hIdx);
+    if (comma > hIdx + 23)
+      newHumidity = cur.substring(hIdx + 23, comma).toInt();
   }
   int wIdx = cur.indexOf("\"weather_code\":");
   if (wIdx >= 0) {
     int comma = cur.indexOf(',', wIdx);
-    newCode = cur.substring(wIdx + 15, comma).toInt();
-    newDesc = getWeatherCodeDescription(newCode);
+    if (comma < 0)
+      comma = cur.indexOf('}', wIdx);
+    if (comma > wIdx + 15) {
+      newCode = cur.substring(wIdx + 15, comma).toInt();
+      newDesc = getWeatherCodeDescription(newCode);
+    }
   }
   int wsIdx = cur.indexOf("\"wind_speed_10m\":");
   if (wsIdx >= 0) {
     int comma = cur.indexOf(',', wsIdx);
     if (comma < 0)
       comma = cur.indexOf('}', wsIdx);
-    newWind = cur.substring(wsIdx + 17, comma).toFloat();
+    if (comma > wsIdx + 17)
+      newWind = cur.substring(wsIdx + 17, comma).toFloat();
   }
 
   if (displayLock(250)) {

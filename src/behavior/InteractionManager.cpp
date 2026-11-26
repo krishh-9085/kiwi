@@ -540,8 +540,10 @@ void handleQuestion(const String &qIn) {
 
   robotStateDesc = "Speaking...";
   {
+    uint32_t nowMs = millis();
     bool actionHeldEmotion =
-        (returnIdleAt > millis() || emotionAutoReturnAt > millis()) &&
+        ((returnIdleAt != 0 && (int32_t)(returnIdleAt - nowMs) > 0) ||
+         (emotionAutoReturnAt != 0 && (int32_t)(emotionAutoReturnAt - nowMs) > 0)) &&
         currentEmotion != EMOTION_THINKING &&
         currentEmotion != EMOTION_LISTENING && currentEmotion != EMOTION_IDLE;
     Emotion vocalEmotion = detectVocalEmotion(answer);

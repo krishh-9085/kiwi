@@ -53,7 +53,8 @@ static String getVoiceExpressionInstruction() {
            "bolo' -> [angry]; 'ro ke bolo' -> [sobbing]; 'has ke bolo' -> "
            "[laughing]; 'dheere bolo' -> [whisper]). "
            "Allowed emotion tags: [laughing] [giggle] [sobbing] [angry] [sad] "
-           "[whisper] [excited] [curious] [shy] [proud] [surprised] [scared] [cute].";
+           "[whisper] [excited] [curious] [shy] [proud] [surprised] [scared] "
+           "[cute].";
   } else {
     return " VOICE & MOOD: Reply in plain spoken text (no markdown). If asked "
            "to laugh, reply ONLY with '[ACTION: sound laugh]' without any "
@@ -257,143 +258,226 @@ static String cleanSentenceForSpeech(const String &s) {
   return cleanForSpeech(out);
 }
 
+static String extractUrlHost(const String &url, const char *fallbackHost) {
+  int start = url.indexOf("://");
+  start = (start >= 0) ? (start + 3) : 0;
+  int slash = url.indexOf('/', start);
+  String host =
+      (slash >= 0) ? url.substring(start, slash) : url.substring(start);
+  int colon = host.indexOf(':');
+  if (colon >= 0)
+    host = host.substring(0, colon);
+  host.trim();
+  return host.length() ? host : String(fallbackHost);
+}
+
+static bool isHexChunkSizeLine(const String &s) {
+  if (s.length() == 0 || s.length() > 12)
+    return false;
+  for (size_t i = 0; i < s.length(); i++) {
+    char c = s[i];
+    if (c == ';')
+      return i > 0;
+    bool isHex = (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') ||
+                 (c >= 'A' && c <= 'F');
+    if (!isHex)
+      return false;
+  }
+  return true;
+}
+
 static String processSseStream(HTTPClient &http, WiFiClient *stream,
-                               SentenceCallback onSentence) {
-
+                               SentenceCallback onSentence,
+                               bool preferTextKey) {
   String fullAnswer;
-
   fullAnswer.reserve(1024);
-
   String currentSentence;
-
   currentSentence.reserve(256);
-
   String line;
-
   line.reserve(1024);
+  String chunkLenLine;
+  chunkLenLine.reserve(16);
 
   bool inThink = false;
-
   bool isSSE = false;
+  bool headerChunked =
+      http.header("Transfer-Encoding").equalsIgnoreCase("chunked");
+  bool isChunked = headerChunked;
+  bool autoDetectPending = !headerChunked;
+  long chunkLeft = 0;
+  bool chunkSkipTrailerCrlf = false;
+  bool sawFirstLine = false;
+  bool cleanEof = false;
 
-  uint32_t tStart = millis();
-
-  while (millis() - tStart < 20000) {
-
-    if (cancelRequest)
-
-      break;
-
-    if (!http.connected() && (!stream || !stream->available()))
-
-      break;
-
-    if (stream && stream->available()) {
-
-      char ch = (char)stream->read();
-
-      tStart = millis();
-
-      if (ch == '\n') {
-
-        line.trim();
-
-        if (line.length() > 0) {
-
-          if (line.startsWith("data:")) {
-
-            isSSE = true;
-
-            String payload = line.substring(5);
-
-            payload.trim();
-
-            if (payload == "[DONE]") {
-
-              break;
+  auto handleSseLine = [&](const String &rawLine) -> bool {
+    String ln = rawLine;
+    ln.trim();
+    if (ln.length() == 0)
+      return true;
+    if (ln.startsWith("data:")) {
+      isSSE = true;
+      String payload = ln.substring(5);
+      payload.trim();
+      if (payload == "[DONE]") {
+        return false;
+      }
+      String delta = extractSseDeltaToken(payload);
+      if (delta.length() > 0) {
+        if (!inThink) {
+          int tStartIdx = delta.indexOf("<think>");
+          if (tStartIdx >= 0) {
+            String before = delta.substring(0, tStartIdx);
+            String rest = delta.substring(tStartIdx + 7);
+            int tEndIdx = rest.indexOf("</think>");
+            if (tEndIdx >= 0) {
+              delta = before + rest.substring(tEndIdx + 8);
+            } else {
+              delta = before;
+              inThink = true;
             }
-
-            String delta = extractSseDeltaToken(payload);
-
-            if (delta.length() > 0) {
-
-              if (delta.indexOf("<think>") >= 0)
-                inThink = true;
-
-              if (inThink) {
-
-                if (delta.indexOf("</think>") >= 0)
-                  inThink = false;
-
-              } else {
-
-                fullAnswer += delta;
-
-                currentSentence += delta;
-
-                if (isSentenceComplete(currentSentence)) {
-                  if (cancelRequest)
-                    break;
-                  String toSpeak = cleanSentenceForSpeech(currentSentence);
-
-                  if (toSpeak.length() > 0 && onSentence) {
-
-                    onSentence(toSpeak, false);
-                    tStart = millis();
-                    if (cancelRequest)
-                      break;
-                  }
-
-                  currentSentence = "";
-                }
-              }
-            }
-
-          } else if (line.startsWith("{")) {
-
-            fullAnswer += line;
+          }
+        } else {
+          int tEndIdx = delta.indexOf("</think>");
+          if (tEndIdx >= 0) {
+            delta = delta.substring(tEndIdx + 8);
+            inThink = false;
+          } else {
+            delta = "";
           }
         }
+        if (delta.length() > 0) {
+          fullAnswer += delta;
+          currentSentence += delta;
+          if (isSentenceComplete(currentSentence)) {
+            if (cancelRequest)
+              return false;
+            String toSpeak = cleanSentenceForSpeech(currentSentence);
+            if (toSpeak.length() > 0 && onSentence) {
+              onSentence(toSpeak, false);
+              if (cancelRequest)
+                return false;
+            }
+            currentSentence = "";
+          }
+        }
+      }
+    } else if (!isSSE && (fullAnswer.length() > 0 || ln.startsWith("{") ||
+                          ln.startsWith("["))) {
+      fullAnswer += ln;
+    }
+    return true;
+  };
 
+  uint32_t tStart = millis();
+  while (millis() - tStart < 20000) {
+    if (cancelRequest)
+      break;
+    if (!http.connected() && (!stream || !stream->available())) {
+      cleanEof = true;
+      break;
+    }
+
+    if (stream && stream->available()) {
+      char ch = (char)stream->read();
+      tStart = millis();
+      lastProgressAt = tStart;
+
+      if (isChunked) {
+        if (chunkLeft == 0) {
+          if (chunkSkipTrailerCrlf) {
+            if (ch == '\r')
+              continue;
+            if (ch == '\n') {
+              chunkSkipTrailerCrlf = false;
+              continue;
+            }
+            chunkSkipTrailerCrlf = false;
+          }
+          if (ch == '\r')
+            continue;
+          if (ch == '\n') {
+            chunkLenLine.trim();
+            if (chunkLenLine.length() == 0)
+              continue;
+            long sz = strtol(chunkLenLine.c_str(), NULL, 16);
+            chunkLenLine = "";
+            if (sz <= 0) {
+              cleanEof = true;
+              break;
+            }
+            chunkLeft = sz;
+          } else if (chunkLenLine.length() < 16) {
+            chunkLenLine += ch;
+          }
+          continue;
+        }
+        chunkLeft--;
+        if (chunkLeft == 0) {
+          chunkSkipTrailerCrlf = true;
+        }
+      }
+
+      if (ch == '\n') {
+        if (autoDetectPending && !sawFirstLine) {
+          String trimmedFirst = line;
+          trimmedFirst.trim();
+          if (trimmedFirst.length() > 0) {
+            sawFirstLine = true;
+            autoDetectPending = false;
+            if (isHexChunkSizeLine(trimmedFirst)) {
+              isChunked = true;
+              long sz = strtol(trimmedFirst.c_str(), NULL, 16);
+              line = "";
+              if (sz <= 0) {
+                cleanEof = true;
+                break;
+              }
+              chunkLeft = sz;
+              continue;
+            }
+          }
+        }
+        bool cont = handleSseLine(line);
         line = "";
-
+        if (!cont)
+          break;
+        tStart = millis();
       } else if (ch != '\r') {
         if (line.length() < 2048)
           line += ch;
       }
-      lastProgressAt = millis();
     } else {
       serviceUi();
       yield();
     }
   }
 
+  if (line.length() > 0 && !cancelRequest) {
+    handleSseLine(line);
+  }
+
+  // Drain/abort leftover bytes if stopped before clean EOF so socket reuse
+  // won't desync
+  if (!cleanEof && stream) {
+    stream->stop();
+  }
+
   if (!cancelRequest && !isSSE && fullAnswer.length() > 0) {
-
-    String ans = jsonTextField(fullAnswer, "content");
-
+    String ans = jsonTextField(fullAnswer, preferTextKey ? "text" : "content");
     if (!ans.length())
-      ans = jsonTextField(fullAnswer, "text");
-
+      ans = jsonTextField(fullAnswer, preferTextKey ? "content" : "text");
     if (ans.length() > 0)
       fullAnswer = ans;
-
     String toSpeak = cleanSentenceForSpeech(fullAnswer);
-
     if (toSpeak.length() > 0 && onSentence) {
-
       onSentence(toSpeak, true);
     }
-
     return fullAnswer;
   }
 
   if (!cancelRequest && currentSentence.length() > 0) {
-
     String toSpeak = cleanSentenceForSpeech(currentSentence);
-
     if (toSpeak.length() > 0 && onSentence) {
-
       onSentence(toSpeak, true);
     }
   }
@@ -494,14 +578,6 @@ String askGemini(const String &question, SentenceCallback onSentence) {
     http.setTimeout(8000);
     http.setConnectTimeout(6000);
 
-    // DNS pre-check before TLS (fixes HTTP -1 on first boot / after AP mode)
-
-    ensureDns("generativelanguage.googleapis.com");
-
-    uint32_t t0 = millis();
-
-    Serial.println("[GEMINI] Asking (streaming)...");
-
     String targetEp = llmEndpoint;
 
     if (targetEp == DEFAULT_LLM_URL ||
@@ -523,6 +599,13 @@ String askGemini(const String &question, SentenceCallback onSentence) {
       targetEp += ":streamGenerateContent?alt=sse";
     }
 
+    // DNS pre-check before TLS (fixes HTTP -1 on first boot / after AP mode)
+    ensureDns(extractUrlHost(targetEp, "generativelanguage.googleapis.com"));
+
+    uint32_t t0 = millis();
+
+    Serial.println("[GEMINI] Asking (streaming)...");
+
     if (!http.begin(client, targetEp)) {
 
       Serial.println("[GEMINI] Bad URL.");
@@ -530,6 +613,8 @@ String askGemini(const String &question, SentenceCallback onSentence) {
       return "";
     }
 
+    const char *sseHdrs[] = {"Transfer-Encoding"};
+    http.collectHeaders(sseHdrs, 1);
     http.addHeader("Content-Type", "application/json");
 
     http.addHeader("x-goog-api-key", key);
@@ -540,7 +625,7 @@ String askGemini(const String &question, SentenceCallback onSentence) {
 
       WiFiClient *stream = http.getStreamPtr();
 
-      fullAns = processSseStream(http, stream, onSentence);
+      fullAns = processSseStream(http, stream, onSentence, true);
 
     } else {
 
@@ -660,9 +745,9 @@ String askGroq(const String &question, SentenceCallback onSentence) {
 
   body += ",\"stream\":true}";
 
-  // DNS pre-check: ensures api.groq.com resolves before TLS (fixes HTTP -1)
+  // DNS pre-check: ensures endpoint resolves before TLS (fixes HTTP -1)
 
-  ensureDns("api.groq.com");
+  ensureDns(extractUrlHost(groqEndpoint, "api.groq.com"));
 
   String fullAns;
 
@@ -698,6 +783,8 @@ String askGroq(const String &question, SentenceCallback onSentence) {
       return "";
     }
 
+    const char *sseHdrs[] = {"Transfer-Encoding"};
+    http.collectHeaders(sseHdrs, 1);
     http.addHeader("Content-Type", "application/json");
 
     http.addHeader("Authorization", "Bearer " + key);
@@ -708,7 +795,7 @@ String askGroq(const String &question, SentenceCallback onSentence) {
 
       WiFiClient *stream = http.getStreamPtr();
 
-      fullAns = processSseStream(http, stream, onSentence);
+      fullAns = processSseStream(http, stream, onSentence, false);
 
     } else {
 

@@ -21,6 +21,12 @@ bool handleTimerCommand(const String &qIn) {
     return false;
   }
 
+  // Negative filter: Do not hijack explanatory / educational questions about timers
+  if (hasAny(q, {"how does", "what is", "explain", "ic ", "555 timer",
+                 "kya hota", "kaam kaise"})) {
+    return false;
+  }
+
   // 1. Cancel / Stop Timer or Alarm
   if (hasWord(q, {"stop", "cancel", "off", "dismiss"}) ||
       hasAny(q,
@@ -47,7 +53,11 @@ bool handleTimerCommand(const String &qIn) {
     if (isdigit(q[i])) {
       int val = 0;
       while (i < (int)q.length() && isdigit(q[i])) {
-        val = val * 10 + (q[i] - '0');
+        if (val < 86400) {
+          val = val * 10 + (q[i] - '0');
+          if (val > 86400)
+            val = 86400;
+        }
         i++;
       }
       if (val > 0) {
@@ -241,6 +251,29 @@ bool handleLightCommand(const String &qIn) {
     }
   }
 
+  // Onboard RGB LED specific controls (must run before generic on/off/color)
+  if (hasAny(q, {"onboard", "choti light", "chhoti light", "robot light",
+                 "robot ki light", "torch", "flashlight"})) {
+    if (hasWord(q, {"off", "close"}) || hasAny(q, {"band", "bujha"})) {
+      rgbLedClearOverride();
+      rgbLedShow(0, 0, 0);
+      soundPetSparkle();
+      speakText("Onboard light band kar di!");
+      return true;
+    } else {
+      rgbLedSetOverride(255, 255, 255);
+      soundPetSparkle();
+      speakText("Onboard light on kar di!");
+      return true;
+    }
+  }
+
+  bool hasExplicitColorWord = hasWord(
+      q, {"red", "laal", "green", "hara", "haree", "blue", "neela", "neeli",
+          "yellow", "peela", "peeli", "pink", "gulabi", "purple", "violet",
+          "baingani", "orange", "narangi", "cyan", "aqua", "firozi", "white",
+          "safed", "warm", "cool"});
+
   // 1. Turn OFF
   if (hasWord(q, {"off", "close"}) ||
       hasAny(q, {"band", "bujha", "turn off", "switch off", "close light",
@@ -256,10 +289,11 @@ bool handleLightCommand(const String &qIn) {
     return true;
   }
 
-  // 2. Turn ON
-  if (hasWord(q, {"on", "open"}) ||
-      hasAny(q, {"chalu", "turn on", "switch on", "jalao", "on kar",
-                 "open light", "चालू", "जलाओ"})) {
+  // 2. Turn ON (skip if caller asked for a specific color like "turn on red light")
+  if (!hasExplicitColorWord &&
+      (hasWord(q, {"on", "open"}) ||
+       hasAny(q, {"chalu", "turn on", "switch on", "jalao", "on kar",
+                  "open light", "चालू", "जलाओ"}))) {
     executeUnifiedLightAction("on");
     rgbLedSetOverride(255, 240, 220);
     setEmotion(EMOTION_IDLE);
@@ -361,23 +395,6 @@ bool handleLightCommand(const String &qIn) {
                          ? "Light ka " + matchedFx + " mode laga diya!"
                          : "Light set to " + matchedFx + " mode!";
       speakText(reply);
-      return true;
-    }
-  }
-
-  // 4c. Onboard RGB LED specific controls
-  if (hasAny(q, {"onboard", "choti light", "chhoti light", "robot light",
-                 "robot ki light", "torch", "flashlight"})) {
-    if (hasWord(q, {"off", "close"}) || hasAny(q, {"band", "bujha"})) {
-      rgbLedClearOverride();
-      rgbLedShow(0, 0, 0);
-      soundPetSparkle();
-      speakText("Onboard light band kar di!");
-      return true;
-    } else {
-      rgbLedSetOverride(255, 255, 255);
-      soundPetSparkle();
-      speakText("Onboard light on kar di!");
       return true;
     }
   }

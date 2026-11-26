@@ -44,23 +44,23 @@ void handleSave() {
     sttLang = normalizeSttLang(server.arg("sttlang"));
 
   sttEndpoint = sanitizeUrl(server.arg("stturl"), DEFAULT_STT_URL);
-  if (server.hasArg("ttskey") && server.arg("ttskey").length() > 0 &&
-      !isMaskedSecret(server.arg("ttskey"))) {
-    sttKey = sanitizeField(server.arg("ttskey"));
-  } else if (server.hasArg("sttkey") && server.arg("sttkey").length() > 0 &&
-             !isMaskedSecret(server.arg("sttkey"))) {
+  if (server.hasArg("sttkey") && server.arg("sttkey").length() > 0 &&
+      !isMaskedSecret(server.arg("sttkey"))) {
     sttKey = sanitizeField(server.arg("sttkey"));
+  } else if (server.hasArg("ttskey") && server.arg("ttskey").length() > 0 &&
+             !isMaskedSecret(server.arg("ttskey"))) {
+    sttKey = sanitizeField(server.arg("ttskey"));
   }
   sttModel = sanitizeField(server.arg("sttmodel"), DEFAULT_STT_MODEL);
 
   groqSttEndpoint = sanitizeUrl(server.arg("groqstturl"), DEFAULT_GROQ_STT_URL);
-  if (server.hasArg("groqkey") && server.arg("groqkey").length() > 0 &&
-      !isMaskedSecret(server.arg("groqkey"))) {
-    groqSttKey = sanitizeField(server.arg("groqkey"));
-  } else if (server.hasArg("groqsttkey") &&
-             server.arg("groqsttkey").length() > 0 &&
-             !isMaskedSecret(server.arg("groqsttkey"))) {
+  if (server.hasArg("groqsttkey") &&
+      server.arg("groqsttkey").length() > 0 &&
+      !isMaskedSecret(server.arg("groqsttkey"))) {
     groqSttKey = sanitizeField(server.arg("groqsttkey"));
+  } else if (server.hasArg("groqkey") && server.arg("groqkey").length() > 0 &&
+             !isMaskedSecret(server.arg("groqkey"))) {
+    groqSttKey = sanitizeField(server.arg("groqkey"));
   }
   groqSttModel =
       sanitizeField(server.arg("groqsttmodel"), DEFAULT_GROQ_STT_MODEL);
@@ -322,6 +322,8 @@ void handleSave() {
     touchFeedbackSound = server.hasArg("tch_snd")
                              ? parsePortalBool(server.arg("tch_snd"))
                              : false;
+  } else if (server.hasArg("tch_snd")) {
+    touchFeedbackSound = parsePortalBool(server.arg("tch_snd"));
   }
 
   if (server.hasArg("act_top_tap"))

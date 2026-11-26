@@ -5,7 +5,22 @@
 #include "config/AppConfig.h"
 #include "core/Timing.h"
 #include <freertos/FreeRTOS.h>
+#include <freertos/semphr.h>
 #include <freertos/task.h>
+
+static SemaphoreHandle_t s_wledMutex = NULL;
+static inline void ensureWledMutex() {
+  if (!s_wledMutex)
+    s_wledMutex = xSemaphoreCreateMutex();
+}
+static inline bool wledLock(uint32_t ms = 100) {
+  ensureWledMutex();
+  return !s_wledMutex || xSemaphoreTake(s_wledMutex, pdMS_TO_TICKS(ms)) == pdTRUE;
+}
+static inline void wledUnlock() {
+  if (s_wledMutex)
+    xSemaphoreGive(s_wledMutex);
+}
 
 static String discoveredWledIp = "";
 static String manualWledIp = "";
@@ -60,21 +75,35 @@ static const WledStaticEffect STATIC_EFFECTS[] = {
 };
 
 bool isWledDiscovered() {
-  return discoveredWledIp.length() > 0 || manualWledIp.length() > 0;
+  bool ok = false;
+  if (wledLock()) {
+    ok = discoveredWledIp.length() > 0 || manualWledIp.length() > 0;
+    wledUnlock();
+  }
+  return ok;
 }
 
 String getWledIp() {
-  if (manualWledIp.length() > 0)
-    return manualWledIp;
-  return discoveredWledIp;
+  String ip;
+  if (wledLock()) {
+    ip = (manualWledIp.length() > 0) ? manualWledIp : discoveredWledIp;
+    wledUnlock();
+  }
+  return ip;
 }
 
 void setWledManualIp(const String &ip) {
-  manualWledIp = ip;
-  manualWledIp.trim();
-  if (manualWledIp.length() > 0) {
-    discoveredWledIp = manualWledIp;
-    Serial.printf("[WLED] Manual IP configured: %s\n", manualWledIp.c_str());
+  String trimmed = ip;
+  trimmed.trim();
+  if (wledLock()) {
+    manualWledIp = trimmed;
+    if (manualWledIp.length() > 0) {
+      discoveredWledIp = manualWledIp;
+    }
+    wledUnlock();
+  }
+  if (trimmed.length() > 0) {
+    Serial.printf("[WLED] Manual IP configured: %s\n", trimmed.c_str());
   }
 }
 
@@ -94,9 +123,14 @@ bool fetchWledEffectsList() {
 
   int code = http.GET();
   if (code == 200) {
-    wledEffectsJson = http.getString();
+    String body = http.getString();
     http.end();
-    Serial.printf("[WLED] Synced %d bytes of effects from %s\n", (int)wledEffectsJson.length(), ip.c_str());
+    size_t len = body.length();
+    if (wledLock()) {
+      wledEffectsJson = body;
+      wledUnlock();
+    }
+    Serial.printf("[WLED] Synced %d bytes of effects from %s\n", (int)len, ip.c_str());
     return true;
   }
   http.end();
@@ -110,10 +144,14 @@ static void wledDiscoveryTask(void *param) {
   // 1. Try discovering via standard WLED mDNS service '_wled._tcp'
   int n = MDNS.queryService("wled", "tcp");
   if (n > 0) {
-    discoveredWledIp = MDNS.address(0).toString();
+    String foundIp = MDNS.address(0).toString();
     String host = MDNS.hostname(0);
-    Serial.printf("[WLED] Found WLED service: %s (%s)\n", discoveredWledIp.c_str(), host.c_str());
-    addTerminalLog("[WLED] Light found at " + discoveredWledIp);
+    if (wledLock()) {
+      discoveredWledIp = foundIp;
+      wledUnlock();
+    }
+    Serial.printf("[WLED] Found WLED service: %s (%s)\n", foundIp.c_str(), host.c_str());
+    addTerminalLog("[WLED] Light found at " + foundIp);
     fetchWledEffectsList();
     s_wledDiscoveryActive = false;
     s_wledDiscoveryTaskHandle = NULL;
@@ -124,9 +162,13 @@ static void wledDiscoveryTask(void *param) {
   // 2. Fallback: Query default hostname 'wled.local' with short 800ms timeout
   IPAddress hostIp = MDNS.queryHost("wled", 800);
   if (hostIp != INADDR_NONE && hostIp != IPAddress(0, 0, 0, 0)) {
-    discoveredWledIp = hostIp.toString();
-    Serial.printf("[WLED] Resolved host 'wled.local': %s\n", discoveredWledIp.c_str());
-    addTerminalLog("[WLED] Light found at " + discoveredWledIp);
+    String foundIp = hostIp.toString();
+    if (wledLock()) {
+      discoveredWledIp = foundIp;
+      wledUnlock();
+    }
+    Serial.printf("[WLED] Resolved host 'wled.local': %s\n", foundIp.c_str());
+    addTerminalLog("[WLED] Light found at " + foundIp);
     fetchWledEffectsList();
   } else {
     Serial.println("[WLED] No WLED light found on network (scan complete)");
@@ -145,13 +187,25 @@ bool discoverWledAsync(bool force) {
   if (WiFi.status() != WL_CONNECTED)
     return false;
 
-  if (manualWledIp.length() > 0) {
-    discoveredWledIp = manualWledIp;
-    if (!wledEffectsJson.length()) fetchWledEffectsList();
+  String mIp;
+  String dIp;
+  bool hasEff = false;
+  if (wledLock()) {
+    mIp = manualWledIp;
+    if (mIp.length() > 0) {
+      discoveredWledIp = mIp;
+    }
+    dIp = discoveredWledIp;
+    hasEff = wledEffectsJson.length() > 0;
+    wledUnlock();
+  }
+
+  if (mIp.length() > 0) {
+    if (!hasEff) fetchWledEffectsList();
     return true;
   }
 
-  if (discoveredWledIp.length() > 0 && !force)
+  if (dIp.length() > 0 && !force)
     return true;
 
   if (s_wledDiscoveryActive)
@@ -176,13 +230,25 @@ bool discoverWled(bool force) {
   if (WiFi.status() != WL_CONNECTED)
     return false;
 
-  if (manualWledIp.length() > 0) {
-    discoveredWledIp = manualWledIp;
-    if (!wledEffectsJson.length()) fetchWledEffectsList();
+  String mIp;
+  String dIp;
+  bool hasEff = false;
+  if (wledLock()) {
+    mIp = manualWledIp;
+    if (mIp.length() > 0) {
+      discoveredWledIp = mIp;
+    }
+    dIp = discoveredWledIp;
+    hasEff = wledEffectsJson.length() > 0;
+    wledUnlock();
+  }
+
+  if (mIp.length() > 0) {
+    if (!hasEff) fetchWledEffectsList();
     return true;
   }
 
-  if (discoveredWledIp.length() > 0 && !force)
+  if (dIp.length() > 0 && !force)
     return true;
 
   // Start background task if not already in progress
@@ -231,8 +297,11 @@ bool sendWledCommand(const String &urlParams) {
     return true;
   } else {
     Serial.printf("[WLED] Command failed (%d), will re-scan IP on next command\n", code);
-    if (!manualWledIp.length()) {
-      discoveredWledIp = ""; // Allow re-discovery next time if IP changed
+    if (wledLock()) {
+      if (!manualWledIp.length()) {
+        discoveredWledIp = ""; // Allow re-discovery next time if IP changed
+      }
+      wledUnlock();
     }
     return false;
   }
@@ -284,25 +353,34 @@ int findWledEffectId(const String &query, String *outMatchedName) {
     cleanQ = q;
 
   // If live JSON list has not been fetched yet, try fetching it
-  if (!wledEffectsJson.length() && WiFi.status() == WL_CONNECTED && getWledIp().length()) {
+  String effectsSnap;
+  if (wledLock()) {
+    effectsSnap = wledEffectsJson;
+    wledUnlock();
+  }
+  if (!effectsSnap.length() && WiFi.status() == WL_CONNECTED && getWledIp().length()) {
     fetchWledEffectsList();
+    if (wledLock()) {
+      effectsSnap = wledEffectsJson;
+      wledUnlock();
+    }
   }
 
   // 1. If we have live JSON list from WLED device, parse dynamically!
-  if (wledEffectsJson.length() > 0) {
+  if (effectsSnap.length() > 0) {
     int currentId = 0;
     int p = 0;
     int bestId = -1;
     int bestScore = 0;
     String bestName = "";
 
-    while (p < (int)wledEffectsJson.length()) {
-      int startQ = wledEffectsJson.indexOf('"', p);
+    while (p < (int)effectsSnap.length()) {
+      int startQ = effectsSnap.indexOf('"', p);
       if (startQ < 0) break;
-      int endQ = wledEffectsJson.indexOf('"', startQ + 1);
+      int endQ = effectsSnap.indexOf('"', startQ + 1);
       if (endQ < 0) break;
 
-      String name = wledEffectsJson.substring(startQ + 1, endQ);
+      String name = effectsSnap.substring(startQ + 1, endQ);
       p = endQ + 1;
 
       // In WLED 0.14, strip UI flags after '@' e.g. "Android@,!;" -> "Android"

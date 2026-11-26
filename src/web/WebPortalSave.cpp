@@ -65,7 +65,9 @@ void handleSave() {
   groqSttModel =
       sanitizeField(server.arg("groqsttmodel"), DEFAULT_GROQ_STT_MODEL);
 
-  replyLang = sanitizeField(server.arg("replang"));
+  if (server.hasArg("replang")) {
+    replyLang = sanitizeField(server.arg("replang"));
+  }
   if (server.hasArg("prompt")) {
     String p = server.arg("prompt");
     p.trim();
@@ -303,8 +305,6 @@ void handleSave() {
   }
   if (server.hasArg("boredom")) {
     boredomEnabled = parsePortalBool(server.arg("boredom"));
-  } else {
-    boredomEnabled = false;
   }
   if (server.hasArg("boredom_mins")) {
     int bm = server.arg("boredom_mins").toInt();
@@ -319,7 +319,9 @@ void handleSave() {
     if (td >= 10 && td <= 200) {
       touchDebounceMs = td;
     }
-    touchFeedbackSound = server.hasArg("tch_snd");
+    touchFeedbackSound = server.hasArg("tch_snd")
+                             ? parsePortalBool(server.arg("tch_snd"))
+                             : false;
   }
 
   if (server.hasArg("act_top_tap"))

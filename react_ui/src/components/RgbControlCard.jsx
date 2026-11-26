@@ -99,6 +99,7 @@ function hexToHsv(hex) {
 export default function RgbControlCard({
   onColorChange,
   onClearOverride,
+  onToggleRgb,
   initialColor = '#38BDF8',
   currentEmotion = 'idle',
   rgbEnabled = true,
@@ -294,21 +295,23 @@ export default function RgbControlCard({
   const activeHex = (isOverride ? hexString : moodHex).toUpperCase()
 
   const { r, g, b } = hexToRgb(activeHex)
-  const r2 = Math.max(0, Math.round(r * 0.68))
-  const g2 = Math.max(0, Math.round(g * 0.68))
-  const b2 = Math.max(0, Math.round(b * 0.68))
 
-  const bgGradient = `linear-gradient(145deg, rgb(${r}, ${g}, ${b}) 0%, rgb(${r2}, ${g2}, ${b2}) 100%)`
-  const glowShadow = `0 8px 24px rgba(${r}, ${g}, ${b}, 0.35)`
+  const cardBgImage = rgbEnabled
+    ? `radial-gradient(circle at top right, rgba(${r}, ${g}, ${b}, 0.24), transparent 72%)`
+    : 'none'
+  const cardBorder = rgbEnabled
+    ? `1px solid rgba(${r}, ${g}, ${b}, 0.36)`
+    : '1px solid var(--border-light)'
+  const badgeBg = !rgbEnabled
+    ? 'var(--card-muted)'
+    : (isOverride ? 'rgba(56, 189, 248, 0.16)' : `rgba(${r}, ${g}, ${b}, 0.18)`)
+  const badgeColor = !rgbEnabled
+    ? 'var(--text-muted)'
+    : (isOverride ? '#38BDF8' : activeHex)
 
-  const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255
-  const isLightText = lum <= 0.62
-  const textColor = isLightText ? '#FFFFFF' : '#12141A'
-  const textMutedColor = isLightText ? 'rgba(255, 255, 255, 0.8)' : 'rgba(18, 20, 26, 0.75)'
-  const triggerBg = isLightText ? 'rgba(0, 0, 0, 0.18)' : 'rgba(255, 255, 255, 0.28)'
-  const triggerBorder = isLightText ? 'rgba(255, 255, 255, 0.24)' : 'rgba(0, 0, 0, 0.16)'
-  const badgeBg = isLightText ? 'rgba(255, 255, 255, 0.22)' : 'rgba(0, 0, 0, 0.2)'
-  const badgeColor = isLightText ? '#FFFFFF' : '#12141A'
+  const emotionLabel = currentEmotion
+    ? `${currentEmotion.charAt(0).toUpperCase() + currentEmotion.slice(1)} mood`
+    : 'Mood sync'
 
   return (
     <div
@@ -323,19 +326,21 @@ export default function RgbControlCard({
               width: '100%'
             }
           : {
-              background: bgGradient,
+              background: 'var(--card-white)',
+              backgroundImage: cardBgImage,
               borderRadius: '22px',
-              padding: '13px 14px',
-              color: textColor,
+              padding: '12px 12px',
+              color: 'var(--text-dark)',
               display: 'flex',
               flexDirection: 'column',
               justifyContent: 'space-between',
-              boxShadow: glowShadow,
-              border: `1px solid ${isLightText ? 'rgba(255, 255, 255, 0.18)' : 'rgba(0, 0, 0, 0.12)'}`,
+              gap: '8px',
+              boxShadow: 'var(--shadow-card)',
+              border: cardBorder,
               position: 'relative',
               boxSizing: 'border-box',
               minHeight: '92px',
-              transition: 'background 0.4s ease, box-shadow 0.4s ease, border-color 0.4s ease, color 0.3s ease'
+              transition: 'background-image 0.35s ease, border-color 0.35s ease'
             }),
         ...style
       }}
@@ -346,19 +351,22 @@ export default function RgbControlCard({
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          marginBottom: isEmbedded ? '6px' : '8px'
+          gap: '6px',
+          marginBottom: isEmbedded ? '6px' : '0'
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '5px', flex: 1, minWidth: 0 }}>
           <svg
             xmlns="http://www.w3.org/2000/svg"
-            width="14"
-            height="14"
+            width="13"
+            height="13"
             viewBox="0 0 24 24"
             style={{
-              color: isEmbedded ? '#10B981' : textColor,
+              color: rgbEnabled ? activeHex : 'var(--text-muted)',
+              filter: rgbEnabled ? `drop-shadow(0 0 5px ${activeHex}66)` : 'none',
               display: 'block',
-              flexShrink: 0
+              flexShrink: 0,
+              transition: 'color 0.3s ease'
             }}
           >
             <path
@@ -366,62 +374,72 @@ export default function RgbControlCard({
               d="M15 20v-2H9v2c0 1.1.9 2 2 2h2c1.1 0 2-.9 2-2m-6.81-4.92c.13.18.29.53.43.92h6.76c.15-.39.3-.74.43-.92c.35-.5.72-.93 1.08-1.36c1.03-1.21 2.1-2.46 2.1-4.72c0-3.86-3.14-7-7-7s-7 3.14-7 7c0 2.28 1.07 3.53 2.1 4.73c.36.42.73.85 1.09 1.35ZM12 5v2c-1.1 0-2 .9-2 2H8c0-2.21 1.79-4 4-4"
             />
           </svg>
-          {(showTitle || title) ? (
-            <span
-              style={{
-                fontSize: '11px',
-                fontWeight: 700,
-                color: isEmbedded ? 'var(--text-dark)' : textColor,
-                letterSpacing: '0.02em'
-              }}
-            >
-              {title || 'WS2812 RGB LED (Pin 48)'}
-            </span>
-          ) : isEmbedded ? (
-            <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-dark)' }}>
-              Color Customizer
-            </span>
-          ) : null}
+          <span
+            style={{
+              flex: 1,
+              minWidth: 0,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+              fontSize: '10.5px',
+              fontWeight: 800,
+              color: 'var(--text-dark)',
+              letterSpacing: '0.03em',
+              textTransform: (showTitle || title || isEmbedded) ? 'none' : 'uppercase'
+            }}
+          >
+            {(showTitle || title)
+              ? (title || 'WS2812 RGB LED')
+              : (isEmbedded ? 'Color Customizer' : 'RGB Light')}
+          </span>
         </div>
-        <span
-          style={{
-            fontSize: '9px',
-            fontWeight: 800,
-            background: isEmbedded
-              ? (isOverride ? 'rgba(56, 189, 248, 0.2)' : 'rgba(16, 185, 129, 0.18)')
-              : badgeBg,
-            color: isEmbedded
-              ? (isOverride ? '#38BDF8' : '#10B981')
-              : badgeColor,
-            padding: '2px 7px',
-            borderRadius: '999px',
-            letterSpacing: '0.04em'
-          }}
-        >
-          {isOverride ? 'CUSTOM' : 'AUTO'}
-        </span>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
+          {(isEmbedded || !onToggleRgb) && renderModeBadge({ rgbEnabled, isOverride, badgeBg, badgeColor })}
+          {onToggleRgb && (
+            <label
+              className="flux-toggle flux-toggle-sm"
+              style={{ gap: 0, flexShrink: 0, '--toggle-accent': activeHex }}
+              title={rgbEnabled ? 'Turn off RGB LED' : 'Turn on RGB LED'}
+            >
+              <input
+                type="checkbox"
+                checked={rgbEnabled}
+                onChange={(e) => onToggleRgb(e.target.checked)}
+                aria-label="Toggle RGB LED"
+              />
+              <span className="flux-toggle-slider" />
+            </label>
+          )}
+        </div>
       </div>
 
       {/* Lightweight Dependency-Free Color Picker Trigger */}
       <div style={{ position: 'relative', width: '100%' }}>
         <button
           type="button"
-          disabled={!rgbEnabled}
-          onClick={() => setIsOpen(!isOpen)}
+          onClick={() => {
+            if (!rgbEnabled) {
+              onToggleRgb?.(true)
+              return
+            }
+            setIsOpen(!isOpen)
+          }}
           style={{
             width: '100%',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'flex-start',
-            gap: '10px',
-            background: isEmbedded ? 'var(--card-subtle)' : triggerBg,
-            border: isEmbedded ? '1px solid var(--border-light)' : `1px solid ${triggerBorder}`,
-            borderRadius: isEmbedded ? '10px' : '12px',
-            padding: isEmbedded ? '6px 12px' : '8px 12px',
-            cursor: rgbEnabled ? 'pointer' : 'not-allowed',
-            opacity: rgbEnabled ? 1 : 0.5,
-            transition: 'background 0.25s ease, border-color 0.25s ease',
-            boxShadow: isEmbedded ? '0 1px 2px rgba(0, 0, 0, 0.04)' : 'none',
+            gap: '8px',
+            background: 'var(--card-muted)',
+            border: rgbEnabled
+              ? `1px solid rgba(${r}, ${g}, ${b}, 0.28)`
+              : '1px solid var(--border-light)',
+            borderRadius: isEmbedded ? '10px' : '11px',
+            padding: isEmbedded ? '6px 10px' : '7px 9px',
+            cursor: (rgbEnabled || onToggleRgb) ? 'pointer' : 'not-allowed',
+            opacity: rgbEnabled ? 1 : 0.72,
+            transition: 'background 0.2s ease, border-color 0.25s ease',
             textAlign: 'left',
             fontFamily: 'inherit'
           }}
@@ -429,38 +447,39 @@ export default function RgbControlCard({
           {/* Swatch circle */}
           <span
             style={{
-              width: isEmbedded ? '20px' : '24px',
-              height: isEmbedded ? '20px' : '24px',
+              width: isEmbedded ? '18px' : '20px',
+              height: isEmbedded ? '18px' : '20px',
               borderRadius: '50%',
-              backgroundColor: activeHex,
-              border: '2px solid rgba(255, 255, 255, 0.8)',
+              backgroundColor: rgbEnabled ? activeHex : '#64748B',
+              border: '2px solid rgba(255, 255, 255, 0.75)',
               flexShrink: 0,
               boxShadow: rgbEnabled ? `0 0 10px ${activeHex}66` : 'none',
-              filter: rgbEnabled ? 'none' : 'grayscale(100%)',
               display: 'inline-block'
             }}
           />
           <span
             style={{
-              fontSize: isEmbedded ? '12px' : '13px',
+              fontSize: isEmbedded ? '11.5px' : '11.5px',
               fontWeight: 700,
-              color: isEmbedded ? 'var(--text-dark)' : textColor,
-              cursor: rgbEnabled ? 'pointer' : 'not-allowed',
+              color: 'var(--text-dark)',
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
               flex: 1
             }}
           >
-            {rgbEnabled ? (isOverride ? 'Change Color' : 'Pick Color') : 'LED Disabled'}
+            {rgbEnabled ? (isOverride ? 'Change Color' : 'Pick Color') : (onToggleRgb ? 'Tap to Turn On' : 'LED Disabled')}
           </span>
-          {showHex && (
+          {(showHex && rgbEnabled) && (
             <span
               style={{
-                fontSize: '11px',
+                fontSize: '10px',
                 fontFamily: 'monospace',
                 fontWeight: 600,
-                color: isEmbedded ? 'var(--text-muted)' : 'rgba(255, 255, 255, 0.65)'
+                color: 'var(--text-muted)'
               }}
             >
-              {hexString}
+              {activeHex}
             </span>
           )}
         </button>
@@ -630,49 +649,127 @@ export default function RgbControlCard({
         )}
       </div>
 
+      {/* Inline Quick Color Swatches + Status Footer */}
+      {!isEmbedded && rgbEnabled && (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '4px' }}>
+          {PRESET_COLORS.slice(0, 6).map((p) => {
+            const isSel = isOverride && hexString.toUpperCase() === p.hex.toUpperCase()
+            return (
+              <button
+                key={p.hex}
+                type="button"
+                aria-label={p.name}
+                title={p.name}
+                onClick={() => handleSelectPreset(p.hex)}
+                style={{
+                  width: '16px',
+                  height: '16px',
+                  borderRadius: '50%',
+                  background: p.hex,
+                  border: isSel ? '2px solid #FFFFFF' : '1px solid rgba(255, 255, 255, 0.25)',
+                  boxShadow: isSel ? `0 0 8px ${p.hex}` : 'none',
+                  cursor: 'pointer',
+                  padding: 0,
+                  flexShrink: 0,
+                  transform: isSel ? 'scale(1.15)' : 'scale(1)',
+                  transition: 'transform 0.12s ease'
+                }}
+              />
+            )
+          })}
+        </div>
+      )}
+
       {/* Quick Action Footer: Auto Mood status & toggle */}
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          marginTop: isEmbedded ? '6px' : '8px'
-        }}
-      >
-        <span
-          style={{
-            fontSize: '10px',
-            color: isEmbedded ? '#6B7280' : textMutedColor,
-            fontWeight: 500
-          }}
-        >
-          {isOverride
-            ? 'Manual color active'
-            : (currentEmotion ? `${currentEmotion.charAt(0).toUpperCase() + currentEmotion.slice(1)} mood active` : 'Syncs with Kiwi moods')}
-        </span>
-        {isOverride && (
-          <button
-            type="button"
-            onClick={handleResetAuto}
+      {(() => {
+        const compactFooterMode = !isEmbedded && Boolean(onToggleRgb)
+        const footerLabel = !rgbEnabled
+          ? (compactFooterMode ? 'LED off' : 'LED turned off')
+          : (isOverride
+              ? (compactFooterMode ? hexString : `Manual · ${hexString}`)
+              : (compactFooterMode ? `${emotionLabel} mood` : `${emotionLabel} active`))
+        return (
+          <div
             style={{
-              background: 'transparent',
-              border: 'none',
-              color: isEmbedded ? '#2563EB' : textColor,
-              fontSize: '10px',
-              fontWeight: 700,
-              cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
-              gap: '3px',
-              padding: 0,
-              fontFamily: 'inherit'
+              justifyContent: 'space-between',
+              gap: '6px',
+              marginTop: isEmbedded ? '6px' : '0'
             }}
           >
-            <RotateCcw size={10} />
-            <span>Auto</span>
-          </button>
-        )}
-      </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flex: 1, minWidth: 0 }}>
+              {compactFooterMode && rgbEnabled && isOverride && renderModeBadge({
+                rgbEnabled,
+                isOverride,
+                badgeBg,
+                badgeColor,
+                compact: true
+              })}
+              <span
+                style={{
+                  fontSize: '9.5px',
+                  color: 'var(--text-muted)',
+                  fontWeight: 600,
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  minWidth: 0
+                }}
+              >
+                {footerLabel}
+              </span>
+            </div>
+            {(rgbEnabled && isOverride) ? (
+              <button
+                type="button"
+                onClick={handleResetAuto}
+                style={{
+                  background: 'var(--card-muted)',
+                  border: '1px solid var(--border-light)',
+                  borderRadius: '999px',
+                  color: 'var(--text-dark)',
+                  fontSize: '8.5px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '3px',
+                  padding: '2px 5px',
+                  flexShrink: 0,
+                  fontFamily: 'inherit'
+                }}
+              >
+                <RotateCcw size={9} />
+                <span>Auto</span>
+              </button>
+            ) : (
+              compactFooterMode && renderModeBadge({ rgbEnabled, isOverride, badgeBg, badgeColor, compact: true })
+            )}
+          </div>
+        )
+      })()}
     </div>
+  )
+}
+
+function renderModeBadge({ rgbEnabled, isOverride, badgeBg, badgeColor, compact = false }) {
+  return (
+    <span
+      style={{
+        fontSize: compact ? '7.5px' : '8.5px',
+        fontWeight: 800,
+        background: badgeBg,
+        color: badgeColor,
+        border: '1px solid ' + (rgbEnabled ? `${badgeColor}44` : 'var(--border-light)'),
+        padding: compact ? '1px 5px' : '2px 6px',
+        borderRadius: '999px',
+        letterSpacing: '0.04em',
+        lineHeight: 1.35,
+        flexShrink: 0
+      }}
+    >
+      {!rgbEnabled ? 'OFF' : (isOverride ? 'CUSTOM' : 'AUTO')}
+    </span>
   )
 }

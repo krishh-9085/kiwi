@@ -1,6 +1,31 @@
 import React from 'react'
 import { LayoutDashboard, Smile, Settings, UploadCloud } from 'lucide-react'
 
+const LEFT_TABS = [
+  { id: 'live', label: 'Home', ariaLabel: 'Dashboard', icon: LayoutDashboard },
+  { id: 'faces', label: 'Faces', ariaLabel: 'Faces & Studio', icon: Smile }
+]
+
+const RIGHT_TABS = [
+  { id: 'settings', label: 'Settings', ariaLabel: 'Settings', icon: Settings },
+  { id: 'ota', label: 'OTA', ariaLabel: 'OTA Firmware', icon: UploadCloud }
+]
+
+function DockTabButton({ item, active, onSelect }) {
+  const Icon = item.icon
+  return (
+    <button
+      type="button"
+      onClick={() => onSelect(item.id)}
+      className={`mobile-dock-btn ${active ? 'active' : ''}`}
+      aria-label={item.ariaLabel}
+    >
+      <Icon size={18} strokeWidth={active ? 2.3 : 1.9} />
+      <span className="mobile-dock-label">{item.label}</span>
+    </button>
+  )
+}
+
 export default function MobileBottomDock({
   activeTab,
   onTabChange,
@@ -9,38 +34,28 @@ export default function MobileBottomDock({
 }) {
   return (
     <nav className="mobile-bottom-dock" aria-label="Mobile Navigation Dock">
-      <button
-        onClick={() => onTabChange('live')}
-        className={`mobile-dock-btn ${activeTab === 'live' ? 'active' : ''}`}
-        aria-label="Dashboard"
-      >
-        <LayoutDashboard size={20} />
-        <span className="mobile-dock-label">Home</span>
-      </button>
+      {LEFT_TABS.map((item) => (
+        <DockTabButton
+          key={item.id}
+          item={item}
+          active={activeTab === item.id}
+          onSelect={onTabChange}
+        />
+      ))}
 
-      <button
-        onClick={() => onTabChange('faces')}
-        className={`mobile-dock-btn ${activeTab === 'faces' ? 'active' : ''}`}
-        aria-label="Faces & Studio"
-      >
-        <Smile size={20} />
-        <span className="mobile-dock-label">Faces</span>
-      </button>
-
-      {/* Floating Glowing Center Voice Button matching image */}
+      {/* Inline Elevated Center Voice Trigger */}
       <button
         type="button"
         onClick={onMicClick}
         className={`mobile-dock-mic ${isListening ? 'is-recording' : ''}`}
-        aria-label={isListening ? "Cancel Voice" : "Voice AI Assistant"}
+        aria-label={isListening ? 'Cancel Voice' : 'Voice AI Assistant'}
       >
-        <div className="mobile-mic-glow" />
         <div className="mobile-mic-inner">
           {isListening ? (
             <svg
               xmlns="http://www.w3.org/2000/svg"
-              width="28"
-              height="28"
+              width="22"
+              height="22"
               viewBox="0 0 24 24"
               fill="none"
               style={{ display: 'block' }}
@@ -57,15 +72,15 @@ export default function MobileBottomDock({
           ) : (
             <svg
               xmlns="http://www.w3.org/2000/svg"
-              width="28"
-              height="28"
+              width="22"
+              height="22"
               viewBox="0 0 24 24"
               fill="none"
               style={{ display: 'block' }}
             >
               <path
                 fill="none"
-                stroke="var(--accent-cyan, #0EA5E9)"
+                stroke="#FFFFFF"
                 strokeLinecap="round"
                 strokeLinejoin="round"
                 strokeWidth={2.4}
@@ -76,23 +91,14 @@ export default function MobileBottomDock({
         </div>
       </button>
 
-      <button
-        onClick={() => onTabChange('settings')}
-        className={`mobile-dock-btn ${activeTab === 'settings' ? 'active' : ''}`}
-        aria-label="Settings"
-      >
-        <Settings size={20} />
-        <span className="mobile-dock-label">Settings</span>
-      </button>
-
-      <button
-        onClick={() => onTabChange('ota')}
-        className={`mobile-dock-btn ${activeTab === 'ota' ? 'active' : ''}`}
-        aria-label="OTA Firmware"
-      >
-        <UploadCloud size={20} />
-        <span className="mobile-dock-label">OTA</span>
-      </button>
+      {RIGHT_TABS.map((item) => (
+        <DockTabButton
+          key={item.id}
+          item={item}
+          active={activeTab === item.id}
+          onSelect={onTabChange}
+        />
+      ))}
     </nav>
   )
 }

@@ -74,6 +74,7 @@ export default function App() {
     return ''
   })
   const [activeTab, setActiveTab] = useState('live')
+  const [activeOledScreen, setActiveOledScreen] = useState(null) // 'clock' | 'weather' | null
   const [status, setStatus] = useState(null)
   const [config, setConfig] = useState(null)
   const [connected, setConnected] = useState(false)
@@ -164,7 +165,7 @@ export default function App() {
             setConnected(true)
             return
           }
-        } catch {}
+        } catch { }
       }
       setConnected(false)
     } finally {
@@ -177,15 +178,21 @@ export default function App() {
       const url = getBaseUrl() ? `${getBaseUrl()}/config` : '/config'
       const res = await fetch(url, { signal: AbortSignal.timeout(3000) })
       if (res.ok) setConfig(await res.json())
-    } catch (err) {
+    } catch {
       if (getBaseUrl()) {
         try {
           const res2 = await fetch('/config', { signal: AbortSignal.timeout(2000) })
           if (res2.ok) setConfig(await res2.json())
-        } catch {}
+        } catch { }
       }
     }
   }, [getBaseUrl])
+
+  useEffect(() => {
+    if (activeTab === 'settings') {
+      fetchConfig()
+    }
+  }, [activeTab, fetchConfig])
 
   useEffect(() => {
     fetchConfig()
@@ -279,9 +286,9 @@ export default function App() {
             }
           }
           if (data.circ_en != null || data.circ_start != null || data.circ_smin != null ||
-              data.circ_end != null || data.circ_emin != null || data.startStr != null ||
-              data.endStr != null || data.eco_sleep != null || data.skip_tonight != null ||
-              data.tempWakeSec != null || data.active != null) {
+            data.circ_end != null || data.circ_emin != null || data.startStr != null ||
+            data.endStr != null || data.eco_sleep != null || data.skip_tonight != null ||
+            data.tempWakeSec != null || data.active != null) {
             next.circadian = {
               ...(next.circadian || {}),
               ...(data.circ_en != null ? { enabled: data.circ_en } : {}),
@@ -303,6 +310,16 @@ export default function App() {
           }
           return next
         })
+        if (params.get('banner') != null || params.get('skin') != null) {
+          setActiveOledScreen(null)
+        } else {
+          const eParam = params.get('e')
+          if (eParam === 'clock' || eParam === 'weather') {
+            setActiveOledScreen(eParam)
+          } else if (eParam) {
+            setActiveOledScreen(null)
+          }
+        }
       }
       if (triggerNextPollRef.current) {
         triggerNextPollRef.current(35)
@@ -331,24 +348,30 @@ export default function App() {
     }
   }
 
-  const handleSaveConfig = async (formDataParams) => {
+  const handleSaveConfig = async (formDataParams, expectsReboot = false) => {
     try {
       const res = await fetch(`${getBaseUrl()}/save`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
         body: formDataParams.toString()
       })
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}`)
+      }
       const data = await res.json().catch(() => ({}))
       if (data?.reboot) {
         setRebootMessage(data.message || 'Settings saved. Kiwi is restarting...')
         setRebooting(true)
       } else {
-        showToast('Settings saved successfully!')
         fetchConfig()
       }
-    } catch {
-      setRebootMessage('Settings sent! Kiwi is restarting to apply changes...')
-      setRebooting(true)
+    } catch (err) {
+      if (expectsReboot) {
+        setRebootMessage('Network settings sent! Kiwi is restarting to apply changes...')
+        setRebooting(true)
+        return
+      }
+      throw err
     }
   }
 
@@ -370,7 +393,7 @@ export default function App() {
         const clean = url.pathname + url.search + url.hash
         window.history.replaceState(null, '', clean || '/')
       }
-    } catch {}
+    } catch { }
   }, [])
 
   const handleHardRefresh = useCallback(async () => {
@@ -379,7 +402,7 @@ export default function App() {
         const keys = await window.caches.keys()
         await Promise.all(keys.map((k) => window.caches.delete(k)))
       }
-    } catch {}
+    } catch { }
     try {
       const url = new URL(window.location.href)
       url.searchParams.set('_r', String(Date.now()))
@@ -415,7 +438,7 @@ export default function App() {
             onToggleTheme={toggleTheme}
           />
 
-          {/* Mobile Top Profile Bar (Global across all tabs: Live, Faces, Settings, OTA) */}
+          {/* Mobile Top Bar (Global across all tabs: Live, Faces, Settings, OTA) */}
           <div className="mobile-top-bar">
             <button
               type="button"
@@ -425,12 +448,12 @@ export default function App() {
               title="Tap to hard refresh page"
             >
               <div className="mobile-avatar">
-                <KiwiLogo size={28} />
+                <KiwiLogo size={26} />
               </div>
               <span className="mobile-user-name">Kiwi</span>
             </button>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <div className="mobile-header-actions">
               <ThemeToggle
                 isDark={theme === 'dark'}
                 onToggle={toggleTheme}
@@ -438,11 +461,13 @@ export default function App() {
               />
 
               <button
+                type="button"
                 onClick={handleRefreshTelemetry}
                 className="mobile-icon-circle-btn"
                 aria-label="Refresh Telemetry"
+                title="Refresh telemetry"
               >
-                <RotateCw size={17} color="var(--text-dark)" className={refreshing ? 'spin-anim' : ''} />
+                <RotateCw size={15} className={refreshing ? 'spin-anim' : ''} />
               </button>
             </div>
           </div>
@@ -453,43 +478,44 @@ export default function App() {
             className="flux-tab-enter"
             style={{ width: '100%', flex: 1, display: 'flex', flexDirection: 'column' }}
           >
-              {activeTab === 'live' && (
-                <HomeView
-                  status={status}
-                  config={config}
-                  connected={connected}
-                  onTriggerAction={triggerAction}
-                  onToast={showToast}
-                  onTabChange={setActiveTab}
-                  onRefresh={handleRefreshTelemetry}
-                />
-              )}
+            {activeTab === 'live' && (
+              <HomeView
+                status={status}
+                config={config}
+                connected={connected}
+                onTriggerAction={triggerAction}
+                onToast={showToast}
+                onRefresh={handleRefreshTelemetry}
+              />
+            )}
 
-              {activeTab === 'faces' && (
-                <FacesStudioView
-                  status={status}
-                  onTriggerAction={triggerAction}
-                  onToast={showToast}
-                />
-              )}
+            {activeTab === 'faces' && (
+              <FacesStudioView
+                status={status}
+                activeScreen={activeOledScreen}
+                onSetActiveScreen={setActiveOledScreen}
+                onTriggerAction={triggerAction}
+                onToast={showToast}
+              />
+            )}
 
-              {activeTab === 'settings' && (
-                <SettingsView
-                  config={config}
-                  onSaveConfig={handleSaveConfig}
-                  onTriggerAction={triggerAction}
-                  onToast={showToast}
-                  getBaseUrl={getBaseUrl}
-                />
-              )}
+            {activeTab === 'settings' && (
+              <SettingsView
+                config={config}
+                onSaveConfig={handleSaveConfig}
+                onTriggerAction={triggerAction}
+                onToast={showToast}
+                getBaseUrl={getBaseUrl}
+              />
+            )}
 
-              {activeTab === 'ota' && (
-                <OtaUpdateView
-                  status={status}
-                  getBaseUrl={getBaseUrl}
-                  onToast={showToast}
-                />
-              )}
+            {activeTab === 'ota' && (
+              <OtaUpdateView
+                status={status}
+                getBaseUrl={getBaseUrl}
+                onToast={showToast}
+              />
+            )}
           </div>
         </div>
       </div>

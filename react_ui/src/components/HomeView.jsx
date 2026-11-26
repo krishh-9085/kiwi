@@ -1,75 +1,16 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react'
 
-import KiwiEyes from './KiwiEyes'
-import KiwiLogo from './KiwiLogo'
-
-import { Tooltip } from './Tooltip'
-
 import WakeSlider from './ui/WakeSlider'
 
 import {
-
-  Heart, Zap, Activity, Moon, Volume2, VolumeX, Sun,
-
+  Zap, Moon, Volume2, VolumeX, Sun,
   Mic, MicOff, Send, SlidersHorizontal,
-
-  Utensils, Coffee, Hand, Eye, Music, Radio, Shield, Sparkles,
-
-  Clock, BellRing, Sparkle, ArrowDown, RotateCw, Settings as SettingsIcon, Check,
-
+  Radio, Sparkles, Clock, RotateCw, Check,
   Bot, Smile, Cpu, Wifi, WifiOff
-
 } from 'lucide-react'
 
 import FluxSelect from './FluxSelect'
 import RgbControlCard from './RgbControlCard'
-
-import { OLED_FACES, SKIN_FACES } from '../data/faceData'
-
-
-
-const QUICK_EMOTIONS = [
-
-  { id: 'happy', label: 'Happy' },
-
-  { id: 'wink', label: 'Wink' },
-
-  { id: 'hearts', label: 'Hearts' },
-
-  { id: 'curious', label: 'Curious' },
-
-  { id: 'cool', label: 'Cool' },
-
-  { id: 'excited', label: 'Excited' },
-
-  { id: 'laughing', label: 'Laugh' },
-
-  { id: 'party', label: 'Party' }
-
-]
-
-
-
-const QUICK_SKINS = [
-  { id: 'kiwi', label: 'Kiwi' },
-  { id: 'emo', label: 'EMO' },
-  { id: 'mecha', label: 'Mecha' },
-  { id: 'pixel', label: 'Pixel' }
-]
-
-
-
-const SOUND_EFFECTS = [
-
-  { id: 'wake', label: 'Wake Chime' },
-
-  { id: '1', label: 'Pet Giggle' },
-
-  { id: '3', label: 'Sparkle' },
-
-  { id: 'laugh', label: 'Joy Laugh' }
-
-]
 
 
 
@@ -163,6 +104,8 @@ function computeVitals(status) {
   const totalKb = status?.heap?.total ? Math.round(status.heap.total / 1024) : 320
   const ramUsedPct = status?.heap?.pct ?? (freeKb ? Math.round(((totalKb - freeKb) / totalKb) * 100) : 44)
   const cpuTemp = status?.temp != null ? Math.round(status.temp) : 46
+  const cpuMhz = status?.power?.cpuMhz ?? 160
+  const tempColor = cpuTemp >= 75 ? '#EF4444' : (cpuTemp >= 60 ? '#F59E0B' : '#10B981')
 
   // Show 2MB PSRAM fallback when offline (no live /status yet); hide only if live device reports no PSRAM
   const psramSrc = status?.psram ?? (!hasLiveHeap ? OFFLINE_PSRAM_FALLBACK : null)
@@ -178,15 +121,16 @@ function computeVitals(status) {
   const flashFree = status?.flash?.free ?? 383416
   const flashTotal = status?.flash?.total ?? (flashUsed + flashFree)
   const flashPct = status?.flash?.pct ?? Math.round((flashUsed / flashTotal) * 100)
+  const flashFreeKb = Math.round(flashFree / 1024)
   const flashFreeMb = (flashFree / (1024 * 1024)).toFixed(2)
   const flashUsedMb = (flashUsed / (1024 * 1024)).toFixed(2)
-  const flashTotalMb = (flashTotal / (1024 * 1024)).toFixed(1)
+  const flashTotalMb = (flashTotal / (1024 * 1024)).toFixed(2)
   const flashChipMb = status?.flash?.chip ? Math.round(status.flash.chip / (1024 * 1024)) : 4
 
   return {
-    freeKb, totalKb, ramUsedPct, cpuTemp,
+    freeKb, totalKb, ramUsedPct, cpuTemp, cpuMhz, tempColor,
     hasPsram, psramTotalKb, psramFreeKb, psramUsedKb, psramPct, psramFreeMb, psramTotalMb,
-    flashPct, flashFreeMb, flashUsedMb, flashTotalMb, flashChipMb
+    flashPct, flashFreeKb, flashFreeMb, flashUsedMb, flashTotalMb, flashChipMb
   }
 }
 
@@ -203,8 +147,6 @@ export default function HomeView({
   onTriggerAction,
 
   onToast,
-
-  onTabChange,
 
   onRefresh
 
@@ -291,6 +233,7 @@ export default function HomeView({
   const [nightBright, setNightBright] = useState(10)
 
   const [rgbBright, setRgbBright] = useState(65)
+  const [linkRefreshing, setLinkRefreshing] = useState(false)
 
   const [promptText, setPromptText] = useState('')
 
@@ -366,14 +309,6 @@ export default function HomeView({
   )
 
   const isSleeping = localSleeping !== null ? localSleeping : serverSleeping
-
-  const currentEmotion = status?.emotion || 'idle'
-
-  const currentSkin = status?.skin || 'kiwi'
-
-  const hunger = status?.hunger || 'satisfied'
-
-  const meal = status?.meal || 'Snack'
 
   const ownerName = status?.owner || config?.memory?.name || config?.ownerName || config?.mem_name || 'Friend'
 
@@ -773,7 +708,7 @@ export default function HomeView({
           />
         </div>
 
-        {/* NeoPixel Status RGB LED */}
+        {/* NeoPixel RGB Brightness (Slider Only; toggle lives in RGB Light card) */}
         <div style={{
           background: 'var(--card-subtle)',
           border: '1px solid var(--border-light)',
@@ -781,28 +716,36 @@ export default function HomeView({
           padding: '10px 12px'
         }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', gap: '8px' }}>
-            <label className="flux-toggle">
-              <input
-                type="checkbox"
-                checked={rgbEnabled}
-                onChange={(e) => handleRgbToggle(e.target.checked)}
-              />
-              <span className="flux-toggle-slider" />
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <Sparkles size={13} color={rgbEnabled ? '#10B981' : 'var(--text-muted)'} />
               <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-dark)' }}>
                 NeoPixel RGB
               </span>
-            </label>
-            <span style={{
-              fontSize: '10.5px',
-              fontWeight: 800,
-              fontVariantNumeric: 'tabular-nums',
-              padding: '2px 8px',
-              borderRadius: '999px',
-              background: rgbEnabled ? 'rgba(16, 185, 129, 0.14)' : 'var(--card-muted)',
-              color: rgbEnabled ? '#10B981' : 'var(--text-muted)'
-            }}>
-              {rgbEnabled ? `${rgbBright}%` : 'OFF'}
-            </span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              {!rgbEnabled && (
+                <span style={{
+                  fontSize: '9.5px',
+                  fontWeight: 700,
+                  padding: '2px 7px',
+                  borderRadius: '999px',
+                  background: 'var(--card-muted)',
+                  color: 'var(--text-muted)',
+                  border: '1px solid var(--border-light)'
+                }}>
+                  OFF
+                </span>
+              )}
+              <strong style={{
+                fontSize: '12px',
+                fontVariantNumeric: 'tabular-nums',
+                minWidth: '34px',
+                textAlign: 'right',
+                color: rgbEnabled ? '#10B981' : 'var(--text-muted)'
+              }}>
+                {rgbBright}%
+              </strong>
+            </div>
           </div>
           <WakeSlider
             value={rgbBright}
@@ -813,8 +756,7 @@ export default function HomeView({
             height={30}
             restHeight={15}
             gap={4}
-            disabled={!rgbEnabled}
-            fillColor="#10B981"
+            fillColor={rgbEnabled ? '#10B981' : '#64748B'}
             trackColor="var(--slider-track)"
             crestColor="#34D399"
             onDragStart={() => { draggingSlidersRef.current.rgbBright = true }}
@@ -825,10 +767,15 @@ export default function HomeView({
             onChange={(v) => {
               sliderHoldUntilRef.current.rgbBright = Date.now() + 1500
               setRgbBright(v)
-              pushSliderValue('rgbBright', `/do?rgb_bright=${v}`, false)
+              if (rgbEnabled) {
+                pushSliderValue('rgbBright', `/do?rgb_bright=${v}`, false)
+              }
             }}
             onCommit={(v) => {
               sliderHoldUntilRef.current.rgbBright = Date.now() + 1500
+              if (!rgbEnabled && v > 0) {
+                onTriggerAction?.('/do?rgb_en=1')
+              }
               pushSliderValue('rgbBright', `/do?rgb_bright=${v}`, true)
             }}
             ariaLabel="NeoPixel RGB Brightness"
@@ -950,7 +897,7 @@ export default function HomeView({
         gap: '8px'
       }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <label className="flux-toggle">
+          <label className="flux-toggle" style={{ '--toggle-accent': '#6366F1' }}>
             <input
               type="checkbox"
               checked={circEnabled}
@@ -1072,7 +1019,7 @@ export default function HomeView({
         {/* Desk Mode vs Eco Deep Sleep + Timezone */}
         <div style={{ borderTop: '1px solid var(--border-light)', paddingTop: '8px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
-            <label className="flux-toggle">
+            <label className="flux-toggle" style={{ '--toggle-accent': '#14B8A6' }}>
               <input
                 type="checkbox"
                 checked={ecoSleepEnabled}
@@ -1157,156 +1104,144 @@ export default function HomeView({
 
 
               {/* Desktop Vitals Deck (Live Hardware Telemetry) */}
-              {(() => {
-                const {
-                  freeKb, totalKb, ramUsedPct, cpuTemp,
-                  hasPsram, psramFreeKb, psramUsedKb, psramPct, psramFreeMb, psramTotalMb,
-                  flashPct, flashFreeMb, flashUsedMb, flashTotalMb, flashChipMb
-                } = vitals;
-
-  return (
-                  <div style={{
-                    background: 'linear-gradient(145deg, #181B24 0%, #101218 100%)',
-                    borderRadius: '18px',
-                    padding: '16px 18px',
-                    color: '#FFFFFF',
-                    border: '1px solid rgba(255, 255, 255, 0.08)',
-                    boxShadow: '0 8px 24px rgba(0, 0, 0, 0.22)',
-                    margin: '14px 0 16px',
-                    position: 'relative',
-                    overflow: 'hidden'
+              <div style={{
+                background: 'linear-gradient(145deg, #181B24 0%, #101218 100%)',
+                borderRadius: '18px',
+                padding: '16px 18px',
+                color: '#FFFFFF',
+                border: '1px solid rgba(255, 255, 255, 0.08)',
+                boxShadow: '0 8px 24px rgba(0, 0, 0, 0.22)',
+                margin: '14px 0 16px',
+                position: 'relative',
+                overflow: 'hidden'
+              }}>
+                {/* Header */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '12px', opacity: 0.9, fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+                    <Cpu size={13} color="#34D399" />
+                    <span>Vitals</span>
+                  </span>
+                  <span style={{
+                    fontSize: '9px',
+                    fontWeight: 800,
+                    background: vitals.hasPsram ? 'rgba(52, 211, 153, 0.18)' : 'rgba(255, 255, 255, 0.18)',
+                    color: vitals.hasPsram ? '#34D399' : '#FFFFFF',
+                    border: vitals.hasPsram ? '1px solid rgba(52, 211, 153, 0.4)' : 'none',
+                    padding: '2px 8px',
+                    borderRadius: '999px',
+                    letterSpacing: '0.04em',
+                    whiteSpace: 'nowrap'
                   }}>
-                    {/* Header */}
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
-                      <span style={{ fontSize: '12px', opacity: 0.9, fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase' }}>
-                        Vitals
-                      </span>
-                      <span style={{
-                        fontSize: '9px',
-                        fontWeight: 800,
-                        background: hasPsram ? 'rgba(52, 211, 153, 0.18)' : 'rgba(255, 255, 255, 0.18)',
-                        color: hasPsram ? '#34D399' : '#FFFFFF',
-                        border: hasPsram ? '1px solid rgba(52, 211, 153, 0.4)' : 'none',
-                        padding: '2px 8px',
-                        borderRadius: '999px',
-                        letterSpacing: '0.04em',
-                        whiteSpace: 'nowrap'
-                      }}>
-                        {hasPsram ? `ESP32-S3 • +${psramTotalMb}MB PSRAM ACTIVE` : 'ESP32-S3'}
+                    {vitals.hasPsram ? `ESP32-S3 · ${vitals.cpuMhz} MHz · +${vitals.psramTotalMb}MB` : `ESP32-S3 · ${vitals.cpuMhz} MHz`}
+                  </span>
+                </div>
+
+                {/* Stats Grid */}
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: vitals.hasPsram ? '72px 1fr 1fr 1fr' : '85px 1fr 1fr',
+                  gap: '12px',
+                  marginTop: '12px',
+                  alignItems: 'center'
+                }}>
+                  {/* CPU Core Temp */}
+                  <div>
+                    <span style={{ fontSize: '11px', opacity: 0.8, fontWeight: 600, display: 'block' }}>CPU Temp</span>
+                    <span style={{ fontSize: '22px', fontWeight: 800, letterSpacing: '-0.02em', color: vitals.tempColor, fontVariantNumeric: 'tabular-nums' }}>
+                      {vitals.cpuTemp}°<span style={{ fontSize: '13px', fontWeight: 600, opacity: 0.85 }}>C</span>
+                    </span>
+                  </div>
+
+                  {/* Internal SRAM Usage */}
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '3px' }}>
+                      <span style={{ fontSize: '11px', opacity: 0.8, fontWeight: 600 }}>SRAM (Heap)</span>
+                      <span style={{ fontSize: '11px', fontWeight: 700, color: '#38BDF8', fontVariantNumeric: 'tabular-nums' }}>
+                        {vitals.freeKb} KB <span style={{ opacity: 0.75, fontWeight: 500, color: '#FFFFFF' }}>free</span>
                       </span>
                     </div>
-
-                    {/* Stats Grid */}
                     <div style={{
-                      display: 'grid',
-                      gridTemplateColumns: hasPsram ? '72px 1fr 1fr 1fr' : '85px 1fr 1fr',
-                      gap: '12px',
-                      marginTop: '12px',
-                      alignItems: 'center'
+                      width: '100%',
+                      height: '6px',
+                      borderRadius: '999px',
+                      background: 'rgba(255, 255, 255, 0.16)',
+                      overflow: 'hidden'
                     }}>
-                      {/* CPU Core Temp */}
-                      <div>
-                        <span style={{ fontSize: '11px', opacity: 0.8, fontWeight: 600, display: 'block' }}>CPU Temp</span>
-                        <span style={{ fontSize: '22px', fontWeight: 800, letterSpacing: '-0.02em', color: '#FFFFFF' }}>
-                          {cpuTemp}°<span style={{ fontSize: '13px', fontWeight: 600, opacity: 0.85 }}>C</span>
-                        </span>
-                      </div>
-
-                      {/* Internal SRAM Usage */}
-                      <div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '3px' }}>
-                          <span style={{ fontSize: '11px', opacity: 0.8, fontWeight: 600 }}>SRAM (Heap)</span>
-                          <span style={{ fontSize: '11px', fontWeight: 700, color: '#38BDF8' }}>
-                            {freeKb} KB <span style={{ opacity: 0.75, fontWeight: 500, color: '#FFFFFF' }}>free</span>
-                          </span>
-                        </div>
-                        {/* Progress Bar */}
-                        <div style={{
-                          width: '100%',
-                          height: '6px',
-                          borderRadius: '3px',
-                          background: 'rgba(255, 255, 255, 0.2)',
-                          overflow: 'hidden'
-                        }}>
-                          <div style={{
-                            height: '100%',
-                            width: `${Math.min(100, Math.max(0, ramUsedPct))}%`,
-                            background: ramUsedPct > 85 ? '#F43F5E' : '#38BDF8',
-                            borderRadius: '3px',
-                            transition: 'width 0.4s ease'
-                          }} />
-                        </div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '3px' }}>
-                          <span style={{ fontSize: '9px', opacity: 0.7 }}>{ramUsedPct}% used</span>
-                          <span style={{ fontSize: '9px', opacity: 0.7 }}>{totalKb} KB total</span>
-                        </div>
-                      </div>
-
-                      {/* External PSRAM Usage (2MB High-Speed) */}
-                      {hasPsram && (
-                        <div>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '3px' }}>
-                            <span style={{ fontSize: '11px', opacity: 0.8, fontWeight: 600, color: '#34D399' }}>2MB PSRAM</span>
-                            <span style={{ fontSize: '11px', fontWeight: 700, color: '#34D399' }}>
-                              {psramFreeKb >= 1024 ? `${psramFreeMb} MB` : `${psramFreeKb} KB`} <span style={{ opacity: 0.75, fontWeight: 500, color: '#FFFFFF' }}>free</span>
-                            </span>
-                          </div>
-                          {/* Progress Bar */}
-                          <div style={{
-                            width: '100%',
-                            height: '6px',
-                            borderRadius: '3px',
-                            background: 'rgba(255, 255, 255, 0.2)',
-                            overflow: 'hidden'
-                          }}>
-                            <div style={{
-                              height: '100%',
-                              width: `${Math.min(100, Math.max(0, psramPct))}%`,
-                              background: '#34D399',
-                              borderRadius: '3px',
-                              transition: 'width 0.4s ease'
-                            }} />
-                          </div>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '3px' }}>
-                            <span style={{ fontSize: '9px', opacity: 0.7 }}>{psramPct}% used ({psramUsedKb} KB)</span>
-                            <span style={{ fontSize: '9px', opacity: 0.7 }}>{psramTotalMb} MB Chip</span>
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Flash Storage Space */}
-                      <div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '3px' }}>
-                          <span style={{ fontSize: '11px', opacity: 0.8, fontWeight: 600 }}>Flash Storage</span>
-                          <span style={{ fontSize: '11px', fontWeight: 700, color: '#A78BFA' }}>
-                            {flashFreeMb} MB <span style={{ opacity: 0.75, fontWeight: 500, color: '#FFFFFF' }}>free</span>
-                          </span>
-                        </div>
-                        {/* Progress Bar */}
-                        <div style={{
-                          width: '100%',
-                          height: '6px',
-                          borderRadius: '3px',
-                          background: 'rgba(255, 255, 255, 0.2)',
-                          overflow: 'hidden'
-                        }}>
-                          <div style={{
-                            height: '100%',
-                            width: `${Math.min(100, Math.max(0, flashPct))}%`,
-                            background: flashPct > 90 ? '#F43F5E' : '#A78BFA',
-                            borderRadius: '3px',
-                            transition: 'width 0.4s ease'
-                          }} />
-                        </div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '3px' }}>
-                          <span style={{ fontSize: '9px', opacity: 0.7 }}>{flashPct}% used ({flashUsedMb}M)</span>
-                          <span style={{ fontSize: '9px', opacity: 0.7 }}>{flashTotalMb}M ({flashChipMb}M Chip)</span>
-                        </div>
-                      </div>
+                      <div style={{
+                        height: '100%',
+                        width: `${Math.min(100, Math.max(0, vitals.ramUsedPct))}%`,
+                        background: vitals.ramUsedPct > 85 ? '#F43F5E' : '#38BDF8',
+                        borderRadius: '999px',
+                        transition: 'width 0.4s ease'
+                      }} />
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '3px' }}>
+                      <span style={{ fontSize: '9px', opacity: 0.7 }}>{vitals.ramUsedPct}% used</span>
+                      <span style={{ fontSize: '9px', opacity: 0.7 }}>{vitals.totalKb} KB total</span>
                     </div>
                   </div>
-                );
-              })()}
+
+                  {/* External PSRAM Usage */}
+                  {vitals.hasPsram && (
+                    <div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '3px' }}>
+                        <span style={{ fontSize: '11px', opacity: 0.8, fontWeight: 600, color: '#34D399' }}>2MB PSRAM</span>
+                        <span style={{ fontSize: '11px', fontWeight: 700, color: '#34D399', fontVariantNumeric: 'tabular-nums' }}>
+                          {vitals.psramFreeKb >= 1024 ? `${vitals.psramFreeMb} MB` : `${vitals.psramFreeKb} KB`} <span style={{ opacity: 0.75, fontWeight: 500, color: '#FFFFFF' }}>free</span>
+                        </span>
+                      </div>
+                      <div style={{
+                        width: '100%',
+                        height: '6px',
+                        borderRadius: '999px',
+                        background: 'rgba(255, 255, 255, 0.16)',
+                        overflow: 'hidden'
+                      }}>
+                        <div style={{
+                          height: '100%',
+                          width: `${Math.min(100, Math.max(0, vitals.psramPct))}%`,
+                          background: '#34D399',
+                          borderRadius: '999px',
+                          transition: 'width 0.4s ease'
+                        }} />
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '3px' }}>
+                        <span style={{ fontSize: '9px', opacity: 0.7 }}>{vitals.psramPct}% used ({vitals.psramUsedKb} KB)</span>
+                        <span style={{ fontSize: '9px', opacity: 0.7 }}>{vitals.psramTotalMb} MB Chip</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Flash App Partition Usage */}
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '3px' }}>
+                      <span style={{ fontSize: '11px', opacity: 0.8, fontWeight: 600 }}>Flash App</span>
+                      <span style={{ fontSize: '11px', fontWeight: 700, color: '#A78BFA', fontVariantNumeric: 'tabular-nums' }}>
+                        {vitals.flashFreeKb >= 1024 ? `${vitals.flashFreeMb} MB` : `${vitals.flashFreeKb} KB`} <span style={{ opacity: 0.75, fontWeight: 500, color: '#FFFFFF' }}>free</span>
+                      </span>
+                    </div>
+                    <div style={{
+                      width: '100%',
+                      height: '6px',
+                      borderRadius: '999px',
+                      background: 'rgba(255, 255, 255, 0.16)',
+                      overflow: 'hidden'
+                    }}>
+                      <div style={{
+                        height: '100%',
+                        width: `${Math.min(100, Math.max(0, vitals.flashPct))}%`,
+                        background: vitals.flashPct > 90 ? '#F43F5E' : '#A78BFA',
+                        borderRadius: '999px',
+                        transition: 'width 0.4s ease'
+                      }} />
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '3px' }}>
+                      <span style={{ fontSize: '9px', opacity: 0.7 }}>{vitals.flashPct}% ({vitals.flashUsedMb}M)</span>
+                      <span style={{ fontSize: '9px', opacity: 0.7 }}>{vitals.flashTotalMb}M App</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
 
 
 
@@ -1386,6 +1321,7 @@ export default function HomeView({
                 <RgbControlCard
                   onColorChange={(hex) => onTriggerAction(`/do?rgb_color=${encodeURIComponent(hex.replace('#', ''))}`)}
                   onClearOverride={() => onTriggerAction('/do?rgb_clear=1')}
+                  onToggleRgb={handleRgbToggle}
                   initialColor="#38BDF8"
                   currentEmotion={status?.emotion}
                   rgbEnabled={status?.rgbLed?.enabled ?? true}
@@ -1499,7 +1435,7 @@ export default function HomeView({
 
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
 
-                  <label className="flux-toggle">
+                  <label className="flux-toggle" style={{ '--toggle-accent': '#0EA5E9' }}>
 
                     <input
 
@@ -1604,7 +1540,7 @@ export default function HomeView({
 
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
 
-                  <label className="flux-toggle">
+                  <label className="flux-toggle" style={{ '--toggle-accent': '#A855F7' }}>
 
                     <input
 
@@ -1674,7 +1610,7 @@ export default function HomeView({
 
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
 
-                <label className="flux-toggle">
+                <label className="flux-toggle" style={{ '--toggle-accent': '#10B981' }}>
 
                   <input
 
@@ -1730,7 +1666,7 @@ export default function HomeView({
 
               <div style={{ borderTop: '1px solid var(--border-light)', paddingTop: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
 
-                <label className="flux-toggle">
+                <label className="flux-toggle" style={{ '--toggle-accent': '#06B6D4' }}>
 
                   <input
 
@@ -1809,166 +1745,146 @@ export default function HomeView({
           {/* Left Column: Vitals (Top) + Color Picker (Bottom) */}
           <div className="mobile-bento-col">
             {/* Card 1: Live Hardware Telemetry (RAM, Flash & CPU Temp) */}
-            {(() => {
-              const {
-                freeKb, totalKb, ramUsedPct, cpuTemp,
-                hasPsram, psramFreeKb, psramUsedKb, psramPct, psramFreeMb, psramTotalMb,
-                flashPct, flashFreeMb, flashUsedMb, flashTotalMb, flashChipMb
-              } = vitals;
-
-  return (
-                <div style={{
-                  background: 'var(--card-white)',
-                  border: '1px solid var(--border-light)',
-                  borderRadius: '22px',
-                  padding: '13px 14px',
-                  color: 'var(--text-dark)',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  justifyContent: 'space-between',
-                  gap: '8px',
-                  boxShadow: 'var(--shadow-card)',
-                  position: 'relative',
-                  boxSizing: 'border-box'
+            <div style={{
+              background: 'var(--card-white)',
+              border: '1px solid var(--border-light)',
+              borderRadius: '22px',
+              padding: '12px 12px',
+              color: 'var(--text-dark)',
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'space-between',
+              gap: '9px',
+              boxShadow: 'var(--shadow-card)',
+              position: 'relative',
+              boxSizing: 'border-box'
+            }}>
+              {/* Header */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px', width: '100%' }}>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', fontSize: '10.5px', fontWeight: 800, color: 'var(--text-dark)', letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+                  <Cpu size={12} color="#10B981" />
+                  <span>Vitals</span>
+                </span>
+                <span style={{
+                  fontSize: '8.5px',
+                  fontWeight: 800,
+                  background: 'rgba(16, 185, 129, 0.14)',
+                  color: '#10B981',
+                  border: '1px solid rgba(16, 185, 129, 0.28)',
+                  padding: '2px 7px',
+                  borderRadius: '999px',
+                  letterSpacing: '0.03em',
+                  whiteSpace: 'nowrap'
                 }}>
-                  {/* Header */}
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
-                    <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-dark)', letterSpacing: '0.04em', textTransform: 'uppercase' }}>
-                      Vitals
-                    </span>
-                    <span style={{
-                      fontSize: '9px',
-                      fontWeight: 800,
-                      background: 'rgba(16, 185, 129, 0.14)',
-                      color: '#059669',
-                      border: '1px solid rgba(16, 185, 129, 0.3)',
-                      padding: '2px 7px',
+                  ESP32-S3
+                </span>
+              </div>
+
+              {/* CPU Core Clock & Thermal Pill */}
+              <div style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                gap: '6px',
+                background: 'var(--card-muted)',
+                border: '1px solid var(--border-light)',
+                padding: '5px 8px',
+                borderRadius: '10px'
+              }}>
+                <span style={{
+                  fontSize: '9.5px',
+                  color: 'var(--text-muted)',
+                  fontWeight: 700,
+                  fontVariantNumeric: 'tabular-nums'
+                }}>
+                  CPU · {vitals.cpuMhz} MHz
+                </span>
+                <span style={{
+                  fontSize: '10.5px',
+                  fontWeight: 800,
+                  fontVariantNumeric: 'tabular-nums',
+                  padding: '1px 6px',
+                  borderRadius: '999px',
+                  background: `${vitals.tempColor}22`,
+                  color: vitals.tempColor
+                }}>
+                  {vitals.cpuTemp}°C
+                </span>
+              </div>
+
+              {/* Memory & Storage Meters */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {[
+                  {
+                    key: 'sram',
+                    label: 'SRAM',
+                    labelColor: 'var(--text-dark)',
+                    freeText: `${vitals.freeKb} KB`,
+                    freeColor: '#38BDF8',
+                    pct: vitals.ramUsedPct,
+                    barColor: vitals.ramUsedPct > 85 ? '#EF4444' : '#0EA5E9',
+                    leftSub: `${vitals.ramUsedPct}% used`,
+                    rightSub: `${vitals.totalKb} KB`
+                  },
+                  ...(vitals.hasPsram ? [{
+                    key: 'psram',
+                    label: `${vitals.psramTotalMb}MB PSRAM`,
+                    labelColor: '#10B981',
+                    freeText: vitals.psramFreeKb >= 1024 ? `${vitals.psramFreeMb} MB` : `${vitals.psramFreeKb} KB`,
+                    freeColor: '#10B981',
+                    pct: vitals.psramPct,
+                    barColor: '#10B981',
+                    leftSub: `${vitals.psramPct}% (${vitals.psramUsedKb} KB)`,
+                    rightSub: `${vitals.psramTotalMb} MB`
+                  }] : []),
+                  {
+                    key: 'flash',
+                    label: 'App Flash',
+                    labelColor: 'var(--text-dark)',
+                    freeText: vitals.flashFreeKb >= 1024 ? `${vitals.flashFreeMb} MB` : `${vitals.flashFreeKb} KB`,
+                    freeColor: '#A78BFA',
+                    pct: vitals.flashPct,
+                    barColor: vitals.flashPct > 90 ? '#EF4444' : '#8B5CF6',
+                    leftSub: `${vitals.flashPct}% (${vitals.flashUsedMb}M)`,
+                    rightSub: `${vitals.flashTotalMb}M App`
+                  }
+                ].map((m) => (
+                  <div key={m.key}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '4px', gap: '4px' }}>
+                      <span style={{ fontSize: '10px', color: m.labelColor, fontWeight: 700, whiteSpace: 'nowrap' }}>{m.label}</span>
+                      <span style={{ fontSize: '10px', fontWeight: 800, color: m.freeColor, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
+                        {m.freeText} <span style={{ opacity: 0.65, fontWeight: 500, color: 'var(--text-muted)' }}>free</span>
+                      </span>
+                    </div>
+                    <div style={{
+                      width: '100%',
+                      height: '6px',
                       borderRadius: '999px',
-                      letterSpacing: '0.04em',
-                      whiteSpace: 'nowrap'
+                      background: 'var(--card-muted)',
+                      overflow: 'hidden'
                     }}>
-                      ESP32-S3
-                    </span>
-                  </div>
-
-                  {/* CPU Core Temp - Sleek Compact Bar */}
-                  <div style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    background: 'var(--card-muted)',
-                    border: '1px solid var(--border-light)',
-                    padding: '3px 8px',
-                    borderRadius: '8px'
-                  }}>
-                    <span style={{ fontSize: '10.5px', color: 'var(--text-muted)', fontWeight: 600 }}>CPU Temp</span>
-                    <span style={{ fontSize: '12px', fontWeight: 800, color: cpuTemp > 75 ? '#EF4444' : 'var(--text-dark)' }}>
-                      {cpuTemp}°C
-                    </span>
-                  </div>
-
-                  {/* Telemetry Metrics */}
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}>
-                    {/* SRAM (Heap) Usage */}
-                    <div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '3px' }}>
-                        <span style={{ fontSize: '10.5px', color: 'var(--text-dark)', fontWeight: 600 }}>SRAM</span>
-                        <span style={{ fontSize: '10.5px', fontWeight: 700, color: '#0284C7' }}>
-                          {freeKb} KB <span style={{ opacity: 0.65, fontWeight: 500, color: 'var(--text-muted)' }}>free</span>
-                        </span>
-                      </div>
                       <div style={{
-                        width: '100%',
-                        height: '4px',
-                        borderRadius: '2px',
-                        background: 'var(--card-muted)',
-                        border: '1px solid var(--border-light)',
-                        overflow: 'hidden'
-                      }}>
-                        <div style={{
-                          height: '100%',
-                          width: `${Math.min(100, Math.max(0, ramUsedPct))}%`,
-                          background: ramUsedPct > 85 ? '#EF4444' : '#0284C7',
-                          borderRadius: '2px',
-                          transition: 'width 0.4s ease'
-                        }} />
-                      </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '2px' }}>
-                        <span style={{ fontSize: '8.5px', color: 'var(--text-muted)' }}>{ramUsedPct}% used</span>
-                        <span style={{ fontSize: '8.5px', color: 'var(--text-muted)' }}>{totalKb} KB</span>
-                      </div>
+                        height: '100%',
+                        width: `${Math.min(100, Math.max(0, m.pct))}%`,
+                        background: m.barColor,
+                        borderRadius: '999px',
+                        transition: 'width 0.4s ease'
+                      }} />
                     </div>
-
-                    {/* PSRAM (External 2MB RAM) */}
-                    {hasPsram && (
-                      <div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '3px' }}>
-                          <span style={{ fontSize: '10.5px', fontWeight: 600, color: '#059669' }}>2MB PSRAM</span>
-                          <span style={{ fontSize: '10.5px', fontWeight: 700, color: '#059669' }}>
-                            {psramFreeKb >= 1024 ? `${psramFreeMb} MB` : `${psramFreeKb} KB`} <span style={{ opacity: 0.65, fontWeight: 500, color: 'var(--text-muted)' }}>free</span>
-                          </span>
-                        </div>
-                        <div style={{
-                          width: '100%',
-                          height: '4px',
-                          borderRadius: '2px',
-                          background: 'var(--card-muted)',
-                          border: '1px solid var(--border-light)',
-                          overflow: 'hidden'
-                        }}>
-                          <div style={{
-                            height: '100%',
-                            width: `${Math.min(100, Math.max(0, psramPct))}%`,
-                            background: '#10B981',
-                            borderRadius: '2px',
-                            transition: 'width 0.4s ease'
-                          }} />
-                        </div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '2px' }}>
-                          <span style={{ fontSize: '8.5px', color: 'var(--text-muted)' }}>{psramPct}% used ({psramUsedKb} KB)</span>
-                          <span style={{ fontSize: '8.5px', color: 'var(--text-muted)' }}>{psramTotalMb} MB Chip</span>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Flash Storage Usage */}
-                    <div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '3px' }}>
-                        <span style={{ fontSize: '10.5px', color: 'var(--text-dark)', fontWeight: 600 }}>Flash Storage</span>
-                        <span style={{ fontSize: '10.5px', fontWeight: 700, color: '#7C3AED' }}>
-                          {flashFreeMb} MB <span style={{ opacity: 0.65, fontWeight: 500, color: 'var(--text-muted)' }}>free</span>
-                        </span>
-                      </div>
-                      <div style={{
-                        width: '100%',
-                        height: '4px',
-                        borderRadius: '2px',
-                        background: 'var(--card-muted)',
-                        border: '1px solid var(--border-light)',
-                        overflow: 'hidden'
-                      }}>
-                        <div style={{
-                          height: '100%',
-                          width: `${Math.min(100, Math.max(0, flashPct))}%`,
-                          background: flashPct > 90 ? '#EF4444' : '#8B5CF6',
-                          borderRadius: '2px',
-                          transition: 'width 0.4s ease'
-                        }} />
-                      </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '2px' }}>
-                        <span style={{ fontSize: '8.5px', color: 'var(--text-muted)' }}>{flashPct}% used</span>
-                        <span style={{ fontSize: '8.5px', color: 'var(--text-muted)' }}>{flashChipMb} MB Chip</span>
-                      </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '3px', fontVariantNumeric: 'tabular-nums' }}>
+                      <span style={{ fontSize: '8.5px', color: 'var(--text-muted)' }}>{m.leftSub}</span>
+                      <span style={{ fontSize: '8.5px', color: 'var(--text-muted)' }}>{m.rightSub}</span>
                     </div>
                   </div>
-                </div>
-              );
-            })()}
+                ))}
+              </div>
+            </div>
 
             {/* Card 2: Bottom Left - ESP32-S3 Pin 48 RGB LED Mood Light */}
             <RgbControlCard
               onColorChange={(hex) => onTriggerAction(`/do?rgb_color=${encodeURIComponent(hex.replace('#', ''))}`)}
               onClearOverride={() => onTriggerAction('/do?rgb_clear=1')}
+              onToggleRgb={handleRgbToggle}
               initialColor="#38BDF8"
               currentEmotion={status?.emotion}
               rgbEnabled={status?.rgbLed?.enabled ?? true}
@@ -1982,373 +1898,466 @@ export default function HomeView({
           <div className="mobile-bento-col">
             {/* Card 3: Top Right - Online / Offline Link Status */}
             <div
-              onClick={() => onRefresh?.()}
+              onClick={() => {
+                setLinkRefreshing(true)
+                Promise.resolve(onRefresh?.()).finally(() => {
+                  setTimeout(() => setLinkRefreshing(false), 450)
+                })
+              }}
               style={{
-                background: connected
-                  ? 'linear-gradient(145deg, #10B981 0%, #059669 100%)'
-                  : 'linear-gradient(145deg, #EF4444 0%, #DC2626 100%)',
+                background: 'var(--card-white)',
+                backgroundImage: connected
+                  ? 'radial-gradient(circle at top right, rgba(16, 185, 129, 0.16), transparent 72%)'
+                  : 'radial-gradient(circle at top right, rgba(239, 68, 68, 0.18), transparent 72%)',
                 borderRadius: '22px',
-                padding: '13px 14px',
-                color: '#FFFFFF',
+                padding: '12px 12px',
+                color: 'var(--text-dark)',
                 cursor: 'pointer',
                 display: 'flex',
-                alignItems: 'center',
-                gap: '10px',
-                boxShadow: connected
-                  ? '0 8px 22px rgba(16, 185, 129, 0.28)'
-                  : '0 8px 22px rgba(239, 68, 68, 0.28)',
-                border: '1px solid rgba(255, 255, 255, 0.2)',
+                flexDirection: 'column',
+                justifyContent: 'space-between',
+                gap: '8px',
+                boxShadow: 'var(--shadow-card)',
+                border: '1px solid ' + (connected ? 'rgba(16, 185, 129, 0.30)' : 'rgba(239, 68, 68, 0.34)'),
+                position: 'relative',
+                overflow: 'hidden',
+                boxSizing: 'border-box',
                 transition: 'all 0.2s cubic-bezier(0.16, 1, 0.3, 1)'
               }}
             >
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '7px', minWidth: 0 }}>
+                  <div style={{
+                    width: '26px',
+                    height: '26px',
+                    borderRadius: '9px',
+                    background: connected ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)',
+                    border: '1px solid ' + (connected ? 'rgba(16, 185, 129, 0.32)' : 'rgba(239, 68, 68, 0.32)'),
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0
+                  }}>
+                    {connected
+                      ? <Wifi size={13} color="#10B981" />
+                      : <WifiOff size={13} color="#EF4444" />}
+                  </div>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '5px'
+                    }}>
+                      <span style={{
+                        width: '6px',
+                        height: '6px',
+                        borderRadius: '50%',
+                        background: connected ? '#10B981' : '#EF4444',
+                        boxShadow: connected ? '0 0 8px rgba(16, 185, 129, 0.7)' : '0 0 8px rgba(239, 68, 68, 0.6)',
+                        flexShrink: 0
+                      }} />
+                      <span style={{
+                        fontSize: '11.5px',
+                        fontWeight: 800,
+                        letterSpacing: '0.03em',
+                        color: connected ? '#10B981' : '#EF4444'
+                      }}>
+                        {connected ? 'ONLINE' : 'OFFLINE'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <span style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  width: '22px',
+                  height: '22px',
+                  borderRadius: '8px',
+                  background: 'var(--card-muted)',
+                  border: '1px solid var(--border-light)',
+                  color: 'var(--text-muted)',
+                  flexShrink: 0
+                }}>
+                  <RotateCw size={11} className={linkRefreshing ? 'spin-anim' : ''} />
+                </span>
+              </div>
+
               <div style={{
-                width: '32px',
-                height: '32px',
-                borderRadius: '50%',
-                background: 'rgba(255, 255, 255, 0.22)',
-                backdropFilter: 'blur(6px)',
                 display: 'flex',
                 alignItems: 'center',
-                justifyContent: 'center',
-                flexShrink: 0
+                justifyContent: 'space-between',
+                gap: '6px',
+                background: 'var(--card-muted)',
+                border: '1px solid var(--border-light)',
+                borderRadius: '9px',
+                padding: '4px 8px'
               }}>
-                {connected ? <Wifi size={16} color="#FFFFFF" /> : <WifiOff size={16} color="#FFFFFF" />}
-              </div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <span style={{ fontSize: '10px', opacity: 0.85, fontWeight: 600, display: 'block' }}>
-                  Robot Link
-                </span>
-                <span style={{ fontSize: '13px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                  {connected ? 'ONLINE' : 'OFFLINE'}
-                </span>
-              </div>
-            </div>
-
-            {/* Card 4: Bottom Right - Suggestions / Smart Controls */}
-            <div style={{
-              background: 'var(--card-white)',
-              border: '1px solid var(--border-light)',
-              borderRadius: '22px',
-              padding: '13px 14px',
-              display: 'flex',
-              flexDirection: 'column',
-              justifyContent: 'space-between',
-              gap: '6px',
-              boxShadow: 'var(--shadow-card)',
-              width: '100%',
-              flex: 1,
-              boxSizing: 'border-box'
-            }}>
-              {/* Header */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-dark)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                  Suggestions
+                <span style={{
+                  fontSize: '9.5px',
+                  fontWeight: 600,
+                  color: 'var(--text-muted)',
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  minWidth: 0
+                }}>
+                  {hostName}
                 </span>
                 <span style={{
-                  fontSize: '9px', fontWeight: 800, padding: '2px 7px',
-                  borderRadius: '999px', background: 'var(--card-muted)', color: 'var(--text-muted)',
-                  border: '1px solid var(--border-light)'
+                  fontSize: '9px',
+                  fontWeight: 800,
+                  color: 'var(--text-dark)',
+                  fontVariantNumeric: 'tabular-nums',
+                  flexShrink: 0
                 }}>
-                  Smart
+                  {connected && status?.power?.cpuMhz ? `${status.power.cpuMhz} MHz` : (status?.version || 'v2.0')}
                 </span>
               </div>
-
-              {/* Row 1: Daily Greetings Tile */}
-              <div style={{
-                background: 'var(--card-muted)',
-                border: '1px solid var(--border-light)',
-                borderRadius: '12px',
-                padding: '6px 9px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                gap: '6px',
-                boxSizing: 'border-box'
-              }}>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: '10.5px', fontWeight: 700, color: 'var(--text-dark)', lineHeight: 1.2 }}>
-                    Greetings
-                  </div>
-                  <div style={{
-                    fontSize: '9px',
-                    color: greetingsEnabled ? '#059669' : 'var(--text-muted)',
-                    fontWeight: greetingsEnabled ? 700 : 500,
-                    marginTop: '2px'
-                  }}>
-                    {greetingsEnabled ? 'Active' : 'Disabled'}
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => handleGreetingsToggle(!greetingsEnabled)}
-                  style={{
-                    width: '38px',
-                    minWidth: '38px',
-                    height: '24px',
-                    boxSizing: 'border-box',
-                    padding: 0,
-                    fontSize: '10px',
-                    fontWeight: 800,
-                    borderRadius: '999px',
-                    border: '1px solid ' + (greetingsEnabled ? 'var(--accent-lime)' : 'var(--border-light)'),
-                    background: greetingsEnabled ? 'var(--accent-lime)' : 'var(--card-white)',
-                    color: greetingsEnabled ? '#12141A' : 'var(--text-muted)',
-                    cursor: 'pointer',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    textAlign: 'center',
-                    flexShrink: 0,
-                    boxShadow: greetingsEnabled ? '0 2px 6px rgba(210, 250, 75, 0.3)' : 'none',
-                    transition: 'all 0.18s ease'
-                  }}
-                >
-                  {greetingsEnabled ? 'ON' : 'OFF'}
-                </button>
-              </div>
-
-              {/* Row 2: Wake Word (Alexa) Tile */}
-              <div style={{
-                background: 'var(--card-muted)',
-                border: '1px solid var(--border-light)',
-                borderRadius: '12px',
-                padding: '6px 9px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                gap: '6px',
-                boxSizing: 'border-box'
-              }}>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: '10.5px', fontWeight: 700, color: 'var(--text-dark)', lineHeight: 1.2 }}>
-                    Wake Word
-                  </div>
-                  <div style={{
-                    fontSize: '9px',
-                    color: wwEnabled ? '#0284C7' : 'var(--text-muted)',
-                    fontWeight: wwEnabled ? 700 : 500,
-                    marginTop: '2px'
-                  }}>
-                    {wwEnabled ? '“Alexa”' : 'Disabled'}
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => handleWakeWordToggle(!wwEnabled)}
-                  style={{
-                    width: '38px',
-                    minWidth: '38px',
-                    height: '24px',
-                    boxSizing: 'border-box',
-                    padding: 0,
-                    fontSize: '10px',
-                    fontWeight: 800,
-                    borderRadius: '999px',
-                    border: '1px solid ' + (wwEnabled ? 'var(--accent-lime)' : 'var(--border-light)'),
-                    background: wwEnabled ? 'var(--accent-lime)' : 'var(--card-white)',
-                    color: wwEnabled ? '#12141A' : 'var(--text-muted)',
-                    cursor: 'pointer',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    textAlign: 'center',
-                    flexShrink: 0,
-                    boxShadow: wwEnabled ? '0 2px 6px rgba(210, 250, 75, 0.3)' : 'none',
-                    transition: 'all 0.18s ease'
-                  }}
-                >
-                  {wwEnabled ? 'ON' : 'OFF'}
-                </button>
-              </div>
-
-              {/* Row 3: Boredom Idle Chatter Tile */}
-              <div style={{
-                background: 'var(--card-muted)',
-                border: '1px solid var(--border-light)',
-                borderRadius: '12px',
-                padding: '6px 9px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                gap: '6px',
-                boxSizing: 'border-box'
-              }}>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: '10.5px', fontWeight: 700, color: 'var(--text-dark)', lineHeight: 1.2 }}>
-                    Idle Chatter
-                  </div>
-                  <div style={{ width: '54px', marginTop: '3px' }}>
-                    <FluxSelect
-                      micro={true}
-                      value={boredomMins}
-                      onChange={(e) => handleBoredomInterval(e.target.value)}
-                      options={MOBILE_BOREDOM_OPTIONS}
-                    />
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => handleBoredomToggle(!boredomEnabled)}
-                  style={{
-                    width: '38px',
-                    minWidth: '38px',
-                    height: '24px',
-                    boxSizing: 'border-box',
-                    padding: 0,
-                    fontSize: '10px',
-                    fontWeight: 800,
-                    borderRadius: '999px',
-                    border: '1px solid ' + (boredomEnabled ? 'var(--accent-lime)' : 'var(--border-light)'),
-                    background: boredomEnabled ? 'var(--accent-lime)' : 'var(--card-white)',
-                    color: boredomEnabled ? '#12141A' : 'var(--text-muted)',
-                    cursor: 'pointer',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    textAlign: 'center',
-                    flexShrink: 0,
-                    boxShadow: boredomEnabled ? '0 2px 6px rgba(210, 250, 75, 0.3)' : 'none',
-                    transition: 'all 0.18s ease'
-                  }}
-                >
-                  {boredomEnabled ? 'ON' : 'OFF'}
-                </button>
-              </div>
-
-              {/* Row 4: Speaker Audio (Mute / Unmute) Tile */}
-              <div style={{
-                background: 'var(--card-muted)',
-                border: '1px solid var(--border-light)',
-                borderRadius: '12px',
-                padding: '6px 9px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                gap: '6px',
-                boxSizing: 'border-box'
-              }}>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: '10.5px', fontWeight: 700, color: 'var(--text-dark)', lineHeight: 1.2 }}>
-                    Speaker
-                  </div>
-                  <div style={{
-                    fontSize: '9px',
-                    color: vol > 0 ? '#10B981' : '#EF4444',
-                    fontWeight: 700,
-                    marginTop: '2px'
-                  }}>
-                    {vol > 0 ? `Active (${vol}%)` : 'Muted (0%)'}
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={handleToggleMute}
-                  style={{
-                    width: '38px',
-                    minWidth: '38px',
-                    height: '24px',
-                    boxSizing: 'border-box',
-                    padding: 0,
-                    fontSize: '10px',
-                    fontWeight: 800,
-                    borderRadius: '999px',
-                    border: '1px solid ' + (vol > 0 ? 'var(--accent-lime)' : 'var(--border-light)'),
-                    background: vol > 0 ? 'var(--accent-lime)' : 'var(--card-white)',
-                    color: vol > 0 ? '#12141A' : 'var(--text-muted)',
-                    cursor: 'pointer',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    textAlign: 'center',
-                    flexShrink: 0,
-                    boxShadow: vol > 0 ? '0 2px 6px rgba(210, 250, 75, 0.3)' : 'none',
-                    transition: 'all 0.18s ease'
-                  }}
-                >
-                  {vol > 0 ? 'ON' : 'OFF'}
-                </button>
-              </div>
             </div>
+
+            {/* Card 4: Bottom Right - Quick Auto Controls */}
+            {(() => {
+              const wwLiveListening = Boolean(status?.wakeWord?.listening)
+              const speakerOn = vol > 0
+              const activeCount = [greetingsEnabled, wwEnabled, boredomEnabled, speakerOn].filter(Boolean).length
+
+              const quickTiles = [
+                {
+                  key: 'greetings',
+                  title: 'Greetings',
+                  on: greetingsEnabled,
+                  onToggle: () => handleGreetingsToggle(!greetingsEnabled),
+                  accent: '#10B981',
+                  icon: <Sun size={11} color={greetingsEnabled ? '#10B981' : 'var(--text-muted)'} />,
+                  sub: (
+                    <div style={{
+                      fontSize: '9px',
+                      color: greetingsEnabled ? '#10B981' : 'var(--text-muted)',
+                      fontWeight: greetingsEnabled ? 700 : 500,
+                      marginTop: '1px',
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis'
+                    }}>
+                      {greetingsEnabled ? 'Daily active' : 'Off'}
+                    </div>
+                  )
+                },
+                {
+                  key: 'wakeword',
+                  title: 'Wake Word',
+                  on: wwEnabled,
+                  onToggle: () => handleWakeWordToggle(!wwEnabled),
+                  accent: '#0EA5E9',
+                  icon: <Radio size={11} color={wwEnabled ? '#0EA5E9' : 'var(--text-muted)'} />,
+                  sub: (
+                    <div style={{
+                      fontSize: '9px',
+                      color: wwEnabled ? (wwLiveListening ? '#38BDF8' : '#F59E0B') : 'var(--text-muted)',
+                      fontWeight: wwEnabled ? 700 : 500,
+                      marginTop: '1px',
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis'
+                    }}>
+                      {wwEnabled ? `Alexa · ${wwLiveListening ? 'Live' : 'Paused'}` : 'Off'}
+                    </div>
+                  )
+                },
+                {
+                  key: 'boredom',
+                  title: 'Idle Chatter',
+                  on: boredomEnabled,
+                  onToggle: () => handleBoredomToggle(!boredomEnabled),
+                  accent: '#A855F7',
+                  icon: <Sparkles size={11} color={boredomEnabled ? '#A855F7' : 'var(--text-muted)'} />,
+                  sub: (
+                    <div
+                      onClick={(e) => e.stopPropagation()}
+                      style={{
+                        display: 'inline-block',
+                        minWidth: '58px',
+                        marginTop: '2px',
+                        opacity: boredomEnabled ? 1 : 0.55,
+                        transition: 'opacity 0.15s ease'
+                      }}
+                    >
+                      <FluxSelect
+                        micro={true}
+                        value={boredomMins}
+                        onChange={(e) => handleBoredomInterval(e.target.value)}
+                        options={MOBILE_BOREDOM_OPTIONS}
+                      />
+                    </div>
+                  )
+                },
+                {
+                  key: 'speaker',
+                  title: 'Speaker',
+                  on: speakerOn,
+                  onToggle: handleToggleMute,
+                  accent: '#65A30D',
+                  icon: speakerOn
+                    ? <Volume2 size={11} color="#84CC16" />
+                    : <VolumeX size={11} color="#F43F5E" />,
+                  sub: (
+                    <div style={{
+                      fontSize: '9px',
+                      color: speakerOn ? '#10B981' : '#F43F5E',
+                      fontWeight: 700,
+                      marginTop: '1px',
+                      fontVariantNumeric: 'tabular-nums'
+                    }}>
+                      {speakerOn ? `On · ${vol}%` : 'Muted'}
+                    </div>
+                  )
+                }
+              ]
+
+              return (
+                <div style={{
+                  background: 'var(--card-white)',
+                  border: '1px solid var(--border-light)',
+                  borderRadius: '22px',
+                  padding: '11px 11px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  justifyContent: 'space-between',
+                  gap: '6px',
+                  boxShadow: 'var(--shadow-card)',
+                  width: '100%',
+                  flex: 1,
+                  boxSizing: 'border-box'
+                }}>
+                  {/* Header */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2px' }}>
+                    <span style={{ fontSize: '10.5px', fontWeight: 800, color: 'var(--text-dark)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                      Quick Modes
+                    </span>
+                    <span style={{
+                      fontSize: '9px',
+                      fontWeight: 800,
+                      padding: '2px 7px',
+                      borderRadius: '999px',
+                      background: activeCount > 0 ? 'rgba(16, 185, 129, 0.14)' : 'var(--card-muted)',
+                      color: activeCount > 0 ? '#10B981' : 'var(--text-muted)',
+                      border: '1px solid ' + (activeCount > 0 ? 'rgba(16, 185, 129, 0.25)' : 'var(--border-light)')
+                    }}>
+                      {activeCount}/4 ON
+                    </span>
+                  </div>
+
+                  {/* Unified Feature Rows */}
+                  {quickTiles.map((tile) => (
+                    <div
+                      key={tile.key}
+                      onClick={tile.onToggle}
+                      style={{
+                        background: 'var(--card-muted)',
+                        border: '1px solid var(--border-light)',
+                        borderRadius: '11px',
+                        padding: '6px 7px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: '5px',
+                        cursor: 'pointer',
+                        boxSizing: 'border-box',
+                        transition: 'border-color 0.18s ease, background 0.18s ease'
+                      }}
+                    >
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          fontSize: '10px',
+                          fontWeight: 700,
+                          color: 'var(--text-dark)',
+                          lineHeight: 1.2
+                        }}>
+                          <span style={{ display: 'inline-flex', alignItems: 'center', flexShrink: 0 }}>
+                            {tile.icon}
+                          </span>
+                          <span style={{
+                            minWidth: 0,
+                            whiteSpace: 'nowrap',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis'
+                          }}>
+                            {tile.title}
+                          </span>
+                        </div>
+                        {tile.sub}
+                      </div>
+
+                      <label
+                        className="flux-toggle flux-toggle-sm"
+                        onClick={(e) => e.stopPropagation()}
+                        style={{ gap: 0, flexShrink: 0, '--toggle-accent': tile.accent }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={tile.on}
+                          onChange={tile.onToggle}
+                          aria-label={tile.title}
+                        />
+                        <span className="flux-toggle-slider" />
+                      </label>
+                    </div>
+                  ))}
+                </div>
+              )
+            })()}
           </div>
         </div>
 
 
-        {/* Voice Prompt Box for Mobile */}
-        <div className="flux-white-card" style={{ padding: '16px' }}>
-          <form onSubmit={(e) => { e.preventDefault(); handleSendPrompt(); }} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <input
-              type="text"
-              value={promptText}
-              onChange={(e) => setPromptText(e.target.value)}
-              placeholder={isListening ? 'Listening...' : 'Ask Kiwi anything...'}
-              style={{
-                flex: 1,
-                height: '42px',
-                boxSizing: 'border-box',
-                padding: '0 18px',
-                borderRadius: '999px',
-                background: 'var(--card-muted)',
-                border: '1px solid var(--border-light)',
-                color: 'var(--text-dark)',
-                fontSize: '13px',
-                outline: 'none'
-              }}
-            />
-            <button
-              type="submit"
-              disabled={sendingPrompt || !promptText.trim()}
-              className="flux-btn"
-              style={{
-                background: 'linear-gradient(135deg, #0EA5E9 0%, #0284C7 100%)',
-                color: '#FFFFFF',
-                padding: 0,
-                borderRadius: '50%',
-                width: '42px',
-                height: '42px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                flexShrink: 0,
-                opacity: (!promptText.trim() || sendingPrompt) ? 0.4 : 1
-              }}
-            >
-              <Send size={16} />
-            </button>
-          </form>
-
-
-
-          {/* Quick Chat Bubble Preview */}
-
-          {(status?.lastPrompt || status?.lastReply) && (
-
-            <div style={{ marginTop: '12px', fontSize: '12px', lineHeight: 1.4 }}>
-
-              {status?.lastPrompt && (
-
-                <div style={{ color: 'var(--text-muted)', marginBottom: '4px' }}>
-
-                  <strong>You:</strong> {status.lastPrompt}
-
+        {/* Voice & Text Prompt Box for Mobile */}
+        {(() => {
+          const canSend = Boolean(promptText.trim()) && !sendingPrompt
+          const quickPrompts = [
+            { label: 'Tell a joke', prompt: 'Tell me a short funny joke' },
+            { label: 'Fun fact', prompt: 'Tell me one surprising fun fact' },
+            { label: 'How are you?', prompt: 'How are you feeling today?' }
+          ]
+          return (
+            <div className="flux-white-card" style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <div className="flux-card-header" style={{ marginBottom: 0 }}>
+                <span className="flux-card-title">
+                  <Sparkles size={15} style={{ color: '#0EA5E9' }} />
+                  <span>Ask Kiwi</span>
+                </span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  {(isListening || sendingPrompt) && (
+                    <span
+                      style={{
+                        fontSize: '9px',
+                        fontWeight: 800,
+                        letterSpacing: '0.05em',
+                        padding: '2px 7px',
+                        borderRadius: '999px',
+                        color: sendingPrompt ? '#0284C7' : '#059669',
+                        background: sendingPrompt ? 'rgba(14, 165, 233, 0.12)' : 'rgba(16, 185, 129, 0.12)',
+                        border: `1px solid ${sendingPrompt ? 'rgba(14, 165, 233, 0.28)' : 'rgba(16, 185, 129, 0.28)'}`
+                      }}
+                    >
+                      {sendingPrompt ? 'SENDING' : 'LISTENING'}
+                    </span>
+                  )}
+                  <button
+                    type="button"
+                    onClick={handleMicToggle}
+                    aria-label={isListening ? 'Stop listening' : 'Start voice input'}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '5px',
+                      height: '26px',
+                      padding: '0 10px',
+                      borderRadius: '999px',
+                      cursor: 'pointer',
+                      fontSize: '10.5px',
+                      fontWeight: 700,
+                      fontFamily: 'inherit',
+                      color: isListening ? '#EF4444' : 'var(--text-dark)',
+                      background: isListening ? 'rgba(239, 68, 68, 0.12)' : 'var(--card-muted)',
+                      border: `1px solid ${isListening ? 'rgba(239, 68, 68, 0.35)' : 'var(--border-light)'}`,
+                      transition: 'all 0.15s ease'
+                    }}
+                  >
+                    {isListening ? <MicOff size={12} color="#EF4444" /> : <Mic size={12} color="#0EA5E9" />}
+                    <span>{isListening ? 'Stop' : 'Voice'}</span>
+                  </button>
                 </div>
+              </div>
 
-              )}
+              <form
+                onSubmit={(e) => { e.preventDefault(); handleSendPrompt(); }}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  padding: '4px 4px 4px 14px',
+                  borderRadius: '999px',
+                  background: 'var(--card-muted)',
+                  border: `1px solid ${isListening ? 'rgba(16, 185, 129, 0.42)' : 'var(--border-light)'}`
+                }}
+              >
+                <input
+                  type="text"
+                  value={promptText}
+                  onChange={(e) => setPromptText(e.target.value)}
+                  placeholder={isListening ? 'Listening to you...' : 'Ask Kiwi anything...'}
+                  style={{
+                    flex: 1,
+                    minWidth: 0,
+                    height: '36px',
+                    background: 'transparent',
+                    border: 'none',
+                    color: 'var(--text-dark)',
+                    fontSize: '13px',
+                    fontFamily: 'inherit',
+                    outline: 'none'
+                  }}
+                />
+                <button
+                  type="submit"
+                  disabled={!canSend}
+                  aria-label="Send prompt"
+                  style={{
+                    background: canSend
+                      ? 'linear-gradient(135deg, #0EA5E9 0%, #0284C7 100%)'
+                      : 'var(--card-white)',
+                    color: canSend ? '#FFFFFF' : 'var(--text-muted)',
+                    border: canSend ? 'none' : '1px solid var(--border-light)',
+                    boxShadow: canSend ? '0 2px 10px rgba(14, 165, 233, 0.28)' : 'none',
+                    cursor: canSend ? 'pointer' : 'not-allowed',
+                    padding: 0,
+                    borderRadius: '50%',
+                    width: '36px',
+                    height: '36px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0,
+                    transition: 'all 0.16s ease'
+                  }}
+                >
+                  <Send size={15} />
+                </button>
+              </form>
 
-              {status?.lastReply && (
-
-                <div style={{ color: 'var(--text-dark)', fontWeight: 600 }}>
-
-                  <strong>Kiwi:</strong> {status.lastReply}
-
-                </div>
-
-              )}
-
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                {quickPrompts.map((chip) => (
+                  <button
+                    key={chip.label}
+                    type="button"
+                    disabled={sendingPrompt}
+                    onClick={() => handleSendPrompt(chip.prompt)}
+                    style={{
+                      padding: '5px 10px',
+                      borderRadius: '999px',
+                      background: 'var(--card-subtle)',
+                      border: '1px solid var(--border-light)',
+                      color: 'var(--text-muted)',
+                      fontSize: '11px',
+                      fontWeight: 600,
+                      fontFamily: 'inherit',
+                      cursor: sendingPrompt ? 'default' : 'pointer',
+                      opacity: sendingPrompt ? 0.55 : 1,
+                      transition: 'background 0.15s ease, color 0.15s ease'
+                    }}
+                  >
+                    {chip.label}
+                  </button>
+                ))}
+              </div>
             </div>
-
-          )}
-
-        </div>
+          )
+        })()}
 
 
 
@@ -2414,7 +2423,7 @@ export default function HomeView({
 
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
 
-              <label className="flux-toggle">
+              <label className="flux-toggle" style={{ '--toggle-accent': '#06B6D4' }}>
 
                 <input
 
@@ -2440,9 +2449,9 @@ export default function HomeView({
 
                 fontSize: '9px', fontWeight: 800, padding: '2px 6px', borderRadius: '999px',
 
-                background: sndReactEnabled ? 'rgba(52, 199, 89, 0.15)' : 'var(--card-muted)',
+                background: sndReactEnabled ? 'rgba(6, 182, 212, 0.14)' : 'var(--card-muted)',
 
-                color: sndReactEnabled ? '#15803D' : 'var(--text-muted)'
+                color: sndReactEnabled ? '#22D3EE' : 'var(--text-muted)'
 
               }}>
 

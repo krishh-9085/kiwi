@@ -1,9 +1,11 @@
-import React, { useState, useRef, useEffect } from 'react'
+import React, { useState, useRef, useEffect, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import { ChevronDown, Check } from 'lucide-react'
 
 /**
  * UntitledUI-styled Rounded Dropdown / Select Component
- * Replaces boxy Windows native <select> menus with modern Scandinavian rounded floating menus.
+ * Uses a document.body portal with viewport-aware flip/alignment so menus are never clipped
+ * by card overflow containers or pushed off-screen near mobile bottom navigation.
  */
 export default function FluxSelect({
   name,
@@ -19,7 +21,45 @@ export default function FluxSelect({
   className = ''
 }) {
   const [open, setOpen] = useState(false)
+  const [menuPos, setMenuPos] = useState(null)
   const containerRef = useRef(null)
+  const menuRef = useRef(null)
+  const selectedRef = useRef(null)
+
+  const computeMenuPosition = useCallback(() => {
+    const el = containerRef.current
+    if (!el || typeof window === 'undefined') return null
+    const rect = el.getBoundingClientRect()
+    const vw = window.innerWidth
+    const vh = window.innerHeight
+    const bottomPad = vw <= 768 ? 92 : 14
+    const topPad = 14
+    const gap = 6
+
+    const spaceBelow = Math.max(0, vh - rect.bottom - bottomPad - gap)
+    const spaceAbove = Math.max(0, rect.top - topPad - gap)
+    const openUp = spaceBelow < 200 && spaceAbove > spaceBelow
+    const availableHeight = openUp ? spaceAbove : spaceBelow
+    const maxHeight = Math.max(120, Math.min(260, availableHeight))
+    const maxWidth = Math.min(360, vw - 24)
+    const minWidth = Math.min(rect.width, maxWidth)
+    const alignRight = rect.left + Math.max(rect.width, 165) > vw - 12
+
+    return {
+      position: 'fixed',
+      zIndex: 99999,
+      minWidth: `${minWidth}px`,
+      width: 'max-content',
+      maxWidth: `${maxWidth}px`,
+      maxHeight: `${maxHeight}px`,
+      ...(alignRight
+        ? { right: `${Math.max(12, vw - rect.right)}px` }
+        : { left: `${Math.max(12, Math.min(rect.left, vw - minWidth - 12))}px` }),
+      ...(openUp
+        ? { bottom: `${Math.max(bottomPad, vh - rect.top + gap)}px`, transformOrigin: 'bottom center' }
+        : { top: `${Math.max(topPad, rect.bottom + gap)}px`, transformOrigin: 'top center' })
+    }
+  }, [])
 
   // Normalize options array
   const normalizedOptions = options.map((opt) => {
@@ -36,28 +76,59 @@ export default function FluxSelect({
   const selectedOption = normalizedOptions.find((opt) => opt.value === String(value))
   const displayLabel = selectedOption ? selectedOption.label : placeholder
 
-  // Close when clicking outside or pressing Escape
+  // Close when clicking outside, pressing Escape, or scrolling away; keep menu aligned on resize/scroll
   useEffect(() => {
+    if (!open) return undefined
+
     const handleOutsideClick = (e) => {
-      if (containerRef.current && !containerRef.current.contains(e.target)) {
+      const inTrigger = containerRef.current && containerRef.current.contains(e.target)
+      const inMenu = menuRef.current && menuRef.current.contains(e.target)
+      if (!inTrigger && !inMenu) {
         setOpen(false)
       }
     }
     const handleKeyDown = (e) => {
       if (e.key === 'Escape') setOpen(false)
     }
-
-    if (open) {
-      document.addEventListener('mousedown', handleOutsideClick)
-      document.addEventListener('touchstart', handleOutsideClick)
-      document.addEventListener('keydown', handleKeyDown)
+    const handleViewportUpdate = (e) => {
+      if (e?.type === 'scroll' && menuRef.current && menuRef.current.contains(e.target)) return
+      const rect = containerRef.current?.getBoundingClientRect()
+      if (!rect || rect.bottom < 0 || rect.top > window.innerHeight) {
+        setOpen(false)
+        return
+      }
+      setMenuPos(computeMenuPosition())
     }
+
+    const rafId = window.requestAnimationFrame(() => {
+      selectedRef.current?.scrollIntoView({ block: 'nearest' })
+    })
+
+    document.addEventListener('mousedown', handleOutsideClick)
+    document.addEventListener('touchstart', handleOutsideClick)
+    document.addEventListener('keydown', handleKeyDown)
+    window.addEventListener('resize', handleViewportUpdate)
+    window.addEventListener('scroll', handleViewportUpdate, true)
+
     return () => {
+      window.cancelAnimationFrame(rafId)
       document.removeEventListener('mousedown', handleOutsideClick)
       document.removeEventListener('touchstart', handleOutsideClick)
       document.removeEventListener('keydown', handleKeyDown)
+      window.removeEventListener('resize', handleViewportUpdate)
+      window.removeEventListener('scroll', handleViewportUpdate, true)
     }
-  }, [open])
+  }, [open, computeMenuPosition])
+
+  const handleToggleOpen = () => {
+    if (disabled) return
+    if (!open) {
+      setMenuPos(computeMenuPosition())
+      setOpen(true)
+    } else {
+      setOpen(false)
+    }
+  }
 
   const handleSelect = (optVal) => {
     if (onChange) {
@@ -96,7 +167,7 @@ export default function FluxSelect({
       <button
         type="button"
         disabled={disabled}
-        onClick={() => setOpen(!open)}
+        onClick={handleToggleOpen}
         aria-haspopup="listbox"
         aria-expanded={open}
         style={{
@@ -111,7 +182,7 @@ export default function FluxSelect({
           borderRadius: btnRadius,
           background: dark ? '#22252C' : 'var(--card-muted)',
           border: open
-            ? '1.5px solid var(--accent-lime)'
+            ? '1px solid rgba(56, 189, 248, 0.55)'
             : (dark ? '1px solid rgba(255, 255, 255, 0.12)' : '1px solid var(--border-light)'),
           color: dark ? '#FFFFFF' : 'var(--text-dark)',
           fontSize: btnFontSize,
@@ -120,7 +191,7 @@ export default function FluxSelect({
           cursor: disabled ? 'not-allowed' : 'pointer',
           outline: 'none',
           boxShadow: open
-            ? '0 0 0 3px rgba(210, 250, 75, 0.35)'
+            ? '0 0 0 3px rgba(56, 189, 248, 0.16)'
             : 'none',
           transition: 'all 0.18s cubic-bezier(0.16, 1, 0.3, 1)'
         }}
@@ -156,26 +227,22 @@ export default function FluxSelect({
         </div>
       </button>
 
-      {/* Floating Popover Menu (Untitled UI Rounded Card with soft shadow & pills) */}
-      {open && (
+      {/* Portal Floating Popover Menu (Never clipped by parent overflow containers) */}
+      {open && menuPos && typeof document !== 'undefined' && createPortal(
         <div
+          ref={menuRef}
           role="listbox"
           style={{
-            position: 'absolute',
-            top: 'calc(100% + 6px)',
-            left: 0,
-            minWidth: '100%',
-            width: 'max-content',
-            maxWidth: 'min(360px, 90vw)',
-            zIndex: 99999,
+            ...menuPos,
+            boxSizing: 'border-box',
             background: dark ? '#1A1C23' : 'var(--card-white)',
             borderRadius: compact ? '12px' : '16px',
-            border: dark ? '1px solid rgba(255, 255, 255, 0.12)' : '1px solid var(--border-light)',
-            boxShadow: '0 16px 40px -4px rgba(0, 0, 0, 0.35), 0 6px 16px -2px rgba(0, 0, 0, 0.15)',
+            border: dark ? '1px solid rgba(255, 255, 255, 0.14)' : '1px solid var(--border-light)',
+            boxShadow: '0 18px 44px rgba(0, 0, 0, 0.48), 0 6px 16px rgba(0, 0, 0, 0.22)',
             padding: compact ? '4px' : '6px',
-            maxHeight: '260px',
             overflowY: 'auto',
-            animation: 'fluxDropdownFadeIn 0.18s cubic-bezier(0.16, 1, 0.3, 1)'
+            overscrollBehavior: 'contain',
+            animation: 'fluxDropdownFadeIn 0.16s cubic-bezier(0.16, 1, 0.3, 1)'
           }}
         >
           {normalizedOptions.map((opt) => {
@@ -184,6 +251,7 @@ export default function FluxSelect({
             return (
               <div
                 key={opt.value}
+                ref={isSelected ? selectedRef : null}
                 role="option"
                 aria-selected={isSelected}
                 onClick={() => handleSelect(opt.value)}
@@ -196,7 +264,7 @@ export default function FluxSelect({
                   borderRadius: isMicro ? '6px' : (compact ? '8px' : '10px'),
                   fontSize: isMicro ? '10px' : (compact ? '11px' : '13px'),
                   fontWeight: isSelected ? 700 : 500,
-                  color: 'var(--text-dark)',
+                  color: dark ? '#F8FAFC' : 'var(--text-dark)',
                   background: isSelected
                     ? 'var(--active-card-bg)'
                     : 'transparent',
@@ -229,7 +297,8 @@ export default function FluxSelect({
               </div>
             )
           })}
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   )

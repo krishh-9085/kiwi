@@ -4,6 +4,7 @@
 #include "config/AppConfig.h"
 #include "core/Timing.h"
 #include "hardware/AudioEngine.h"
+#include "hardware/WakeWordEngine.h"
 #include "face/FaceEngine.h"
 #include "net/WifiManager.h"
 #include "web/WebPortal.h"
@@ -77,6 +78,10 @@ bool speakText(const String &text) {
     res = ttsSarvam(toSpeak);
 
   spkEndSpeech();
+  if (!cancelRequest) {
+    audioDrainRxDmaOnly();
+    wakeWordSuppressUntil(millis() + 120UL);
+  }
   if (currentEmotion == EMOTION_SPEAKING) {
     setEmotion(EMOTION_IDLE);
   }
@@ -296,8 +301,10 @@ int ttsSarvam(const String &text) {
     }
   }
 
-  Serial.printf("[TTS/Sarvam] Model=%s Voice=%s Lang=%s (replyLang=%s)\n",
-                ttsModel.c_str(), voiceParam.c_str(), langCode.c_str(), replyLang.c_str());
+  float safePace = constrain(ttsPace, 0.50f, 2.00f);
+  Serial.printf("[TTS/Sarvam] Model=%s Voice=%s Lang=%s Pace=%.2f (replyLang=%s)\n",
+                ttsModel.c_str(), voiceParam.c_str(), langCode.c_str(),
+                safePace, replyLang.c_str());
 
   String body = "{\"text\":\"" + jsonEscape(text) + "\",";
   if (isV4) {
@@ -307,6 +314,8 @@ int ttsSarvam(const String &text) {
   }
   body += "\"speaker\":\"" + jsonEscape(voiceParam) + "\",";
   body += "\"model\":\"" + jsonEscape(ttsModel) + "\",";
+  body += "\"pace\":" + String(safePace, 2) + ",";
+  body += "\"loudness\":1.15,";
   body += "\"speech_sample_rate\":16000,\"enable_preprocessing\":false}";
 
   client.printf("POST %s HTTP/1.1\r\n", path.c_str());
@@ -679,6 +688,10 @@ bool speakFishAudio(const String &text, uint32_t maxPlayMs) {
 
   int res = ttsFishAudio(toSpeak, maxPlayMs);
   spkEndSpeech();
+  if (!cancelRequest) {
+    audioDrainRxDmaOnly();
+    wakeWordSuppressUntil(millis() + 120UL);
+  }
   if (currentEmotion == EMOTION_SPEAKING) {
     setEmotion(EMOTION_IDLE);
   }

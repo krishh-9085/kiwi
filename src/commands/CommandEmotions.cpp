@@ -4,6 +4,7 @@
 #include "config/AppConfig.h"
 #include "config/ConfigManager.h"
 #include "core/Timing.h"
+#include "face/FaceDisplay.h"
 #include "face/FaceEngine.h"
 #include "hardware/AudioEngine.h"
 #include "hardware/WakeWordEngine.h"
@@ -419,6 +420,7 @@ bool handleSkinCommand(const String &qIn) {
 
   // If user asked to cycle or change eyes without specifying a theme name:
   if (name.length() == 0 && isCycleCommand) {
+    DisplayLockGuard lock(80);
     targetSkin = (EyeSkin)(((uint8_t)currentEyeSkin + 1) % SKIN_COUNT);
     const char *skinNames[SKIN_COUNT] = {"Kiwi", "Pixel 8-Bit", "Lumina Spark",
                                          "Mecha", "EMO Style", "Kiwi+"};
@@ -430,7 +432,10 @@ bool handleSkinCommand(const String &qIn) {
 
   // Apply new skin immediately (<10ms!)
   Serial.printf("[CMD] Fast-path: eye skin -> %s\n", name.c_str());
-  currentEyeSkin = targetSkin;
+  {
+    DisplayLockGuard lock(80);
+    currentEyeSkin = targetSkin;
+  }
   saveConfig();
   soundPetSparkle();
   if (sttLang == "hi" || containsDevanagari(qIn) ||

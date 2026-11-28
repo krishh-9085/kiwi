@@ -27,6 +27,8 @@ void rgbLedSetOverride(uint8_t r, uint8_t g, uint8_t b);
 
 // Clear manual override (restores mood / mode auto-sync)
 void rgbLedClearOverride();
+bool rgbLedGetOverride();
+void rgbLedGetOverrideColor(uint8_t &r, uint8_t &g, uint8_t &b);
 
 // Global brightness limit (0 - 255, default ~180 to avoid eye strain)
 void rgbLedSetBrightness(uint8_t b);

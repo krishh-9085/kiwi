@@ -48,6 +48,30 @@ void saveMemory() {
   Serial.println("[MEMORY] Saved to Flash NVS");
 }
 
+static bool isAsciiOnlyText(const String &s) {
+  bool hasPrintable = false;
+  for (size_t i = 0; i < s.length(); i++) {
+    unsigned char c = (unsigned char)s[i];
+    // Reject control characters and non-ASCII UTF-8 bytes (e.g. Hindi/Devanagari)
+    if (c < 0x20 || c >= 0x7F)
+      return false;
+    if (c > 0x20)
+      hasPrintable = true;
+  }
+  return hasPrintable;
+}
+
+static bool isValidAsciiOwnerName(const String &s) {
+  if (!isAsciiOnlyText(s))
+    return false;
+  for (size_t i = 0; i < s.length(); i++) {
+    unsigned char c = (unsigned char)s[i];
+    if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z'))
+      return true;
+  }
+  return false;
+}
+
 void setOwnerNameNoSave(const String &name) {
   String n = name;
   n.trim();
@@ -313,9 +337,13 @@ String getFormattedMemoryPrompt() {
   }
   p += "CRITICAL LEARNING & MEMORY RULES: "
        "1. NEVER save transient requests, jokes, or queries (e.g. NEVER output '[MEM: Story requested]', '[MEM: asked for joke]', etc.). "
-       "2. If user shares a family member/friend OR clarifies who someone's parent/spouse/child is, reply warmly AND append '[MEM: FAMILY: <Name> (<relation>)]' at the end. If that person already exists in Friends & Family (e.g. 'Yunay (Bhatija)') and user adds a parent/spouse link, keep BOTH in one entry like '[MEM: FAMILY: Yunay (Bhatija - Yash & Aditi's son)]'. "
-       "3. If user shares their own name, append '[MEM: Name is <Name>]'. "
-       "4. ONLY save real, meaningful personal life facts (e.g. Papa likes ginger tea, upcoming exam tomorrow, pet name) or when user says 'yaad rakhna', append '[MEM: <concise fact>]'. "
+       "2. If user shares a family member/friend OR clarifies who someone's parent/spouse/child is, reply warmly AND append '[MEM: FAMILY: <Name> (<relation>)]' written strictly in English/Roman letters (ASCII only, never Hindi/Devanagari script). If that person already exists in Friends & Family (e.g. 'Yunay (Bhatija)') and user adds a parent/spouse link, keep BOTH in one entry like '[MEM: FAMILY: Yunay (Bhatija - Yash & Aditi's son)]'. ";
+  if (isValidAsciiOwnerName(kiwiMemory.userName)) {
+    p += "3. User's name is ALREADY saved; NEVER emit '[MEM: Name is ...]' tags. ";
+  } else {
+    p += "3. If user shares their own name, append '[MEM: Name is <Name>]' written strictly in English/Roman letters (ASCII only, never Hindi/Devanagari script). ";
+  }
+  p += "4. ONLY save real, meaningful personal life facts (e.g. Papa likes ginger tea, upcoming exam tomorrow, pet name) or when user says 'yaad rakhna', append '[MEM: <concise fact>]' strictly in English/Roman letters (ASCII only, never Hindi/Devanagari script). "
        "5. If user mentions an upcoming event, test, interview, trip, or doctor visit, optionally append '[FOLLOWUP: <short warm check-in question in user's language>]' at the end so Kiwi checks in later. ";
   return p;
 }
@@ -436,10 +464,16 @@ void parseAndSaveMemoriesFromLlm(String &resp) {
     String fact = resp.substring(start + 5, end);
     fact.trim();
     if (fact.length() > 0) {
-      if (fact.startsWith("User name is ") || fact.startsWith("Name is ") ||
-          fact.startsWith("User's name is ") || fact.startsWith("name is ")) {
+      String lowerFact = fact;
+      lowerFact.toLowerCase();
+      if (lowerFact.startsWith("user name is ") ||
+          lowerFact.startsWith("name is ") ||
+          lowerFact.startsWith("user's name is ") ||
+          lowerFact.startsWith("owner name is ") ||
+          lowerFact.startsWith("owner's name is ") ||
+          lowerFact.startsWith("my name is ")) {
         String name = "";
-        int isIdx = fact.lastIndexOf(" is ");
+        int isIdx = lowerFact.lastIndexOf(" is ");
         if (isIdx >= 0) {
           name = fact.substring(isIdx + 4);
         } else {
@@ -447,17 +481,37 @@ void parseAndSaveMemoriesFromLlm(String &resp) {
           if (idx > 0) name = fact.substring(idx + 1);
         }
         name.trim();
-        if (name.length() > 0) {
+        while (name.length() > 0 &&
+               (name.endsWith(".") || name.endsWith("!") || name.endsWith(",") ||
+                name.endsWith("\"") || name.endsWith("'"))) {
+          name.remove(name.length() - 1);
+          name.trim();
+        }
+        while (name.length() > 0 && (name.startsWith("\"") || name.startsWith("'"))) {
+          name.remove(0, 1);
+          name.trim();
+        }
+        // Only accept pure English/ASCII names from LLM tags, and never overwrite an
+        // existing English/ASCII owner name (use Web UI Settings to intentionally rename).
+        if (isValidAsciiOwnerName(name) && !isValidAsciiOwnerName(kiwiMemory.userName)) {
           setOwnerNameNoSave(name);
           modified = true;
+        } else {
+          Serial.printf("[MEMORY] Ignored LLM owner name tag ('%s', current='%s')\n",
+                        name.c_str(), kiwiMemory.userName.c_str());
         }
       } else if (fact.startsWith("FAMILY:") || fact.startsWith("family:") ||
                  fact.startsWith("RELATION:") || fact.startsWith("FRIEND:")) {
         int col = fact.indexOf(':');
         String rel = fact.substring(col + 1);
         rel.trim();
-        addFriendOrFamilyNoSave(rel);
-        modified = true;
+        if (isAsciiOnlyText(rel)) {
+          addFriendOrFamilyNoSave(rel);
+          modified = true;
+        } else {
+          Serial.printf("[MEMORY] Ignored non-ASCII LLM family tag: '%s'\n",
+                        rel.c_str());
+        }
       } else {
         String lowerF = fact;
         lowerF.toLowerCase();
@@ -472,7 +526,10 @@ void parseAndSaveMemoriesFromLlm(String &resp) {
           continue;
         }
 
-        if (looksLikeShortFamilyEntry(lowerF)) {
+        if (!isAsciiOnlyText(fact)) {
+          Serial.printf("[MEMORY] Ignored non-ASCII LLM memory tag: '%s'\n",
+                        fact.c_str());
+        } else if (looksLikeShortFamilyEntry(lowerF)) {
           addFriendOrFamilyNoSave(fact);
           modified = true;
         } else {

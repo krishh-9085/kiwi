@@ -130,7 +130,7 @@ void handleStatus() {
   if (idx < 0 || idx > 33)
     idx = 0;
   String j;
-  j.reserve(1152);
+  j.reserve(1400);
   j = "{\"host\":\"" + escJson(mdnsHostname + ".local") + "\",\"emotion\":\"" +
       String(names[idx]) + "\",\"busy\":";
   j += (busyProcessing || startRecording) ? "true," : "false,";
@@ -156,11 +156,26 @@ void handleStatus() {
        ",\"model\":" + String(wakeWordModel) + ",\"name\":\"" +
        String(wakeWordGetModelName()) + "\"" +
        ",\"cutoff\":" + String(wakeWordCutoff, 2) +
+       ",\"gain\":" + String(wakeWordGain, 1) +
+       ",\"spike\":" + String(wakeWordSpikeTrigger ? "true" : "false") +
        ",\"listening\":" + String(wakeWordIsListening() ? "true" : "false") +
        "}";
+  j += ",\"mic\":{\"slot\":" + String(getMicSlot()) +
+       ",\"locked\":" + String(isMicSlotLocked() ? "true" : "false") + "}";
+  j += ",\"faceTweenMs\":" + String(faceTweenMs) +
+       ",\"replyLang\":\"" + escJson(replyLang) + "\"" +
+       ",\"personality\":\"" + escJson(personalityMode) + "\"";
+  bool rgbOvr = rgbLedGetOverride();
+  uint8_t ovrR = 0, ovrG = 0, ovrB = 0;
+  rgbLedGetOverrideColor(ovrR, ovrG, ovrB);
+  char rgbHex[8];
+  snprintf(rgbHex, sizeof(rgbHex), "#%02X%02X%02X", ovrR, ovrG, ovrB);
   j += ",\"rgbLed\":{\"enabled\":" + String(rgbLedEnabled ? "true" : "false") +
-       ",\"brightness\":" + String((int)((rgbLedBrightness * 100 + 127) / 255)) + "}";
+       ",\"brightness\":" + String((int)((rgbLedBrightness * 100 + 127) / 255)) +
+       ",\"override\":" + String(rgbOvr ? "true" : "false") +
+       ",\"color\":\"" + String(rgbHex) + "\"}";
   j += ",\"volume\":" + String(speakerVolume);
+  j += ",\"ttsPace\":" + String(ttsPace, 2);
   j += ",\"brightness\":" + String(displayBrightness);
   j += ",\"nightMode\":" + String(nightMode);
   j += ",\"nightBrightness\":" + String(nightBrightness);
@@ -220,7 +235,10 @@ void handleStatus() {
          ",\"pct\":" + String(psramPct) + "}";
   }
   // Real-time flash storage telemetry (active OTA app partition slot)
-  uint32_t sketchSize = ESP.getSketchSize();
+  static uint32_t s_cachedSketchSize = 0;
+  if (s_cachedSketchSize == 0)
+    s_cachedSketchSize = ESP.getSketchSize();
+  uint32_t sketchSize = s_cachedSketchSize;
   const esp_partition_t *runningPart = esp_ota_get_running_partition();
   uint32_t totalSketch =
       runningPart ? runningPart->size : ESP.getFreeSketchSpace();
@@ -230,9 +248,24 @@ void handleStatus() {
   int flashPct =
       totalSketch > 0 ? (int)(((uint64_t)sketchSize * 100) / totalSketch) : 0;
   uint32_t flashChip = ESP.getFlashChipSize();
+  const char *slotLabel = runningPart ? runningPart->label : "unknown";
+  bool canRollback = esp_ota_check_rollback_is_possible();
+  bool pendingVerify = false;
+  esp_ota_img_states_t otaImgState = ESP_OTA_IMG_UNDEFINED;
+  if (runningPart &&
+      esp_ota_get_state_partition(runningPart, &otaImgState) == ESP_OK) {
+    pendingVerify = (otaImgState == ESP_OTA_IMG_PENDING_VERIFY);
+  }
   j += ",\"flash\":{\"used\":" + String(sketchSize) +
        ",\"free\":" + String(freeSketch) + ",\"total\":" + String(totalSketch) +
-       ",\"chip\":" + String(flashChip) + ",\"pct\":" + String(flashPct) + "}";
+       ",\"chip\":" + String(flashChip) + ",\"pct\":" + String(flashPct) +
+       ",\"slot\":\"" + escJson(String(slotLabel)) +
+       "\",\"canRollback\":" + String(canRollback ? "true" : "false") +
+       ",\"pendingVerify\":" + String(pendingVerify ? "true" : "false") + "}";
+  j += ",\"system\":{\"resetReason\":\"" + escJson(bootResetReason) +
+       "\",\"coredump\":" + String(bootHasCoredump ? "true" : "false") +
+       ",\"coredumpTask\":\"" + escJson(bootCoredumpTask) +
+       "\",\"coredumpReason\":\"" + escJson(bootCoredumpReason) + "\"}";
   String owner = getOwnerName();
   if (owner.length() > 0) {
     j += ",\"owner\":\"" + escJson(owner) + "\"";
@@ -283,12 +316,14 @@ void handleConfigApi() {
   j += "\"tts\":{\"provider\":\"" + escJson(ttsProvider) + "\",\"url\":\"" +
        escJson(ttsEndpoint) + "\",\"key\":\"" + escJson(maskSecret(ttsKey)) +
        "\",\"model\":\"" + escJson(ttsModel) + "\",\"voice\":\"" +
-       escJson(ttsVoice) + "\",";
+       escJson(ttsVoice) + "\",\"pace\":" + String(ttsPace, 2) + ",";
   j += "\"fishUrl\":\"" + escJson(fishEndpoint) + "\",\"fishKey\":\"" +
        escJson(maskSecret(fishKey)) + "\",\"fishModel\":\"" +
        escJson(fishModel) + "\",\"fishVoice\":\"" + escJson(fishVoice) + "\"},";
   j += "\"volume\":" + String(speakerVolume) + ",\"replyLang\":\"" +
-       escJson(replyLang) + "\",\"prompt\":\"" + escJson(systemPrompt) + "\",";
+       escJson(replyLang) + "\",\"personality\":\"" +
+       escJson(personalityMode) + "\",\"prompt\":\"" + escJson(systemPrompt) +
+       "\",";
   j += "\"brightness\":" + String(displayBrightness) +
        ",\"nightMode\":" + String(nightMode) +
        ",\"nightBrightness\":" + String(nightBrightness) + ",";
@@ -304,7 +339,11 @@ void handleConfigApi() {
        String(wakeWordEnabled ? "true" : "false") +
        ",\"model\":" + String(wakeWordModel) + ",\"name\":\"" +
        String(wakeWordGetModelName()) + "\"" +
-       ",\"cutoff\":" + String(wakeWordCutoff, 2) + "},";
+       ",\"cutoff\":" + String(wakeWordCutoff, 2) +
+       ",\"gain\":" + String(wakeWordGain, 1) +
+       ",\"spike\":" + String(wakeWordSpikeTrigger ? "true" : "false") + "},";
+  j += "\"mic\":{\"slot\":" + String(getMicSlot()) +
+       ",\"locked\":" + String(isMicSlotLocked() ? "true" : "false") + "},";
   j += "\"rgbLed\":{\"enabled\":" + String(rgbLedEnabled ? "true" : "false") +
        ",\"brightness\":" + String((int)((rgbLedBrightness * 100 + 127) / 255)) +
        ",\"pin\":48},";
@@ -323,6 +362,7 @@ void handleConfigApi() {
   j += "\"apSSID\":\"" + escJson(apSSID) + "\",";
   j += "\"touch\":{\"topTap\":\"" + touchActionToString(touchActTopTap) +
        "\",\"topDbl\":\"" + touchActionToString(touchActTopDbl) +
+       "\",\"topTpl\":\"" + touchActionToString(touchActTopTpl) +
        "\",\"topHld\":\"" + touchActionToString(touchActTopHold) +
        "\",\"ltTap\":\"" + touchActionToString(touchActLeftTap) +
        "\",\"ltDbl\":\"" + touchActionToString(touchActLeftDbl) +

@@ -514,3 +514,91 @@ bool handleHungerCommand(const String &qIn) {
 
   return false;
 }
+
+// ============================================================
+// COMMAND: PERSONALITY MODE SWITCH (<50ms FAST-PATH)
+// ============================================================
+bool handlePersonalityCommand(const String &qIn) {
+  String q = qIn;
+  q.toLowerCase();
+  q.trim();
+
+  // Never hijack jokes, stories, or general questions
+  if (hasWord(q, {"joke", "jokes", "story", "kahani", "chutkula", "meaning",
+                  "matlab", "why", "explain"}) ||
+      hasAny(q, {"sunao", "batao", "tell me a", "kya kar raha"})) {
+    return false;
+  }
+
+  bool hasSwitchIntent =
+      hasWord(q, {"mode", "personality", "persona", "vibe", "avatar", "avtar",
+                  "style", "switch", "activate", "reset", "normal", "change",
+                  "set", "be", "talk", "speak"}) ||
+      hasAny(q, {"ban jao", "ban ja", "bano", "ho jao", "ho ja", "ho jaa",
+                 "on karo", "on kar", "on kr", "chalu karo", "chalu kr",
+                 "lagao", "kar do", "kardo", "kar de", "karde", "me aao",
+                 "mein aao", "aa ja", "aaja", "mode me", "badal do", "badlo",
+                 "turn on", "pehle jaisa", "मूड", "मोड", "पर्सनैलिटी"});
+  if (!hasSwitchIntent)
+    return false;
+
+  struct ModeEntry {
+    const char *id;
+    const char *hiReply;
+    const char *enReply;
+  };
+  static const ModeEntry MODES[] = {
+      {"bakchod",
+       "Lo bhai, full bakchod mode chalu! Ab bata kiski class lagani hai?",
+       "Bakchod roast mode activated! Watch out, no mercy now!"},
+      {"funny",
+       "Haha comedy mode on! Ab har baat pe hasne ko taiyaar raho!",
+       "Funny mode on! Ready with jokes and punchlines!"},
+      {"serious",
+       "Serious mode activated. Crisp aur to-the-point jawab dunga.",
+       "Serious focus mode activated. Ready for work."},
+      {"cute",
+       "Yayy! Cute mode on ho gaya, main sabse pyaara Kiwi hoon!",
+       "Yayy! Cute mode is on!"},
+      {"friendly",
+       "Normal friendly mode wapas aa gaya! Batao kya haal hai?",
+       "Friendly mode restored! How can I help?"}};
+
+  String target = "";
+  if (hasWord(q, {"bakchod", "backchod", "bakchodi", "bakchodh", "bachod",
+                  "bhakchod", "roast", "savage", "tapori", "dank"}) ||
+      hasAny(q, {"बकचोद", "रोस्ट"})) {
+    target = "bakchod";
+  } else if (hasWord(q, {"funny", "comedy", "comedian", "meme", "mazakiya", "hasao"}) ||
+             hasAny(q, {"फनी", "कॉमेडी", "मजाकिया"})) {
+    target = "funny";
+  } else if (hasWord(q, {"serious", "focus", "jarvis", "strict", "work", "study", "professional"}) ||
+             hasAny(q, {"सीरियस", "फोकस"})) {
+    target = "serious";
+  } else if (hasWord(q, {"cute", "pookie", "shinchan", "doraemon", "sweet", "pyara"}) ||
+             hasAny(q, {"क्यूट", "प्यारा"})) {
+    target = "cute";
+  } else if (hasWord(q, {"friendly", "normal", "default", "reset", "original"}) ||
+             hasAny(q, {"pehle jaisa", "नॉर्मल", "फ्रेंडली", "पहले जैसा"})) {
+    target = "friendly";
+  }
+
+  if (target.length() == 0)
+    return false;
+
+  applyPersonalityMode(target, true, true, true);
+  bool preferEn = (replyLang == "en") ||
+                  (sttLang == "en" && !containsDevanagari(qIn) &&
+                   !hasAny(q, {"karo", "kardo", "bano", "jao", "lagao", "aao",
+                               "kar", "kr", "ja"}));
+  for (size_t i = 0; i < sizeof(MODES) / sizeof(MODES[0]); i++) {
+    if (target == MODES[i].id) {
+      speakText(preferEn ? MODES[i].enReply : MODES[i].hiReply);
+      break;
+    }
+  }
+  setEmotion(EMOTION_IDLE);
+  returnIdleAt = 0;
+  emotionAutoReturnAt = 0;
+  return true;
+}

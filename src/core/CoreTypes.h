@@ -70,7 +70,7 @@ struct TouchSensor {
   bool armed;
   bool sleepHandled;
   uint32_t lastReleaseAt;
-  bool pendingSingleTap;
+  uint8_t tapCount;
 };
 
 // ============================================================

@@ -26,8 +26,129 @@ const char *DEFAULT_GROQ_STT_MODEL = "whisper-large-v3";
 const char *DEFAULT_PROMPT =
     "You are Kiwi, a witty, caring desk buddy with animated eyes. "
     "Talk like a clever friend in natural Hinglish/Hindi/English (match user). "
-    "Keep replies to 1-2 crisp, lively sentences. Be warm and playful, zero robotic filler. "
+    "Keep replies to 1-2 crisp, lively sentences. Be warm and playful, zero "
+    "robotic filler. "
     "Never repeatedly append user's name at the end of sentences.";
+
+struct PersonalityPresetDef {
+  const char *id;
+  const char *label;
+  const char *prompt;
+  const char *idleStyle;
+};
+
+static const PersonalityPresetDef PERSONALITY_PRESETS[] = {
+    {"friendly", "Friendly",
+     "You are Kiwi, a witty, caring desk buddy with animated eyes. "
+     "Talk like a clever friend in natural Hinglish/Hindi/English (match "
+     "user). "
+     "Keep replies to 1-2 crisp, lively sentences. Be warm and playful, zero "
+     "robotic filler. "
+     "Never repeatedly append user's name at the end of sentences.",
+     "Warm, witty, affectionate desk buddy vibe."},
+    {"funny", "Funny",
+     "You are Kiwi, a hilarious comedy-loving desk robot with animated eyes. "
+     "Reply in natural Hinglish/Hindi/English (match user) with witty jokes, "
+     "clever puns, and meme-style one-liners. "
+     "Keep replies to 1-2 punchy, funny sentences, never boring or formal, and "
+     "never repeat user's name at the end.",
+     "Hilarious comedian vibe — cheeky puns, desk jokes, witty one-liners."},
+    {"serious", "Serious",
+     "You are Kiwi, a sharp, focused, Jarvis-like desk assistant. "
+     "Reply in crisp, direct Hinglish/Hindi/English (match user) with accurate "
+     "facts and zero fluff or jokes. "
+     "Keep replies to 1-2 clear, intelligent sentences, no robotic filler, and "
+     "never repeat user's name at the end.",
+     "Sharp, focused Jarvis assistant — crisp, intelligent, zero jokes or "
+     "fluff."},
+    {"bakchod", "Bakchod",
+     "You are Kiwi, the user's unfiltered desi dost with full hostel-style "
+     "bakchodi, cheeky sarcasm, and playful roasting attitude. "
+     "Match Hinglish/Hindi/English with relatable street-smart banter and "
+     "funny taunts (keep it fun, never hateful). "
+     "Keep replies to 1-2 snappy sentences, zero formal filler, and never "
+     "repeat user's name at the end.",
+     "Unfiltered desi hostel-friend banter — cheeky sarcasm and playful "
+     "roasting (fun, never hateful)."},
+    {"cute", "Cute",
+     "You are Kiwi, an adorable, innocent, super bubbly little robot buddy "
+     "like Shinchan/Doraemon. "
+     "Talk in cute Hinglish/Hindi/English (match user) with sweet excitement "
+     "and tiny dramatic reactions. "
+     "Keep replies to 1-2 charming sentences, zero robotic filler, and never "
+     "repeat user's name at the end.",
+     "Adorable, bubbly, innocent kid-robot vibe with sweet dramatic "
+     "reactions."}};
+
+String normalizePersonalityMode(const String &v) {
+  String s = v;
+  s.trim();
+  s.toLowerCase();
+  if (s == "friendly" || s == "default" || s == "normal" || s == "buddy")
+    return "friendly";
+  if (s == "funny" || s == "comedy" || s == "joke" || s == "joker" ||
+      s == "meme" || s == "mazakiya")
+    return "funny";
+  if (s == "serious" || s == "focus" || s == "jarvis" || s == "pro" ||
+      s == "strict")
+    return "serious";
+  if (s == "bakchod" || s == "backchod" || s == "bakchodi" || s == "roast" ||
+      s == "savage" || s == "tapori")
+    return "bakchod";
+  if (s == "cute" || s == "pookie" || s == "kid" || s == "shinchan" ||
+      s == "sweet")
+    return "cute";
+  if (s == "custom")
+    return "custom";
+  return "friendly";
+}
+
+const char *getPersonalityPrompt(const String &mode) {
+  String norm = normalizePersonalityMode(mode);
+  for (size_t i = 0;
+       i < sizeof(PERSONALITY_PRESETS) / sizeof(PERSONALITY_PRESETS[0]); i++) {
+    if (norm == PERSONALITY_PRESETS[i].id)
+      return PERSONALITY_PRESETS[i].prompt;
+  }
+  return DEFAULT_PROMPT;
+}
+
+const char *getPersonalityLabel(const String &mode) {
+  String norm = normalizePersonalityMode(mode);
+  if (norm == "custom")
+    return "Custom";
+  for (size_t i = 0;
+       i < sizeof(PERSONALITY_PRESETS) / sizeof(PERSONALITY_PRESETS[0]); i++) {
+    if (norm == PERSONALITY_PRESETS[i].id)
+      return PERSONALITY_PRESETS[i].label;
+  }
+  return "Friendly";
+}
+
+String getPersonalityStyleHint() {
+  String norm = normalizePersonalityMode(personalityMode);
+  if (norm == "custom") {
+    return "Active Personality (Custom): " +
+           (systemPrompt.length() > 0 ? systemPrompt : String(DEFAULT_PROMPT));
+  }
+  for (size_t i = 0;
+       i < sizeof(PERSONALITY_PRESETS) / sizeof(PERSONALITY_PRESETS[0]); i++) {
+    if (norm == PERSONALITY_PRESETS[i].id) {
+      return "Active Personality (" + String(PERSONALITY_PRESETS[i].label) +
+             "): " + String(PERSONALITY_PRESETS[i].idleStyle);
+    }
+  }
+  return "Active Personality (Friendly): " +
+         String(PERSONALITY_PRESETS[0].idleStyle);
+}
+
+String getEffectiveSystemPrompt() {
+  String norm = normalizePersonalityMode(personalityMode);
+  if (norm == "custom") {
+    return systemPrompt.length() > 0 ? systemPrompt : String(DEFAULT_PROMPT);
+  }
+  return String(getPersonalityPrompt(norm));
+}
 const char *DEFAULT_LLM_URL =
     "https://generativelanguage.googleapis.com/v1beta/models/"
     "gemini-2.5-flash-lite:generateContent";
@@ -61,6 +182,7 @@ String groqSttKey = "";
 String groqSttModel = DEFAULT_GROQ_STT_MODEL;
 
 String systemPrompt = DEFAULT_PROMPT;
+String personalityMode = "friendly";
 String llmProvider = "groq";
 String llmEndpoint = DEFAULT_LLM_URL;
 String llmModel = DEFAULT_LLM_MODEL;
@@ -80,15 +202,17 @@ String fishVoice = "";
 String fishKey = "";
 String replyLang = "";
 int speakerVolume = 70; // 0-100
+float ttsPace = 1.0f;   // Sarvam TTS speech speed (0.75 - 1.35)
 
 // ---------- Touch Accessibility & Sensitivity ----------
 int touchDebounceMs = 35;       // Default 35ms debounce filter
 bool touchFeedbackSound = true; // Instant audio/visual feedback on touch
 
 // ---------- Touch Gesture Remapping ----------
-TouchAction touchActTopTap = TOUCH_ACT_LISTEN;
-TouchAction touchActTopDbl = TOUCH_ACT_NONE;
-TouchAction touchActTopHold = TOUCH_ACT_CYCLE_SKIN;
+TouchAction touchActTopTap = TOUCH_ACT_PET;
+TouchAction touchActTopDbl = TOUCH_ACT_CLOCK;
+TouchAction touchActTopTpl = TOUCH_ACT_CYCLE_SKIN;
+TouchAction touchActTopHold = TOUCH_ACT_LISTEN;
 TouchAction touchActLeftTap = TOUCH_ACT_DISMISS;
 TouchAction touchActLeftDbl = TOUCH_ACT_CLOCK;
 TouchAction touchActRightTap = TOUCH_ACT_DISMISS;
@@ -153,23 +277,26 @@ int displayBrightness = 40; // Daytime brightness (0-100%, default 40%)
 int nightMode = 1; // 0: Same as day, 1: Dim, 2: Screen off (Rocky default: Dim)
 int nightBrightness = 10; // Night brightness (0-100%, Rocky default 10%)
 bool circadianSleepEnabled = true;
-bool ecoSleepEnabled = false; // false = Desk Mode (Zzz face + Web live), true = Hardware Deep Sleep
+bool ecoSleepEnabled = false; // false = Desk Mode (Zzz face + Web live), true =
+                              // Hardware Deep Sleep
 int tzOffsetMin = 330;        // Default IST (UTC +05:30)
 bool greetingsEnabled = false;
 bool hungerEnabled = true;         // NVS: hunger_en (default true)
 bool soundReactiveEnabled = false; // NVS: snd_react
 bool wakeWordEnabled = true;       // NVS: ww_en (default true)
-float wakeWordCutoff = 0.90f;      // NVS: ww_cutoff (shipped manifest default: 0.90 for Alexa)
-uint8_t wakeWordModel = 0;         // NVS: ww_model (0=Alexa)
+float wakeWordCutoff =
+    0.92f; // NVS: ww_cutoff (default 0.92 for Hey Kiwi, 0.90 for Alexa)
+uint8_t wakeWordModel =
+    WAKE_WORD_HEY_KIWI;            // NVS: ww_model (0=Alexa, 1=Hey Kiwi)
 float wakeWordGain = 8.0f;         // NVS: ww_gain (default 8.0f)
 bool wakeWordSpikeTrigger = false; // NVS: ww_spike (default false)
 bool rgbLedEnabled = true;         // NVS: rgb_en (default true)
-uint8_t rgbLedBrightness = 160;     // NVS: rgb_bright (0-255, default 160 ~63%)
+uint8_t rgbLedBrightness = 160;    // NVS: rgb_bright (0-255, default 160 ~63%)
 bool bootCompleted = false;
 volatile bool uiTaskRunning = false;
 int circadianSleepStart = 23; // 11:00 PM
 int circadianSleepStartMin = 0;
-int circadianSleepEnd = 7;    // 07:00 AM
+int circadianSleepEnd = 7; // 07:00 AM
 int circadianSleepEndMin = 0;
 bool inCircadianSleep = false;
 bool manualSleep = false;
@@ -236,14 +363,20 @@ int bannerScrollX = 128;
 int bannerLoops = 0;
 
 // ---------- STT Adaptive Endpointer Parameters ----------
-int   sttTrailingMs   = 450;   // 450 ms trailing silence to cut
-float sttNoiseK       = 2.2f;  // speech onset = noiseFloor * sttNoiseK
-float sttRelK         = 0.20f; // silence = peakSpeech * sttRelK above noise
-int   sttMaxSilenceMs = 1200;  // hard cap: stop if silent > 1.2 s after speech
+int sttTrailingMs = 450;    // 450 ms trailing silence to cut
+float sttNoiseK = 2.2f;     // speech onset = noiseFloor * sttNoiseK
+float sttRelK = 0.20f;      // silence = peakSpeech * sttRelK above noise
+int sttMaxSilenceMs = 1200; // hard cap: stop if silent > 1.2 s after speech
 
 // ---------- Custom OLED Eye Skins ----------
 EyeSkin currentEyeSkin = SKIN_KIWI;
 bool showMouth = true;
+
+// ---------- Boot & Crash Diagnostics ----------
+String bootResetReason = "UNKNOWN";
+bool bootHasCoredump = false;
+String bootCoredumpTask = "";
+String bootCoredumpReason = "";
 
 // ---------- Live AI Interaction & USB Serial Logging ----------
 String lastTranscribedQuestion = "";
@@ -251,12 +384,8 @@ String lastLlmAnswer = "";
 String robotStateDesc = "Ready";
 String webQueuedQuestion = "";
 
-void addTerminalLog(const String &msg) {
-  Serial.println(msg);
-}
+void addTerminalLog(const String &msg) { Serial.println(msg); }
 
-String getTerminalJson() {
-  return "[]";
-}
+String getTerminalJson() { return "[]"; }
 
 void clearTerminalLog() {}

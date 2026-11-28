@@ -1,5 +1,5 @@
 import React from 'react'
-import { Check, AlertCircle, Sparkles, X } from 'lucide-react'
+import { Check, AlertCircle, Info, X } from 'lucide-react'
 
 /**
  * Ultra-Clean Sonner / Dynamic Island Style Toast HUD
@@ -23,7 +23,7 @@ export default function Toast({ toast, onClose }) {
           {isError ? (
             <AlertCircle size={13} strokeWidth={2.5} />
           ) : isInfo ? (
-            <Sparkles size={13} strokeWidth={2.5} />
+            <Info size={13} strokeWidth={2.5} />
           ) : (
             <Check size={13} strokeWidth={2.8} />
           )}

@@ -24,4 +24,5 @@ void handleConfigApi();
 void handleScanNetworks();
 void handleOtaStatus();
 void handleOtaInstall();
+void handleOtaRollback();
 void processPendingSound();

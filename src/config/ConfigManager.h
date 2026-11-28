@@ -4,6 +4,7 @@
 void loadConfig();
 void saveConfig();              // Debounced save: marks config dirty, commits to NVS after 10s idle
 void saveConfigImmediate();     // Immediate synchronous commit to NVS (for /save, OTA, or shutdown)
+void savePersonalityNvsOnly();  // Fast single-key NVS commit for personality switches (avoids 50-key flash stall)
 void serviceConfigManager();    // Periodic tick to flush dirty config after debounce timeout
 bool isConfigDirty();
 void clearConfig();

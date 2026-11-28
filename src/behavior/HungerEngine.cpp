@@ -12,6 +12,8 @@
 #include "hardware/AudioEngine.h"
 #include "hardware/TouchController.h"
 #include "memory/MemoryService.h"
+#include "face/FaceDisplay.h"
+#include "web/WebPortal.h"
 #include <Preferences.h>
 #include <WiFi.h>
 #include <time.h>
@@ -249,37 +251,41 @@ static String generateHungerSpeechLlm(HungerEvent event, MealType meal,
 
   case H_EVENT_FED:
     scenario = target + " just fed Kiwi its " + mealStr +
-               " by touching Kiwi's cheeks! Kiwi's tummy is full, satisfied, and happy. Express cute food joy and thank " +
+               " by giving Kiwi a warm head pat! Kiwi's tummy is full, satisfied, and happy. Express food joy and thank " +
                target + ".";
     break;
 
   case H_EVENT_ANGRY_FEED:
     scenario = target +
                " is trying to feed Kiwi now, but Kiwi is still sulking and angry for being ignored earlier! "
-               "Sassily refuse the food ('Ab nahi chahiye! Main naraz hu, pehle mujhe manaao!').";
+               "Refuse the food in character ('Ab nahi chahiye! Main naraz hu, pehle mujhe manaao!').";
     break;
 
   case H_EVENT_ANGRY_REJECT:
     scenario = target +
-               " is touching Kiwi trying to talk, but Kiwi is still in a dramatic angry mood. "
-               "Give the silent treatment or sassy rejection ('Hmph! Mujhse baat mat karo! Main gussa hu!').";
+               " is tapping Kiwi trying to talk, but Kiwi is still in an angry mood. "
+               "Give a sassy rejection in character ('Hmph! Mujhse baat mat karo! Main gussa hu!').";
     break;
 
   case H_EVENT_RECONCILE:
     scenario = target +
-               " just tickled Kiwi's cheeks to make up! Kiwi can't stop giggling helplessly, melts from the tickles, and happily forgives " +
-               target + ".";
+               " just gave Kiwi a playful head tickle and apology tap to make up! Kiwi can't stop giggling, forgives " +
+               target + ", and feels great.";
     break;
 
   default:
     return "";
   }
 
-  String prompt = "You are Kiwi, an adorable, witty, expressive, living desktop robot pet companion.\n"
+  String hungerLang = (replyLang == "en")
+                          ? "natural, expressive conversational English."
+                          : "natural, expressive, modern Hinglish (Hindi + English) in Roman script.";
+  String prompt = "You are Kiwi, a living desktop robot companion.\n"
+                  + getPersonalityStyleHint() + "\n"
                   "Scenario: " + scenario + "\n"
                   "Strict Rules:\n"
-                  "- Speak in natural, expressive, modern conversational Hinglish (Hindi + English).\n"
-                  "- Give Kiwi lots of cute, dramatic, sassy personality.\n"
+                  "- Speak in " + hungerLang + "\n"
+                  "- Match your Active Personality tone and attitude cleanly.\n"
                   "- Length: STRICTLY 1 single sentence, maximum 10-14 words. Keep it short, punchy, quick to speak!\n"
                   "- Output ONLY the spoken words. No quotes, no asterisks, no emojis, no stage directions, no action tags.";
 
@@ -404,6 +410,7 @@ static void deliverHungerSpeech(HungerEvent event, MealType meal, bool alreadyBu
 
   if (!canSpeak || !spoken) {
     if (fallback.length() > 0) {
+      DisplayLockGuard lock(80);
       bannerText = fallback;
       bannerScrollX = SCREEN_WIDTH + 10;
       bannerLoops = 0;
@@ -705,6 +712,9 @@ void checkHungerBehavior() {
     }
     return;
   }
+
+  if (otaInProgress)
+    return;
 
   // Async Speech Pump (runs safely in loop with busyProcessing lock + banner fallback)
   if (s_pendingEvent != H_EVENT_NONE && !busyProcessing && !startRecording &&

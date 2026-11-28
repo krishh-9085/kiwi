@@ -419,34 +419,90 @@ int findWledEffectId(const String &query, String *outMatchedName) {
     }
   }
 
-  // 2. Fallback to comprehensive static table
+  // 2. Fallback to comprehensive static table (zero-heap scan until match)
   int bestStaticId = -1;
   int bestStaticScore = 0;
-  String bestStaticName = "";
+  const char *bestStaticName = nullptr;
+
+  auto asciiEqLower = [](const char *raw, size_t rawLen, const String &lowerTarget) -> bool {
+    if (rawLen != lowerTarget.length())
+      return false;
+    for (size_t j = 0; j < rawLen; j++) {
+      char c = raw[j];
+      if (c >= 'A' && c <= 'Z') c += ('a' - 'A');
+      if (c != lowerTarget[j])
+        return false;
+    }
+    return true;
+  };
+
+  auto rawContainsLower = [](const char *hayRaw, size_t hayLen, const String &needleLower) -> bool {
+    size_t nLen = needleLower.length();
+    if (nLen == 0)
+      return true;
+    if (nLen > hayLen)
+      return false;
+    for (size_t start = 0; start <= hayLen - nLen; start++) {
+      bool ok = true;
+      for (size_t j = 0; j < nLen; j++) {
+        char c = hayRaw[start + j];
+        if (c >= 'A' && c <= 'Z') c += ('a' - 'A');
+        if (c != needleLower[j]) {
+          ok = false;
+          break;
+        }
+      }
+      if (ok)
+        return true;
+    }
+    return false;
+  };
+
+  auto lowerContainsRaw = [](const String &hayLower, const char *needleRaw, size_t needleLen) -> bool {
+    size_t hLen = hayLower.length();
+    if (needleLen == 0)
+      return true;
+    if (needleLen > hLen)
+      return false;
+    for (size_t start = 0; start <= hLen - needleLen; start++) {
+      bool ok = true;
+      for (size_t j = 0; j < needleLen; j++) {
+        char c = needleRaw[j];
+        if (c >= 'A' && c <= 'Z') c += ('a' - 'A');
+        if (hayLower[start + j] != c) {
+          ok = false;
+          break;
+        }
+      }
+      if (ok)
+        return true;
+    }
+    return false;
+  };
 
   for (int i = 0; STATIC_EFFECTS[i].name != nullptr; i++) {
-    String name = STATIC_EFFECTS[i].name;
-    String norm = name;
-    norm.toLowerCase();
+    const char *rawName = STATIC_EFFECTS[i].name;
+    size_t rawLen = strlen(rawName);
 
-    if (norm == cleanQ || norm == q) {
-      if (outMatchedName) *outMatchedName = name;
+    if (asciiEqLower(rawName, rawLen, cleanQ) || asciiEqLower(rawName, rawLen, q)) {
+      if (outMatchedName) *outMatchedName = String(rawName);
       return STATIC_EFFECTS[i].id;
     }
 
-    if (q.indexOf(norm) >= 0 || (norm.length() >= 3 && cleanQ.indexOf(norm) >= 0) ||
-        (cleanQ.length() >= 4 && norm.indexOf(cleanQ) >= 0)) {
-      int score = norm.length();
+    if (lowerContainsRaw(q, rawName, rawLen) ||
+        (rawLen >= 3 && lowerContainsRaw(cleanQ, rawName, rawLen)) ||
+        (cleanQ.length() >= 4 && rawContainsLower(rawName, rawLen, cleanQ))) {
+      int score = (int)rawLen;
       if (score > bestStaticScore) {
         bestStaticScore = score;
         bestStaticId = STATIC_EFFECTS[i].id;
-        bestStaticName = name;
+        bestStaticName = rawName;
       }
     }
   }
 
   if (bestStaticId >= 0) {
-    if (outMatchedName) *outMatchedName = bestStaticName;
+    if (outMatchedName) *outMatchedName = String(bestStaticName);
     return bestStaticId;
   }
 

@@ -37,9 +37,24 @@ extern uint32_t bootSetupEnterAt;
 #define PIN_OLED_SCL 3     // Old C3: 9  -> S3 Pin: 3
 #define PIN_RGB_LED 48     // Built-in WS2812 RGB LED on ESP32-S3
 
-// ---------- Audio Amplifier Limit ----------
+// 0 = Single Top Head sensor only (GPIO 12); disables polling of unplugged L/R cheek pins (GPIO 4/5)
+#ifndef ENABLE_CHEEK_SENSORS
+#define ENABLE_CHEEK_SENSORS 0
+#endif
+
+// ---------- Audio Amplifier & Speaker Profile ----------
+// 1 = Coin-size 8-ohm 1W crisp-voice DSP (350 Hz HPF + 450 Hz de-mud + 3.2 kHz crisp boost, calibrated for MAX98357A +15dB)
+// 0 = Original 4-ohm 3W full-range speaker profile (flat EQ, 2.6x gain, 0.35 tone peak)
+#ifndef SPEAKER_COIN_8OHM_1W
+#define SPEAKER_COIN_8OHM_1W 1
+#endif
+
 #ifndef SPEAKER_MAX_GAIN
+#if SPEAKER_COIN_8OHM_1W
+#define SPEAKER_MAX_GAIN 3.40f // Clean digital makeup gain calibrated for 8-ohm 1W + MAX98357A GAIN->GND (+15 dB) without rail clipping
+#else
 #define SPEAKER_MAX_GAIN 2.6f // Master digital makeup gain for 4-ohm 3W / MAX98357A (2.6x = +8.3 dB)
+#endif
 #endif
 
 // ============================================================
@@ -88,8 +103,8 @@ extern const char *NTP_SERVER_2;
 constexpr uint32_t TOUCH_DEBOUNCE = 30;
 constexpr uint32_t TOUCH_HOLD_MS = 1500;
 constexpr uint32_t TOUCH_TAP_MAX_MS = 1200;
-constexpr uint32_t TOUCH_CLOCK_MS = 3000;
-constexpr uint32_t TOUCH_HOLD_TOP_MS = 3000;
+constexpr uint32_t TOUCH_CLOCK_MS = 1500;
+constexpr uint32_t TOUCH_HOLD_TOP_MS = 1500;
 constexpr uint32_t TICKLE_CHEEK_WINDOW_MS = 1000;
 constexpr uint32_t TICKLE_COOLDOWN_MS = 6000;
 constexpr uint32_t DUAL_CHEEK_HOLD_MS = 600;
@@ -143,7 +158,14 @@ extern String groqSttKey;
 extern String groqSttModel;
 
 extern String systemPrompt;
+extern String personalityMode;
 extern String llmProvider;
+
+String normalizePersonalityMode(const String &v);
+const char *getPersonalityPrompt(const String &mode);
+const char *getPersonalityLabel(const String &mode);
+String getPersonalityStyleHint();
+String getEffectiveSystemPrompt();
 extern String llmEndpoint;
 extern String llmModel;
 extern String llmKey;
@@ -162,6 +184,7 @@ extern String fishVoice;
 extern String fishKey;
 extern String replyLang;
 extern int speakerVolume;
+extern float ttsPace;
 
 // ---------- Touch Accessibility & Sensitivity ----------
 extern int touchDebounceMs;
@@ -170,6 +193,7 @@ extern bool touchFeedbackSound;
 // ---------- Touch Gesture Remapping ----------
 extern TouchAction touchActTopTap;
 extern TouchAction touchActTopDbl;
+extern TouchAction touchActTopTpl;
 extern TouchAction touchActTopHold;
 extern TouchAction touchActLeftTap;
 extern TouchAction touchActLeftDbl;
@@ -193,11 +217,12 @@ extern bool greetingsEnabled;
 extern bool hungerEnabled;         // NVS: hunger_en (default true)
 extern bool soundReactiveEnabled; // NVS: snd_react
 enum WakeWordModelType : uint8_t {
-    WAKE_WORD_ALEXA      = 0
+    WAKE_WORD_ALEXA    = 0,
+    WAKE_WORD_HEY_KIWI = 1
 };
 extern bool wakeWordEnabled;      // NVS: ww_en (default true)
-extern float wakeWordCutoff;      // NVS: ww_cutoff (default 0.90 for Alexa)
-extern uint8_t wakeWordModel;     // NVS: ww_model (0=Alexa)
+extern float wakeWordCutoff;      // NVS: ww_cutoff (default 0.92 for Hey Kiwi, 0.90 for Alexa)
+extern uint8_t wakeWordModel;     // NVS: ww_model (0=Alexa, 1=Hey Kiwi)
 extern float wakeWordGain;        // NVS: ww_gain (default 8.0f)
 extern bool wakeWordSpikeTrigger; // NVS: ww_spike (default false)
 extern bool rgbLedEnabled;        // NVS: rgb_en (default true)
@@ -291,6 +316,12 @@ extern int   sttMaxSilenceMs;  // NVS: stt_max_sil   – hard silence cap after 
 // ---------- Custom OLED Eye Skins ----------
 extern EyeSkin currentEyeSkin;
 extern bool showMouth;
+
+// ---------- Boot & Crash Diagnostics ----------
+extern String bootResetReason;
+extern bool bootHasCoredump;
+extern String bootCoredumpTask;
+extern String bootCoredumpReason;
 
 // ---------- Live AI Interaction & Web Serial Terminal ----------
 extern String lastTranscribedQuestion;

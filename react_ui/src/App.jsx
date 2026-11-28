@@ -109,12 +109,18 @@ export default function App() {
       })
     }
 
-    if (document.startViewTransition) {
-      document.startViewTransition(() => {
-        flushSync(() => {
-          switchTheme()
+    if (document.startViewTransition && !document.hidden) {
+      try {
+        const vt = document.startViewTransition(() => {
+          flushSync(() => {
+            switchTheme()
+          })
         })
-      })
+        vt?.ready?.catch?.(() => {})
+        vt?.finished?.catch?.(() => {})
+      } catch {
+        switchTheme()
+      }
     } else {
       switchTheme()
     }
@@ -301,6 +307,9 @@ export default function App() {
       fastPollUntilRef.current = Date.now() + 2500
       const res = await fetch(`${getBaseUrl()}${endpointAndQuery}`, { method: 'POST' })
       const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        return { ok: false, status: res.status, error: data?.error || `HTTP ${res.status}`, ...data }
+      }
       if (data && data.ok !== false) {
         const qIdx = endpointAndQuery.indexOf('?')
         const params = new URLSearchParams(qIdx >= 0 ? endpointAndQuery.slice(qIdx + 1) : '')
@@ -315,6 +324,20 @@ export default function App() {
           if (data.sleeping != null) next.sleeping = data.sleeping
           if (data.boredom != null) next.boredom = data.boredom
           if (data.boredom_mins != null) next.boredom_mins = data.boredom_mins
+          if (data.timer != null) {
+            next.timer_active = Boolean(data.timer)
+            if (!data.timer) {
+              next.timer_ringing = false
+              next.timer_remaining = 0
+            } else if (data.sec != null) {
+              next.timer_remaining = data.sec
+            }
+          }
+          if (params.get('e') === 'clear' || params.get('e') === 'forget' || data.historyCleared === true) {
+            next.question = ''
+            next.answer = ''
+            next.history = 0
+          }
           if (data.eco_sleep != null) {
             next.power = { ...(next.power || {}), ecoSleep: data.eco_sleep }
           }
@@ -325,11 +348,13 @@ export default function App() {
               ...(data.localTime != null ? { localTime: data.localTime } : {})
             }
           }
-          if (data.rgb_en != null || data.rgb_bright != null) {
+          if (data.rgb_en != null || data.rgb_bright != null || data.rgb_color != null || data.rgb_clear) {
             next.rgbLed = {
               ...(next.rgbLed || {}),
               ...(data.rgb_en != null ? { enabled: data.rgb_en } : {}),
-              ...(data.rgb_bright != null ? { brightness: data.rgb_bright } : {})
+              ...(data.rgb_bright != null ? { brightness: data.rgb_bright } : {}),
+              ...(data.rgb_color != null ? { override: true, color: data.rgb_color } : {}),
+              ...(data.rgb_clear ? { override: false } : {})
             }
           }
           if (data.greet_en != null) {
@@ -359,14 +384,29 @@ export default function App() {
           if (data.snd_react != null) {
             next.soundReactive = { ...(next.soundReactive || {}), enabled: data.snd_react }
           }
-          if (data.ww_en != null || data.ww_model != null || data.ww_cutoff != null) {
+          if (data.ww_en != null || data.ww_model != null || data.ww_cutoff != null ||
+            data.ww_gain != null || data.ww_spike != null) {
             next.wakeWord = {
               ...(next.wakeWord || {}),
               ...(data.ww_en != null ? { enabled: data.ww_en } : {}),
               ...(data.ww_model != null ? { model: data.ww_model } : {}),
-              ...(data.ww_cutoff != null ? { cutoff: data.ww_cutoff } : {})
+              ...(data.name != null ? { name: data.name } : {}),
+              ...(data.ww_cutoff != null ? { cutoff: data.ww_cutoff } : {}),
+              ...(data.ww_gain != null ? { gain: data.ww_gain } : {}),
+              ...(data.ww_spike != null ? { spike: data.ww_spike } : {})
             }
           }
+          if (data.micslot != null || data.micslot_lock != null) {
+            next.mic = {
+              ...(next.mic || {}),
+              ...(data.micslot != null ? { slot: data.micslot } : {}),
+              ...(data.micslot_lock != null ? { locked: data.micslot_lock } : {})
+            }
+          }
+          if (data.face_tween != null) next.faceTweenMs = data.face_tween
+          if (data.replang != null) next.replyLang = data.replang
+          if (data.personality != null) next.personality = data.personality
+          if (data.tts_pace != null) next.ttsPace = data.tts_pace
           if (data.circ_en != null || data.circ_start != null || data.circ_smin != null ||
             data.circ_end != null || data.circ_emin != null || data.startStr != null ||
             data.endStr != null || data.eco_sleep != null || data.skip_tonight != null ||
@@ -392,6 +432,12 @@ export default function App() {
           }
           return next
         })
+        if (data.personality != null) {
+          setConfig((cPrev) => (cPrev ? { ...cPrev, personality: data.personality } : cPrev))
+        }
+        if (data.tts_pace != null) {
+          setConfig((cPrev) => (cPrev ? { ...cPrev, tts: { ...(cPrev.tts || {}), pace: data.tts_pace } } : cPrev))
+        }
         if (params.get('banner') != null || params.get('skin') != null) {
           setActiveOledScreen(null)
         } else {
@@ -473,9 +519,10 @@ export default function App() {
 
   const handleRefreshTelemetry = async () => {
     setRefreshing(true)
-    showToast('Telemetry refreshed!')
     try {
-      await Promise.allSettled([fetchStatus(), fetchConfig()])
+      const results = await Promise.allSettled([fetchStatus(), fetchConfig()])
+      const okCount = results.filter((r) => r.status === 'fulfilled' && r.value).length
+      showToast(okCount > 0 ? 'Telemetry refreshed!' : 'Could not reach Kiwi — device offline')
     } finally {
       setTimeout(() => setRefreshing(false), 600)
     }
@@ -613,6 +660,10 @@ export default function App() {
                   status={status}
                   getBaseUrl={getBaseUrl}
                   onToast={showToast}
+                  onRebootTriggered={(msg) => {
+                    setRebootMessage(msg || 'Firmware update complete! Kiwi is restarting...')
+                    setRebooting(true)
+                  }}
                 />
               )}
             </TabErrorBoundary>

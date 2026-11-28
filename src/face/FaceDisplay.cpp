@@ -249,11 +249,28 @@ void updateDisplayBrightnessMode() {
 
 // ---- Initialization --------------------------------------------------------
 
+static void recoverI2cBus() {
+  pinMode(PIN_OLED_SDA, INPUT_PULLUP);
+  pinMode(PIN_OLED_SCL, INPUT_PULLUP);
+  if (digitalRead(PIN_OLED_SDA) == LOW) {
+    pinMode(PIN_OLED_SCL, OUTPUT_OPEN_DRAIN);
+    for (int i = 0; i < 9 && digitalRead(PIN_OLED_SDA) == LOW; i++) {
+      digitalWrite(PIN_OLED_SCL, LOW);
+      delayMicroseconds(5);
+      digitalWrite(PIN_OLED_SCL, HIGH);
+      delayMicroseconds(5);
+    }
+    pinMode(PIN_OLED_SCL, INPUT_PULLUP);
+  }
+}
+
 bool initDisplay() {
   if (!s_displayMutex) {
     s_displayMutex = xSemaphoreCreateRecursiveMutex();
   }
+  recoverI2cBus();
   Wire.begin(PIN_OLED_SDA, PIN_OLED_SCL);
+  Wire.setTimeOut(50);
   uint32_t targetClock = FACE_I2C_CLK_DURING;
   Wire.setClock(targetClock);
 

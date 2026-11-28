@@ -36,6 +36,10 @@ void handleSave() {
       wifiPassword = incomingPass;
       wifiChanged = true;
     }
+  } else if (server.hasArg("pass_clear") && server.arg("pass_clear") == "1" &&
+             wifiPassword.length() > 0) {
+    wifiPassword = "";
+    wifiChanged = true;
   }
 
   if (server.hasArg("sttprovider"))
@@ -67,6 +71,13 @@ void handleSave() {
 
   if (server.hasArg("replang")) {
     replyLang = sanitizeField(server.arg("replang"));
+  }
+  if (server.hasArg("personality")) {
+    String nextPersona = normalizePersonalityMode(server.arg("personality"));
+    if (personalityMode != nextPersona) {
+      clearConversationHistory();
+    }
+    personalityMode = nextPersona;
   }
   if (server.hasArg("prompt")) {
     String p = server.arg("prompt");
@@ -112,6 +123,12 @@ void handleSave() {
   }
   ttsModel = sanitizeField(server.arg("ttsmodel"), DEFAULT_TTS_MODEL);
   ttsVoice = sanitizeField(server.arg("ttsvoice"), DEFAULT_TTS_VOICE);
+  if (server.hasArg("tts_pace")) {
+    float sp = server.arg("tts_pace").toFloat();
+    if (sp >= 0.50f && sp <= 2.00f) {
+      ttsPace = constrain(sp, 0.75f, 1.35f);
+    }
+  }
   fishEndpoint = sanitizeUrl(server.arg("fishurl"), DEFAULT_FISH_TTS_URL);
   if (server.hasArg("fishkey") && server.arg("fishkey").length() > 0 &&
       !isMaskedSecret(server.arg("fishkey"))) {
@@ -209,14 +226,13 @@ void handleSave() {
     wakeWordEnabled = parsePortalBool(server.arg("ww_en"));
     wakeWordSetEnabled(wakeWordEnabled);
   }
-  if (server.hasArg("ww_cutoff")) {
-    wakeWordCutoff = server.arg("ww_cutoff").toFloat();
-    wakeWordSetSensitivity(wakeWordCutoff);
-  }
   // P3: Apply ww_model BEFORE ww_cutoff
   if (server.hasArg("ww_model")) {
-    wakeWordModel = 0; // Alexa only
-    wakeWordSetModel(wakeWordModel);
+    uint8_t mIdx = wakeWordModel;
+    if (wakeWordParseModelIndex(server.arg("ww_model"), mIdx)) {
+      wakeWordModel = mIdx;
+      wakeWordSetModel(wakeWordModel);
+    }
   }
   if (server.hasArg("ww_cutoff")) {
     wakeWordCutoff = server.arg("ww_cutoff").toFloat();
@@ -253,7 +269,13 @@ void handleSave() {
   }
   if (server.hasArg("micslot")) {
     int s = server.arg("micslot").toInt();
-    setMicSlot(s, true, true);
+    if (s == 0 || s == 1) {
+      setMicSlot(s, false, true);
+      if (!server.hasArg("micslot_lock"))
+        setMicSlotLocked(true);
+    } else if (!server.hasArg("micslot_lock")) {
+      setMicSlotLocked(false);
+    }
   }
   if (server.hasArg("micslot_lock")) {
     setMicSlotLocked(parsePortalBool(server.arg("micslot_lock")));
@@ -319,22 +341,23 @@ void handleSave() {
     if (td >= 10 && td <= 200) {
       touchDebounceMs = td;
     }
-    touchFeedbackSound = server.hasArg("tch_snd")
-                             ? parsePortalBool(server.arg("tch_snd"))
-                             : false;
-  } else if (server.hasArg("tch_snd")) {
+  }
+  if (server.hasArg("tch_snd")) {
     touchFeedbackSound = parsePortalBool(server.arg("tch_snd"));
   }
 
   if (server.hasArg("act_top_tap"))
     touchActTopTap =
-        parseTouchAction(server.arg("act_top_tap"), TOUCH_ACT_LISTEN);
+        parseTouchAction(server.arg("act_top_tap"), TOUCH_ACT_PET);
   if (server.hasArg("act_top_dbl"))
     touchActTopDbl =
-        parseTouchAction(server.arg("act_top_dbl"), TOUCH_ACT_NONE);
+        parseTouchAction(server.arg("act_top_dbl"), TOUCH_ACT_CLOCK);
+  if (server.hasArg("act_top_tpl"))
+    touchActTopTpl =
+        parseTouchAction(server.arg("act_top_tpl"), TOUCH_ACT_CYCLE_SKIN);
   if (server.hasArg("act_top_hld"))
     touchActTopHold =
-        parseTouchAction(server.arg("act_top_hld"), TOUCH_ACT_CYCLE_SKIN);
+        parseTouchAction(server.arg("act_top_hld"), TOUCH_ACT_LISTEN);
   if (server.hasArg("act_lt_tap"))
     touchActLeftTap =
         parseTouchAction(server.arg("act_lt_tap"), TOUCH_ACT_DISMISS);
@@ -355,7 +378,9 @@ void handleSave() {
         parseTouchAction(server.arg("act_rt_hld"), TOUCH_ACT_PET);
 
   if (server.hasArg("skin")) {
-    currentEyeSkin = parseEyeSkinArg(server.arg("skin"));
+    EyeSkin nextSkin = parseEyeSkinArg(server.arg("skin"));
+    DisplayLockGuard lock(80);
+    currentEyeSkin = nextSkin;
   }
 
   if (server.hasArg("mem_name"))
@@ -380,15 +405,18 @@ void handleSave() {
   if (server.hasArg("new_mem") && server.arg("new_mem").length() > 0)
     addMemoryFact(server.arg("new_mem"));
 
-  if (server.hasArg("wthr_city"))
-    weatherCity = server.arg("wthr_city");
-  if (server.hasArg("wthr_lat"))
-    weatherLat = server.arg("wthr_lat");
-  if (server.hasArg("wthr_lon"))
-    weatherLon = server.arg("wthr_lon");
-  weatherCity.trim();
-  weatherLat.trim();
-  weatherLon.trim();
+  {
+    DisplayLockGuard lock(80);
+    if (server.hasArg("wthr_city"))
+      weatherCity = server.arg("wthr_city");
+    if (server.hasArg("wthr_lat"))
+      weatherLat = server.arg("wthr_lat");
+    if (server.hasArg("wthr_lon"))
+      weatherLon = server.arg("wthr_lon");
+    weatherCity.trim();
+    weatherLat.trim();
+    weatherLon.trim();
+  }
 
   wifiSSID.trim();
   wifiPassword.trim();

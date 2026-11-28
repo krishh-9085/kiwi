@@ -36,7 +36,7 @@ export default function ContentHeader({
   }
 
   const apBadge = status?.host || config?.host || (config?.hostname ? `${config.hostname}.local` : null) || config?.apSSID || 'kiwi.local'
-  const llmBadge = formatProviderBadge(config?.llm?.provider || config?.llmProvider || status?.llm || 'Gemini')
+  const llmBadge = formatProviderBadge(config?.llm?.provider || config?.llmProvider || status?.llm || 'Groq')
   const sttBadge = formatProviderBadge(config?.stt?.provider || config?.sttProvider || status?.stt || 'Sarvam')
   const ttsBadge = formatProviderBadge(config?.tts?.provider || config?.ttsProvider || status?.tts || 'Sarvam')
 

@@ -19,8 +19,18 @@
 static bool writeChunk(WiFiClient &c, const uint8_t *p, size_t n) {
   if (n == 0) return true;
   char hexBuf[16];
-  snprintf(hexBuf, sizeof(hexBuf), "%X\r\n", (unsigned int)n);
-  if (!clientWriteAll(c, (const uint8_t *)hexBuf, strlen(hexBuf)))
+  int hLen = snprintf(hexBuf, sizeof(hexBuf), "%X\r\n", (unsigned int)n);
+  if (hLen <= 0)
+    return false;
+  if (n <= 2048) {
+    uint8_t frame[2072];
+    memcpy(frame, hexBuf, (size_t)hLen);
+    memcpy(frame + hLen, p, n);
+    frame[hLen + n] = '\r';
+    frame[hLen + n + 1] = '\n';
+    return clientWriteAll(c, frame, (size_t)hLen + n + 2);
+  }
+  if (!clientWriteAll(c, (const uint8_t *)hexBuf, (size_t)hLen))
     return false;
   if (!clientWriteAll(c, p, n))
     return false;
@@ -212,10 +222,31 @@ String recordAndTranscribe(uint32_t recordSeconds) {
   if (!writeChunk(client, wav, 44))
     return bail("upload failed");
 
+  struct SttMicGuard {
+    bool acquired = false;
+    void acquire() {
+      if (!acquired) {
+        wakeWordAcquireMic(150);
+        audioRxLock(200);
+        acquired = true;
+      }
+    }
+    void release() {
+      if (acquired) {
+        audioRxUnlock();
+        wakeWordReleaseMic();
+        acquired = false;
+      }
+    }
+    ~SttMicGuard() { release(); }
+  };
+
   bool hasPreWake = preWakeHasData();
   if (hasPreWake) {
     preWakeWaitBridgeStop(60);
   }
+  SttMicGuard micGuard;
+  micGuard.acquire();
 
   setEmotion(EMOTION_LISTENING);
   pumpUI();
@@ -513,6 +544,8 @@ String recordAndTranscribe(uint32_t recordSeconds) {
         silenceSamples = 0;
         aboveGateSpikes = 0;
         consecutiveSpeechBlocks = 0;
+        peakSpeechEnergy = 0.0f;
+        maxBlkAvg = 0.0f;
         Serial.println("[STT] Wake word concluded with pause; waiting for command in live audio");
       } else {
         // Speech was actively ongoing at the end of pre-wake (continuous utterance: "Alexa, what...")
@@ -668,8 +701,14 @@ String recordAndTranscribe(uint32_t recordSeconds) {
   setEmotion(EMOTION_THINKING);
 
   // Speculatively pre-resolve DNS for active LLM & TTS hosts while waiting for STT response
-  if (llmProvider == "groq") ensureDns("api.groq.com");
-  else ensureDns("generativelanguage.googleapis.com");
+  String llmHost, llmPath;
+  if (llmProvider == "groq") {
+    if (parseUrl(groqEndpoint, llmHost, llmPath)) ensureDns(llmHost);
+    else ensureDns("api.groq.com");
+  } else {
+    if (parseUrl(llmEndpoint, llmHost, llmPath)) ensureDns(llmHost);
+    else ensureDns("generativelanguage.googleapis.com");
+  }
   String ttsHost, ttsPath;
   if (ttsProvider == "fish" || ttsProvider == "fishaudio") {
     if (parseUrl(fishEndpoint, ttsHost, ttsPath)) ensureDns(ttsHost);
@@ -700,7 +739,13 @@ String recordAndTranscribe(uint32_t recordSeconds) {
     if (cancelRequest)
       break;
     while (client.available() && response.length() < 6000) {
-      response += (char)client.read();
+      uint8_t tmp[256];
+      size_t room = (size_t)(6000 - response.length());
+      size_t want = room < sizeof(tmp) ? room : sizeof(tmp);
+      int nr = client.read(tmp, want);
+      if (nr <= 0)
+        break;
+      response.concat((const char *)tmp, nr);
       readStart = millis();
     }
     if (hdrEndIdx < 0) {

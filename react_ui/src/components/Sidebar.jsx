@@ -1,10 +1,10 @@
 import React from 'react'
-import { LayoutDashboard, Smile, Settings, UploadCloud, Sparkles } from 'lucide-react'
+import { LayoutDashboard, Smile, Settings, UploadCloud } from 'lucide-react'
 import { Tooltip } from './Tooltip'
 import KiwiLogo from './KiwiLogo'
 
 const NAV_ITEMS = [
-  { id: 'live', label: 'Dashboard', icon: LayoutDashboard, badge: '3' },
+  { id: 'live', label: 'Dashboard', icon: LayoutDashboard },
   { id: 'faces', label: 'Faces & Studio', icon: Smile },
   { id: 'settings', label: 'Settings & AI', icon: Settings },
   { id: 'ota', label: 'OTA Firmware', icon: UploadCloud }
@@ -56,7 +56,15 @@ export default function Sidebar({ activeTab, onTabChange, status, connected, onT
           padding: '2px 8px', borderRadius: '999px', fontSize: '10px', fontWeight: 800,
           marginBottom: '8px'
         }}>
-          <Sparkles size={11} />
+          <span
+            style={{
+              width: '6px',
+              height: '6px',
+              borderRadius: '50%',
+              background: connected ? '#38BDF8' : '#94A3B8',
+              flexShrink: 0
+            }}
+          />
           <span>{connected ? 'NEURAL LINK ACTIVE' : 'CONNECTING...'}</span>
         </div>
 

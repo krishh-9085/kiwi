@@ -3,14 +3,16 @@ import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import WakeSlider from './ui/WakeSlider'
 
 import {
-  Zap, Moon, Volume2, VolumeX, Sun,
+  Activity, AudioLines, Lightbulb, MessageCircle,
+  Moon, Volume2, VolumeX, Sun,
   Mic, MicOff, Send, SlidersHorizontal,
-  Radio, Sparkles, Clock, RotateCw,
-  Cpu, Wifi, WifiOff, Utensils, Heart
+  Radio, Clock, RotateCw, RotateCcw,
+  Cpu, Wifi, WifiOff, Utensils, Heart, Timer, Sparkles
 } from 'lucide-react'
 
 import FluxSelect from './FluxSelect'
 import RgbControlCard from './RgbControlCard'
+import { PERSONALITY_PRESETS, getPersonalityMeta } from '../data/personalities'
 
 
 
@@ -46,6 +48,11 @@ const MOBILE_BOREDOM_OPTIONS = [
   { val: '10', lbl: '10m' },
   { val: '15', lbl: '15m' },
   { val: '30', lbl: '30m' }
+]
+
+const WAKE_WORD_OPTIONS = [
+  { val: '1', lbl: 'Hey Kiwi' },
+  { val: '0', lbl: 'Alexa' }
 ]
 
 
@@ -91,24 +98,21 @@ const TZ_OPTIONS = [
   { val: '720', lbl: 'NZST (+12:00)' }
 ]
 
-const OFFLINE_PSRAM_FALLBACK = {
-  free: 1951744,
-  total: 2097152,
-  used: 145408,
-  pct: 7
-}
-
 function computeVitals(status) {
   const hasLiveHeap = Boolean(status?.heap?.total > 0)
-  const freeKb = status?.heap?.free ? Math.round(status.heap.free / 1024) : 178
-  const totalKb = status?.heap?.total ? Math.round(status.heap.total / 1024) : 320
-  const ramUsedPct = status?.heap?.pct ?? (freeKb ? Math.round(((totalKb - freeKb) / totalKb) * 100) : 44)
-  const cpuTemp = status?.temp != null ? Math.round(status.temp) : 46
-  const cpuMhz = status?.power?.cpuMhz ?? 160
-  const tempColor = cpuTemp >= 75 ? '#EF4444' : (cpuTemp >= 60 ? '#F59E0B' : '#10B981')
+  const hasLiveTemp = status?.temp != null
+  const freeKb = hasLiveHeap ? Math.round(status.heap.free / 1024) : null
+  const totalKb = hasLiveHeap ? Math.round(status.heap.total / 1024) : null
+  const ramUsedPct = hasLiveHeap
+    ? (status.heap.pct ?? Math.round(((totalKb - freeKb) / totalKb) * 100))
+    : 0
+  const cpuTemp = hasLiveTemp ? Math.round(status.temp) : null
+  const cpuMhz = status?.power?.cpuMhz ?? null
+  const tempColor = cpuTemp == null
+    ? 'var(--text-muted)'
+    : (cpuTemp >= 75 ? '#EF4444' : (cpuTemp >= 60 ? '#F59E0B' : '#10B981'))
 
-  // Show 2MB PSRAM fallback when offline (no live /status yet); hide only if live device reports no PSRAM
-  const psramSrc = status?.psram ?? (!hasLiveHeap ? OFFLINE_PSRAM_FALLBACK : null)
+  const psramSrc = status?.psram
   const hasPsram = Boolean(psramSrc && psramSrc.total > 0)
   const psramTotalKb = hasPsram ? Math.round(psramSrc.total / 1024) : 0
   const psramFreeKb = hasPsram ? Math.round(psramSrc.free / 1024) : 0
@@ -117,17 +121,19 @@ function computeVitals(status) {
   const psramFreeMb = hasPsram ? (psramFreeKb / 1024).toFixed(2) : '0'
   const psramTotalMb = hasPsram ? (psramTotalKb / 1024).toFixed(0) : '0'
 
-  const flashUsed = status?.flash?.used ?? 1648200
-  const flashFree = status?.flash?.free ?? 383416
-  const flashTotal = status?.flash?.total ?? (flashUsed + flashFree)
-  const flashPct = status?.flash?.pct ?? Math.round((flashUsed / flashTotal) * 100)
-  const flashFreeKb = Math.round(flashFree / 1024)
-  const flashFreeMb = (flashFree / (1024 * 1024)).toFixed(2)
-  const flashUsedMb = (flashUsed / (1024 * 1024)).toFixed(2)
-  const flashTotalMb = (flashTotal / (1024 * 1024)).toFixed(2)
-  const flashChipMb = status?.flash?.chip ? Math.round(status.flash.chip / (1024 * 1024)) : 4
+  const hasLiveFlash = Boolean(status?.flash?.total > 0)
+  const flashUsed = hasLiveFlash ? (status.flash.used ?? 0) : null
+  const flashFree = hasLiveFlash ? (status.flash.free ?? 0) : null
+  const flashTotal = hasLiveFlash ? status.flash.total : null
+  const flashPct = hasLiveFlash ? (status.flash.pct ?? Math.round((flashUsed / flashTotal) * 100)) : 0
+  const flashFreeKb = hasLiveFlash ? Math.round(flashFree / 1024) : null
+  const flashFreeMb = hasLiveFlash ? (flashFree / (1024 * 1024)).toFixed(2) : null
+  const flashUsedMb = hasLiveFlash ? (flashUsed / (1024 * 1024)).toFixed(2) : null
+  const flashTotalMb = hasLiveFlash ? (flashTotal / (1024 * 1024)).toFixed(2) : null
+  const flashChipMb = status?.flash?.chip ? Math.round(status.flash.chip / (1024 * 1024)) : null
 
   return {
+    hasLiveHeap, hasLiveFlash,
     freeKb, totalKb, ramUsedPct, cpuTemp, cpuMhz, tempColor,
     hasPsram, psramTotalKb, psramFreeKb, psramUsedKb, psramPct, psramFreeMb, psramTotalMb,
     flashPct, flashFreeKb, flashFreeMb, flashUsedMb, flashTotalMb, flashChipMb
@@ -155,20 +161,6 @@ export default function HomeView({
   onRefresh
 
 }) {
-
-  const [isMobileView, setIsMobileView] = useState(() =>
-    typeof window !== 'undefined' && window.matchMedia
-      ? window.matchMedia('(max-width: 768px)').matches
-      : false
-  )
-
-  useEffect(() => {
-    if (typeof window === 'undefined' || !window.matchMedia) return
-    const mq = window.matchMedia('(max-width: 768px)')
-    const onMqChange = (e) => setIsMobileView(e.matches)
-    mq.addEventListener?.('change', onMqChange)
-  return () => mq.removeEventListener?.('change', onMqChange)
-  }, [])
 
   const [vol, setVol] = useState(70)
   const lastUnmutedVol = useRef(70)
@@ -232,6 +224,33 @@ export default function HomeView({
       pushSliderValue('vol', `/do?vol=${restoreVol}`, true)
     }
   }, [vol, pushSliderValue])
+
+  const handleSpeakerPreset = useCallback((mode) => {
+    sliderHoldUntilRef.current.vol = Date.now() + 1500
+    let targetVol = 70
+    if (mode === 'whisper') {
+      if (vol > 0 && vol <= 30) {
+        targetVol = lastUnmutedVol.current > 30 ? lastUnmutedVol.current : 70
+      } else {
+        if (vol > 30) lastUnmutedVol.current = vol
+        targetVol = 25
+      }
+    } else if (mode === 'loud') {
+      if (vol >= 90) {
+        targetVol = 70
+      } else {
+        if (vol > 0 && vol < 90) lastUnmutedVol.current = vol
+        targetVol = 95
+      }
+    }
+    setVol(targetVol)
+    pushSliderValue('vol', `/do?vol=${targetVol}`, true)
+    onToast?.(
+      targetVol <= 30
+        ? `Whisper mode (${targetVol}%)`
+        : (targetVol >= 90 ? `Loud boost (${targetVol}%)` : `Normal volume (${targetVol}%)`)
+    )
+  }, [vol, pushSliderValue, onToast])
 
   const [bright, setBright] = useState(90)
   const [nightBright, setNightBright] = useState(10)
@@ -324,8 +343,10 @@ export default function HomeView({
   const [localGreetings, setLocalGreetings] = useState(null)
   const [localHungerEnabled, setLocalHungerEnabled] = useState(null)
   const [localWwEnabled, setLocalWwEnabled] = useState(null)
+  const [localWwModel, setLocalWwModel] = useState(null)
   const [localBoredomEnabled, setLocalBoredomEnabled] = useState(null)
   const [localBoredomMins, setLocalBoredomMins] = useState(null)
+  const [localPersonality, setLocalPersonality] = useState(null)
 
   useEffect(() => {
     if (status?.greetings?.enabled != null) setLocalGreetings(status.greetings.enabled)
@@ -337,20 +358,32 @@ export default function HomeView({
     if (status?.wakeWord?.enabled != null) setLocalWwEnabled(status.wakeWord.enabled)
     else if (config?.wakeWord?.enabled != null) setLocalWwEnabled((prev) => (prev === null ? config.wakeWord.enabled : prev))
 
+    if (status?.wakeWord?.model != null) setLocalWwModel(String(status.wakeWord.model))
+    else if (config?.wakeWord?.model != null) setLocalWwModel((prev) => (prev === null ? String(config.wakeWord.model) : prev))
+
     if (status?.boredom != null) setLocalBoredomEnabled(status.boredom)
     else if (config?.boredom?.enabled != null) setLocalBoredomEnabled((prev) => (prev === null ? config.boredom.enabled : prev))
 
     if (status?.boredom_mins != null) setLocalBoredomMins(String(status.boredom_mins))
     else if (config?.boredom?.minutes != null) setLocalBoredomMins((prev) => (prev === null ? String(config.boredom.minutes) : prev))
 
+    if (status?.personality != null) setLocalPersonality(status.personality)
+    else if (config?.personality != null) setLocalPersonality((prev) => (prev === null ? config.personality : prev))
+
     if (status?.sleeping != null) setLocalSleeping(null)
   }, [status, config])
 
   const handleSleepToggle = async () => {
+    const prevSleeping = isSleeping
     const nextSleeping = !isSleeping
     setLocalSleeping(nextSleeping)
     if (onTriggerAction) {
-      await onTriggerAction(`/do?sleep=${nextSleeping ? '1' : '0'}`)
+      const res = await onTriggerAction(`/do?sleep=${nextSleeping ? '1' : '0'}`)
+      if (!res || res.ok === false) {
+        setLocalSleeping(prevSleeping)
+        onToast?.('Device offline — could not update sleep state')
+        return
+      }
     }
     if (onToast) {
       onToast(nextSleeping ? 'Putting Kiwi to sleep...' : 'Waking Kiwi up...')
@@ -359,10 +392,11 @@ export default function HomeView({
 
   // Wake Word state
   const wwEnabled = localWwEnabled ?? status?.wakeWord?.enabled ?? config?.wakeWord?.enabled ?? true
+  const wwModel = String(localWwModel ?? status?.wakeWord?.model ?? config?.wakeWord?.model ?? 1)
 
-  const getWakeWordName = () => 'Alexa'
+  const getWakeWordName = (m = wwModel) => WAKE_WORD_OPTIONS.find((opt) => opt.val === String(m))?.lbl || 'Hey Kiwi'
 
-  const currentWakeWordName = status?.wakeWord?.name || getWakeWordName()
+  const currentWakeWordName = localWwModel != null ? getWakeWordName(localWwModel) : (status?.wakeWord?.name || getWakeWordName(wwModel))
 
   // Boredom state
   const boredomEnabled = localBoredomEnabled ?? status?.boredom ?? config?.boredom?.enabled ?? true
@@ -377,6 +411,11 @@ export default function HomeView({
   const hungerSec = Math.max(0, Number(status?.hunger_sec ?? 0))
   const hungerMeal = status?.meal && status.meal !== 'generic' ? status.meal : 'snack'
   const hungerTimerStr = `${String(Math.floor(hungerSec / 60)).padStart(2, '0')}:${String(hungerSec % 60).padStart(2, '0')}`
+
+  const timerActive = Boolean(status?.timer_active)
+  const timerRinging = Boolean(status?.timer_ringing)
+  const timerSec = Math.max(0, Number(status?.timer_remaining ?? 0))
+  const timerRemainStr = `${String(Math.floor(timerSec / 60)).padStart(2, '0')}:${String(timerSec % 60).padStart(2, '0')}`
 
   // Circadian & Timezone state
   const circEnabled = status?.circadian?.enabled ?? config?.circadian?.enabled ?? true
@@ -491,48 +530,113 @@ export default function HomeView({
 
 
 
+  const handleQuickSoundFx = async (fxId, label) => {
+    const res = await onTriggerAction(`/do?sound=${encodeURIComponent(fxId)}`)
+    if (!res || res.ok === false) {
+      onToast('Device offline — FX did not play')
+      return
+    }
+    onToast(`Played FX: ${label}`)
+  }
+
   const handleWakeWordToggle = async (checked) => {
+    const prev = wwEnabled
     setLocalWwEnabled(checked)
-    await onTriggerAction(`/do?ww_en=${checked ? '1' : '0'}`)
+    const res = await onTriggerAction(`/do?ww_en=${checked ? '1' : '0'}`)
+    if (!res || res.ok === false) {
+      setLocalWwEnabled(prev)
+      onToast('Device offline — Wake Word not changed')
+      return
+    }
     onToast(`Wake Word ${checked ? 'Activated' : 'Disabled'}`)
   }
 
+  const handleWakeWordModelChange = async (nextModel) => {
+    const valStr = String(nextModel)
+    const prev = wwModel
+    setLocalWwModel(valStr)
+    const res = await onTriggerAction(`/do?ww_model=${encodeURIComponent(valStr)}`)
+    if (!res || res.ok === false) {
+      setLocalWwModel(prev)
+      onToast('Device offline — Wake Word model not changed')
+      return
+    }
+    const label = res.name || getWakeWordName(valStr)
+    onToast(`Wake Word switched to "${label}"`)
+  }
+
   const handleBoredomToggle = async (checked) => {
+    const prev = boredomEnabled
     setLocalBoredomEnabled(checked)
-    await onTriggerAction(`/do?boredom=${checked ? '1' : '0'}`)
+    const res = await onTriggerAction(`/do?boredom=${checked ? '1' : '0'}`)
+    if (!res || res.ok === false) {
+      setLocalBoredomEnabled(prev)
+      onToast('Device offline — Idle Chatter not changed')
+      return
+    }
     onToast(`Autonomous Idle Chatter ${checked ? 'Enabled' : 'Disabled'}`)
   }
 
   const handleBoredomInterval = async (mins) => {
+    const prev = boredomMins
     setLocalBoredomMins(String(mins))
-    await onTriggerAction(`/do?boredom_mins=${mins}`)
+    const res = await onTriggerAction(`/do?boredom_mins=${mins}`)
+    if (!res || res.ok === false) {
+      setLocalBoredomMins(prev)
+      onToast('Device offline — interval not updated')
+      return
+    }
     onToast(`Idle interval set to every ${mins} minute(s)`)
   }
 
   const handleGreetingsToggle = async (checked) => {
+    const prev = greetingsEnabled
     setLocalGreetings(checked)
-    await onTriggerAction(`/do?greet_en=${checked ? '1' : '0'}`)
+    const res = await onTriggerAction(`/do?greet_en=${checked ? '1' : '0'}`)
+    if (!res || res.ok === false) {
+      setLocalGreetings(prev)
+      onToast('Device offline — Greetings not changed')
+      return
+    }
     onToast(`Greetings ${checked ? 'Enabled' : 'Disabled'}`)
   }
 
   const handleHungerToggle = async (checked) => {
+    const prev = hungerEnabled
     setLocalHungerEnabled(checked)
-    await onTriggerAction(`/do?hunger_en=${checked ? '1' : '0'}`)
+    const res = await onTriggerAction(`/do?hunger_en=${checked ? '1' : '0'}`)
+    if (!res || res.ok === false) {
+      setLocalHungerEnabled(prev)
+      onToast('Device offline — Hunger Routine not changed')
+      return
+    }
     onToast(`Meal & Hunger Routine ${checked ? 'Enabled' : 'Disabled'}`)
   }
 
   const handleFeedKiwi = async () => {
     const res = await onTriggerAction('/do?feed=1')
-    if (res?.fed) {
+    if (!res || res.ok === false) {
+      if (res?.reason === 'angry' || hungerState === 'angry') {
+        onToast('Kiwi is angry! Hold top 1.2s, 4× tap, or apologize first.')
+      } else {
+        onToast('Device offline — could not feed Kiwi')
+      }
+      return
+    }
+    if (res.fed) {
       onToast('Yummy! Kiwi is fed and happy!')
     } else {
-      onToast(hungerState === 'angry' ? 'Kiwi is angry! Apologize or tickle cheeks first.' : 'Kiwi is already full!')
+      onToast(hungerState === 'angry' ? 'Kiwi is angry! Hold top 1.2s, 4× tap, or apologize first.' : 'Kiwi is already full!')
     }
   }
 
   const handleApologizeKiwi = async () => {
     const res = await onTriggerAction('/do?apologize=1')
-    if (res?.reconciled) {
+    if (!res || res.ok === false) {
+      onToast('Device offline — could not send apology')
+      return
+    }
+    if (res.reconciled) {
       onToast('Kiwi forgave you and is giggling!')
     } else {
       onToast('Kiwi is not angry right now.')
@@ -544,69 +648,198 @@ export default function HomeView({
       onToast('Enable Meal & Hunger Routine first')
       return
     }
-    await onTriggerAction('/do?hunger=snack')
+    const res = await onTriggerAction('/do?hunger=snack')
+    if (!res || res.ok === false) {
+      onToast('Device offline — could not trigger snack')
+      return
+    }
     onToast('Kiwi feels hungry! Feed within 2 minutes.')
   }
 
+  const handleStartTimer = async (sec) => {
+    const res = await onTriggerAction(`/do?timer=${sec}`)
+    if (!res || res.ok === false) {
+      onToast('Device offline — could not start timer')
+      return
+    }
+    onToast(`Timer started for ${Math.round(sec / 60)}m!`)
+  }
+
+  const handleStopTimer = async () => {
+    const cmd = timerRinging ? 'stop' : 'cancel'
+    const res = await onTriggerAction(`/do?timer=${cmd}`)
+    if (!res || res.ok === false) {
+      onToast('Device offline — could not stop timer')
+      return
+    }
+    onToast(timerRinging ? 'Timer alarm silenced!' : 'Timer cancelled.')
+  }
+
+  const currentPersonality = status?.personality || localPersonality || config?.personality || 'friendly'
+
+  const handlePersonalitySelect = async (modeId) => {
+    const prevMode = currentPersonality
+    setLocalPersonality(modeId)
+    const meta = getPersonalityMeta(modeId)
+    if (!onTriggerAction) return
+    const res = await onTriggerAction(`/do?personality=${encodeURIComponent(modeId)}`)
+    if (!res || res.ok === false) {
+      setLocalPersonality(prevMode)
+      onToast?.('Device offline — personality not switched')
+      return
+    }
+    onToast?.(`Personality switched to ${meta.label}!`)
+  }
+
+  const renderPersonalityStrip = (compact = false) => {
+    const activeMeta = getPersonalityMeta(currentPersonality)
+    return (
+      <div style={{
+        background: 'var(--card-subtle)',
+        border: '1px solid var(--border-light)',
+        borderRadius: '12px',
+        padding: compact ? '8px 10px' : '9px 11px',
+        marginBottom: compact ? '0' : '12px'
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px', gap: '8px' }}>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', fontSize: '10.5px', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+            <Sparkles size={11} color={activeMeta.accent} />
+            <span>Personality</span>
+          </span>
+          <span style={{
+            fontSize: '9.5px',
+            fontWeight: 800,
+            padding: '2px 7px',
+            borderRadius: '999px',
+            background: activeMeta.bgTint,
+            color: activeMeta.accent
+          }}>
+            {activeMeta.label} · {activeMeta.badge}
+          </span>
+        </div>
+        <div className="flux-chip-row">
+          {PERSONALITY_PRESETS.map((p) => {
+            const active = currentPersonality === p.id
+            return (
+              <button
+                key={p.id}
+                type="button"
+                onClick={() => handlePersonalitySelect(p.id)}
+                style={{
+                  padding: compact ? '4px 10px' : '4px 11px',
+                  borderRadius: '999px',
+                  background: active ? p.bgTint : 'var(--card-white)',
+                  border: active ? `1px solid ${p.accent}` : '1px solid var(--border-light)',
+                  color: active ? p.accent : 'var(--text-dark)',
+                  fontSize: '11px',
+                  fontWeight: active ? 800 : 600,
+                  fontFamily: 'inherit',
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap',
+                  flexShrink: 0,
+                  transition: 'all 0.14s ease'
+                }}
+              >
+                {p.label}
+              </button>
+            )
+          })}
+        </div>
+      </div>
+    )
+  }
+
+  const handleClearConversation = async () => {
+    const res = await onTriggerAction('/do?e=clear')
+    if (!res || res.ok === false) {
+      onToast('Device offline — could not clear chat')
+      return
+    }
+    onToast('Started a fresh topic!')
+  }
+
   const handleCircadianToggle = async (checked) => {
-    await onTriggerAction(`/do?circ_en=${checked ? '1' : '0'}`)
+    const res = await onTriggerAction(`/do?circ_en=${checked ? '1' : '0'}`)
+    if (!res || res.ok === false) {
+      onToast('Device offline — Sleep Schedule not changed')
+      return
+    }
     onToast(`Sleep Schedule ${checked ? 'Enabled' : 'Disabled'}`)
   }
 
   const handleCircStartChange = async (val) => {
-    await onTriggerAction(`/do?circ_start=${encodeURIComponent(val)}`)
+    const res = await onTriggerAction(`/do?circ_start=${encodeURIComponent(val)}`)
+    if (!res || res.ok === false) {
+      onToast('Device offline — Sleep time not updated')
+      return
+    }
     onToast(`Sleep time set to ${formatTime24To12(val)}`)
   }
 
   const handleCircEndChange = async (val) => {
-    await onTriggerAction(`/do?circ_end=${encodeURIComponent(val)}`)
+    const res = await onTriggerAction(`/do?circ_end=${encodeURIComponent(val)}`)
+    if (!res || res.ok === false) {
+      onToast('Device offline — Wake time not updated')
+      return
+    }
     onToast(`Wake time set to ${formatTime24To12(val)}`)
   }
 
   const handleSnooze = async (mins = 15) => {
+    const prevSleeping = isSleeping
     setLocalSleeping(false)
-    await onTriggerAction(`/do?snooze=${mins}`)
+    const res = await onTriggerAction(`/do?snooze=${mins}`)
+    if (!res || res.ok === false) {
+      setLocalSleeping(prevSleeping)
+      onToast('Device offline — could not snooze')
+      return
+    }
     onToast(`Snoozed sleep for ${mins} minutes`)
   }
 
   const handleEcoSleepToggle = async (checked) => {
-    await onTriggerAction(`/do?eco_sleep=${checked ? '1' : '0'}`)
+    const res = await onTriggerAction(`/do?eco_sleep=${checked ? '1' : '0'}`)
+    if (!res || res.ok === false) {
+      onToast('Device offline — Sleep power mode not changed')
+      return
+    }
     onToast(checked ? 'Eco Hardware Deep Sleep enabled' : 'Desk Mode enabled (Wi-Fi & Zzz live)')
   }
 
   const handleTzChange = async (val) => {
-    await onTriggerAction(`/do?tz_min=${encodeURIComponent(val)}`)
+    const res = await onTriggerAction(`/do?tz_min=${encodeURIComponent(val)}`)
+    if (!res || res.ok === false) {
+      onToast('Device offline — Timezone not updated')
+      return
+    }
     onToast('Timezone updated & NTP syncing...')
   }
 
-
-
   const handleSoundReactToggle = async (checked) => {
-
-    await onTriggerAction(`/do?snd_react=${checked ? '1' : '0'}`)
-
+    const res = await onTriggerAction(`/do?snd_react=${checked ? '1' : '0'}`)
+    if (!res || res.ok === false) {
+      onToast('Device offline — Sound-reactive face not changed')
+      return
+    }
     onToast(`Sound-reactive face ${checked ? 'Enabled' : 'Disabled'}`)
-
   }
-
-
 
   const handleNightModeChange = async (mode) => {
-
-    await onTriggerAction(`/do?night_mode=${mode}`)
-
+    const res = await onTriggerAction(`/do?night_mode=${mode}`)
+    if (!res || res.ok === false) {
+      onToast('Device offline — Night Mode not changed')
+      return
+    }
     onToast(`Night Mode set to ${mode === 0 ? 'Same' : (mode === 1 ? 'Dim' : 'Screen Off')}`)
-
   }
 
-
-
   const handleRgbToggle = async (checked) => {
-
-    await onTriggerAction(`/do?rgb_en=${checked ? '1' : '0'}`)
-
+    const res = await onTriggerAction(`/do?rgb_en=${checked ? '1' : '0'}`)
+    if (!res || res.ok === false) {
+      onToast('Device offline — NeoPixel LED not changed')
+      return
+    }
     onToast(`NeoPixel LED ${checked ? 'Enabled' : 'Disabled'}`)
-
   }
 
 
@@ -617,6 +850,56 @@ export default function HomeView({
   else if (isSpeaking) statusBadge = 'SPEAKING'
   else if (isBusy) statusBadge = 'THINKING'
   else if (isSleeping) statusBadge = 'SLEEPING'
+
+  const renderQuickSoundboardStrip = () => (
+    <div style={{
+      background: 'var(--card-subtle)',
+      border: '1px solid var(--border-light)',
+      borderRadius: '12px',
+      padding: '10px 12px'
+    }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '7px' }}>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: 700, color: 'var(--text-dark)' }}>
+          <AudioLines size={13} color="var(--text-muted)" />
+          <span>Audio Soundboard FX</span>
+        </span>
+        <span style={{ fontSize: '9.5px', fontWeight: 700, color: 'var(--text-muted)' }}>Quick FX</span>
+      </div>
+      <div className="flux-chip-row">
+        {[
+          { id: 'coin', lbl: 'Coin' },
+          { id: 'giggle', lbl: 'Giggle' },
+          { id: 'laser', lbl: 'Laser' },
+          { id: 'fanfare', lbl: 'Fanfare' },
+          { id: 'sparkle', lbl: 'Sparkle' },
+          { id: 'love', lbl: 'Love' },
+          { id: 'violin', lbl: 'Violin' },
+          { id: 'fart', lbl: 'Cheeky' }
+        ].map((fx) => (
+          <button
+            key={fx.id}
+            type="button"
+            onClick={() => handleQuickSoundFx(fx.id, fx.lbl)}
+            style={{
+              padding: '4px 10px',
+              borderRadius: '999px',
+              background: 'var(--card-white)',
+              border: '1px solid var(--border-light)',
+              color: 'var(--text-dark)',
+              fontSize: '10.5px',
+              fontWeight: 700,
+              fontFamily: 'inherit',
+              cursor: 'pointer',
+              whiteSpace: 'nowrap',
+              flexShrink: 0
+            }}
+          >
+            {fx.lbl}
+          </button>
+        ))}
+      </div>
+    </div>
+  )
 
   const renderHardwareSliders = () => {
     const isMuted = vol === 0
@@ -632,12 +915,46 @@ export default function HomeView({
         }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', gap: '8px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              {isMuted ? <VolumeX size={13} color="#F59E0B" /> : <Volume2 size={13} color="#A3E635" />}
+              {isMuted ? <VolumeX size={13} color="#F59E0B" /> : <Volume2 size={13} color="var(--text-muted)" />}
               <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-dark)' }}>
                 Speaker Volume
               </span>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '5px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+              <button
+                type="button"
+                onClick={() => handleSpeakerPreset('whisper')}
+                style={{
+                  border: vol > 0 && vol <= 30 ? '1px solid rgba(168, 85, 247, 0.45)' : '1px solid var(--border-light)',
+                  borderRadius: '999px',
+                  padding: '2px 7px',
+                  fontSize: '10px',
+                  fontWeight: 700,
+                  fontFamily: 'inherit',
+                  cursor: 'pointer',
+                  background: vol > 0 && vol <= 30 ? 'rgba(168, 85, 247, 0.16)' : 'var(--card-muted)',
+                  color: vol > 0 && vol <= 30 ? '#A855F7' : 'var(--text-muted)'
+                }}
+              >
+                Whisper
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSpeakerPreset('loud')}
+                style={{
+                  border: vol >= 90 ? '1px solid rgba(14, 165, 233, 0.45)' : '1px solid var(--border-light)',
+                  borderRadius: '999px',
+                  padding: '2px 7px',
+                  fontSize: '10px',
+                  fontWeight: 700,
+                  fontFamily: 'inherit',
+                  cursor: 'pointer',
+                  background: vol >= 90 ? 'rgba(14, 165, 233, 0.16)' : 'var(--card-muted)',
+                  color: vol >= 90 ? '#0EA5E9' : 'var(--text-muted)'
+                }}
+              >
+                Loud
+              </button>
               <button
                 type="button"
                 onClick={handleToggleMute}
@@ -647,6 +964,7 @@ export default function HomeView({
                   padding: '2px 8px',
                   fontSize: '10px',
                   fontWeight: 700,
+                  fontFamily: 'inherit',
                   cursor: 'pointer',
                   background: isMuted ? 'rgba(245, 158, 11, 0.16)' : 'var(--card-muted)',
                   color: isMuted ? '#F59E0B' : 'var(--text-muted)'
@@ -670,9 +988,9 @@ export default function HomeView({
             min={0}
             max={100}
             step={5}
-            bars={20}
-            height={30}
-            restHeight={15}
+            bars={34}
+            height={48}
+            restHeight={10}
             gap={4}
             fillColor={isMuted ? '#64748B' : 'var(--slider-fill)'}
             trackColor="var(--slider-track)"
@@ -706,7 +1024,7 @@ export default function HomeView({
         }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', gap: '8px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <Sun size={13} color="#0EA5E9" />
+              <Sun size={13} color="var(--text-muted)" />
               <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-dark)' }}>
                 OLED Brightness
               </span>
@@ -749,9 +1067,9 @@ export default function HomeView({
             min={0}
             max={100}
             step={5}
-            bars={20}
-            height={30}
-            restHeight={15}
+            bars={34}
+            height={48}
+            restHeight={10}
             gap={4}
             fillColor="#0ea5e9"
             trackColor="var(--slider-track)"
@@ -786,7 +1104,7 @@ export default function HomeView({
         }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', gap: '8px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <Sparkles size={13} color={rgbEnabled ? '#10B981' : 'var(--text-muted)'} />
+              <Lightbulb size={13} color="var(--text-muted)" />
               <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-dark)' }}>
                 NeoPixel RGB
               </span>
@@ -821,9 +1139,9 @@ export default function HomeView({
             min={0}
             max={100}
             step={5}
-            bars={20}
-            height={30}
-            restHeight={15}
+            bars={34}
+            height={48}
+            restHeight={10}
             gap={4}
             fillColor={rgbEnabled ? '#10B981' : '#64748B'}
             trackColor="var(--slider-track)"
@@ -915,7 +1233,7 @@ export default function HomeView({
             />
             <span className="flux-toggle-slider" />
             <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-dark)', display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
-              <Utensils size={12} color={isAngry ? '#EF4444' : (hungerEnabled ? '#F59E0B' : 'var(--text-muted)')} />
+              <Utensils size={12} color={isAngry ? '#EF4444' : 'var(--text-muted)'} />
               <span>Meal &amp; Hunger</span>
             </span>
           </label>
@@ -939,9 +1257,9 @@ export default function HomeView({
             {!hungerEnabled
               ? 'Meal reminders paused.'
               : isAngry
-                ? `Missed ${hungerMeal}! Tickle cheeks or apologize to make up.`
+                ? `Missed ${hungerMeal}! Hold top 1.2s, 4× tap, or apologize to make up.`
                 : isHungry
-                  ? `Asking for ${hungerMeal}! Hold cheeks or feed within ${hungerTimerStr}.`
+                  ? `Asking for ${hungerMeal}! Hold top 1.2s or feed within ${hungerTimerStr}.`
                   : 'Breakfast 8:30 · Lunch 1:00 · Dinner 8:00'}
           </span>
 
@@ -1012,10 +1330,108 @@ export default function HomeView({
                   flexShrink: 0
                 }}
               >
-                <Utensils size={10} color="#F59E0B" />
+                <Utensils size={10} color="var(--text-muted)" />
                 <span>Ask Snack</span>
               </button>
             )
+          )}
+        </div>
+      </div>
+    )
+  }
+
+  const renderTimerPanel = (isCompact = true) => {
+    const pillColor = timerRinging ? '#DC2626' : (timerActive ? '#0284C7' : 'var(--text-muted)')
+    const pillBg = timerRinging
+      ? 'rgba(239, 68, 68, 0.16)'
+      : (timerActive ? 'rgba(14, 165, 233, 0.14)' : 'var(--card-muted)')
+    const pillText = timerRinging ? 'RINGING' : (timerActive ? timerRemainStr : 'IDLE')
+
+    return (
+      <div style={{
+        background: timerRinging ? 'rgba(239, 68, 68, 0.06)' : 'var(--card-subtle)',
+        border: timerRinging
+          ? '1px solid rgba(239, 68, 68, 0.35)'
+          : (timerActive ? '1px solid rgba(14, 165, 233, 0.32)' : '1px solid var(--border-light)'),
+        borderRadius: '12px',
+        padding: isCompact ? '10px 12px' : '12px 14px',
+        marginBottom: isCompact ? '10px' : '0',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '8px'
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: 700, color: 'var(--text-dark)' }}>
+            <Timer size={13} color={timerRinging ? '#EF4444' : 'var(--text-muted)'} />
+            <span>Robot Timer</span>
+          </span>
+          <span style={{
+            fontSize: '9.5px',
+            fontWeight: 800,
+            padding: '2px 8px',
+            borderRadius: '999px',
+            background: pillBg,
+            color: pillColor,
+            fontVariantNumeric: 'tabular-nums'
+          }}>
+            {pillText}
+          </span>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px', flexWrap: 'wrap' }}>
+          {(timerActive || timerRinging) ? (
+            <>
+              <span style={{ fontSize: '11px', color: timerRinging ? '#EF4444' : 'var(--text-muted)', fontWeight: 600 }}>
+                {timerRinging ? 'Alarm ringing on Kiwi!' : `${timerRemainStr} remaining`}
+              </span>
+              <button
+                type="button"
+                onClick={handleStopTimer}
+                style={{
+                  padding: '4px 10px',
+                  borderRadius: '999px',
+                  border: '1px solid rgba(239, 68, 68, 0.38)',
+                  background: timerRinging ? 'linear-gradient(135deg, #EF4444 0%, #DC2626 100%)' : 'var(--card-white)',
+                  color: timerRinging ? '#FFFFFF' : '#DC2626',
+                  fontSize: '10.5px',
+                  fontWeight: 700,
+                  fontFamily: 'inherit',
+                  cursor: 'pointer'
+                }}
+              >
+                {timerRinging ? 'Stop Alarm' : 'Cancel Timer'}
+              </button>
+            </>
+          ) : (
+            <>
+              <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Quick start:</span>
+              <div style={{ display: 'flex', gap: '5px' }}>
+                {[
+                  { sec: 60, lbl: '1m' },
+                  { sec: 300, lbl: '5m' },
+                  { sec: 600, lbl: '10m' }
+                ].map((p) => (
+                  <button
+                    key={p.sec}
+                    type="button"
+                    onClick={() => handleStartTimer(p.sec)}
+                    style={{
+                      padding: '3px 9px',
+                      borderRadius: '999px',
+                      border: '1px solid var(--border-light)',
+                      background: 'var(--card-white)',
+                      color: 'var(--text-dark)',
+                      fontSize: '10.5px',
+                      fontWeight: 700,
+                      fontFamily: 'inherit',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    {p.lbl}
+                  </button>
+                ))}
+              </div>
+            </>
           )}
         </div>
       </div>
@@ -1208,9 +1624,9 @@ export default function HomeView({
                 min={5}
                 max={100}
                 step={5}
-                bars={16}
-                height={24}
-                restHeight={12}
+                bars={30}
+                height={38}
+                restHeight={9}
                 gap={3}
                 fillColor="#6366F1"
                 trackColor="var(--slider-track)"
@@ -1275,7 +1691,6 @@ export default function HomeView({
     <div>
 
       {/* ================= DESKTOP VIEWPORT (Visible ONLY on > 768px) ================= */}
-      {!isMobileView ? (
       <div className="desktop-console-layout">
 
         {/* 3 EQUALLY DIVIDED COLUMNS GRID */}
@@ -1291,7 +1706,7 @@ export default function HomeView({
 
                 <span className="flux-card-title">
 
-                  <Zap size={15} />
+                  <Activity size={15} />
 
                   <span>Kiwi Live Console</span>
 
@@ -1336,7 +1751,7 @@ export default function HomeView({
                 {/* Header */}
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
                   <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '12px', opacity: 0.9, fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase' }}>
-                    <Cpu size={13} color="#34D399" />
+                    <Cpu size={13} color="rgba(255, 255, 255, 0.72)" />
                     <span>Vitals</span>
                   </span>
                   <span style={{
@@ -1350,7 +1765,9 @@ export default function HomeView({
                     letterSpacing: '0.04em',
                     whiteSpace: 'nowrap'
                   }}>
-                    {vitals.hasPsram ? `ESP32-S3 · ${vitals.cpuMhz} MHz · +${vitals.psramTotalMb}MB` : `ESP32-S3 · ${vitals.cpuMhz} MHz`}
+                    {vitals.cpuMhz != null
+                      ? (vitals.hasPsram ? `ESP32-S3 · ${vitals.cpuMhz} MHz · +${vitals.psramTotalMb}MB` : `ESP32-S3 · ${vitals.cpuMhz} MHz`)
+                      : 'ESP32-S3 · OFFLINE'}
                   </span>
                 </div>
 
@@ -1366,7 +1783,7 @@ export default function HomeView({
                   <div style={{ minWidth: 0 }}>
                     <span style={{ fontSize: '11px', opacity: 0.8, fontWeight: 600, display: 'block' }}>CPU Temp</span>
                     <span style={{ fontSize: '22px', fontWeight: 800, letterSpacing: '-0.02em', color: vitals.tempColor, fontVariantNumeric: 'tabular-nums' }}>
-                      {vitals.cpuTemp}°<span style={{ fontSize: '13px', fontWeight: 600, opacity: 0.85 }}>C</span>
+                      {vitals.cpuTemp != null ? <>{vitals.cpuTemp}°<span style={{ fontSize: '13px', fontWeight: 600, opacity: 0.85 }}>C</span></> : '--'}
                     </span>
                   </div>
 
@@ -1375,7 +1792,7 @@ export default function HomeView({
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '3px' }}>
                       <span style={{ fontSize: '11px', opacity: 0.8, fontWeight: 600 }}>SRAM (Heap)</span>
                       <span style={{ fontSize: '11px', fontWeight: 700, color: '#38BDF8', fontVariantNumeric: 'tabular-nums' }}>
-                        {vitals.freeKb} KB <span style={{ opacity: 0.75, fontWeight: 500, color: '#FFFFFF' }}>free</span>
+                        {vitals.freeKb != null ? <>{vitals.freeKb} KB <span style={{ opacity: 0.75, fontWeight: 500, color: '#FFFFFF' }}>free</span></> : '--'}
                       </span>
                     </div>
                     <div style={{
@@ -1394,8 +1811,8 @@ export default function HomeView({
                       }} />
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '3px' }}>
-                      <span style={{ fontSize: '9px', opacity: 0.7 }}>{vitals.ramUsedPct}% used</span>
-                      <span style={{ fontSize: '9px', opacity: 0.7 }}>{vitals.totalKb} KB total</span>
+                      <span style={{ fontSize: '9px', opacity: 0.7 }}>{vitals.hasLiveHeap ? `${vitals.ramUsedPct}% used` : '--'}</span>
+                      <span style={{ fontSize: '9px', opacity: 0.7 }}>{vitals.totalKb != null ? `${vitals.totalKb} KB total` : '--'}</span>
                     </div>
                   </div>
 
@@ -1435,7 +1852,7 @@ export default function HomeView({
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '3px' }}>
                       <span style={{ fontSize: '11px', opacity: 0.8, fontWeight: 600 }}>Flash App</span>
                       <span style={{ fontSize: '11px', fontWeight: 700, color: '#A78BFA', fontVariantNumeric: 'tabular-nums' }}>
-                        {vitals.flashFreeKb >= 1024 ? `${vitals.flashFreeMb} MB` : `${vitals.flashFreeKb} KB`} <span style={{ opacity: 0.75, fontWeight: 500, color: '#FFFFFF' }}>free</span>
+                        {vitals.flashFreeKb != null ? <>{vitals.flashFreeKb >= 1024 ? `${vitals.flashFreeMb} MB` : `${vitals.flashFreeKb} KB`} <span style={{ opacity: 0.75, fontWeight: 500, color: '#FFFFFF' }}>free</span></> : '--'}
                       </span>
                     </div>
                     <div style={{
@@ -1454,14 +1871,17 @@ export default function HomeView({
                       }} />
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '3px' }}>
-                      <span style={{ fontSize: '9px', opacity: 0.7 }}>{vitals.flashPct}% ({vitals.flashUsedMb}M)</span>
-                      <span style={{ fontSize: '9px', opacity: 0.7 }}>{vitals.flashTotalMb}M App</span>
+                      <span style={{ fontSize: '9px', opacity: 0.7 }}>{vitals.hasLiveFlash ? `${vitals.flashPct}% (${vitals.flashUsedMb}M)` : '--'}</span>
+                      <span style={{ fontSize: '9px', opacity: 0.7 }}>{vitals.flashTotalMb != null ? `${vitals.flashTotalMb}M App` : '--'}</span>
                     </div>
                   </div>
                 </div>
               </div>
 
 
+
+              {/* Personality Quick Switcher */}
+              {renderPersonalityStrip(false)}
 
               {/* Prompt Box + Glowing Mic */}
               <form onSubmit={(e) => { e.preventDefault(); handleSendPrompt(); }} style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
@@ -1532,7 +1952,7 @@ export default function HomeView({
 
               {/* Last Conversation Bubble */}
 
-              {(status?.question || status?.answer) && (
+              {(status?.question || status?.answer || (status?.history ?? 0) > 0) && (
 
                 <div style={{
 
@@ -1540,17 +1960,38 @@ export default function HomeView({
 
                   borderRadius: '12px', padding: '10px 12px', marginBottom: '14px',
 
-                  fontSize: '12px', display: 'flex', flexDirection: 'column', gap: '3px'
+                  fontSize: '12px', display: 'flex', flexDirection: 'column', gap: '4px'
 
                 }}>
 
-                  {status.question && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ fontSize: '10px', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                      Last Chat{status?.history ? ` · ${status.history} turns` : ''}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={handleClearConversation}
+                      style={{
+                        display: 'inline-flex', alignItems: 'center', gap: '4px',
+                        padding: '2px 8px', borderRadius: '999px',
+                        border: '1px solid var(--border-light)',
+                        background: 'var(--card-white)',
+                        color: 'var(--text-muted)',
+                        fontSize: '10px', fontWeight: 700, fontFamily: 'inherit', cursor: 'pointer'
+                      }}
+                    >
+                      <RotateCcw size={10} />
+                      <span>New Topic</span>
+                    </button>
+                  </div>
+
+                  {status?.question && (
 
                     <div><strong style={{ color: 'var(--text-muted)' }}>You:</strong> {status.question}</div>
 
                   )}
 
-                  {status.answer && (
+                  {status?.answer && (
 
                     <div><strong style={{ color: 'var(--text-dark)' }}>Kiwi:</strong> {status.answer}</div>
 
@@ -1566,7 +2007,8 @@ export default function HomeView({
                   onColorChange={(hex) => onTriggerAction(`/do?rgb_color=${encodeURIComponent(hex.replace('#', ''))}`)}
                   onClearOverride={() => onTriggerAction('/do?rgb_clear=1')}
                   onToggleRgb={handleRgbToggle}
-                  initialColor="#38BDF8"
+                  initialColor={status?.rgbLed?.color || '#38BDF8'}
+                  rgbOverride={Boolean(status?.rgbLed?.override)}
                   currentEmotion={status?.emotion}
                   rgbEnabled={status?.rgbLed?.enabled ?? true}
                   showTitle={false}
@@ -1581,11 +2023,11 @@ export default function HomeView({
             {/* Telemetry Progress Bars */}
             <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: '12px', marginTop: '10px' }}>
               <div className="flux-progress-row">
-                <span className="flux-progress-val">{status?.heap?.pct != null ? `${100 - status.heap.pct}%` : '55%'}</span>
+                <span className="flux-progress-val">{vitals.hasLiveHeap ? `${100 - vitals.ramUsedPct}%` : '--'}</span>
                 <div className="flux-progress-track">
-                  <div className="flux-progress-fill-purple" style={{ width: status?.heap?.pct != null ? `${100 - status.heap.pct}%` : '55%' }} />
+                  <div className="flux-progress-fill-purple" style={{ width: vitals.hasLiveHeap ? `${100 - vitals.ramUsedPct}%` : '0%' }} />
                 </div>
-                <span className="flux-progress-label">Free Heap ({status?.heap?.free ? Math.round(status.heap.free / 1024) : 178} KB)</span>
+                <span className="flux-progress-label">Free Heap ({vitals.freeKb != null ? `${vitals.freeKb} KB` : '--'})</span>
               </div>
 
               {vitals.hasPsram ? (
@@ -1713,22 +2155,20 @@ export default function HomeView({
 
 
 
-                {/* Wake Word Model Badge */}
+                {/* Wake Word Model Switcher */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', flexShrink: 0 }}>
                     Model:
                   </label>
-                  <span style={{
-                    fontSize: '11px',
-                    fontWeight: 700,
-                    color: 'var(--text-dark)',
-                    background: 'var(--card-subtle)',
-                    border: '1px solid var(--border-light)',
-                    padding: '3px 9px',
-                    borderRadius: '6px'
-                  }}>
-                    Alexa
-                  </span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <FluxSelect
+                      name="ww_model"
+                      compact={true}
+                      value={wwModel}
+                      onChange={(e) => handleWakeWordModelChange(e.target.value)}
+                      options={WAKE_WORD_OPTIONS}
+                    />
+                  </div>
                 </div>
 
 
@@ -1744,9 +2184,11 @@ export default function HomeView({
 
 
               {/* Hardware Sliders: Volume, OLED Brightness & NeoPixel RGB */}
-              <div style={{ marginBottom: '16px' }}>
+              <div style={{ marginBottom: '12px' }}>
                 {renderHardwareSliders()}
               </div>
+
+              {renderQuickSoundboardStrip()}
 
             </div>
 
@@ -1764,7 +2206,7 @@ export default function HomeView({
 
                 <span className="flux-card-title">
 
-                  <Sparkles size={15} color="#38BDF8" />
+                  <MessageCircle size={15} />
 
                   <span>Chatter & Greetings</span>
 
@@ -1969,6 +2411,9 @@ export default function HomeView({
             {/* MEAL & HUNGER PANEL */}
             {renderHungerPanel(true)}
 
+            {/* ROBOT TIMER PANEL */}
+            {renderTimerPanel(true)}
+
             {/* PUT TO SLEEP / SCHEDULE PANEL */}
             {renderSleepSchedulePanel(true)}
 
@@ -1977,8 +2422,8 @@ export default function HomeView({
         </div>
 
       </div>
-      ) : (
-      /* ================= MOBILE PHONE VIEW (Visible ONLY on <= 768px) ================= */
+
+      {/* ================= MOBILE PHONE VIEW (Visible ONLY on <= 768px) ================= */}
 
       <div className="mobile-console-layout">
         {/* Hero Greeting: Welcome back, {ownerName} */}
@@ -2017,7 +2462,7 @@ export default function HomeView({
               {/* Header */}
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px', width: '100%' }}>
                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', fontSize: '10.5px', fontWeight: 800, color: 'var(--text-dark)', letterSpacing: '0.04em', textTransform: 'uppercase' }}>
-                  <Cpu size={12} color="#10B981" />
+                  <Cpu size={12} color="var(--text-muted)" />
                   <span>Vitals</span>
                 </span>
                 <span style={{
@@ -2052,7 +2497,7 @@ export default function HomeView({
                   fontWeight: 700,
                   fontVariantNumeric: 'tabular-nums'
                 }}>
-                  CPU · {vitals.cpuMhz} MHz
+                  {vitals.cpuMhz != null ? `CPU · ${vitals.cpuMhz} MHz` : 'CPU · --'}
                 </span>
                 <span style={{
                   fontSize: '10.5px',
@@ -2060,10 +2505,10 @@ export default function HomeView({
                   fontVariantNumeric: 'tabular-nums',
                   padding: '1px 6px',
                   borderRadius: '999px',
-                  background: `${vitals.tempColor}22`,
+                  background: vitals.cpuTemp != null ? `${vitals.tempColor}22` : 'var(--card-white)',
                   color: vitals.tempColor
                 }}>
-                  {vitals.cpuTemp}°C
+                  {vitals.cpuTemp != null ? `${vitals.cpuTemp}°C` : '--'}
                 </span>
               </div>
 
@@ -2074,12 +2519,12 @@ export default function HomeView({
                     key: 'sram',
                     label: 'SRAM',
                     labelColor: 'var(--text-dark)',
-                    freeText: `${vitals.freeKb} KB`,
+                    freeText: vitals.freeKb != null ? `${vitals.freeKb} KB` : '--',
                     freeColor: '#38BDF8',
                     pct: vitals.ramUsedPct,
                     barColor: vitals.ramUsedPct > 85 ? '#EF4444' : '#0EA5E9',
-                    leftSub: `${vitals.ramUsedPct}% used`,
-                    rightSub: `${vitals.totalKb} KB`
+                    leftSub: vitals.hasLiveHeap ? `${vitals.ramUsedPct}% used` : '--',
+                    rightSub: vitals.totalKb != null ? `${vitals.totalKb} KB` : '--'
                   },
                   ...(vitals.hasPsram ? [{
                     key: 'psram',
@@ -2096,19 +2541,19 @@ export default function HomeView({
                     key: 'flash',
                     label: 'App Flash',
                     labelColor: 'var(--text-dark)',
-                    freeText: vitals.flashFreeKb >= 1024 ? `${vitals.flashFreeMb} MB` : `${vitals.flashFreeKb} KB`,
+                    freeText: vitals.flashFreeKb != null ? (vitals.flashFreeKb >= 1024 ? `${vitals.flashFreeMb} MB` : `${vitals.flashFreeKb} KB`) : '--',
                     freeColor: '#A78BFA',
                     pct: vitals.flashPct,
                     barColor: vitals.flashPct > 90 ? '#EF4444' : '#8B5CF6',
-                    leftSub: `${vitals.flashPct}% (${vitals.flashUsedMb}M)`,
-                    rightSub: `${vitals.flashTotalMb}M App`
+                    leftSub: vitals.hasLiveFlash ? `${vitals.flashPct}% (${vitals.flashUsedMb}M)` : '--',
+                    rightSub: vitals.flashTotalMb != null ? `${vitals.flashTotalMb}M App` : '--'
                   }
                 ].map((m) => (
                   <div key={m.key}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '4px', gap: '4px' }}>
                       <span style={{ fontSize: '10px', color: m.labelColor, fontWeight: 700, whiteSpace: 'nowrap' }}>{m.label}</span>
                       <span style={{ fontSize: '10px', fontWeight: 800, color: m.freeColor, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
-                        {m.freeText} <span style={{ opacity: 0.65, fontWeight: 500, color: 'var(--text-muted)' }}>free</span>
+                        {m.freeText}{m.freeText !== '--' && <span style={{ opacity: 0.65, fontWeight: 500, color: 'var(--text-muted)' }}> free</span>}
                       </span>
                     </div>
                     <div style={{
@@ -2140,7 +2585,8 @@ export default function HomeView({
               onColorChange={(hex) => onTriggerAction(`/do?rgb_color=${encodeURIComponent(hex.replace('#', ''))}`)}
               onClearOverride={() => onTriggerAction('/do?rgb_clear=1')}
               onToggleRgb={handleRgbToggle}
-              initialColor="#38BDF8"
+              initialColor={status?.rgbLed?.color || '#38BDF8'}
+              rgbOverride={Boolean(status?.rgbLed?.override)}
               currentEmotion={status?.emotion}
               rgbEnabled={status?.rgbLed?.enabled ?? true}
               showTitle={false}
@@ -2317,7 +2763,7 @@ export default function HomeView({
                   on: greetingsEnabled,
                   onToggle: () => handleGreetingsToggle(!greetingsEnabled),
                   accent: '#10B981',
-                  icon: <Sun size={11} color={greetingsEnabled ? '#10B981' : 'var(--text-muted)'} />,
+                  icon: <Sun size={11} color="var(--text-muted)" />,
                   sub: (
                     <div style={{
                       fontSize: '9px',
@@ -2338,18 +2784,41 @@ export default function HomeView({
                   on: wwEnabled,
                   onToggle: () => handleWakeWordToggle(!wwEnabled),
                   accent: '#0EA5E9',
-                  icon: <Radio size={11} color={wwEnabled ? '#0EA5E9' : 'var(--text-muted)'} />,
+                  icon: <Radio size={11} color="var(--text-muted)" />,
                   sub: (
-                    <div style={{
-                      fontSize: '9px',
-                      color: wwEnabled ? (status?.wakeWord?.listening ? '#38BDF8' : '#F59E0B') : 'var(--text-muted)',
-                      fontWeight: wwEnabled ? 700 : 500,
-                      marginTop: '1px',
-                      whiteSpace: 'nowrap',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis'
-                    }}>
-                      {wwEnabled ? `Alexa · ${status?.wakeWord?.listening ? 'Live' : 'Paused'}` : 'Off'}
+                    <div
+                      onClick={(e) => e.stopPropagation()}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '5px',
+                        marginTop: '2px',
+                        maxWidth: '100%'
+                      }}
+                    >
+                      <div style={{
+                        display: 'inline-block',
+                        minWidth: '72px',
+                        opacity: wwEnabled ? 1 : 0.55,
+                        transition: 'opacity 0.15s ease'
+                      }}>
+                        <FluxSelect
+                          micro={true}
+                          value={wwModel}
+                          onChange={(e) => handleWakeWordModelChange(e.target.value)}
+                          options={WAKE_WORD_OPTIONS}
+                        />
+                      </div>
+                      <span
+                        title={wwEnabled ? (status?.wakeWord?.listening ? 'Listening Live' : 'Paused') : 'Off'}
+                        style={{
+                          width: '6px',
+                          height: '6px',
+                          borderRadius: '999px',
+                          flexShrink: 0,
+                          background: wwEnabled ? (status?.wakeWord?.listening ? '#38BDF8' : '#F59E0B') : 'var(--text-muted)'
+                        }}
+                      />
                     </div>
                   )
                 },
@@ -2359,7 +2828,7 @@ export default function HomeView({
                   on: boredomEnabled,
                   onToggle: () => handleBoredomToggle(!boredomEnabled),
                   accent: '#A855F7',
-                  icon: <Sparkles size={11} color={boredomEnabled ? '#A855F7' : 'var(--text-muted)'} />,
+                  icon: <MessageCircle size={11} color="var(--text-muted)" />,
                   sub: (
                     <div
                       onClick={(e) => e.stopPropagation()}
@@ -2387,7 +2856,7 @@ export default function HomeView({
                   onToggle: () => handleToggleMute(),
                   accent: '#65A30D',
                   icon: vol > 0
-                    ? <Volume2 size={11} color="#84CC16" />
+                    ? <Volume2 size={11} color="var(--text-muted)" />
                     : <VolumeX size={11} color="#F43F5E" />,
                   sub: (
                     <div style={{
@@ -2469,6 +2938,11 @@ export default function HomeView({
           {renderHungerPanel(false)}
         </div>
 
+        {/* Mobile Robot Timer Card */}
+        <div className="flux-white-card" style={{ padding: '14px 16px' }}>
+          {renderTimerPanel(false)}
+        </div>
+
         {/* Voice & Text Prompt Box for Mobile */}
         {(() => {
           const canSend = Boolean(promptText.trim()) && !sendingPrompt
@@ -2481,7 +2955,7 @@ export default function HomeView({
             <div className="flux-white-card" style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
               <div className="flux-card-header" style={{ marginBottom: 0 }}>
                 <span className="flux-card-title">
-                  <Sparkles size={15} style={{ color: '#0EA5E9' }} />
+                  <MessageCircle size={15} />
                   <span>Ask Kiwi</span>
                 </span>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -2522,7 +2996,7 @@ export default function HomeView({
                       transition: 'all 0.15s ease'
                     }}
                   >
-                    {isListening ? <MicOff size={12} color="#EF4444" /> : <Mic size={12} color="#0EA5E9" />}
+                    {isListening ? <MicOff size={12} color="#EF4444" /> : <Mic size={12} color="var(--text-muted)" />}
                     <span>{isListening ? 'Stop' : 'Voice'}</span>
                   </button>
                 </div>
@@ -2584,6 +3058,8 @@ export default function HomeView({
                 </button>
               </form>
 
+              {renderPersonalityStrip(true)}
+
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
                 {quickPrompts.map((chip) => (
                   <button
@@ -2610,7 +3086,7 @@ export default function HomeView({
                 ))}
               </div>
 
-              {(status?.question || status?.answer) && (
+              {(status?.question || status?.answer || (status?.history ?? 0) > 0) && (
                 <div style={{
                   background: 'var(--card-subtle)',
                   border: '1px solid var(--border-light)',
@@ -2620,13 +3096,33 @@ export default function HomeView({
                   lineHeight: 1.45,
                   display: 'flex',
                   flexDirection: 'column',
-                  gap: '4px',
+                  gap: '5px',
                   wordBreak: 'break-word'
                 }}>
-                  {status.question && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ fontSize: '10px', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                      Last Chat{status?.history ? ` · ${status.history} turns` : ''}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={handleClearConversation}
+                      style={{
+                        display: 'inline-flex', alignItems: 'center', gap: '4px',
+                        padding: '2px 8px', borderRadius: '999px',
+                        border: '1px solid var(--border-light)',
+                        background: 'var(--card-white)',
+                        color: 'var(--text-muted)',
+                        fontSize: '10px', fontWeight: 700, fontFamily: 'inherit', cursor: 'pointer'
+                      }}
+                    >
+                      <RotateCcw size={10} />
+                      <span>New Topic</span>
+                    </button>
+                  </div>
+                  {status?.question && (
                     <div><strong style={{ color: 'var(--text-muted)' }}>You:</strong> {status.question}</div>
                   )}
-                  {status.answer && (
+                  {status?.answer && (
                     <div><strong style={{ color: 'var(--text-dark)' }}>Kiwi:</strong> {status.answer}</div>
                   )}
                 </div>
@@ -2666,6 +3162,10 @@ export default function HomeView({
           </div>
 
           {renderHardwareSliders()}
+
+          <div style={{ marginTop: '12px' }}>
+            {renderQuickSoundboardStrip()}
+          </div>
         </div>
 
 
@@ -2746,7 +3246,6 @@ export default function HomeView({
 
 
       </div>
-      )}
 
     </div>
 

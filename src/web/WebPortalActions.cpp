@@ -19,6 +19,7 @@
 #include "web/WebPortalApiInternal.h"
 #include <WebServer.h>
 #include <WiFi.h>
+#include <esp_core_dump.h>
 
 void handleDoAction() {
   server.sendHeader("Access-Control-Allow-Origin", "*");
@@ -113,6 +114,17 @@ void handleDoAction() {
     return;
   }
 
+  // Erase stored flash crash coredump after inspection
+  if (server.hasArg("clearcoredump")) {
+    esp_core_dump_image_erase();
+    bootHasCoredump = false;
+    bootCoredumpTask = "";
+    bootCoredumpReason = "";
+    invalidateStatusCache();
+    server.send(200, "application/json", "{\"ok\":true,\"coredumpCleared\":true}");
+    return;
+  }
+
   // Hunger & Mood System Triggers
   if (server.hasArg("hunger")) {
     String mArg = server.arg("hunger");
@@ -166,6 +178,8 @@ void handleDoAction() {
   // Soundboard FX
   if (server.hasArg("sound")) {
     String s = server.arg("sound");
+    s.trim();
+    s.toLowerCase();
     if (s == "fart") {
       setEmotion(EMOTION_SMUG);
       soundFart();
@@ -184,9 +198,44 @@ void handleDoAction() {
     } else if (s == "violin") {
       setEmotion(EMOTION_CRYING);
       soundSadViolin();
+    } else if (s == "sparkle") {
+      setEmotion(EMOTION_HAPPY);
+      flourish = FL_SPARKLE;
+      flourishT0 = millis();
+      soundPetSparkle();
+    } else if (s == "love") {
+      setEmotion(EMOTION_HEARTS);
+      flourish = FL_HEART;
+      flourishT0 = millis();
+      soundPetLove();
+    } else if (s == "kiss") {
+      setEmotion(EMOTION_WINK);
+      flourish = FL_HEART;
+      flourishT0 = millis();
+      soundPetKiss();
+    } else if (s == "surprised") {
+      setEmotion(EMOTION_SURPRISED);
+      soundPetSurprised();
+    } else if (s == "sleepy") {
+      setEmotion(EMOTION_BORED);
+      soundPetSleepy();
+    } else if (s == "laugh") {
+      setEmotion(EMOTION_LAUGHING);
+      flourish = FL_NOTE;
+      flourishT0 = millis();
+      soundLaughing();
+    } else if (s == "cry") {
+      setEmotion(EMOTION_CRYING);
+      soundCrying();
+    } else if (s == "chime") {
+      setEmotion(EMOTION_EXCITED);
+      flourish = FL_STAR;
+      flourishT0 = millis();
+      playBootChime();
     }
     returnIdleAt = millis() + 3000;
-    server.send(200, "application/json", "{\"ok\":true}");
+    server.send(200, "application/json",
+                "{\"ok\":true,\"sound\":\"" + escJson(s) + "\"}");
     return;
   }
 
@@ -209,12 +258,15 @@ void handleDoAction() {
   }
   if (server.hasArg("banner")) {
     stopAnimation();
-    bannerText = server.arg("banner");
-    bannerActive = true;
-    bannerScrollX = SCREEN_WIDTH + 10;
-    bannerLoops = 0;
-    showClockScreen = false;
-    showWeatherScreen = false;
+    {
+      DisplayLockGuard lock(80);
+      bannerText = server.arg("banner");
+      bannerActive = true;
+      bannerScrollX = SCREEN_WIDTH + 10;
+      bannerLoops = 0;
+      showClockScreen = false;
+      showWeatherScreen = false;
+    }
     soundPetSparkle();
     server.send(200, "application/json", "{\"ok\":true}");
     return;
@@ -256,7 +308,11 @@ void handleDoAction() {
   // Custom OLED Eye Skin Action
   if (server.hasArg("skin")) {
     String s = server.arg("skin");
-    currentEyeSkin = parseEyeSkinArg(s);
+    EyeSkin nextSkin = parseEyeSkinArg(s);
+    {
+      DisplayLockGuard lock(80);
+      currentEyeSkin = nextSkin;
+    }
     s.toLowerCase();
 
     saveConfig();
@@ -459,6 +515,7 @@ void handleDoAction() {
     wakeWordCutoff = server.arg("ww_cutoff").toFloat();
     wakeWordSetSensitivity(wakeWordCutoff);
     saveConfig();
+    invalidateStatusCache();
     Serial.printf("[PORTAL] Wake-word cutoff set to: %.2f\n", wakeWordCutoff);
     server.send(200, "application/json",
                 "{\"ok\":true,\"ww_cutoff\":" + String(wakeWordCutoff, 2) +
@@ -466,9 +523,14 @@ void handleDoAction() {
     return;
   }
 
-  // Live Wake-Word Model Switch (0=Alexa)
+  // Live Wake-Word Model Switch (0=Alexa, 1=Hey Kiwi)
   if (server.hasArg("ww_model")) {
-    uint8_t mIdx = 0; // Alexa
+    uint8_t mIdx = WAKE_WORD_HEY_KIWI;
+    if (!wakeWordParseModelIndex(server.arg("ww_model"), mIdx)) {
+      server.send(400, "application/json",
+                  "{\"ok\":false,\"error\":\"Invalid wake-word model\"}");
+      return;
+    }
     bool ok = wakeWordSetModel(mIdx);
     if (!ok) {
       server.send(200, "application/json",
@@ -476,6 +538,7 @@ void handleDoAction() {
       return;
     }
     saveConfig();
+    invalidateStatusCache();
     Serial.printf(
         "[PORTAL] Wake-word model switched to: %d (%s), cutoff: %.2f\n",
         wakeWordModel, wakeWordGetModelName(), wakeWordCutoff);
@@ -491,8 +554,9 @@ void handleDoAction() {
     float g = server.arg("ww_gain").toFloat();
     wakeWordSetGain(g);
     saveConfig();
+    invalidateStatusCache();
     server.send(200, "application/json",
-                "{\"ok\":true,\"ww_gain\":" + String(wakeWordGain, 2) + "}");
+                "{\"ok\":true,\"ww_gain\":" + String(wakeWordGain, 1) + "}");
     return;
   }
 
@@ -501,6 +565,7 @@ void handleDoAction() {
     bool sp = parsePortalBool(server.arg("ww_spike"));
     wakeWordSetSpikeTrigger(sp);
     saveConfig();
+    invalidateStatusCache();
     server.send(200, "application/json",
                 "{\"ok\":true,\"ww_spike\":" +
                     String(wakeWordSpikeTrigger ? "true" : "false") + "}");
@@ -535,14 +600,21 @@ void handleDoAction() {
     return;
   }
 
-  // Live Microphone Slot Selection (0=Left, 1=Right)
+  // Live Microphone Slot Selection (0=Left, 1=Right, -1=Auto)
   if (server.hasArg("micslot")) {
     int s = server.arg("micslot").toInt();
-    setMicSlot(s, false, true);
-    setMicSlotLocked(true);
+    if (s < 0) {
+      setMicSlotLocked(false);
+    } else {
+      setMicSlot(s, false, true);
+      setMicSlotLocked(true);
+    }
     saveConfig();
+    invalidateStatusCache();
     server.send(200, "application/json",
-                "{\"ok\":true,\"micslot\":" + String(getMicSlot()) + "}");
+                "{\"ok\":true,\"micslot\":" + String(getMicSlot()) +
+                    ",\"micslot_lock\":" +
+                    String(isMicSlotLocked() ? "true" : "false") + "}");
     return;
   }
 
@@ -551,8 +623,10 @@ void handleDoAction() {
     bool lk = parsePortalBool(server.arg("micslot_lock"));
     setMicSlotLocked(lk);
     saveConfig();
+    invalidateStatusCache();
     server.send(200, "application/json",
-                "{\"ok\":true,\"micslot_lock\":" +
+                "{\"ok\":true,\"micslot\":" + String(getMicSlot()) +
+                    ",\"micslot_lock\":" +
                     String(isMicSlotLocked() ? "true" : "false") + "}");
     return;
   }
@@ -690,6 +764,66 @@ void handleDoAction() {
     Serial.printf("[PORTAL] Speaker volume live set to: %d%%\n", speakerVolume);
     server.send(200, "application/json",
                 "{\"ok\":true,\"volume\":" + String(speakerVolume) + "}");
+    return;
+  }
+
+  // Live Face Tween Duration (0 to 1000 ms)
+  if (server.hasArg("face_tween")) {
+    int ft = constrain(server.arg("face_tween").toInt(), 0, 1000);
+    faceTweenMs = ft;
+    saveConfig();
+    invalidateStatusCache();
+    server.send(200, "application/json",
+                "{\"ok\":true,\"face_tween\":" + String(faceTweenMs) + "}");
+    return;
+  }
+
+  // Live Reply Language ("", "hi", "en")
+  if (server.hasArg("replang")) {
+    String rl = server.arg("replang");
+    rl.trim();
+    rl.toLowerCase();
+    if (rl == "auto")
+      rl = "";
+    if (rl != "" && rl != "hi" && rl != "en")
+      rl = "";
+    replyLang = rl;
+    saveConfig();
+    invalidateStatusCache();
+    server.send(200, "application/json",
+                "{\"ok\":true,\"replang\":\"" + escJson(replyLang) + "\"}");
+    return;
+  }
+
+  // Live Personality Mode Switch ("friendly", "funny", "serious", "bakchod", "cute", "custom")
+  if (server.hasArg("personality")) {
+    String p = server.arg("personality");
+    bool changed = (personalityMode != normalizePersonalityMode(p));
+    applyPersonalityMode(p, true, true, true);
+    invalidateStatusCache();
+    server.send(200, "application/json",
+                "{\"ok\":true,\"personality\":\"" + escJson(personalityMode) +
+                    "\",\"label\":\"" +
+                    escJson(String(getPersonalityLabel(personalityMode))) +
+                    "\",\"historyCleared\":" +
+                    String(changed ? "true" : "false") +
+                    ",\"prompt\":\"" + escJson(getEffectiveSystemPrompt()) +
+                    "\"}");
+    return;
+  }
+
+  // Live Sarvam TTS Speech Speed ("pace", 0.75 - 1.35)
+  if (server.hasArg("tts_pace")) {
+    float sp = server.arg("tts_pace").toFloat();
+    if (sp < 0.75f)
+      sp = 0.75f;
+    if (sp > 1.35f)
+      sp = 1.35f;
+    ttsPace = sp;
+    saveConfig();
+    invalidateStatusCache();
+    server.send(200, "application/json",
+                "{\"ok\":true,\"tts_pace\":" + String(ttsPace, 2) + "}");
     return;
   }
 

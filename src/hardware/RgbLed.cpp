@@ -109,6 +109,28 @@ void rgbLedClearOverride() {
   }
 }
 
+bool rgbLedGetOverride() {
+  bool active = s_overrideActive;
+  if (rgbLock()) {
+    active = s_overrideActive;
+    rgbUnlock();
+  }
+  return active;
+}
+
+void rgbLedGetOverrideColor(uint8_t &r, uint8_t &g, uint8_t &b) {
+  if (rgbLock()) {
+    r = s_overrideR;
+    g = s_overrideG;
+    b = s_overrideB;
+    rgbUnlock();
+  } else {
+    r = s_overrideR;
+    g = s_overrideG;
+    b = s_overrideB;
+  }
+}
+
 void rgbLedShow(uint8_t r, uint8_t g, uint8_t b) {
   if (!rgbLock())
     return;
@@ -276,9 +298,9 @@ void rgbLedUpdate() {
   s_currG += (targetG - s_currG) * 0.18f;
   s_currB += (targetB - s_currB) * 0.18f;
 
-  uint8_t outR = (uint8_t)fminf(fmaxf(s_currR, 0.0f), 255.0f);
-  uint8_t outG = (uint8_t)fminf(fmaxf(s_currG, 0.0f), 255.0f);
-  uint8_t outB = (uint8_t)fminf(fmaxf(s_currB, 0.0f), 255.0f);
+  uint8_t outR = (uint8_t)fminf(fmaxf(roundf(s_currR), 0.0f), 255.0f);
+  uint8_t outG = (uint8_t)fminf(fmaxf(roundf(s_currG), 0.0f), 255.0f);
+  uint8_t outB = (uint8_t)fminf(fmaxf(roundf(s_currB), 0.0f), 255.0f);
 
   rgbWriteIfChangedLocked(outR, outG, outB);
   rgbUnlock();

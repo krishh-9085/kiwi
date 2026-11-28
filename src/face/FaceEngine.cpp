@@ -2,6 +2,7 @@
 #include "face/AnimationEngine.h"
 #include "config/AppConfig.h"
 #include "face/BootWakeAnim.h"
+#include "face/FaceDisplay.h"
 #include "face/SleepyWakeAnim.h"
 #include "hardware/AudioEngine.h"
 #include "hardware/SoundLevel.h"
@@ -68,7 +69,7 @@ void updateFaceFrameRate() {
 #include "power/PowerManager.h"
 
 void tickFace() {
-  if (!oledOK || otaInProgress)
+  if (!oledOK || otaInProgress || !displayPowerState)
     return;
   if (!displayLock(0))
     return;

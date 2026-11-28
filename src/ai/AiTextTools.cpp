@@ -236,7 +236,7 @@ String normalizeFishAudioTags(const String &text) {
   return s;
 }
 
-String cleanForSpeech(const String &in) {
+String cleanForSpeech(const String &in, bool keepAudioCues) {
   String s = in;
   int t1 = s.indexOf("<think>");
   while (t1 >= 0) {
@@ -251,20 +251,23 @@ String cleanForSpeech(const String &in) {
   }
   s.trim();
 
-  // For Fish Audio: keep vocal emotion tags, remove internal robot tags & normalize tags
-  if (ttsProvider == "fish" || ttsProvider == "fishaudio") {
-    s = stripRobotTags(s);
-    static const char *unwantedTags[] = {
-        "[happy]", "(happy)", "[joy]", "(joy)",
-        nullptr};
-    for (int k = 0; unwantedTags[k] != nullptr; k++) {
-      s.replace(String(unwantedTags[k]), "");
+  // Always strip internal robot control tags ([ACTION:], [MEM:], [FOLLOWUP:])
+  s = stripRobotTags(s);
+
+  if (!keepAudioCues) {
+    if (ttsProvider == "fish" || ttsProvider == "fishaudio") {
+      // Keep Fish vocal tags, remove unsupported happiness tags & normalize aliases
+      static const char *unwantedTags[] = {
+          "[happy]", "(happy)", "[joy]", "(joy)",
+          nullptr};
+      for (int k = 0; unwantedTags[k] != nullptr; k++) {
+        s.replace(String(unwantedTags[k]), "");
+      }
+      s = normalizeFishAudioTags(s);
+    } else {
+      // For Sarvam / other TTS: strip all vocal emotion cues
+      s = stripAudioCues(s);
     }
-    s = normalizeFishAudioTags(s);
-  } else {
-    // For other TTS: strip all vocal emotion cues and internal robot tags
-    s = stripAudioCues(s);
-    s = stripRobotTags(s);
   }
 
   String o;

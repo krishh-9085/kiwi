@@ -1,7 +1,10 @@
 #include "hardware/AudioEngine.h"
 #include "config/AppConfig.h"
+#include "hardware/WakeWordEngine.h"
 #include "power/PowerManager.h"
 #include <Preferences.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/semphr.h>
 #include <math.h>
 #include <string.h>
 
@@ -10,10 +13,18 @@ void pumpUI();
 // ---- Tunables (override in AppConfig.h or build flags) ----------------------
 
 // Tone peak level at maximum volume, as a fraction of full scale.
-// Calibrated for 4-ohm 3W / 8-ohm speakers: 0.35f provides a clear, warm acoustic presence
-// (~4 dB below speech peaks), preventing piercing resonance and power rail brownouts on 5V.
 #ifndef TONE_PEAK_FRACTION
+#if SPEAKER_COIN_8OHM_1W
+#define TONE_PEAK_FRACTION                                                     \
+  0.28f // Clean, crisp chimes paired with 3.40x gain (~0.95 peak at 100%, zero
+        // overdrive)
+#else
+// Calibrated for 4-ohm 3W / 8-ohm speakers: 0.35f provides a clear, warm
+// acoustic presence
+// (~4 dB below speech peaks), preventing piercing resonance and power rail
+// brownouts on 5V.
 #define TONE_PEAK_FRACTION 0.35f
+#endif
 #endif
 
 // Samples generated per tone-synth block (stereo frames).
@@ -41,11 +52,23 @@ static volatile SpkOwner spkOwner = SPK_NONE;
 // ---- Sample helpers ---------------------------------------------------------
 
 // Soft-clip a sample given in int16 units and return a left-justified 32-bit
-// I2S frame value. A linear response is maintained through normal speech (|n| <= 0.80),
-// with a smooth rational soft-knee applied only above 0.80 to protect 4-ohm / 3W speakers
-// and the MAX98357A amplifier from square-wave clipping without adding harmonic distortion.
+// I2S frame value. Under SPEAKER_COIN_8OHM_1W, a C1-continuous knee above 0.72f
+// prevents coil buzz/square clipping on 1W coin speakers while staying linear
+// below.
 static inline int32_t toFrame32(float x) {
   float n = x * (1.0f / 32768.0f);
+#if SPEAKER_COIN_8OHM_1W
+  constexpr float kKnee = 0.76f;
+  constexpr float kCap = 0.92f;
+  constexpr float kSpan = kCap - kKnee;
+  if (n > kKnee) {
+    float diff = n - kKnee;
+    n = kKnee + kSpan * (diff / (kSpan + diff));
+  } else if (n < -kKnee) {
+    float diff = -n - kKnee;
+    n = -(kKnee + kSpan * (diff / (kSpan + diff)));
+  }
+#else
   if (n > 0.80f) {
     float diff = n - 0.80f;
     n = 0.80f + 0.20f * (diff / (1.0f + diff));
@@ -53,6 +76,7 @@ static inline int32_t toFrame32(float x) {
     float diff = -n - 0.80f;
     n = -(0.80f + 0.20f * (diff / (1.0f + diff)));
   }
+#endif
   if (n > 1.0f)
     n = 1.0f;
   else if (n < -1.0f)
@@ -61,17 +85,152 @@ static inline int32_t toFrame32(float x) {
   return s16 * 65536; // equivalent to << 16 without shifting a negative value
 }
 
+#if SPEAKER_COIN_8OHM_1W
+// 2nd-order Biquad EQ (350 Hz HPF + 450 Hz de-mud + 3.2 kHz crisp presence)
+struct SpeechBiquad {
+  float b0 = 1.0f, b1 = 0.0f, b2 = 0.0f, a1 = 0.0f, a2 = 0.0f;
+  float z1 = 0.0f, z2 = 0.0f;
+
+  void setHpf(float freqHz, float fs) {
+    const float w = 2.0f * (float)M_PI * freqHz / fs;
+    const float cs = cosf(w), sn = sinf(w);
+    const float alpha = sn / (2.0f * 0.70710678f);
+    const float a0 = 1.0f + alpha;
+    b0 = (1.0f + cs) * 0.5f / a0;
+    b1 = -(1.0f + cs) / a0;
+    b2 = b0;
+    a1 = -2.0f * cs / a0;
+    a2 = (1.0f - alpha) / a0;
+  }
+
+  void setPeaking(float freqHz, float q, float gainDb, float fs) {
+    const float A = powf(10.0f, gainDb / 40.0f);
+    const float w = 2.0f * (float)M_PI * freqHz / fs;
+    const float cs = cosf(w), sn = sinf(w);
+    const float alpha = sn / (2.0f * q);
+    const float a0 = 1.0f + alpha / A;
+    b0 = (1.0f + alpha * A) / a0;
+    b1 = -2.0f * cs / a0;
+    b2 = (1.0f - alpha * A) / a0;
+    a1 = -2.0f * cs / a0;
+    a2 = (1.0f - alpha / A) / a0;
+  }
+
+  inline float process(float x) {
+    float y = b0 * x + z1;
+    z1 = b1 * x - a1 * y + z2;
+    z2 = b2 * x - a2 * y;
+    return y;
+  }
+  inline void reset() {
+    z1 = 0.0f;
+    z2 = 0.0f;
+  }
+};
+
+static SpeechBiquad s_coinHpf;
+static SpeechBiquad s_coinDeMud;
+static SpeechBiquad s_coinPresence;
+static float s_inAgcEnv = 0.0f;
+static float s_outAgcEnv = 0.0f;
+static bool s_coinDspReady = false;
+
+static void initSpeechDsp() {
+  if (s_coinDspReady)
+    return;
+  const float fs = (float)SAMPLE_RATE;
+
+  // 350 Hz HPF strips boxy sub-bass boom inside tiny sealed plastic enclosures
+  s_coinHpf.setHpf(350.0f, fs);
+  // -4.5 dB cut @ 450 Hz removes boxy/muddy low-mid overhang so voices stay
+  // clear
+  s_coinDeMud.setPeaking(450.0f, 0.90f, -4.5f, fs);
+  // +5.5 dB presence & consonant crispness @ 3.2 kHz
+  s_coinPresence.setPeaking(3200.0f, 0.75f, 5.5f, fs);
+
+  s_coinDspReady = true;
+}
+
+static inline void resetSpeechDsp() {
+  initSpeechDsp();
+  s_coinHpf.reset();
+  s_coinDeMud.reset();
+  s_coinPresence.reset();
+  s_inAgcEnv = 0.0f;
+  s_outAgcEnv = 0.0f;
+}
+
+static inline float processSpeechDsp(float x) {
+  initSpeechDsp();
+  return s_coinPresence.process(s_coinDeMud.process(s_coinHpf.process(x)));
+}
+
+// Crisp speech leveler + clean limiter tuned for MAX98357A GAIN->GND (+15 dB):
+// Keeps quiet speech clear without clipping the 5V Class-D amp on bass
+// transients.
+static inline float levelAndLimitSpeechSample(float dspSample, float volGain) {
+  if (volGain <= 0.0f)
+    return 0.0f;
+
+  float inMag = fabsf(dspSample) * (1.0f / 32768.0f);
+  if (inMag > s_inAgcEnv) {
+    s_inAgcEnv += (inMag - s_inAgcEnv) * 0.020f;
+  } else {
+    s_inAgcEnv += (inMag - s_inAgcEnv) * 0.0005f;
+  }
+
+  float effectiveGain = volGain;
+  if (s_inAgcEnv > 0.015f) {
+    float volNorm = volGain / SPEAKER_MAX_GAIN;
+    float desiredGain = (0.36f * volNorm) / s_inAgcEnv;
+    float gate = (s_inAgcEnv - 0.015f) * 50.0f;
+    if (gate > 1.0f)
+      gate = 1.0f;
+    float maxGain = volGain * 1.9f;
+    if (desiredGain > maxGain)
+      desiredGain = maxGain;
+    if (desiredGain > volGain) {
+      effectiveGain = volGain + gate * (desiredGain - volGain);
+    }
+  }
+
+  float boosted = dspSample * effectiveGain;
+  float outMag = fabsf(boosted) * (1.0f / 32768.0f);
+  if (outMag > s_outAgcEnv) {
+    s_outAgcEnv += (outMag - s_outAgcEnv) *
+                   0.080f; // Fast <1ms attack catches crisp transients cleanly
+  } else {
+    s_outAgcEnv += (outMag - s_outAgcEnv) * 0.0009f;
+  }
+
+  constexpr float kLimitThresh = 0.62f;
+  if (s_outAgcEnv > kLimitThresh) {
+    float excess = s_outAgcEnv - kLimitThresh;
+    float targetEnv = kLimitThresh + excess / (1.0f + 3.5f * excess);
+    boosted *= (targetEnv / s_outAgcEnv);
+  }
+  return boosted;
+}
+#else
+static inline void resetSpeechDsp() {}
+static inline float processSpeechDsp(float x) { return x; }
+static inline float levelAndLimitSpeechSample(float dspSample, float volGain) {
+  return dspSample * volGain;
+}
+#endif
+
 // Perceptual volume curve: speakerVolume 0..100 -> gain 0..SPEAKER_MAX_GAIN.
-// Uses a v^1.5 psychoacoustic curve for smooth, natural loudness progression,
-// multiplied by SPEAKER_MAX_GAIN so 100% volume utilizes the full 3W capacity
-// of 4-ohm desktop speakers with cloud TTS audio.
 static inline float volumeGain() {
   float v = speakerVolume / 100.0f;
   if (v <= 0.0f)
     return 0.0f;
   if (v >= 1.0f)
     return SPEAKER_MAX_GAIN;
+#if SPEAKER_COIN_8OHM_1W
+  return powf(v, 1.10f) * SPEAKER_MAX_GAIN;
+#else
   return (v * sqrtf(v)) * SPEAKER_MAX_GAIN;
+#endif
 }
 
 // ============================================================
@@ -86,6 +245,11 @@ static uint32_t toneNoteTotalSamples = 0;
 static uint32_t toneTotalSamplesSent = 0;
 static uint32_t toneTailUntilMs = 0;
 static volatile bool tonePlaying = false;
+static volatile bool s_toneMoveMouth = true;
+static volatile float s_speechAmplitude = 0.0f;
+static volatile float s_speechBrightness = 0.3f;
+static volatile float s_toneMouthAmplitude = 0.0f;
+static volatile float s_tonePitchNorm = 0.5f;
 static float tonePhase = 0.0f;
 static float vibPhase = 0.0f;
 static float tremPhase = 0.0f;
@@ -96,7 +260,7 @@ static inline uint32_t toneMsToSamples(int ms) {
   return (uint32_t)(((uint64_t)ms * (uint64_t)SAMPLE_RATE + 500ULL) / 1000ULL);
 }
 
-void playToneQueue(Tone *tones, int count) {
+void playToneQueue(Tone *tones, int count, bool lipSync) {
   powerNotifyActivity();
   if (spkOwner == SPK_SPEECH) {
     if (!busyProcessing) {
@@ -122,17 +286,17 @@ void playToneQueue(Tone *tones, int count) {
   tonePhase = 0.0f;
   vibPhase = 0.0f;
   tremPhase = 0.0f;
+  s_toneMoveMouth = lipSync;
+  if (!lipSync) {
+    s_toneMouthAmplitude = 0.0f;
+  }
   tonePlaying = true;
   spkOwner = SPK_TONE;
 }
 
-bool isTonePlaying() {
-  return tonePlaying;
-}
+bool isTonePlaying() { return tonePlaying; }
 
-bool isSpeechPlaying() {
-  return spkOwner == SPK_SPEECH;
-}
+bool isSpeechPlaying() { return spkOwner == SPK_SPEECH; }
 
 bool kiwiIsOutputting() {
   if (spkOwner == SPK_SPEECH)
@@ -145,11 +309,6 @@ bool kiwiIsOutputting() {
 }
 
 // Live speech & vocal-tone envelope followers for real-time lip sync
-static volatile float s_speechAmplitude = 0.0f;
-static volatile float s_speechBrightness = 0.3f;
-static volatile float s_toneMouthAmplitude = 0.0f;
-static volatile float s_tonePitchNorm = 0.5f;
-
 struct LipSyncFrame {
   float amp;
   float bright;
@@ -285,8 +444,7 @@ void updateTonePlayer() {
         continue;
       }
 
-      const float duration =
-          (float)toneNoteTotalSamples / (float)SAMPLE_RATE;
+      const float duration = (float)toneNoteTotalSamples / (float)SAMPLE_RATE;
       const float attack = fminf(0.015f, duration * 0.25f);
       const float release = fminf(0.025f, duration * 0.35f);
       const float t = (float)sampleIdx / (float)SAMPLE_RATE;
@@ -354,8 +512,7 @@ void updateTonePlayer() {
       float raw = 0.0f;
       switch (cur.shape) {
       case SHAPE_WARM_VOCAL: {
-        raw = sinf(tonePhase) * 0.70f +
-              sinf(2.0f * tonePhase) * 0.22f +
+        raw = sinf(tonePhase) * 0.70f + sinf(2.0f * tonePhase) * 0.22f +
               sinf(3.0f * tonePhase) * 0.08f;
         break;
       }
@@ -378,8 +535,7 @@ void updateTonePlayer() {
         break;
       }
       case SHAPE_BELL: {
-        raw = sinf(tonePhase) * 0.74f +
-              sinf(2.0f * tonePhase) * 0.16f +
+        raw = sinf(tonePhase) * 0.74f + sinf(2.0f * tonePhase) * 0.16f +
               sinf(2.756f * tonePhase) * 0.10f;
         break;
       }
@@ -388,10 +544,19 @@ void updateTonePlayer() {
         break;
       }
 
-      bool isVocalTone = (cur.shape == SHAPE_WARM_VOCAL ||
-                          cur.shape == SHAPE_WARBLE ||
-                          cur.shape == SHAPE_CHIRP ||
-                          cur.shape == SHAPE_PURR);
+#if SPEAKER_COIN_8OHM_1W
+      // Low notes (< 220 Hz) rely on 2nd/3rd harmonics to stay audible on small
+      // coin speakers
+      if (instFreq < 220.0f) {
+        raw = raw * 0.72f + sinf(2.0f * tonePhase) * 0.28f +
+              sinf(3.0f * tonePhase) * 0.12f;
+      }
+#endif
+
+      bool isVocalTone =
+          s_toneMoveMouth &&
+          (cur.shape == SHAPE_WARM_VOCAL || cur.shape == SHAPE_WARBLE ||
+           cur.shape == SHAPE_CHIRP || cur.shape == SHAPE_PURR);
       if (isVocalTone) {
         blockHasVocal = true;
         blockEnvSum += env;
@@ -436,46 +601,37 @@ void updateTonePlayer() {
 
 // Affectionate Wall-E Coo ("Awww <3")
 void soundPetLove() {
-  Tone t[] = {
-    {380, 140, 580, SHAPE_WARM_VOCAL, 0, 0},
-    {0, 25, 0, SHAPE_SINE, 0, 0},
-    {720, 220, 480, SHAPE_WARM_VOCAL, 25, 14}
-  };
+  Tone t[] = {{380, 140, 580, SHAPE_WARM_VOCAL, 0, 0},
+              {0, 25, 0, SHAPE_SINE, 0, 0},
+              {720, 220, 480, SHAPE_WARM_VOCAL, 25, 14}};
   playToneQueue(t, 3);
 }
 
 // Cute Robot Tickle & Giggle (warm, playful chuckles)
 void soundPetGiggle() {
   Tone t[] = {
-    {580, 35, 720, SHAPE_WARM_VOCAL, 0, 0},
-    {0, 15, 0, SHAPE_SINE, 0, 0},
-    {640, 35, 780, SHAPE_WARM_VOCAL, 0, 0},
-    {0, 15, 0, SHAPE_SINE, 0, 0},
-    {700, 38, 860, SHAPE_WARM_VOCAL, 0, 0},
-    {0, 15, 0, SHAPE_SINE, 0, 0},
-    {780, 42, 960, SHAPE_WARM_VOCAL, 0, 0},
-    {0, 18, 0, SHAPE_SINE, 0, 0},
-    {860, 70, 1050, SHAPE_WARM_VOCAL, 25, 16}
-  };
+      {580, 35, 720, SHAPE_WARM_VOCAL, 0, 0},   {0, 15, 0, SHAPE_SINE, 0, 0},
+      {640, 35, 780, SHAPE_WARM_VOCAL, 0, 0},   {0, 15, 0, SHAPE_SINE, 0, 0},
+      {700, 38, 860, SHAPE_WARM_VOCAL, 0, 0},   {0, 15, 0, SHAPE_SINE, 0, 0},
+      {780, 42, 960, SHAPE_WARM_VOCAL, 0, 0},   {0, 18, 0, SHAPE_SINE, 0, 0},
+      {860, 70, 1050, SHAPE_WARM_VOCAL, 25, 16}};
   playToneQueue(t, 9);
 }
 
 // Tiny Bashful Squeak / Murmur
 void soundPetShy() {
-  Tone t[] = {
-    {440, 95, 620, SHAPE_WARM_VOCAL, 0, 0},
-    {620, 160, 400, SHAPE_WARM_VOCAL, 20, 14}
-  };
+  Tone t[] = {{440, 95, 620, SHAPE_WARM_VOCAL, 0, 0},
+              {620, 160, 400, SHAPE_WARM_VOCAL, 20, 14}};
   playToneQueue(t, 2);
 }
 
 // Gentle, magical glockenspiel chime (warm bell trill without piercing screech)
 void soundPetSparkle() {
   Tone t[] = {
-    {659, 42, 784, SHAPE_WARM_VOCAL, 0, 0},     // E5 -> G5
-    {784, 42, 988, SHAPE_WARM_VOCAL, 0, 0},     // G5 -> B5
-    {988, 48, 1175, SHAPE_WARM_VOCAL, 0, 0},    // B5 -> D6
-    {1318, 110, 1318, SHAPE_WARM_VOCAL, 20, 12} // E6 warm bell ring
+      {659, 42, 784, SHAPE_WARM_VOCAL, 0, 0},     // E5 -> G5
+      {784, 42, 988, SHAPE_WARM_VOCAL, 0, 0},     // G5 -> B5
+      {988, 48, 1175, SHAPE_WARM_VOCAL, 0, 0},    // B5 -> D6
+      {1318, 110, 1318, SHAPE_WARM_VOCAL, 20, 12} // E6 warm bell ring
   };
   playToneQueue(t, 4);
 }
@@ -483,101 +639,90 @@ void soundPetSparkle() {
 // Combined non-blocking coin + sparkle chime when fed
 void soundFeedHappy() {
   Tone t[] = {
-    {523.3f, 65, 0, SHAPE_BELL, 0, 0},          // C5
-    {784.0f, 115, 0, SHAPE_BELL, 10, 7},        // G5
-    {659, 42, 784, SHAPE_WARM_VOCAL, 0, 0},     // E5 -> G5
-    {784, 42, 988, SHAPE_WARM_VOCAL, 0, 0},     // G5 -> B5
-    {988, 48, 1175, SHAPE_WARM_VOCAL, 0, 0},    // B5 -> D6
-    {1318, 110, 1318, SHAPE_WARM_VOCAL, 20, 12} // E6
+      {523.3f, 65, 0, SHAPE_BELL, 0, 0},          // C5
+      {784.0f, 115, 0, SHAPE_BELL, 10, 7},        // G5
+      {659, 42, 784, SHAPE_WARM_VOCAL, 0, 0},     // E5 -> G5
+      {784, 42, 988, SHAPE_WARM_VOCAL, 0, 0},     // G5 -> B5
+      {988, 48, 1175, SHAPE_WARM_VOCAL, 0, 0},    // B5 -> D6
+      {1318, 110, 1318, SHAPE_WARM_VOCAL, 20, 12} // E6
   };
   playToneQueue(t, 6);
 }
 
 // Cute "Mwah / Squeak-Pop"
 void soundPetKiss() {
-  Tone t[] = {
-    {480, 45, 960, SHAPE_WARM_VOCAL, 0, 0},
-    {960, 50, 580, SHAPE_WARM_VOCAL, 0, 0}
-  };
+  Tone t[] = {{480, 45, 960, SHAPE_WARM_VOCAL, 0, 0},
+              {960, 50, 580, SHAPE_WARM_VOCAL, 0, 0}};
   playToneQueue(t, 2);
 }
 
 // Warm Purring Robot Kitten (low motor rumble + coo)
 void soundPetCuddle() {
-  Tone t[] = {
-    {105, 140, 115, SHAPE_PURR, 0, 0},
-    {115, 160, 125, SHAPE_PURR, 0, 0},
-    {520, 90, 880, SHAPE_WARM_VOCAL, 0, 0}
-  };
+  Tone t[] = {{105, 140, 115, SHAPE_PURR, 0, 0},
+              {115, 160, 125, SHAPE_PURR, 0, 0},
+              {520, 90, 880, SHAPE_WARM_VOCAL, 0, 0}};
   playToneQueue(t, 3);
 }
 
 // Wall-E / BB-8 Excited Warble ("Ta-da!")
 void soundPetPlayful() {
-  Tone t[] = {
-    {520, 60, 680, SHAPE_WARM_VOCAL, 0, 0},
-    {680, 85, 880, SHAPE_WARM_VOCAL, 25, 16},
-    {880, 110, 1050, SHAPE_WARM_VOCAL, 18, 12}
-  };
+  Tone t[] = {{520, 60, 680, SHAPE_WARM_VOCAL, 0, 0},
+              {680, 85, 880, SHAPE_WARM_VOCAL, 25, 16},
+              {880, 110, 1050, SHAPE_WARM_VOCAL, 18, 12}};
   playToneQueue(t, 3);
 }
 
 // Cute Robot Yawn & Sigh
 void soundPetSleepy() {
-  Tone t[] = {
-    {340, 220, 580, SHAPE_WARM_VOCAL, 0, 0},
-    {580, 360, 220, SHAPE_WARM_VOCAL, 16, 10}
-  };
+  Tone t[] = {{340, 220, 580, SHAPE_WARM_VOCAL, 0, 0},
+              {580, 360, 220, SHAPE_WARM_VOCAL, 16, 10}};
   playToneQueue(t, 2);
 }
 
 // Chest-Puffed Robot Fanfare
 void soundPetProud() {
-  Tone t[] = {
-    {440, 70, 554, SHAPE_WARM_VOCAL, 0, 0},
-    {554, 70, 659, SHAPE_WARM_VOCAL, 0, 0},
-    {659, 90, 880, SHAPE_WARM_VOCAL, 0, 0},
-    {880, 200, 1100, SHAPE_WARM_VOCAL, 25, 14}
-  };
+  Tone t[] = {{440, 70, 554, SHAPE_WARM_VOCAL, 0, 0},
+              {554, 70, 659, SHAPE_WARM_VOCAL, 0, 0},
+              {659, 90, 880, SHAPE_WARM_VOCAL, 0, 0},
+              {880, 200, 1100, SHAPE_WARM_VOCAL, 25, 14}};
   playToneQueue(t, 4);
 }
 
 // Wall-E Iconic "Whoooa?!"
 void soundPetSurprised() {
-  Tone t[] = {
-    {360, 100, 920, SHAPE_WARM_VOCAL, 0, 0},
-    {920, 90, 820, SHAPE_WARM_VOCAL, 30, 16}
-  };
+  Tone t[] = {{360, 100, 920, SHAPE_WARM_VOCAL, 0, 0},
+              {920, 90, 820, SHAPE_WARM_VOCAL, 30, 16}};
   playToneQueue(t, 2);
 }
 
-// Luxurious Ambient Robot Wakeup Chime (Warm F-Major-9 acoustic marimba/celesta arpeggio)
+// Luxurious Ambient Robot Wakeup Chime (Warm F-Major-9 acoustic marimba/celesta
+// arpeggio)
 void playBootChime() {
   Tone t[] = {
-    {349.2f, 90, 0, SHAPE_BELL, 0, 0},    // F4 (warm foundational root note)
-    {440.0f, 95, 0, SHAPE_BELL, 0, 0},    // A4 (major third warmth)
-    {523.3f, 110, 0, SHAPE_BELL, 0, 0},   // C5 (pure fifth clarity)
-    {659.3f, 280, 0, SHAPE_BELL, 8, 6}    // E5 (major seventh resolution with gentle acoustic ring-out)
+      {349.2f, 90, 0, SHAPE_BELL, 0, 0},  // F4 (warm foundational root note)
+      {440.0f, 95, 0, SHAPE_BELL, 0, 0},  // A4 (major third warmth)
+      {523.3f, 110, 0, SHAPE_BELL, 0, 0}, // C5 (pure fifth clarity)
+      {659.3f, 280, 0, SHAPE_BELL, 8, 6}
+      // E5 (major seventh resolution with gentle acoustic ring-out)
   };
   playToneQueue(t, 4);
 }
 
 // Wall-E Disappointed "Uh-Oh / Sad Wah"
 void soundError() {
-  Tone t[] = {
-    {580, 110, 380, SHAPE_WARM_VOCAL, 0, 0},
-    {0, 25, 0, SHAPE_SINE, 0, 0},
-    {420, 180, 240, SHAPE_WARM_VOCAL, 25, 12}
-  };
+  Tone t[] = {{580, 110, 380, SHAPE_WARM_VOCAL, 0, 0},
+              {0, 25, 0, SHAPE_SINE, 0, 0},
+              {420, 180, 240, SHAPE_WARM_VOCAL, 25, 12}};
   playToneQueue(t, 3);
 }
 
 // Elegant Westminster Clock Chime (Classic 3-note antique clock bell motif)
 void soundClock() {
   Tone t[] = {
-    {392.0f, 110, 0, SHAPE_BELL, 0, 0},   // G4 (deep bell toll)
-    {659.3f, 130, 0, SHAPE_BELL, 0, 0},   // E5 (high melodic bell)
-    {523.3f, 260, 0, SHAPE_BELL, 6, 5}    // C5 (warm home clock bell resolution with lingering ring-out)
+      {392.0f, 110, 0, SHAPE_BELL, 0, 0}, // G4 (deep bell toll)
+      {659.3f, 130, 0, SHAPE_BELL, 0, 0}, // E5 (high melodic bell)
+      {523.3f, 260, 0, SHAPE_BELL, 6, 5}
+      // C5 (warm home clock bell resolution with lingering ring-out)
   };
   playToneQueue(t, 3);
 }
@@ -585,44 +730,42 @@ void soundClock() {
 // Refreshing Morning Breeze & Wind-Chime (Atmospheric pentatonic weather chime)
 void soundWeather() {
   Tone t[] = {
-    {587.3f, 90, 0, SHAPE_BELL, 0, 0},    // D5 (gentle airy droplet)
-    {784.0f, 110, 0, SHAPE_BELL, 0, 0},   // G5 (bright sunny sky)
-    {880.0f, 240, 0, SHAPE_BELL, 14, 8}   // A5 (fluttering wind chime in a gentle breeze)
+      {587.3f, 90, 0, SHAPE_BELL, 0, 0},  // D5 (gentle airy droplet)
+      {784.0f, 110, 0, SHAPE_BELL, 0, 0}, // G5 (bright sunny sky)
+      {880.0f, 240, 0, SHAPE_BELL, 14, 8}
+      // A5 (fluttering wind chime in a gentle breeze)
   };
   playToneQueue(t, 3);
 }
 
 // Inquisitive Wall-E "Hm?"
 void soundListening() {
-  Tone t[] = {
-    {440, 80, 660, SHAPE_WARM_VOCAL, 0, 0}
-  };
+  Tone t[] = {{440, 80, 660, SHAPE_WARM_VOCAL, 0, 0}};
   playToneQueue(t, 1);
 }
 
-// Soft, tactile water-drop / bubble tap on touch (warm, pleasant, non-fatiguing)
+// Soft, tactile water-drop / bubble tap on touch (warm, pleasant,
+// non-fatiguing)
 void soundTouchBlip() {
-  Tone t[] = {
-    {520, 26, 380, SHAPE_WARM_VOCAL, 0, 0}
-  };
-  playToneQueue(t, 1);
+  Tone t[] = {{520, 26, 380, SHAPE_WARM_VOCAL, 0, 0}};
+  playToneQueue(t, 1, false);
 }
 
 // Smooth Marimba Volume Cues
 void soundVolUp() {
   Tone t[] = {
-    {440, 35, 440, SHAPE_WARM_VOCAL, 0, 0}, // A4
-    {554, 45, 554, SHAPE_WARM_VOCAL, 0, 0}  // C#5
+      {440, 35, 440, SHAPE_WARM_VOCAL, 0, 0}, // A4
+      {554, 45, 554, SHAPE_WARM_VOCAL, 0, 0}  // C#5
   };
-  playToneQueue(t, 2);
+  playToneQueue(t, 2, false);
 }
 
 void soundVolDown() {
   Tone t[] = {
-    {554, 35, 554, SHAPE_WARM_VOCAL, 0, 0}, // C#5
-    {440, 45, 440, SHAPE_WARM_VOCAL, 0, 0}  // A4
+      {554, 35, 554, SHAPE_WARM_VOCAL, 0, 0}, // C#5
+      {440, 45, 440, SHAPE_WARM_VOCAL, 0, 0}  // A4
   };
-  playToneQueue(t, 2);
+  playToneQueue(t, 2, false);
 }
 
 // ============================================================
@@ -630,125 +773,154 @@ void soundVolDown() {
 // ============================================================
 void soundFart() {
   Tone t[] = {
-    {135, 60, 95, SHAPE_PURR, 30, 15},
-    {95, 70, 75, SHAPE_PURR, 25, 12},
-    {150, 40, 85, SHAPE_PURR, 20, 10},
-    {85, 90, 65, SHAPE_PURR, 35, 14},
-    {110, 80, 55, SHAPE_PURR, 25, 10},
-    {65, 140, 45, SHAPE_PURR, 15, 8}
-  };
+      {135, 60, 95, SHAPE_PURR, 30, 15}, {95, 70, 75, SHAPE_PURR, 25, 12},
+      {150, 40, 85, SHAPE_PURR, 20, 10}, {85, 90, 65, SHAPE_PURR, 35, 14},
+      {110, 80, 55, SHAPE_PURR, 25, 10}, {65, 140, 45, SHAPE_PURR, 15, 8}};
   playToneQueue(t, 6);
 }
 
 void soundLaser() {
-  Tone t[] = {
-    {1800, 65, 260, SHAPE_CHIRP, 0, 0}
-  };
+  Tone t[] = {{1800, 65, 260, SHAPE_CHIRP, 0, 0}};
   playToneQueue(t, 1);
 }
 
 void soundFanfare() {
-  Tone t[] = {
-    {440, 90, 440, SHAPE_WARM_VOCAL, 0, 0},
-    {554, 90, 554, SHAPE_WARM_VOCAL, 0, 0},
-    {659, 100, 659, SHAPE_WARM_VOCAL, 0, 0},
-    {880, 260, 880, SHAPE_WARM_VOCAL, 25, 14}
-  };
+  Tone t[] = {{440, 90, 440, SHAPE_WARM_VOCAL, 0, 0},
+              {554, 90, 554, SHAPE_WARM_VOCAL, 0, 0},
+              {659, 100, 659, SHAPE_WARM_VOCAL, 0, 0},
+              {880, 260, 880, SHAPE_WARM_VOCAL, 25, 14}};
   playToneQueue(t, 4);
 }
 
 // Soft, musical acoustic marimba chime for skin and face change
 void soundCoin() {
   Tone t[] = {
-    {523.3f, 65, 0, SHAPE_BELL, 0, 0},    // C5
-    {784.0f, 160, 0, SHAPE_BELL, 10, 7}   // G5 resonant chime
+      {523.3f, 65, 0, SHAPE_BELL, 0, 0},  // C5
+      {784.0f, 160, 0, SHAPE_BELL, 10, 7} // G5 resonant chime
   };
   playToneQueue(t, 2);
 }
 
 void soundSadViolin() {
-  Tone t[] = {
-    {659, 250, 620, SHAPE_WARM_VOCAL, 18, 8},
-    {620, 250, 554, SHAPE_WARM_VOCAL, 18, 8},
-    {554, 320, 494, SHAPE_WARM_VOCAL, 20, 8},
-    {494, 450, 440, SHAPE_WARM_VOCAL, 25, 6}
-  };
+  Tone t[] = {{659, 250, 620, SHAPE_WARM_VOCAL, 18, 8},
+              {620, 250, 554, SHAPE_WARM_VOCAL, 18, 8},
+              {554, 320, 494, SHAPE_WARM_VOCAL, 20, 8},
+              {494, 450, 440, SHAPE_WARM_VOCAL, 25, 6}};
   playToneQueue(t, 4);
 }
 
 // Infant / Baby Crying Vocalization (sobbing wails & sniffles)
 void soundCrying() {
-  Tone t[] = {
-    // Phase 1: Breath intake & initial wail ("Ah-Waaaah...")
-    {480, 80, 680, SHAPE_WARM_VOCAL, 0, 0},
-    {720, 360, 560, SHAPE_WARM_VOCAL, 35, 13},
-    {0, 35, 0, SHAPE_SINE, 0, 0},
+  Tone t[] = {// Phase 1: Breath intake & initial wail ("Ah-Waaaah...")
+              {480, 80, 680, SHAPE_WARM_VOCAL, 0, 0},
+              {720, 360, 560, SHAPE_WARM_VOCAL, 35, 13},
+              {0, 35, 0, SHAPE_SINE, 0, 0},
 
-    // Phase 2: Desperate high infant wail ("WAAAAAHH!!")
-    {780, 440, 580, SHAPE_WARM_VOCAL, 45, 14},
-    {0, 40, 0, SHAPE_SINE, 0, 0},
+              // Phase 2: Desperate high infant wail ("WAAAAAHH!!")
+              {780, 440, 580, SHAPE_WARM_VOCAL, 45, 14},
+              {0, 40, 0, SHAPE_SINE, 0, 0},
 
-    // Phase 3: Trembling sob ("Uwaaah...")
-    {680, 320, 480, SHAPE_WARM_VOCAL, 32, 12},
-    {0, 40, 0, SHAPE_SINE, 0, 0},
+              // Phase 3: Trembling sob ("Uwaaah...")
+              {680, 320, 480, SHAPE_WARM_VOCAL, 32, 12},
+              {0, 40, 0, SHAPE_SINE, 0, 0},
 
-    // Phase 4: Sniffling hiccups ("uh... uh... uh...")
-    {540, 110, 420, SHAPE_WARM_VOCAL, 20, 10},
-    {0, 40, 0, SHAPE_SINE, 0, 0},
-    {480, 120, 380, SHAPE_WARM_VOCAL, 18, 9},
-    {0, 40, 0, SHAPE_SINE, 0, 0},
-    {420, 160, 320, SHAPE_WARM_VOCAL, 15, 8},
-    {0, 60, 0, SHAPE_SINE, 0, 0},
+              // Phase 4: Sniffling hiccups ("uh... uh... uh...")
+              {540, 110, 420, SHAPE_WARM_VOCAL, 20, 10},
+              {0, 40, 0, SHAPE_SINE, 0, 0},
+              {480, 120, 380, SHAPE_WARM_VOCAL, 18, 9},
+              {0, 40, 0, SHAPE_SINE, 0, 0},
+              {420, 160, 320, SHAPE_WARM_VOCAL, 15, 8},
+              {0, 60, 0, SHAPE_SINE, 0, 0},
 
-    // Phase 5: Second crying wave ("Waaah... waah...")
-    {750, 380, 520, SHAPE_WARM_VOCAL, 40, 13},
-    {0, 40, 0, SHAPE_SINE, 0, 0},
-    {620, 280, 440, SHAPE_WARM_VOCAL, 28, 11},
-    {0, 35, 0, SHAPE_SINE, 0, 0},
-    {460, 180, 330, SHAPE_WARM_VOCAL, 20, 9}
-  };
+              // Phase 5: Second crying wave ("Waaah... waah...")
+              {750, 380, 520, SHAPE_WARM_VOCAL, 40, 13},
+              {0, 40, 0, SHAPE_SINE, 0, 0},
+              {620, 280, 440, SHAPE_WARM_VOCAL, 28, 11},
+              {0, 35, 0, SHAPE_SINE, 0, 0},
+              {460, 180, 330, SHAPE_WARM_VOCAL, 20, 9}};
   playToneQueue(t, 18);
 }
 
 // Joyful Baby / Robot Giggle & Belly Laughter ("Hehe-haha-hahahaha-heee!")
 void soundLaughing() {
-  Tone t[] = {
-    // Phase 1: Rising staccato giggles ("He-he-he-he!")
-    {600, 35, 750, SHAPE_WARM_VOCAL, 0, 0},
-    {0, 15, 0, SHAPE_SINE, 0, 0},
-    {680, 38, 840, SHAPE_WARM_VOCAL, 0, 0},
-    {0, 15, 0, SHAPE_SINE, 0, 0},
-    {760, 42, 940, SHAPE_WARM_VOCAL, 0, 0},
-    {0, 15, 0, SHAPE_SINE, 0, 0},
-    {860, 45, 1060, SHAPE_WARM_VOCAL, 0, 0},
-    {0, 18, 0, SHAPE_SINE, 0, 0},
+  Tone t[] = {// Phase 1: Rising staccato giggles ("He-he-he-he!")
+              {600, 35, 750, SHAPE_WARM_VOCAL, 0, 0},
+              {0, 15, 0, SHAPE_SINE, 0, 0},
+              {680, 38, 840, SHAPE_WARM_VOCAL, 0, 0},
+              {0, 15, 0, SHAPE_SINE, 0, 0},
+              {760, 42, 940, SHAPE_WARM_VOCAL, 0, 0},
+              {0, 15, 0, SHAPE_SINE, 0, 0},
+              {860, 45, 1060, SHAPE_WARM_VOCAL, 0, 0},
+              {0, 18, 0, SHAPE_SINE, 0, 0},
 
-    // Phase 2: Big melodic laugh burst ("Haaahaahaa!")
-    {1120, 220, 920, SHAPE_WARM_VOCAL, 32, 16},
-    {0, 25, 0, SHAPE_SINE, 0, 0},
+              // Phase 2: Big melodic laugh burst ("Haaahaahaa!")
+              {1120, 220, 920, SHAPE_WARM_VOCAL, 32, 16},
+              {0, 25, 0, SHAPE_SINE, 0, 0},
 
-    // Phase 3: Second chuckle roll ("He-he-he-hee!")
-    {820, 40, 980, SHAPE_WARM_VOCAL, 0, 0},
-    {0, 15, 0, SHAPE_SINE, 0, 0},
-    {940, 42, 1120, SHAPE_WARM_VOCAL, 0, 0},
-    {0, 15, 0, SHAPE_SINE, 0, 0},
-    {1080, 50, 1280, SHAPE_WARM_VOCAL, 0, 0},
-    {0, 20, 0, SHAPE_SINE, 0, 0},
+              // Phase 3: Second chuckle roll ("He-he-he-hee!")
+              {820, 40, 980, SHAPE_WARM_VOCAL, 0, 0},
+              {0, 15, 0, SHAPE_SINE, 0, 0},
+              {940, 42, 1120, SHAPE_WARM_VOCAL, 0, 0},
+              {0, 15, 0, SHAPE_SINE, 0, 0},
+              {1080, 50, 1280, SHAPE_WARM_VOCAL, 0, 0},
+              {0, 20, 0, SHAPE_SINE, 0, 0},
 
-    // Phase 4: Big joyful squeal & chuckles ("Heeeee-chuckle!")
-    {1220, 240, 860, SHAPE_WARM_VOCAL, 35, 15},
-    {0, 25, 0, SHAPE_SINE, 0, 0},
-    {740, 60, 880, SHAPE_WARM_VOCAL, 0, 0},
-    {0, 20, 0, SHAPE_SINE, 0, 0},
-    {840, 85, 960, SHAPE_WARM_VOCAL, 20, 12}
-  };
+              // Phase 4: Big joyful squeal & chuckles ("Heeeee-chuckle!")
+              {1220, 240, 860, SHAPE_WARM_VOCAL, 35, 15},
+              {0, 25, 0, SHAPE_SINE, 0, 0},
+              {740, 60, 880, SHAPE_WARM_VOCAL, 0, 0},
+              {0, 20, 0, SHAPE_SINE, 0, 0},
+              {840, 85, 960, SHAPE_WARM_VOCAL, 20, 12}};
   playToneQueue(t, 21);
 }
 
 // ============================================================
-// I2S DRIVER INITIALIZATION
+// I2S DRIVER INITIALIZATION & RX OWNERSHIP MUTEX
 // ============================================================
+static SemaphoreHandle_t s_rxMutex = nullptr;
+static portMUX_TYPE s_rxInitMux = portMUX_INITIALIZER_UNLOCKED;
+
+static void ensureRxMutex() {
+  if (s_rxMutex)
+    return;
+  SemaphoreHandle_t created = xSemaphoreCreateRecursiveMutex();
+  portENTER_CRITICAL(&s_rxInitMux);
+  if (!s_rxMutex) {
+    s_rxMutex = created;
+    created = nullptr;
+  }
+  portEXIT_CRITICAL(&s_rxInitMux);
+  if (created)
+    vSemaphoreDelete(created);
+}
+
+bool audioRxLock(uint32_t waitMs) {
+  ensureRxMutex();
+  if (!s_rxMutex)
+    return true;
+  return xSemaphoreTakeRecursive(s_rxMutex, pdMS_TO_TICKS(waitMs)) == pdTRUE;
+}
+
+void audioRxUnlock() {
+  if (s_rxMutex)
+    xSemaphoreGiveRecursive(s_rxMutex);
+}
+
+void audioDrainRxDmaOnly() {
+  if (!rxHandle || !audioRxLock(40))
+    return;
+  int32_t tmp[64];
+  size_t br = 0;
+  int guard = 0;
+  while (guard++ < 24 &&
+         i2s_channel_read(rxHandle, tmp, sizeof(tmp), &br, 0) == ESP_OK &&
+         br > 0) {
+  }
+  audioRxUnlock();
+}
+
 bool startAudio() {
+  ensureRxMutex();
   i2s_chan_config_t chan =
       I2S_CHANNEL_DEFAULT_CONFIG(I2S_NUM_0, I2S_ROLE_MASTER);
   chan.dma_desc_num = psramFound() ? 8 : 6;
@@ -810,11 +982,21 @@ void drainMic() {
   static int32_t tmp[64];
   size_t br = 0;
   int guard = 0;
-  while (guard++ < 300 &&
-         i2s_channel_read(rxHandle, tmp, sizeof(tmp), &br, 5) == ESP_OK &&
-         br > 0) {
-    if ((guard & 31) == 0)  // pump face every ~32 iterations
-      pumpUI();
+  while (guard < 300) {
+    bool readAny = false;
+    if (!audioRxLock(150))
+      break;
+    while (guard++ < 300 &&
+           i2s_channel_read(rxHandle, tmp, sizeof(tmp), &br, 5) == ESP_OK &&
+           br > 0) {
+      readAny = true;
+      if ((guard & 31) == 0)
+        break;
+    }
+    audioRxUnlock();
+    if (!readAny)
+      break;
+    pumpUI();
   }
 }
 
@@ -848,7 +1030,9 @@ bool setMicSlot(int slot, bool persist, bool force) {
     saveMicSlot(slot);
     Serial.printf("[MIC] Slot locked to %d (saved to NVS)\n", slot);
   } else if (oldSlot != slot) {
-    Serial.printf("[MIC] Auto-detected slot changed: %d -> %d (unlocked, not saved to NVS)\n", oldSlot, slot);
+    Serial.printf("[MIC] Auto-detected slot changed: %d -> %d (unlocked, not "
+                  "saved to NVS)\n",
+                  oldSlot, slot);
   }
   return true;
 }
@@ -860,9 +1044,7 @@ int getMicSlot() {
   return slot;
 }
 
-bool isMicSlotLocked() {
-  return micSlotLocked;
-}
+bool isMicSlotLocked() { return micSlotLocked; }
 
 void setMicSlotLocked(bool locked) {
   portENTER_CRITICAL(&s_micMux);
@@ -885,8 +1067,13 @@ void detectMicSlot() {
 
   while (counted < SAMPLE_RATE / 4 && millis() - t0 < 900) {
     size_t br = 0;
-    if (i2s_channel_read(rxHandle, tmp, tmpSamples * sizeof(int32_t), &br, 200) != ESP_OK ||
-        br == 0)
+    esp_err_t readErr = ESP_FAIL;
+    if (audioRxLock(200)) {
+      readErr = i2s_channel_read(rxHandle, tmp, tmpSamples * sizeof(int32_t),
+                                 &br, 200);
+      audioRxUnlock();
+    }
+    if (readErr != ESP_OK || br == 0)
       break;
 
     int frames = br / (2 * sizeof(int32_t));
@@ -928,7 +1115,8 @@ void detectMicSlot() {
   } else {
     // INMP441 standard is GND -> Left channel (slot 0)
     setMicSlot(0, false, true);
-    Serial.println("[MIC] Ambiguous slot, defaulting to LEFT slot 0 (standard INMP441 GND)");
+    Serial.println("[MIC] Ambiguous slot, defaulting to LEFT slot 0 (standard "
+                   "INMP441 GND)");
   }
 }
 
@@ -938,7 +1126,8 @@ void detectMicSlot() {
 static int32_t txBuf[TX_FRAMES * 2];
 static int txPos = 0;
 
-// Gentle TTS amplitude envelope & zero-ramp state (prevents pops on start/abort)
+// Gentle TTS amplitude envelope & zero-ramp state (prevents pops on
+// start/abort)
 constexpr uint16_t SPEECH_FADE_IN_SAMPLES = 240;   // 15 ms @ 16 kHz
 constexpr uint16_t SPEECH_FADE_OUT_SAMPLES = 192;  // 12 ms @ 16 kHz
 constexpr uint16_t SPEECH_TAIL_ZERO_SAMPLES = 128; // 8 ms silence tail @ 16 kHz
@@ -1016,6 +1205,7 @@ void spkBeginSpeech() {
     tonePlaying = false;
     s_toneMouthAmplitude = 0.0f;
     resetLipSyncState();
+    resetSpeechDsp();
     s_speechFadeInIdx = 0;
     s_lastSpeechOut = 0.0f;
     spkOwner = SPK_SPEECH;
@@ -1036,24 +1226,17 @@ void toneStop() {
   }
 }
 
-float getSpeechAmplitude() {
-  return s_speechAmplitude;
-}
+float getSpeechAmplitude() { return s_speechAmplitude; }
 
-float getSpeechBrightness() {
-  return s_speechBrightness;
-}
+float getSpeechBrightness() { return s_speechBrightness; }
 
-float getToneMouthAmplitude() {
-  return s_toneMouthAmplitude;
-}
+float getToneMouthAmplitude() { return s_toneMouthAmplitude; }
 
-float getTonePitchNorm() {
-  return s_tonePitchNorm;
-}
+float getTonePitchNorm() { return s_tonePitchNorm; }
 
-// Call when a speech stream ends. Flushes remaining samples (when not cancelled),
-// smoothly ramps to zero, and releases the speaker so tones can play again.
+// Call when a speech stream ends. Flushes remaining samples (when not
+// cancelled), smoothly ramps to zero, and releases the speaker so tones can
+// play again.
 void spkEndSpeech() {
   if (!cancelRequest && spkOwner == SPK_SPEECH) {
     spkFlush();
@@ -1071,7 +1254,8 @@ void spkEndSpeech() {
   }
 }
 
-// Cuts off speech with a short pop-free fade-out without flushing leftover buffer
+// Cuts off speech with a short pop-free fade-out without flushing leftover
+// buffer
 void spkAbortSpeech() {
   txPos = 0;
   tonePlaying = false;
@@ -1110,7 +1294,13 @@ void audioSleepPrepare() {
     i2s_channel_disable(txHandle);
   }
   if (rxHandle) {
+    bool yielded = wakeWordAcquireMic(150);
+    bool locked = audioRxLock(150);
     i2s_channel_disable(rxHandle);
+    if (locked)
+      audioRxUnlock();
+    if (yielded)
+      wakeWordReleaseMic();
   }
 }
 
@@ -1133,8 +1323,9 @@ void spkPushSample(int16_t s) {
   // Delayed 2-band envelope tracking for DMA-aligned viseme lip sync
   float fs = (float)s * (1.0f / 32768.0f);
   float absSample = fabsf(fs);
-  s_lpState = s_lpState * 0.82f + fs * 0.18f; // ~500 Hz crossover lowpass (DC gain = 1)
-  float highDiff = fabsf(fs - s_lpState);     // >500 Hz highpass complement
+  s_lpState =
+      s_lpState * 0.82f + fs * 0.18f; // ~500 Hz crossover lowpass (DC gain = 1)
+  float highDiff = fabsf(fs - s_lpState); // >500 Hz highpass complement
 
   s_blkAbsSum += absSample;
   if (absSample > s_blkPeak)
@@ -1144,15 +1335,18 @@ void spkPushSample(int16_t s) {
 
   if (++s_blkSamples >= 256) {
     float meanAmp = s_blkAbsSum * (1.0f / 256.0f);
-    // Blend peak & mean so syllables punch open cleanly without clipping out pauses
+    // Blend peak & mean so syllables punch open cleanly without clipping out
+    // pauses
     float blkEnv = 0.55f * s_blkPeak + 0.45f * meanAmp;
 
     float lowMean = s_blkLowSum * (1.0f / 256.0f);
     float highMean = s_blkHighSum * (1.0f / 256.0f);
     float denom = lowMean + highMean + 0.002f;
     float rawBright = (highMean / denom - 0.34f) * 2.0f;
-    if (rawBright < 0.0f) rawBright = 0.0f;
-    if (rawBright > 1.0f) rawBright = 1.0f;
+    if (rawBright < 0.0f)
+      rawBright = 0.0f;
+    if (rawBright > 1.0f)
+      rawBright = 1.0f;
 
     if (blkEnv > s_envAmp) {
       s_envAmp = s_envAmp * 0.30f + blkEnv * 0.70f;
@@ -1187,7 +1381,7 @@ void spkPushSample(int16_t s) {
     gain *= (t * t * (3.0f - 2.0f * t));
     s_speechFadeInIdx++;
   }
-  float outSample = (float)s * gain;
+  float outSample = levelAndLimitSpeechSample(processSpeechDsp((float)s), gain);
   s_lastSpeechOut = outSample;
   int32_t v = toFrame32(outSample);
   txBuf[txPos * 2] = v;

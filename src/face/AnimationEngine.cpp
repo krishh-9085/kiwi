@@ -276,3 +276,12 @@ bool finishCustomAnimationUpload() {
   }
   return ok;
 }
+
+void cancelCustomAnimationUpload() {
+  uploadFailed = true;
+  uploadBytes = 0;
+  if (customFrame) {
+    free(customFrame);
+    customFrame = nullptr;
+  }
+}

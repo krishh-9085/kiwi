@@ -16,6 +16,7 @@ extern volatile int8_t pendingSound;
 
 void setFace(float w, float h, float gap, float y, float r, float lidIn,
              float lidOut, float cheek, float blush) {
+  DisplayLockGuard lock(80);
   faceTgt.w = w;
   faceTgt.h = h;
   faceTgt.gap = gap;
@@ -51,6 +52,7 @@ static bool emotionSkipsTransitionBlink(Emotion e) {
 }
 
 void setEmotion(Emotion e) {
+  DisplayLockGuard lock(80);
   if (e == EMOTION_SLEEPING) {
     sleepyWakeCancel();
   } else if (!sleepyFallAsleepIsActive()) {
@@ -83,6 +85,7 @@ void setEmotion(Emotion e) {
 }
 
 void faceTargetsForEmotion(Emotion e, PetMood pm) {
+  DisplayLockGuard lock(80);
   switch (e) {
   case EMOTION_IDLE:
     setFace(34, 32, 30, 29, 6);

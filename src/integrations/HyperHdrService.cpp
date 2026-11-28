@@ -221,7 +221,7 @@ bool sendHyperHdrJson(const String &jsonPayload, String *outResponse) {
 
   String ip = getHyperHdrIp();
   if (!ip.length()) {
-    if (!discoverHyperHdr(true))
+    if (!discoverHyperHdr(false))
       return false;
     ip = getHyperHdrIp();
   }
@@ -248,9 +248,11 @@ bool sendHyperHdrJson(const String &jsonPayload, String *outResponse) {
     Serial.printf("[HYPERHDR] Command OK (%d): %s\n", code, jsonPayload.c_str());
   } else {
     Serial.printf("[HYPERHDR] Command failed (%d) url=%s body=%s\n", code, url.c_str(), jsonPayload.c_str());
+    // Respect 15s discovery cooldown after failure so retries do not freeze on mDNS
+    s_lastHyperHdrDiscovery = millis();
     if (hyperLock()) {
       if (!s_manualHyperHdrIp.length()) {
-        s_discoveredHyperHdrIp = ""; // allow re-scan next time
+        s_discoveredHyperHdrIp = ""; // allow re-scan after cooldown
       }
       hyperUnlock();
     }
@@ -271,28 +273,31 @@ bool setHyperHdrLedDevice(bool state) {
 
 bool setHyperHdrPower(bool on) {
   if (on) {
-    setHyperHdrComponentState("ALL", true);
-    setHyperHdrComponentState("LEDDEVICE", true);
-    return true;
+    if (!setHyperHdrComponentState("ALL", true))
+      return false;
+    return setHyperHdrComponentState("LEDDEVICE", true);
   } else {
     clearHyperHdrPriority(50);
-    setHyperHdrComponentState("ALL", false);
-    return true;
+    return setHyperHdrComponentState("ALL", false);
   }
 }
 
 bool setHyperHdrScreenSync(bool enable) {
   if (enable) {
     clearHyperHdrPriority(50);
-    setHyperHdrComponentState("ALL", true);
-    setHyperHdrComponentState("LEDDEVICE", true);
-    setHyperHdrComponentState("SYSTEMGRABBER", true);
+    if (!setHyperHdrComponentState("ALL", true))
+      return false;
+    if (!setHyperHdrComponentState("LEDDEVICE", true))
+      return false;
+    if (!setHyperHdrComponentState("SYSTEMGRABBER", true))
+      return false;
     s_screenSyncActive = true;
     Serial.println("[HYPERHDR] Screen sync ENABLED");
     addTerminalLog("[HYPERHDR] Screen sync active");
     return true;
   } else {
-    setHyperHdrComponentState("SYSTEMGRABBER", false);
+    if (!setHyperHdrComponentState("SYSTEMGRABBER", false))
+      return false;
     s_screenSyncActive = false;
     Serial.println("[HYPERHDR] Screen sync DISABLED");
     addTerminalLog("[HYPERHDR] Screen sync paused");
@@ -305,8 +310,10 @@ bool isHyperHdrScreenSyncActive() {
 }
 
 bool setHyperHdrColor(uint8_t r, uint8_t g, uint8_t b, int priority, int durationMs) {
-  setHyperHdrComponentState("ALL", true);
-  setHyperHdrComponentState("LEDDEVICE", true);
+  if (!setHyperHdrComponentState("ALL", true))
+    return false;
+  if (!setHyperHdrComponentState("LEDDEVICE", true))
+    return false;
 
   String body = "{\"command\":\"color\",\"priority\":" + String(priority) +
                 ",\"color\":[" + String(r) + "," + String(g) + "," + String(b) + "]" +
@@ -317,8 +324,10 @@ bool setHyperHdrColor(uint8_t r, uint8_t g, uint8_t b, int priority, int duratio
 }
 
 bool setHyperHdrEffect(const String &effectName, int priority, int durationMs) {
-  setHyperHdrComponentState("ALL", true);
-  setHyperHdrComponentState("LEDDEVICE", true);
+  if (!setHyperHdrComponentState("ALL", true))
+    return false;
+  if (!setHyperHdrComponentState("LEDDEVICE", true))
+    return false;
 
   String body = "{\"command\":\"effect\",\"priority\":" + String(priority) +
                 ",\"effect\":{\"name\":\"" + effectName + "\"}" +

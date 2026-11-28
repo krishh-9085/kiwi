@@ -20,6 +20,10 @@ bool executeRobotAction(const String &actionCmd);
 // Maps friendly skin name to EyeSkin enum
 bool setEyeSkinByName(const String &nameIn);
 
+// Switches active personality mode ("friendly", "funny", "serious", "bakchod", "cute", "custom")
+bool applyPersonalityMode(const String &modeIn, bool resetHistory = true,
+                          bool save = true, bool withFeedback = true);
+
 // Plays named sound effect
 void triggerSoundByName(const String &nameIn);
 

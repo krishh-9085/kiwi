@@ -4,7 +4,9 @@
 #include "hardware/AudioEngine.h"
 #include "hardware/SoundLevel.h"
 #include "hardware/alexa_model.h"
+#include "hardware/hey_kiwi_model.h"
 #include "power/PowerManager.h"
+#include "web/WebPortal.h"
 
 
 #include <Preferences.h>
@@ -35,7 +37,7 @@ static const size_t STEP_SAMPLES =
     (FEATURE_STEP_SIZE_MS * AUDIO_SAMPLE_FREQUENCY) /
     1000; // 160 samples (10ms)
 static const size_t MAX_SLIDING_WINDOW_SIZE = 8;
-static const uint8_t MIN_SLICES_BEFORE_DETECTION = 74; // ~740ms initial priming
+static const uint8_t MIN_PRIME_SLICES_10MS = 9; // ~90ms frontend settle after reset (stride-compensated)
 static const size_t TENSOR_ARENA_SIZE = 20000;
 static const size_t VARIABLE_ARENA_SIZE = 1024;
 
@@ -54,16 +56,18 @@ struct WakeWordModelEntry {
 
 static const WakeWordModelEntry WAKE_WORD_MODELS[] = {
     {"alexa", "Alexa", alexa_model, sizeof(alexa_model), 0.90f, 0.60f, 0.98f, 5,
-     true}};
+     true},
+    {"hey_kiwi", "Hey Kiwi", hey_kiwi_model, sizeof(hey_kiwi_model), 0.92f,
+     0.60f, 0.98f, 5, true}};
 static const size_t NUM_WAKE_WORD_MODELS =
     sizeof(WAKE_WORD_MODELS) / sizeof(WAKE_WORD_MODELS[0]);
 
 // Mutex protecting frontend state, interpreter and window buffers across cores
 static SemaphoreHandle_t s_wwMutex = nullptr;
 
-static uint8_t s_activeModelIndex = 0;
+static uint8_t s_activeModelIndex = WAKE_WORD_HEY_KIWI;
 static size_t s_sliding_window_size = 5;
-static float s_probability_cutoff = 0.90f;
+static float s_probability_cutoff = 0.92f;
 static float s_gain = 8.0f;
 static bool s_enable_spike_trigger = false;
 
@@ -87,6 +91,8 @@ static size_t s_preWakeTotalCount = 0;
 static portMUX_TYPE s_preWakeMux = portMUX_INITIALIZER_UNLOCKED;
 static volatile bool s_preWakeBridgeActive = false;
 static volatile bool s_bridgeInRead = false;
+static volatile bool s_sttMicYield = false;
+static volatile bool s_wwInRxRead = false;
 static uint32_t s_bridgeStartAt = 0;
 static volatile bool s_wakeWordDetectedTrigger = false;
 
@@ -180,7 +186,7 @@ size_t preWakeDrain(int16_t *dest, size_t maxSamples) {
   return count;
 }
 
-static tflite::MicroMutableOpResolver<20> *s_op_resolver = nullptr;
+static tflite::MicroMutableOpResolver<12> *s_op_resolver = nullptr;
 static tflite::MicroAllocator *s_micro_allocator = nullptr;
 static tflite::MicroResourceVariables *s_micro_resource_vars = nullptr;
 static tflite::MicroInterpreter *s_interpreter = nullptr;
@@ -188,7 +194,7 @@ static tflite::MicroInterpreter *s_interpreter = nullptr;
 static uint8_t s_current_stride_step = 0;
 static uint8_t s_sliding_window[MAX_SLIDING_WINDOW_SIZE] = {0};
 static size_t s_sliding_index = 0;
-static int16_t s_ignore_windows = -MIN_SLICES_BEFORE_DETECTION;
+static int16_t s_ignore_windows = -6;
 
 static TaskHandle_t s_wakeWordTaskHandle = nullptr;
 static volatile bool s_wakeWordRunning = false;
@@ -201,14 +207,15 @@ static float s_prevOut = 0.0f;
 
 // Forward declarations
 static void wakeWordTask(void *params);
-static bool registerOps(tflite::MicroMutableOpResolver<20> &resolver);
+static bool registerOps(tflite::MicroMutableOpResolver<12> &resolver);
 static bool loadModelInternal(uint8_t modelIndex, float preservedCutoff);
 static void wakeWordResetLocked();
 
 // ============================================================
 // OPERATOR REGISTRATION
 // ============================================================
-static bool registerOps(tflite::MicroMutableOpResolver<20> &resolver) {
+// Minimal 12-op resolver matching alexa.tflite (strips 8 unused TFLM kernels)
+static bool registerOps(tflite::MicroMutableOpResolver<12> &resolver) {
   if (resolver.AddCallOnce() != kTfLiteOk)
     return false;
   if (resolver.AddVarHandle() != kTfLiteOk)
@@ -225,12 +232,6 @@ static bool registerOps(tflite::MicroMutableOpResolver<20> &resolver) {
     return false;
   if (resolver.AddConv2D() != kTfLiteOk)
     return false;
-  if (resolver.AddMul() != kTfLiteOk)
-    return false;
-  if (resolver.AddAdd() != kTfLiteOk)
-    return false;
-  if (resolver.AddMean() != kTfLiteOk)
-    return false;
   if (resolver.AddFullyConnected() != kTfLiteOk)
     return false;
   if (resolver.AddLogistic() != kTfLiteOk)
@@ -238,16 +239,6 @@ static bool registerOps(tflite::MicroMutableOpResolver<20> &resolver) {
   if (resolver.AddQuantize() != kTfLiteOk)
     return false;
   if (resolver.AddDepthwiseConv2D() != kTfLiteOk)
-    return false;
-  if (resolver.AddAveragePool2D() != kTfLiteOk)
-    return false;
-  if (resolver.AddMaxPool2D() != kTfLiteOk)
-    return false;
-  if (resolver.AddPad() != kTfLiteOk)
-    return false;
-  if (resolver.AddPack() != kTfLiteOk)
-    return false;
-  if (resolver.AddSplitV() != kTfLiteOk)
     return false;
   return true;
 }
@@ -410,7 +401,7 @@ bool wakeWordInit() {
 
   // 2. Setup TFLite Micro Operation Resolver
   if (!s_op_resolver) {
-    s_op_resolver = new tflite::MicroMutableOpResolver<20>();
+    s_op_resolver = new tflite::MicroMutableOpResolver<12>();
     if (!registerOps(*s_op_resolver)) {
       Serial.println("[WAKEWORD] ERROR: Failed to register TFLite Micro ops!");
       delete s_op_resolver;
@@ -467,7 +458,18 @@ static void wakeWordResetLocked() {
   for (size_t k = 0; k < MAX_SLIDING_WINDOW_SIZE; k++) {
     s_sliding_window[k] = 0;
   }
-  s_ignore_windows = -MIN_SLICES_BEFORE_DETECTION;
+  uint8_t stride = (s_interpreter && s_interpreter->input(0) &&
+                    s_interpreter->input(0)->dims &&
+                    s_interpreter->input(0)->dims->size >= 2)
+                       ? (uint8_t)max(1, (int)s_interpreter->input(0)->dims->data[1])
+                       : 3;
+  int16_t minInfers = (int16_t)((MIN_PRIME_SLICES_10MS + stride - 1) / stride);
+  if (minInfers < 3) {
+    minInfers = 3;
+  }
+  s_ignore_windows = -minInfers;
+  s_prevIn = 0.0f;
+  s_prevOut = 0.0f;
   if (s_frontend_initialized) {
     FrontendReset(&s_frontend_state);
   }
@@ -498,6 +500,20 @@ void wakeWordSuppressUntil(uint32_t untilMs) {
   preWakeReset();
 }
 
+bool wakeWordAcquireMic(uint32_t maxWaitMs) {
+  s_sttMicYield = true;
+  s_preWakeBridgeActive = false;
+  uint32_t t0 = millis();
+  while ((s_wwInRxRead || s_bridgeInRead) && (millis() - t0 < maxWaitMs)) {
+    vTaskDelay(pdMS_TO_TICKS(2));
+  }
+  return !s_wwInRxRead && !s_bridgeInRead;
+}
+
+void wakeWordReleaseMic() {
+  s_sttMicYield = false;
+}
+
 void wakeWordSetSensitivity(float cutoff) {
   if (cutoff < 0.10f)
     cutoff = 0.10f;
@@ -526,6 +542,21 @@ void wakeWordSetEnabled(bool en) {
   }
 }
 
+bool wakeWordParseModelIndex(const String &arg, uint8_t &outIdx) {
+  String s = arg;
+  s.trim();
+  s.toLowerCase();
+  if (s == "0" || s == "alexa") {
+    outIdx = WAKE_WORD_ALEXA;
+    return true;
+  }
+  if (s == "1" || s == "hey_kiwi" || s == "hey kiwi" || s == "kiwi") {
+    outIdx = WAKE_WORD_HEY_KIWI;
+    return true;
+  }
+  return false;
+}
+
 bool wakeWordSetModel(uint8_t modelIndex) {
   if (modelIndex >= NUM_WAKE_WORD_MODELS)
     return false;
@@ -540,8 +571,9 @@ bool wakeWordSetModel(uint8_t modelIndex) {
   s_wakeWordRunning = false;
   s_isListening = false;
 
-  float savedCutoff = wakeWordCutoff;
-  bool ok = loadModelInternal(modelIndex, savedCutoff);
+  // Apply the target model's calibrated manifest cutoff when switching models
+  float targetDefault = WAKE_WORD_MODELS[modelIndex].defaultCutoff;
+  bool ok = loadModelInternal(modelIndex, targetDefault);
   if (ok) {
     wakeWordModel = modelIndex;
   }
@@ -639,7 +671,11 @@ void wakeWordProcessSerialCommand(const String &cmd) {
   }
 
   if (c.startsWith("ww model ") || c.startsWith("ww_model ")) {
-    uint8_t mIdx = 0; // Alexa
+    uint8_t mIdx = WAKE_WORD_HEY_KIWI;
+    if (!wakeWordParseModelIndex(c.substring(c.indexOf(' ', 3) + 1), mIdx)) {
+      Serial.println("[WAKEWORD] Invalid model! Use 0 (Alexa) or 1 (Hey Kiwi).");
+      return;
+    }
     if (wakeWordSetModel(mIdx)) {
       Preferences p;
       p.begin("myrobot", false);
@@ -693,7 +729,7 @@ void wakeWordProcessSerialCommand(const String &cmd) {
     Serial.println("  ww status");
     Serial.println("  ww gain <float>       (e.g. ww gain 1.0 or ww gain 8.0)");
     Serial.println("  ww cutoff <float>     (e.g. ww cutoff 0.36)");
-    Serial.println("  ww model <0>          (0=Alexa)");
+    Serial.println("  ww model <0|1>        (0=Alexa, 1=Hey Kiwi)");
     Serial.println(
         "  ww spike <0|1>        (0=disable spike trigger, 1=enable)");
     Serial.println("  ww mic <0|1>          (0=Left, 1=Right)");
@@ -709,7 +745,21 @@ static void wakeWordTask(void *params) {
   Serial.println("[WAKEWORD] Task running on Core " + String(xPortGetCoreID()));
 
   static int32_t raw_i2s[STEP_SAMPLES * 2]; // 160 frames stereo = 320 x int32_t
-  static int16_t pcm_samples[STEP_SAMPLES]; // 160 samples mono = 320 bytes
+  static int16_t pcm_samples[STEP_SAMPLES]; // 160 samples mono (TFLM gain)
+  static int16_t pre_samples[STEP_SAMPLES]; // 160 samples mono (STT MIC_GAIN)
+
+  auto shapeSttSample = [](float yRaw) -> int16_t {
+    float yStt = yRaw * MIC_GAIN;
+    if (yStt > 28000.0f)
+      yStt = 28000.0f + (yStt - 28000.0f) * 0.25f;
+    else if (yStt < -28000.0f)
+      yStt = -28000.0f + (yStt + 28000.0f) * 0.25f;
+    if (yStt > 32767.0f)
+      yStt = 32767.0f;
+    else if (yStt < -32768.0f)
+      yStt = -32768.0f;
+    return (int16_t)yStt;
+  };
 
   uint32_t lastDiagAt = millis();
   float maxProbDiag = 0.0f;
@@ -717,6 +767,19 @@ static void wakeWordTask(void *params) {
   uint8_t slotMismatchCount = 0;
 
   for (;;) {
+    // -------------------------------------------------------------------
+    // Yield RX mic cleanly whenever Core 1 (STT / sleep) owns rxHandle
+    // -------------------------------------------------------------------
+    if (s_sttMicYield || powerIsHardwareSleeping()) {
+      s_preWakeBridgeActive = false;
+      if (s_isListening) {
+        s_isListening = false;
+        wakeWordReset();
+      }
+      vTaskDelay(pdMS_TO_TICKS(10));
+      continue;
+    }
+
     // -------------------------------------------------------------------
     // PRE-WAKE BRIDGE MODE (Captures live mic into PSRAM while STT TLS
     // connects)
@@ -727,8 +790,14 @@ static void wakeWordTask(void *params) {
       } else {
         s_bridgeInRead = true;
         size_t bytesRead = 0;
-        esp_err_t err = i2s_channel_read(rxHandle, raw_i2s, sizeof(raw_i2s),
-                                         &bytesRead, pdMS_TO_TICKS(50));
+        esp_err_t err = ESP_FAIL;
+        if (audioRxLock(40)) {
+          if (!s_sttMicYield && !powerIsHardwareSleeping() && rxHandle != nullptr) {
+            err = i2s_channel_read(rxHandle, raw_i2s, sizeof(raw_i2s),
+                                   &bytesRead, pdMS_TO_TICKS(50));
+          }
+          audioRxUnlock();
+        }
         s_bridgeInRead = false;
         if (err == ESP_OK && bytesRead > 0) {
           int frames = bytesRead / (2 * sizeof(int32_t));
@@ -740,6 +809,7 @@ static void wakeWordTask(void *params) {
             float y = x - s_prevIn + 0.995f * s_prevOut;
             s_prevIn = x;
             s_prevOut = y;
+            pre_samples[i] = shapeSttSample(y);
             if (s_gain != 1.0f) {
               y *= s_gain;
               if (y > 26000.0f)
@@ -753,18 +823,16 @@ static void wakeWordTask(void *params) {
               y = -32768.0f;
             pcm_samples[i] = (int16_t)y;
           }
-          preWakePush(pcm_samples, frames);
+          preWakePush(pre_samples, frames);
         }
         vTaskDelay(pdMS_TO_TICKS(1));
         continue;
       }
     }
 
-    bool isEmotionAction = (currentEmotion == EMOTION_LAUGHING ||
-                            currentEmotion == EMOTION_CRYING);
     bool isSpeakingOrBusy = busyProcessing || startRecording ||
                             isTonePlaying() || isSpeechPlaying() ||
-                            kiwiIsOutputting() || isEmotionAction ||
+                            kiwiIsOutputting() ||
                             currentEmotion == EMOTION_SPEAKING;
     bool isSuppressed = (s_suppressWakeWordUntil != 0 &&
                          (int32_t)(millis() - s_suppressWakeWordUntil) < 0);
@@ -772,28 +840,38 @@ static void wakeWordTask(void *params) {
     // Listen only when robot is idle, awake, and not suppressed/busy
     bool canListen = s_wakeWordRunning && wakeWordEnabled &&
                      (s_interpreter != nullptr) && !isSpeakingOrBusy &&
-                     !isSuppressed && !manualSleep && !inCircadianSleep &&
-                     rxHandle != nullptr;
+                     !isSuppressed && !s_sttMicYield &&
+                     !powerIsHardwareSleeping() && !manualSleep &&
+                     !inCircadianSleep && !otaInProgress && rxHandle != nullptr;
 
     if (!canListen) {
       if (s_isListening) {
         s_isListening = false;
         wakeWordReset();
       }
-      vTaskDelay(pdMS_TO_TICKS(50));
+      vTaskDelay(pdMS_TO_TICKS(10));
       continue;
     }
 
     if (!s_isListening) {
       s_isListening = true;
       wakeWordReset();
+      audioDrainRxDmaOnly();
       lastDiagAt = millis();
     }
 
     // Read 10ms of audio (160 samples at 16kHz) from INMP441 microphone
     size_t bytesRead = 0;
-    esp_err_t err = i2s_channel_read(rxHandle, raw_i2s, sizeof(raw_i2s),
-                                     &bytesRead, pdMS_TO_TICKS(100));
+    esp_err_t err = ESP_FAIL;
+    s_wwInRxRead = true;
+    if (audioRxLock(40)) {
+      if (!s_sttMicYield && !powerIsHardwareSleeping() && rxHandle != nullptr) {
+        err = i2s_channel_read(rxHandle, raw_i2s, sizeof(raw_i2s),
+                               &bytesRead, pdMS_TO_TICKS(100));
+      }
+      audioRxUnlock();
+    }
+    s_wwInRxRead = false;
     if (err != ESP_OK || bytesRead == 0) {
       vTaskDelay(pdMS_TO_TICKS(5));
       continue;
@@ -824,6 +902,7 @@ static void wakeWordTask(void *params) {
       float y = x - s_prevIn + 0.995f * s_prevOut;
       s_prevIn = x;
       s_prevOut = y;
+      pre_samples[i] = shapeSttSample(y);
 
       // F1: Runtime Gain tuning (default 8.0x) with soft knee compression;
       // bypass soft-knee when 1.0x
@@ -841,7 +920,7 @@ static void wakeWordTask(void *params) {
         y = -32768.0f;
       pcm_samples[i] = (int16_t)y;
     }
-    preWakePush(pcm_samples, frames);
+    preWakePush(pre_samples, frames);
 
     // F3: Auto-swap mic slot respects micSlotLocked; routes through
     // setMicSlot(slot, false)

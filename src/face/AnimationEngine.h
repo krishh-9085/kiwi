@@ -11,3 +11,4 @@ String animationListJson();
 void beginCustomAnimationUpload(const String &filename, const String &displayName = "");
 bool writeCustomAnimationUpload(const uint8_t *data, size_t length);
 bool finishCustomAnimationUpload();
+void cancelCustomAnimationUpload();

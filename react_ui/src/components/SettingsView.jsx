@@ -1,18 +1,20 @@
 import React, { useState, useEffect, useRef } from 'react'
 import {
-  Wifi, Key, Mic, Brain, Volume2, Hand, CloudSun, User, Save, RefreshCw,
+  Wifi, Key, Mic, Brain, Volume2, Hand, CloudSun, Sparkles, User, Save, RefreshCw,
   Plus, Trash2, CheckCircle2, Eye, EyeOff, ChevronDown, X
 } from 'lucide-react'
 import FluxSelect from './FluxSelect'
 import { Tooltip } from './Tooltip'
 import WakeSlider from './ui/WakeSlider'
+import { PERSONALITY_PRESETS, getPersonalityMeta } from '../data/personalities'
 
 const SETTING_TABS = [
   { id: 'all', lbl: 'All' },
   { id: 'network', lbl: 'Wi-Fi & Keys' },
   { id: 'voice', lbl: 'Voice AI' },
   { id: 'touch', lbl: 'Touch' },
-  { id: 'persona', lbl: 'Weather & Prompt' },
+  { id: 'weather', lbl: 'Weather' },
+  { id: 'persona', lbl: 'Personality' },
   { id: 'diary', lbl: 'Memory' }
 ]
 
@@ -24,10 +26,22 @@ const API_KEY_FIELDS = [
 ]
 
 const VAD_FIELDS = [
-  { name: 'stt_trail_ms', label: 'Trailing Silence Cutoff (ms)', min: 100, max: 3000, step: 50, hint: 'Default 450 ms wait after speech finishes.' },
-  { name: 'stt_noise_k', label: 'Noise Floor Multiplier (K_noise)', min: 1.1, max: 10.0, step: 0.1, hint: 'Default 2.2x. Speech gate = noiseFloor * K.' },
-  { name: 'stt_rel_k', label: 'Relative Peak Multiplier (K_rel)', min: 0.05, max: 1.0, step: 0.05, hint: 'Default 0.20 (20%) silence threshold.' },
-  { name: 'stt_max_sil', label: 'Max Silence Hard-Cap (ms)', min: 300, max: 5000, step: 100, hint: 'Default 1200 ms hard cutoff.' }
+  { name: 'stt_trail_ms', label: 'Trailing Silence Cutoff', min: 100, max: 3000, step: 50, unit: 'ms', decimals: 0, hint: 'Default 450 ms wait after speech finishes.' },
+  { name: 'stt_noise_k', label: 'Noise Floor Multiplier (K_noise)', min: 1.1, max: 10.0, step: 0.1, unit: 'x', decimals: 1, hint: 'Default 2.2x. Speech gate = noiseFloor * K.' },
+  { name: 'stt_rel_k', label: 'Relative Peak Multiplier (K_rel)', min: 0.05, max: 1.0, step: 0.05, unit: '', decimals: 2, hint: 'Default 0.20 (20%) silence threshold.' },
+  { name: 'stt_max_sil', label: 'Max Silence Hard-Cap', min: 300, max: 5000, step: 100, unit: 'ms', decimals: 0, hint: 'Default 1200 ms hard cutoff.' }
+]
+
+const MIC_MODE_OPTIONS = [
+  { val: 'auto', lbl: 'Auto Detect' },
+  { val: '0', lbl: 'Left Mic (Ch 0)' },
+  { val: '1', lbl: 'Right Mic (Ch 1)' }
+]
+
+const REPLY_LANG_OPTIONS = [
+  { val: '', lbl: 'Auto (Match User Language)' },
+  { val: 'hi', lbl: 'Hindi / Hinglish' },
+  { val: 'en', lbl: 'English Only' }
 ]
 
 const TOUCH_ACTION_OPTIONS = [
@@ -43,31 +57,11 @@ const TOUCH_ACTION_OPTIONS = [
   { val: 'none', lbl: 'Disabled' }
 ]
 
-const TOUCH_ZONES = [
-  {
-    zone: 'Top Head',
-    fields: [
-      { name: 'act_top_tap', label: 'Single Tap' },
-      { name: 'act_top_dbl', label: 'Double Tap' },
-      { name: 'act_top_hld', label: 'Hold 3s' }
-    ]
-  },
-  {
-    zone: 'Left Cheek',
-    fields: [
-      { name: 'act_lt_tap', label: 'Single Tap' },
-      { name: 'act_lt_dbl', label: 'Double Tap' },
-      { name: 'act_lt_hld', label: 'Hold 1.5s' }
-    ]
-  },
-  {
-    zone: 'Right Cheek',
-    fields: [
-      { name: 'act_rt_tap', label: 'Single Tap' },
-      { name: 'act_rt_dbl', label: 'Double Tap' },
-      { name: 'act_rt_hld', label: 'Hold 1.5s' }
-    ]
-  }
+const TOP_TOUCH_FIELDS = [
+  { name: 'act_top_tap', label: 'Single Tap (1×)' },
+  { name: 'act_top_dbl', label: 'Double Tap (2×)' },
+  { name: 'act_top_tpl', label: 'Triple Tap (3×)' },
+  { name: 'act_top_hld', label: 'Hold 1.5s' }
 ]
 
 const STT_PROVIDER_OPTIONS = [
@@ -99,6 +93,7 @@ const LLM_PROVIDER_OPTIONS = [
 
 const LLM_GEMINI_MODELS = [
   { val: 'gemini-2.5-flash', lbl: 'gemini-2.5-flash' },
+  { val: 'gemini-2.5-flash-lite', lbl: 'gemini-2.5-flash-lite' },
   { val: 'gemini-3.5-flash-lite', lbl: 'gemini-3.5-flash-lite' },
   { val: 'gemini-3.1-flash-lite', lbl: 'gemini-3.1-flash-lite' },
   { val: 'gemini-3.8-flash', lbl: 'gemini-3.8-flash' }
@@ -165,6 +160,11 @@ const TTS_FISH_VOICES = [
   { val: 'a32f14ad4d66457193d68abb997ed6c1', lbl: 'Doraemon' },
   { val: 'fb05f07c94d941c8be1b1ebb84422ef0', lbl: 'Alexa' },
   { val: '__custom__', lbl: 'Custom Reference ID...' }
+]
+
+const WAKE_WORD_OPTIONS = [
+  { val: '1', lbl: 'Hey Kiwi' },
+  { val: '0', lbl: 'Alexa' }
 ]
 
 const fieldLabelStyle = {
@@ -239,7 +239,13 @@ export default function SettingsView({
     stt_noise_k: 2.2,
     stt_rel_k: 0.20,
     stt_max_sil: 1200,
+    ww_model: '1',
+    ww_cutoff: 0.92,
+    ww_gain: 8.0,
+    ww_spike: '0',
+    mic_mode: 'auto',
     llmprovider: 'gemini',
+    replang: '',
     llmmodel: 'gemini-2.5-flash',
     llmurl: 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent',
     groqmodel: 'openai/gpt-oss-120b',
@@ -248,23 +254,21 @@ export default function SettingsView({
     ttsurl: 'https://api.sarvam.ai/text-to-speech',
     ttsmodel: 'bulbul:v3',
     ttsvoice: 'priya',
+    tts_pace: 1.0,
     fishurl: 'https://api.fish.audio/v1/tts',
     fishmodel: 's2.1-pro-free',
     fishvoice: 'default',
     tch_snd: '1',
     tch_deb: 30,
-    act_top_tap: 'listen',
-    act_top_dbl: 'tickle',
-    act_top_hld: 'skin',
-    act_lt_tap: 'vol_dn',
-    act_lt_dbl: 'none',
-    act_rt_tap: 'vol_up',
-    act_rt_dbl: 'none',
-    act_lt_hld: 'pet',
-    act_rt_hld: 'weather',
+    face_tween: 220,
+    act_top_tap: 'pet',
+    act_top_dbl: 'clock',
+    act_top_tpl: 'skin',
+    act_top_hld: 'listen',
     wthr_city: '',
     wthr_lat: '',
     wthr_lon: '',
+    personality: 'friendly',
     prompt: '',
     mem_name: '',
     mem_friends: '',
@@ -289,6 +293,7 @@ export default function SettingsView({
   const [customFishVoice, setCustomFishVoice] = useState(false)
   const dirtyFieldsRef = useRef(new Set())
   const dirtyFactsRef = useRef(false)
+  const customPromptDraftRef = useRef('')
 
   useEffect(() => {
     if (!config) return
@@ -307,7 +312,7 @@ export default function SettingsView({
         pass: config.wifi?.password || config.wifiPassword || config.pass || prev.pass,
         llmkey: config.llm?.key || config.llmKey || prev.llmkey,
         ttskey: config.tts?.key || config.ttsKey || prev.ttskey,
-        groqkey: config.groqKey || config.stt?.groqKey || prev.groqkey,
+        groqkey: config.llm?.groqKey || config.groqKey || config.stt?.groqKey || prev.groqkey,
         fishkey: config.tts?.fishKey || config.fishKey || prev.fishkey,
         sttprovider: config.stt?.provider || config.sttProvider || prev.sttprovider,
         sttlang: config.stt?.lang || config.sttLang || prev.sttlang,
@@ -319,7 +324,13 @@ export default function SettingsView({
         stt_noise_k: config.sttVad?.noiseK ?? prev.stt_noise_k,
         stt_rel_k: config.sttVad?.relK ?? prev.stt_rel_k,
         stt_max_sil: config.sttVad?.maxSilenceMs ?? prev.stt_max_sil,
+        ww_model: config.wakeWord?.model != null ? String(config.wakeWord.model) : prev.ww_model,
+        ww_cutoff: config.wakeWord?.cutoff ?? prev.ww_cutoff,
+        ww_gain: config.wakeWord?.gain ?? prev.ww_gain,
+        ww_spike: config.wakeWord?.spike != null ? (config.wakeWord.spike ? '1' : '0') : prev.ww_spike,
+        mic_mode: config.mic ? (config.mic.locked ? String(config.mic.slot ?? 0) : 'auto') : prev.mic_mode,
         llmprovider: config.llm?.provider || config.llmProvider || prev.llmprovider,
+        replang: config.replyLang ?? prev.replang,
         llmmodel: loadedLlmModel,
         llmurl: loadedLlmUrl,
         groqmodel: config.llm?.groqModel || config.groqModel || prev.groqmodel,
@@ -328,24 +339,30 @@ export default function SettingsView({
         ttsurl: config.tts?.url || config.ttsEndpoint || prev.ttsurl,
         ttsmodel: config.tts?.model || config.ttsModel || prev.ttsmodel,
         ttsvoice: config.tts?.voice || config.ttsVoice || prev.ttsvoice,
+        tts_pace: config.tts?.pace ?? prev.tts_pace,
         fishurl: config.tts?.fishUrl || config.fishEndpoint || prev.fishurl,
         fishmodel: config.tts?.fishModel || config.fishModel || prev.fishmodel,
         fishvoice: config.tts?.fishVoice || config.fishVoice || prev.fishvoice,
         tch_snd: config.touch?.sound != null ? (config.touch.sound ? '1' : '0') : prev.tch_snd,
         tch_deb: config.touch?.deb ?? prev.tch_deb,
+        face_tween: config.faceTweenMs ?? prev.face_tween,
         act_top_tap: config.touch?.topTap || prev.act_top_tap,
         act_top_dbl: config.touch?.topDbl || prev.act_top_dbl,
+        act_top_tpl: config.touch?.topTpl || prev.act_top_tpl,
         act_top_hld: config.touch?.topHld || prev.act_top_hld,
-        act_lt_tap: config.touch?.ltTap || prev.act_lt_tap,
-        act_lt_dbl: config.touch?.ltDbl || prev.act_lt_dbl,
-        act_rt_tap: config.touch?.rtTap || prev.act_rt_tap,
-        act_rt_dbl: config.touch?.rtDbl || prev.act_rt_dbl,
-        act_lt_hld: config.touch?.ltHld || prev.act_lt_hld,
-        act_rt_hld: config.touch?.rtHld || prev.act_rt_hld,
         wthr_city: config.weather?.city || config.weatherCity || prev.wthr_city,
         wthr_lat: config.weather?.lat || config.weatherLat || prev.wthr_lat,
         wthr_lon: config.weather?.lon || config.weatherLon || prev.wthr_lon,
-        prompt: config.prompt != null ? config.prompt : (config.systemPrompt != null ? config.systemPrompt : prev.prompt),
+        personality: config.personality || prev.personality,
+        prompt: (() => {
+          const loadedPersona = config.personality || prev.personality || 'friendly'
+          const rawP = config.prompt != null ? config.prompt : (config.systemPrompt != null ? config.systemPrompt : prev.prompt)
+          if (loadedPersona === 'custom' && rawP) {
+            customPromptDraftRef.current = rawP
+            return rawP
+          }
+          return getPersonalityMeta(loadedPersona)?.prompt || rawP
+        })(),
         mem_name: config.memory?.name ?? config.ownerName ?? prev.mem_name,
         mem_friends: config.memory?.friends ?? prev.mem_friends
       }
@@ -370,12 +387,49 @@ export default function SettingsView({
     dirtyFieldsRef.current.add(name)
     setFormData((prev) => {
       const updated = { ...prev, [name]: val }
+      if (name === 'prompt') {
+        customPromptDraftRef.current = val
+        updated.personality = 'custom'
+        dirtyFieldsRef.current.add('personality')
+      }
       if (name === 'llmmodel' && (!prev.llmurl || prev.llmurl.includes('generativelanguage.googleapis.com'))) {
         updated.llmurl = `https://generativelanguage.googleapis.com/v1beta/models/${val}:generateContent`
         dirtyFieldsRef.current.add('llmurl')
       }
+      if (name === 'ww_model') {
+        updated.ww_cutoff = String(val) === '0' ? 0.90 : 0.92
+        dirtyFieldsRef.current.add('ww_cutoff')
+      }
       return updated
     })
+  }
+
+  const handleSelectPersonality = async (modeId) => {
+    const meta = getPersonalityMeta(modeId)
+    if (formData.personality === 'custom' && formData.prompt) {
+      customPromptDraftRef.current = formData.prompt
+    }
+    const nextPrompt = modeId === 'custom'
+      ? (customPromptDraftRef.current || formData.prompt)
+      : (meta.prompt || formData.prompt)
+
+    dirtyFieldsRef.current.add('personality')
+    if (modeId === 'custom') {
+      dirtyFieldsRef.current.add('prompt')
+    } else {
+      dirtyFieldsRef.current.delete('prompt')
+    }
+    setFormData((prev) => ({ ...prev, personality: modeId, prompt: nextPrompt }))
+
+    if (onTriggerAction) {
+      const res = await onTriggerAction(`/do?personality=${encodeURIComponent(modeId)}`)
+      if (res && res.ok !== false) {
+        dirtyFieldsRef.current.delete('personality')
+        onToast?.(`Personality set to ${meta.label}!`)
+        return
+      }
+    }
+    onToast?.(`Selected ${meta.label} — tap Save to apply`)
   }
 
   const handleScanWifi = async () => {
@@ -420,7 +474,7 @@ export default function SettingsView({
     setNewFamRel(parsed.rel)
   }
 
-  const handleAddFamily = () => {
+  const handleAddFamily = async () => {
     const name = newFamName.trim().replace(/,/g, '')
     const rel = newFamRel.trim().replace(/[(),]/g, '')
     if (!name) return
@@ -435,23 +489,35 @@ export default function SettingsView({
     else nextList.push(entry)
 
     const updated = nextList.join(', ')
+    if (onTriggerAction) {
+      const res = await onTriggerAction('/do?setfriends=' + encodeURIComponent(updated))
+      if (!res || res.ok === false) {
+        onToast('Device offline — could not save family/friend.')
+        return
+      }
+    }
     dirtyFieldsRef.current.add('mem_friends')
     setFormData((prev) => ({ ...prev, mem_friends: updated }))
     resetFamilyDraft()
-    if (onTriggerAction) onTriggerAction('/do?setfriends=' + encodeURIComponent(updated))
     onToast(existingIdx >= 0 ? 'Updated family/friend!' : 'Added to family & friends!')
   }
 
-  const handleRemoveFamily = (idx) => {
+  const handleRemoveFamily = async (idx) => {
     const updated = familyMembers.filter((_, i) => i !== idx).join(', ')
+    if (onTriggerAction) {
+      const res = await onTriggerAction('/do?setfriends=' + encodeURIComponent(updated))
+      if (!res || res.ok === false) {
+        onToast('Device offline — could not remove member.')
+        return
+      }
+    }
     dirtyFieldsRef.current.add('mem_friends')
     setFormData((prev) => ({ ...prev, mem_friends: updated }))
     if (editingFamIdx !== null) resetFamilyDraft()
-    if (onTriggerAction) onTriggerAction('/do?setfriends=' + encodeURIComponent(updated))
     onToast('Removed member!')
   }
 
-  const handleAddFact = () => {
+  const handleAddFact = async () => {
     const txt = formData.new_mem.trim()
     if (!txt) return
     const strippedNew = txt.replace(/^\[\d{1,2}\s+[A-Za-z]{3}\]\s*/, '').toLowerCase()
@@ -459,34 +525,59 @@ export default function SettingsView({
       onToast('Already in memory!')
       return
     }
+    if (onTriggerAction) {
+      const res = await onTriggerAction('/do?addmem=' + encodeURIComponent(txt))
+      if (!res || res.ok === false) {
+        onToast('Device offline — fact not saved.')
+        return
+      }
+    }
     dirtyFactsRef.current = true
     dirtyFieldsRef.current.add('new_mem')
     setFacts((prev) => [...prev, txt])
     setFormData((prev) => ({ ...prev, new_mem: '' }))
-    if (onTriggerAction) onTriggerAction('/do?addmem=' + encodeURIComponent(txt))
     onToast('Fact saved to Kiwi memory!')
   }
 
-  const handleDeleteFact = (idx) => {
+  const handleDeleteFact = async (idx) => {
+    if (onTriggerAction) {
+      const res = await onTriggerAction('/do?delmem=' + idx)
+      if (!res || res.ok === false) {
+        onToast('Device offline — could not delete fact.')
+        return
+      }
+    }
     dirtyFactsRef.current = true
     setFacts((prev) => prev.filter((_, i) => i !== idx))
-    if (onTriggerAction) onTriggerAction('/do?delmem=' + idx)
     onToast('Fact removed!')
   }
 
-  const handleClearFollowUp = () => {
+  const handleClearFollowUp = async () => {
+    if (onTriggerAction) {
+      const res = await onTriggerAction('/do?clearfollowup=1')
+      if (!res || res.ok === false) {
+        onToast('Device offline — could not dismiss follow-up.')
+        return
+      }
+    }
     setPendingFollowUp('')
-    if (onTriggerAction) onTriggerAction('/do?clearfollowup=1')
     onToast('Follow-up dismissed!')
   }
 
-  const handleClearAllMemory = () => {
+  const handleClearAllMemory = async () => {
     if (!confirmClearMem) {
       setConfirmClearMem(true)
       setTimeout(() => setConfirmClearMem(false), 4000)
       return
     }
     setConfirmClearMem(false)
+    if (onTriggerAction) {
+      const res = await onTriggerAction('/do?clearmem=1')
+      if (!res || res.ok === false) {
+        onToast('Device offline — memory was not cleared.')
+        return
+      }
+    }
     resetFamilyDraft()
     dirtyFieldsRef.current.delete('mem_name')
     dirtyFieldsRef.current.delete('mem_friends')
@@ -495,7 +586,6 @@ export default function SettingsView({
     setFormData((prev) => ({ ...prev, mem_name: '', mem_friends: '', new_mem: '' }))
     setFacts([])
     setPendingFollowUp('')
-    if (onTriggerAction) onTriggerAction('/do?clearmem=1')
     onToast('All diary memories cleared!')
   }
 
@@ -508,8 +598,16 @@ export default function SettingsView({
     setSaving(true)
     const payload = new URLSearchParams()
     Object.entries(formData).forEach(([k, v]) => {
+      if (k === 'mic_mode') return
       payload.append(k, String(v))
     })
+    if (formData.mic_mode === 'auto') {
+      payload.append('micslot', '-1')
+      payload.append('micslot_lock', '0')
+    } else {
+      payload.append('micslot', String(formData.mic_mode))
+      payload.append('micslot_lock', '1')
+    }
     payload.append('facts_present', '1')
     facts.forEach((f) => payload.append('facts[]', f))
 
@@ -517,8 +615,15 @@ export default function SettingsView({
     const oldPass = config?.wifi?.password || config?.wifiPassword || config?.pass || ''
     const nextSsid = String(formData.ssid || '').trim()
     const nextPass = String(formData.pass || '').trim()
+    if (dirtyFieldsRef.current.has('pass') && nextPass === '') {
+      payload.append('pass_clear', '1')
+    }
+    const isClearedWifiPass = Boolean(
+      dirtyFieldsRef.current.has('pass') && nextPass === '' && oldPass && oldPass !== ''
+    )
     const expectsReboot = Boolean(
       (nextSsid && nextSsid !== oldSsid) ||
+      isClearedWifiPass ||
       (nextPass && nextPass !== oldPass && !/^\*+$/.test(nextPass))
     )
 
@@ -828,6 +933,93 @@ export default function SettingsView({
             )}
           </div>
 
+          <div style={{ ...subPanelStyle, marginBottom: '12px' }}>
+            <h3 style={{ fontSize: '12.5px', fontWeight: 700, color: 'var(--text-dark)', marginBottom: '12px' }}>
+              Microphone &amp; Wake-Word Sensitivity
+            </h3>
+            <div style={{ marginBottom: '12px' }}>
+              <label style={{ ...fieldLabelStyle, marginBottom: '4px', fontWeight: 600 }}>Wake Word Model (ww_model)</label>
+              <FluxSelect name="ww_model" value={formData.ww_model} onChange={handleChange} options={WAKE_WORD_OPTIONS} />
+            </div>
+            <div className="flux-grid-2" style={{ gap: '14px', marginBottom: '12px' }}>
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11.5px', marginBottom: '6px' }}>
+                  <span style={{ fontWeight: 600, color: 'var(--text-muted)' }}>Mic Boost Gain (ww_gain)</span>
+                  <strong style={{ color: 'var(--text-dark)', fontVariantNumeric: 'tabular-nums' }}>
+                    {Number(formData.ww_gain).toFixed(1)}x
+                  </strong>
+                </div>
+                <WakeSlider
+                  value={Number(formData.ww_gain)}
+                  min={1}
+                  max={16}
+                  step={0.5}
+                  bars={32}
+                  height={44}
+                  restHeight={10}
+                  gap={3}
+                  fillColor="#10B981"
+                  trackColor="var(--slider-track)"
+                  crestColor="#34D399"
+                  onChange={(v) => {
+                    dirtyFieldsRef.current.add('ww_gain')
+                    setFormData((prev) => ({ ...prev, ww_gain: Math.round(v * 2) / 2 }))
+                  }}
+                  ariaLabel="Wake Word Gain"
+                />
+              </div>
+
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11.5px', marginBottom: '6px' }}>
+                  <span style={{ fontWeight: 600, color: 'var(--text-muted)' }}>Wake Threshold (ww_cutoff)</span>
+                  <strong style={{ color: 'var(--text-dark)', fontVariantNumeric: 'tabular-nums' }}>
+                    {Number(formData.ww_cutoff).toFixed(2)}
+                  </strong>
+                </div>
+                <WakeSlider
+                  value={Number(formData.ww_cutoff)}
+                  min={0.5}
+                  max={0.98}
+                  step={0.02}
+                  bars={32}
+                  height={44}
+                  restHeight={10}
+                  gap={3}
+                  fillColor="var(--slider-fill)"
+                  trackColor="var(--slider-track)"
+                  crestColor="var(--accent-lime)"
+                  onChange={(v) => {
+                    dirtyFieldsRef.current.add('ww_cutoff')
+                    setFormData((prev) => ({ ...prev, ww_cutoff: Number(v.toFixed(2)) }))
+                  }}
+                  ariaLabel="Wake Word Cutoff"
+                />
+              </div>
+            </div>
+
+            <div className="flux-grid-2" style={{ alignItems: 'center', gap: '12px' }}>
+              <div>
+                <label style={{ ...fieldLabelStyle, marginBottom: '4px', fontWeight: 600 }}>Microphone Channel (micslot)</label>
+                <FluxSelect name="mic_mode" value={formData.mic_mode} onChange={handleChange} options={MIC_MODE_OPTIONS} />
+              </div>
+
+              <div style={{ paddingTop: '14px' }}>
+                <label className="flux-toggle" style={{ '--toggle-accent': '#F59E0B' }}>
+                  <input
+                    type="checkbox"
+                    name="ww_spike"
+                    checked={formData.ww_spike === '1'}
+                    onChange={handleChange}
+                  />
+                  <span className="flux-toggle-slider" />
+                  <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-dark)' }}>
+                    Secondary Spike Trigger (ww_spike)
+                  </span>
+                </label>
+              </div>
+            </div>
+          </div>
+
           <div style={subPanelStyle}>
             <button
               type="button"
@@ -857,23 +1049,41 @@ export default function SettingsView({
             </button>
 
             {showVad && (
-              <div className="flux-grid-2" style={{ gap: '12px', marginTop: '12px', paddingTop: '12px', borderTop: '1px solid var(--border-light)' }}>
-                {VAD_FIELDS.map((v) => (
-                  <div key={v.name}>
-                    <label style={{ ...fieldLabelStyle, marginBottom: '4px', fontWeight: 600 }}>{v.label}</label>
-                    <input
-                      type="number"
-                      name={v.name}
-                      min={v.min}
-                      max={v.max}
-                      step={v.step}
-                      value={formData[v.name]}
-                      onChange={handleChange}
-                      className="flux-field-input flux-field-input-card"
-                    />
-                    <span style={{ fontSize: '10px', color: 'var(--text-muted)', display: 'block', marginTop: '3px' }}>{v.hint}</span>
-                  </div>
-                ))}
+              <div className="flux-grid-2" style={{ gap: '14px', marginTop: '12px', paddingTop: '12px', borderTop: '1px solid var(--border-light)' }}>
+                {VAD_FIELDS.map((v) => {
+                  const numVal = Number(formData[v.name])
+                  const dispVal = v.decimals > 0 ? numVal.toFixed(v.decimals) : Math.round(numVal)
+                  return (
+                    <div key={v.name}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11.5px', marginBottom: '6px', gap: '6px' }}>
+                        <span style={{ fontWeight: 600, color: 'var(--text-muted)' }}>{v.label}</span>
+                        <strong style={{ color: 'var(--text-dark)', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
+                          {dispVal}{v.unit ? ` ${v.unit}` : ''}
+                        </strong>
+                      </div>
+                      <WakeSlider
+                        value={numVal}
+                        min={v.min}
+                        max={v.max}
+                        step={v.step}
+                        bars={32}
+                        height={44}
+                        restHeight={10}
+                        gap={3}
+                        fillColor="var(--slider-fill)"
+                        trackColor="var(--slider-track)"
+                        crestColor="#38BDF8"
+                        onChange={(nextVal) => {
+                          const normalized = v.decimals > 0 ? Number(nextVal.toFixed(v.decimals)) : Math.round(nextVal)
+                          dirtyFieldsRef.current.add(v.name)
+                          setFormData((prev) => ({ ...prev, [v.name]: normalized }))
+                        }}
+                        ariaLabel={v.label}
+                      />
+                      <span style={{ fontSize: '10px', color: 'var(--text-muted)', display: 'block', marginTop: '4px' }}>{v.hint}</span>
+                    </div>
+                  )
+                })}
               </div>
             )}
           </div>
@@ -890,14 +1100,26 @@ export default function SettingsView({
             </span>
           </div>
 
-          <div style={{ marginBottom: '14px' }}>
-            <label style={fieldLabelStyle}>LLM PROVIDER</label>
-            <FluxSelect
-              name="llmprovider"
-              value={formData.llmprovider}
-              onChange={handleChange}
-              options={LLM_PROVIDER_OPTIONS}
-            />
+          <div className="flux-grid-2" style={{ marginBottom: '14px' }}>
+            <div>
+              <label style={fieldLabelStyle}>LLM PROVIDER</label>
+              <FluxSelect
+                name="llmprovider"
+                value={formData.llmprovider}
+                onChange={handleChange}
+                options={LLM_PROVIDER_OPTIONS}
+              />
+            </div>
+
+            <div>
+              <label style={fieldLabelStyle}>REPLY LANGUAGE (replyLang)</label>
+              <FluxSelect
+                name="replang"
+                value={formData.replang}
+                onChange={handleChange}
+                options={REPLY_LANG_OPTIONS}
+              />
+            </div>
           </div>
 
           <div style={subPanelStyle}>
@@ -991,6 +1213,87 @@ export default function SettingsView({
                     <label style={{ ...fieldLabelStyle, marginBottom: '4px', fontWeight: 600 }}>Voice / Speaker</label>
                     <FluxSelect name="ttsvoice" value={formData.ttsvoice} onChange={handleChange} options={TTS_SARVAM_VOICES} />
                   </div>
+                </div>
+
+                {/* Sarvam Voice Speed (Pace: 0.75x - 1.35x) */}
+                <div style={{ marginTop: '14px', paddingTop: '12px', borderTop: '1px solid var(--border-light)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', gap: '8px', flexWrap: 'wrap' }}>
+                    <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-muted)' }}>
+                      Voice Speed (Pace):{' '}
+                      <strong style={{ color: 'var(--text-dark)', fontVariantNumeric: 'tabular-nums' }}>
+                        {Number(formData.tts_pace ?? 1.0).toFixed(2)}x
+                      </strong>
+                    </span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '5px', flexWrap: 'wrap' }}>
+                      {[
+                        { val: 0.85, lbl: 'Slow 0.85x' },
+                        { val: 1.0, lbl: 'Normal 1.0x' },
+                        { val: 1.15, lbl: 'Brisk 1.15x' },
+                        { val: 1.25, lbl: 'Fast 1.25x' }
+                      ].map((preset) => {
+                        const active = Math.abs(Number(formData.tts_pace ?? 1.0) - preset.val) < 0.02
+                        return (
+                          <button
+                            key={preset.val}
+                            type="button"
+                            onClick={async () => {
+                              dirtyFieldsRef.current.add('tts_pace')
+                              setFormData((prev) => ({ ...prev, tts_pace: preset.val }))
+                              if (onTriggerAction) {
+                                const res = await onTriggerAction(`/do?tts_pace=${preset.val.toFixed(2)}`)
+                                if (res && res.ok !== false) {
+                                  dirtyFieldsRef.current.delete('tts_pace')
+                                  onToast?.(`Voice speed set to ${preset.val.toFixed(2)}x`)
+                                }
+                              }
+                            }}
+                            style={{
+                              padding: '2px 8px',
+                              borderRadius: '999px',
+                              fontSize: '10.5px',
+                              fontWeight: active ? 700 : 600,
+                              fontFamily: 'inherit',
+                              cursor: 'pointer',
+                              background: active ? 'rgba(14, 165, 233, 0.14)' : 'var(--card-white)',
+                              border: active ? '1px solid #0EA5E9' : '1px solid var(--border-light)',
+                              color: active ? '#0284C7' : 'var(--text-muted)'
+                            }}
+                          >
+                            {preset.lbl}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+                  <WakeSlider
+                    value={Number(formData.tts_pace ?? 1.0)}
+                    min={0.75}
+                    max={1.35}
+                    step={0.05}
+                    bars={25}
+                    height={42}
+                    restHeight={10}
+                    gap={4}
+                    fillColor="#0EA5E9"
+                    trackColor="var(--slider-track)"
+                    crestColor="#38BDF8"
+                    onChange={(v) => {
+                      const snapped = Math.round(Number(v) * 20) / 20
+                      dirtyFieldsRef.current.add('tts_pace')
+                      setFormData((prev) => ({ ...prev, tts_pace: snapped }))
+                    }}
+                    onCommit={async (v) => {
+                      const snapped = Math.round(Number(v) * 20) / 20
+                      if (onTriggerAction) {
+                        const res = await onTriggerAction(`/do?tts_pace=${snapped.toFixed(2)}`)
+                        if (res && res.ok !== false) {
+                          dirtyFieldsRef.current.delete('tts_pace')
+                          onToast?.(`Voice speed set to ${snapped.toFixed(2)}x`)
+                        }
+                      }
+                    }}
+                    ariaLabel="Sarvam Voice Speed Pace"
+                  />
                 </div>
               </div>
             )}
@@ -1103,58 +1406,126 @@ export default function SettingsView({
             </label>
           </div>
 
-          <div style={{ marginBottom: '16px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', marginBottom: '8px' }}>
-              <span style={{ fontWeight: 600, color: 'var(--text-muted)' }}>
-                Debounce Sensitivity: <strong style={{ color: 'var(--text-dark)' }}>{formData.tch_deb} ms</strong>
-              </span>
-            </div>
-            <div style={{ maxWidth: '340px' }}>
+          <div className="flux-grid-2" style={{ marginBottom: '16px', gap: '14px' }}>
+            <div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', marginBottom: '8px' }}>
+                <span style={{ fontWeight: 600, color: 'var(--text-muted)' }}>
+                  Debounce Sensitivity: <strong style={{ color: 'var(--text-dark)' }}>{formData.tch_deb} ms</strong>
+                </span>
+              </div>
               <WakeSlider
                 value={Number(formData.tch_deb || 50)}
                 min={10}
                 max={150}
                 step={5}
-                bars={20}
-                height={32}
-                restHeight={16}
+                bars={34}
+                height={46}
+                restHeight={10}
                 gap={4}
                 fillColor="var(--slider-fill)"
                 trackColor="var(--slider-track)"
                 crestColor="var(--accent-lime)"
-                onChange={(v) => setFormData((prev) => ({ ...prev, tch_deb: v }))}
+                onChange={(v) => {
+                  dirtyFieldsRef.current.add('tch_deb')
+                  setFormData((prev) => ({ ...prev, tch_deb: v }))
+                }}
                 ariaLabel="Touch Debounce Filter"
+              />
+            </div>
+
+            <div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', marginBottom: '8px' }}>
+                <span style={{ fontWeight: 600, color: 'var(--text-muted)' }}>
+                  Eye Tween Speed (faceTweenMs):{' '}
+                  <strong style={{ color: 'var(--text-dark)' }}>
+                    {Number(formData.face_tween) === 0 ? '0 ms (Instant)' : `${formData.face_tween} ms`}
+                  </strong>
+                </span>
+              </div>
+              <WakeSlider
+                value={Number(formData.face_tween ?? 220)}
+                min={0}
+                max={800}
+                step={20}
+                bars={34}
+                height={46}
+                restHeight={10}
+                gap={4}
+                fillColor="#0EA5E9"
+                trackColor="var(--slider-track)"
+                crestColor="#38BDF8"
+                onChange={(v) => {
+                  dirtyFieldsRef.current.add('face_tween')
+                  setFormData((prev) => ({ ...prev, face_tween: Math.round(v) }))
+                }}
+                ariaLabel="OLED Eye Tween Duration"
               />
             </div>
           </div>
 
-          <div className="flux-grid-autofit">
-            {TOUCH_ZONES.map((z) => (
-              <div key={z.zone} style={{ ...subPanelStyle, display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-dark)' }}>{z.zone}</span>
-                {z.fields.map((f) => (
-                  <div key={f.name}>
-                    <label style={{ ...fieldLabelStyle, marginBottom: '4px', fontSize: '10.5px', fontWeight: 600 }}>{f.label}</label>
-                    <FluxSelect compact name={f.name} value={formData[f.name]} onChange={handleChange} options={TOUCH_ACTION_OPTIONS} />
-                  </div>
-                ))}
-              </div>
-            ))}
+          <div style={{ ...subPanelStyle, display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap' }}>
+              <span style={{ fontSize: '12.5px', fontWeight: 700, color: 'var(--text-dark)' }}>Top Head Sensor (GPIO 12)</span>
+              <span style={{
+                fontSize: '10px',
+                fontWeight: 700,
+                padding: '2px 8px',
+                borderRadius: '999px',
+                background: 'rgba(14, 165, 233, 0.12)',
+                color: '#0284C7',
+                border: '1px solid rgba(14, 165, 233, 0.25)'
+              }}>
+                1-Sensor Mode
+              </span>
+            </div>
+            <div className="flux-grid-2" style={{ gap: '12px' }}>
+              {TOP_TOUCH_FIELDS.map((f) => (
+                <div key={f.name}>
+                  <label style={{ ...fieldLabelStyle, marginBottom: '4px', fontSize: '11px', fontWeight: 600 }}>{f.label}</label>
+                  <FluxSelect compact name={f.name} value={formData[f.name]} onChange={handleChange} options={TOUCH_ACTION_OPTIONS} />
+                </div>
+              ))}
+            </div>
+            <div style={{
+              borderTop: '1px solid var(--border-light)',
+              paddingTop: '10px',
+              display: 'flex',
+              flexWrap: 'wrap',
+              gap: '6px'
+            }}>
+              {[
+                '1× Busy: Stop / Dismiss',
+                '4× Tap: Tickle Laugh',
+                'Hold 1.2s: Feed / Forgive',
+                'Hold 7s: Sleep / Wake'
+              ].map((tip) => (
+                <span
+                  key={tip}
+                  style={{
+                    fontSize: '10.5px',
+                    fontWeight: 600,
+                    color: 'var(--text-muted)',
+                    background: 'var(--card-white)',
+                    border: '1px solid var(--border-light)',
+                    borderRadius: '999px',
+                    padding: '3px 9px'
+                  }}
+                >
+                  {tip}
+                </span>
+              ))}
+            </div>
           </div>
-
-          <small style={{ display: 'block', marginTop: '12px', color: 'var(--text-muted)', fontSize: '11.5px' }}>
-            Tip: Hold Top Head for 3s to change face skin; hold for 7s to enter Night Sleep.
-          </small>
         </div>
       )}
 
-      {/* ================= CARD 7: WEATHER & PERSONALITY ================= */}
-      {showTab('persona') && (
+      {/* ================= CARD 7: WEATHER ================= */}
+      {showTab('weather') && (
         <div className="flux-white-card">
           <div className="flux-card-header">
             <span className="flux-card-title">
               <CloudSun size={16} />
-              <span>Weather &amp; Personality</span>
+              <span>Weather</span>
             </span>
           </div>
 
@@ -1170,7 +1541,7 @@ export default function SettingsView({
             />
           </div>
 
-          <div className="flux-grid-2" style={{ marginBottom: '14px' }}>
+          <div className="flux-grid-2">
             <div>
               <label style={{ ...fieldLabelStyle, marginBottom: '4px', fontWeight: 600 }}>Latitude (-90 to 90)</label>
               <input
@@ -1202,22 +1573,92 @@ export default function SettingsView({
             </div>
           </div>
 
-          <div>
-            <label style={{ ...fieldLabelStyle, marginBottom: '4px', fontWeight: 600 }}>Robot System Prompt</label>
-            <textarea
-              name="prompt"
-              rows={4}
-              value={formData.prompt}
-              onChange={handleChange}
-              placeholder="You are Kiwi, an autonomous companion robot..."
-              className="flux-field-input"
-              style={{ borderRadius: '14px', resize: 'vertical' }}
-            />
-          </div>
+          <small style={{ display: 'block', marginTop: '8px', color: 'var(--text-muted)', fontSize: '12px' }}>
+            Used for Kiwi&apos;s OLED weather screen and local weather updates.
+          </small>
         </div>
       )}
 
-      {/* ================= CARD 8: PERSONAL LIFE DIARY & LONG-TERM MEMORY ================= */}
+      {/* ================= CARD 8: PERSONALITY ================= */}
+      {showTab('persona') && (() => {
+        const activePersonaMeta = getPersonalityMeta(formData.personality)
+        return (
+          <div className="flux-white-card">
+            <div className="flux-card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+              <span className="flux-card-title">
+                <Sparkles size={16} />
+                <span>Personality</span>
+              </span>
+              <span style={{
+                fontSize: '10.5px',
+                fontWeight: 800,
+                padding: '3px 9px',
+                borderRadius: '999px',
+                background: activePersonaMeta.bgTint,
+                color: activePersonaMeta.accent
+              }}>
+                {activePersonaMeta.label} · {activePersonaMeta.badge}
+              </span>
+            </div>
+
+            <div style={{ marginBottom: '14px' }}>
+              <label style={{ ...fieldLabelStyle, marginBottom: '8px', fontWeight: 600 }}>Preset Mode</label>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(128px, 1fr))', gap: '8px' }}>
+                {PERSONALITY_PRESETS.map((p) => {
+                  const active = formData.personality === p.id
+                  return (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => handleSelectPersonality(p.id)}
+                      style={{
+                        textAlign: 'left',
+                        padding: '9px 11px',
+                        borderRadius: '12px',
+                        background: active ? p.bgTint : 'var(--card-subtle)',
+                        border: active ? `1.5px solid ${p.accent}` : '1px solid var(--border-light)',
+                        cursor: 'pointer',
+                        fontFamily: 'inherit',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '2px',
+                        transition: 'all 0.14s ease'
+                      }}
+                    >
+                      <span style={{ fontSize: '12.5px', fontWeight: 800, color: active ? p.accent : 'var(--text-dark)' }}>
+                        {p.label}
+                      </span>
+                      <span style={{ fontSize: '10.5px', fontWeight: 600, color: 'var(--text-muted)' }}>
+                        {p.badge}
+                      </span>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+
+            <div>
+              <label style={{ ...fieldLabelStyle, marginBottom: '6px', fontWeight: 600 }}>
+                {formData.personality === 'custom' ? 'Custom System Prompt' : `System Prompt (${activePersonaMeta.label} Template)`}
+              </label>
+              <textarea
+                name="prompt"
+                rows={5}
+                value={formData.prompt}
+                onChange={handleChange}
+                placeholder="You are Kiwi, an autonomous companion robot..."
+                className="flux-field-input"
+                style={{ borderRadius: '14px', resize: 'vertical', lineHeight: 1.5, minHeight: '116px' }}
+              />
+              <small style={{ display: 'block', marginTop: '6px', color: 'var(--text-muted)', fontSize: '12px' }}>
+                Switch live above or by voice (&quot;Kiwi bakchod mode on&quot;, &quot;serious mode me aao&quot;). Editing text switches to Custom.
+              </small>
+            </div>
+          </div>
+        )
+      })()}
+
+      {/* ================= CARD 9: PERSONAL LIFE DIARY & LONG-TERM MEMORY ================= */}
       {showTab('diary') && (
         <div className="flux-white-card">
           <div className="flux-card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>

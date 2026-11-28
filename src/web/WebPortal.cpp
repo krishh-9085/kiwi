@@ -15,6 +15,7 @@ volatile bool otaInProgress = false;
 volatile uint32_t lastWebRequestAt = 0;
 static bool webRoutesSet = false;
 static bool customAnimationUploadResult = false;
+static bool manualOtaRejectedBusy = false;
 
 void notifyWebRequest() {
   lastWebRequestAt = millis();
@@ -130,7 +131,7 @@ void startWeb() {
               customAnimationUploadResult ? 200 : 400, "application/json",
               customAnimationUploadResult
                   ? "{\"ok\":true}"
-                  : "{\"ok\":false,\"error\":\"Expected 1024 bitmap bytes\"}");
+                  : "{\"ok\":false,\"error\":\"Expected 1024 bitmap bytes (or all 12 slots full)\"}");
         },
         []() {
           HTTPUpload &upload = server.upload();
@@ -144,6 +145,7 @@ void startWeb() {
           } else if (upload.status == UPLOAD_FILE_END) {
             customAnimationUploadResult = finishCustomAnimationUpload();
           } else if (upload.status == UPLOAD_FILE_ABORTED) {
+            cancelCustomAnimationUpload();
             customAnimationUploadResult = false;
           }
         });
@@ -155,18 +157,23 @@ void startWeb() {
 
     server.on("/ota/status", HTTP_GET, handleOtaStatus);
     server.on("/ota/install", HTTP_POST, handleOtaInstall);
+    server.on("/ota/rollback", HTTP_POST, handleOtaRollback);
 
     server.on(
         "/update", HTTP_POST,
         []() {
           notifyWebRequest();
           otaInProgress = false;
-          if (busyProcessing) {
+          if (manualOtaRejectedBusy) {
+            manualOtaRejectedBusy = false;
+            busyProcessing = false;
+            Update.abort();
             server.send(503, "text/plain",
                         "FAIL: Robot is busy processing audio/AI. Please wait "
                         "or touch to cancel.");
             return;
           }
+          busyProcessing = false;
           server.sendHeader("Connection", "close");
           if (Update.hasError()) {
             server.send(500, "text/plain",
@@ -180,50 +187,69 @@ void startWeb() {
         },
         []() {
           notifyWebRequest();
-          if (busyProcessing) {
-            otaInProgress = false;
-            Update.abort();
-            return;
-          }
           HTTPUpload &upload = server.upload();
           if (upload.status == UPLOAD_FILE_START) {
+            if (busyProcessing || otaInProgress) {
+              manualOtaRejectedBusy = true;
+              otaInProgress = false;
+              Update.abort();
+              return;
+            }
+            manualOtaRejectedBusy = false;
             otaInProgress = true;
+            busyProcessing = true;
+            lastProgressAt = millis();
             Serial.printf("[OTA] Update: %s\n", upload.filename.c_str());
             if (server.hasHeader("Content-Length") &&
                 (size_t)server.header("Content-Length").toInt() > (0x1F0000UL + 8192UL)) {
               Serial.println("[OTA] Update rejected: upload size exceeds app "
                              "partition (1.98MB)");
               otaInProgress = false;
+              busyProcessing = false;
               Update.abort();
               return;
             }
             if (!Update.begin(0x1F0000UL)) {
               otaInProgress = false;
+              busyProcessing = false;
               Update.printError(Serial);
             }
           } else if (upload.status == UPLOAD_FILE_WRITE) {
-            if (upload.totalSize > 0x1F0000UL) {
+            if (manualOtaRejectedBusy || !otaInProgress) {
+              Update.abort();
+              return;
+            }
+            lastProgressAt = millis();
+            if (upload.totalSize + upload.currentSize > 0x1F0000UL) {
               Serial.println(
                   "[OTA] Update rejected: written size exceeds app partition");
               otaInProgress = false;
+              busyProcessing = false;
               Update.abort();
               return;
             }
             if (Update.write(upload.buf, upload.currentSize) !=
                 upload.currentSize) {
               otaInProgress = false;
+              busyProcessing = false;
               Update.printError(Serial);
               Update.abort();
             }
           } else if (upload.status == UPLOAD_FILE_END) {
             otaInProgress = false;
-            if (Update.end(true)) {
+            busyProcessing = false;
+            if (manualOtaRejectedBusy || upload.totalSize < 4096) {
+              Serial.println("[OTA] Update aborted: rejected or truncated payload");
+              Update.abort();
+            } else if (Update.end(true)) {
               Serial.printf("[OTA] Success: %u bytes\n", upload.totalSize);
             } else {
               Update.printError(Serial);
             }
           } else if (upload.status == UPLOAD_FILE_ABORTED) {
             otaInProgress = false;
+            busyProcessing = false;
+            manualOtaRejectedBusy = false;
             Update.abort();
           }
         });

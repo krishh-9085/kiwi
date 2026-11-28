@@ -11,9 +11,16 @@ static const uint32_t CHAT_HISTORY_TIMEOUT_MS =
     240000; // 4 minutes inactivity timeout
 
 void clearConversationHistory() {
+  for (int i = 0; i < MAX_CHAT_HISTORY; i++) {
+    chatHistory[i].question = "";
+    chatHistory[i].answer = "";
+    chatHistory[i].persona = "";
+  }
   chatHistoryCount = 0;
   lastChatTime = 0;
-  Serial.println("[CONVO] Conversation history cleared.");
+  lastTranscribedQuestion = "";
+  lastLlmAnswer = "";
+  Serial.println("[CONVO] Conversation history & active context cleared.");
 }
 
 int getConversationHistoryCount() { return chatHistoryCount; }
@@ -40,9 +47,11 @@ void addChatHistory(const String &q, const String &a) {
   }
   chatHistory[chatHistoryCount].question = utf8Truncate(q, 160);
   chatHistory[chatHistoryCount].answer = utf8Truncate(a, 220);
+  chatHistory[chatHistoryCount].persona = normalizePersonalityMode(personalityMode);
   chatHistoryCount++;
   lastChatTime = millis();
-  Serial.printf("[CONVO] Stored turn %d/%d in memory (Free heap: %u)\n",
+  Serial.printf("[CONVO] Stored turn %d/%d in memory (persona=%s, Free heap: %u)\n",
                 chatHistoryCount, limit,
+                chatHistory[chatHistoryCount - 1].persona.c_str(),
                 (unsigned)ESP.getFreeHeap());
 }

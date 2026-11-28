@@ -7,7 +7,7 @@ int utf8Count(const String &s);
 String utf8Truncate(const String &s, int maxChars);
 String jsonTextField(const String &json, const char *key);
 String jsonEscape(const String &s);
-String cleanForSpeech(const String &s);
+String cleanForSpeech(const String &s, bool keepAudioCues = false);
 String stripAudioCues(const String &text);
 String stripRobotTags(const String &text);
 String normalizeFishAudioTags(const String &text);

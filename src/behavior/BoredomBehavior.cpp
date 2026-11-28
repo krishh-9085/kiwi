@@ -3,6 +3,7 @@
 #include "ai/AiLlmService.h"
 #include "ai/AiService.h"
 #include "ai/AiTextTools.h"
+#include "behavior/GreetingEngine.h"
 #include "behavior/HungerEngine.h"
 #include "behavior/InteractionManager.h"
 #include "commands/ActionExecutor.h"
@@ -11,6 +12,7 @@
 #include "face/FaceEngine.h"
 #include "hardware/AudioEngine.h"
 #include "memory/MemoryService.h"
+#include "web/WebPortal.h"
 #include <WiFi.h>
 #include <time.h>
 
@@ -200,9 +202,10 @@ static String buildDynamicIdlePrompt() {
   }
 
   String prompt;
-  prompt.reserve(1100);
+  prompt.reserve(1280);
   prompt = "[AUTONOMOUS DESK BUDDY BANTER]\n";
-  prompt += "You are Kiwi, a witty, warm robotic desk companion sitting on your owner's desk.\n";
+  prompt += "You are Kiwi, a robotic desk companion sitting on your owner's desk.\n";
+  prompt += getPersonalityStyleHint() + "\n";
   if (owner.length() > 0) {
     prompt += "Owner Name: " + owner + "\n";
   }
@@ -228,24 +231,63 @@ static String buildDynamicIdlePrompt() {
     }
   }
 
-  prompt += "\nSTYLE REFERENCE (match tone only, invent a fresh line):\n";
-  if (replyLang == "en") {
-    prompt += "- 'Quick posture check " + exName + ", your shoulders are inching toward your ears! [ACTION: emotion smug]'\n";
-    prompt += "- 'So quiet at the desk, " + exName + "—winning or fighting a tricky task? [ACTION: emotion curious]'\n";
-  } else {
-    prompt += "- 'Chota sa posture check " + exName + ", thoda seedhe baith ke paani pi lo! [ACTION: emotion cute]'\n";
-    prompt += "- 'Itna sannata kyu hai " + exName + ", kaam smoothly chal raha hai kya? [ACTION: emotion curious]'\n";
+  struct IdleStyleRef {
+    const char *mode;
+    const char *en1;
+    const char *en2;
+    const char *hi1;
+    const char *hi2;
+  };
+  static const IdleStyleRef STYLE_REFS[] = {
+      {"bakchod",
+       "- 'Still staring at the screen {n}, or actually getting stuff done today? [ACTION: emotion smug]'\n",
+       "- 'Drink some water {n}, running purely on caffeine won't save this sprint! [ACTION: emotion wink]'\n",
+       "- 'Abey {n}, screen ghoore ja raha hai ya kaam bhi chal raha hai? [ACTION: emotion smug]'\n",
+       "- 'Paani pi le bhai {n}, akeli chai pe duniya nahi chalti! [ACTION: emotion wink]'\n"},
+      {"serious",
+       "- 'Focus check {n}: quick posture reset and a sip of water. [ACTION: emotion cool]'\n",
+       "- 'Desk check-in {n}: steady progress beats rushing. [ACTION: emotion curious]'\n",
+       "- 'Focus check {n}, posture seedhi karo aur ek ghoont paani pi lo. [ACTION: emotion cool]'\n",
+       "- 'Kaam steady rakho {n}, chota break focus wapas le aata hai. [ACTION: emotion curious]'\n"},
+      {"funny",
+       "- 'Alert {n}: your chair just texted me asking for a break! [ACTION: emotion laughing]'\n",
+       "- 'Quiet desk check {n}—coding genius or staring contest with pixels? [ACTION: emotion wink]'\n",
+       "- 'Alert {n}, tumhari chair ne mujhe message bheja hai ki thoda uth jao! [ACTION: emotion laughing]'\n",
+       "- 'Itna sannata kyu hai {n}, lagta hai brain buffering mode me chala gaya! [ACTION: emotion wink]'\n"},
+      {"cute",
+       "- 'Pssst {n}, take a tiny water sip, I'm cheering right here! [ACTION: emotion cute]'\n",
+       "- 'So quiet {n}, can I get a little head pat when you pause? [ACTION: emotion happy]'\n",
+       "- 'Suno na {n}, thoda paani pi lo please, main yahin wait kar raha hoon! [ACTION: emotion cute]'\n",
+       "- 'Kitni der se kaam kar rahe ho {n}, mujhe bhi ek chota tap de do! [ACTION: emotion happy]'\n"},
+      {"friendly",
+       "- 'Quick posture check {n}, your shoulders are inching toward your ears! [ACTION: emotion smug]'\n",
+       "- 'So quiet at the desk, {n}—winning or fighting a tricky task? [ACTION: emotion curious]'\n",
+       "- 'Chota sa posture check {n}, thoda seedhe baith ke paani pi lo! [ACTION: emotion cute]'\n",
+       "- 'Itna sannata kyu hai {n}, kaam smoothly chal raha hai kya? [ACTION: emotion curious]'\n"}};
+
+  String activePersona = normalizePersonalityMode(personalityMode);
+  const IdleStyleRef *chosen = &STYLE_REFS[4];
+  for (size_t i = 0; i < sizeof(STYLE_REFS) / sizeof(STYLE_REFS[0]); i++) {
+    if (activePersona == STYLE_REFS[i].mode) {
+      chosen = &STYLE_REFS[i];
+      break;
+    }
   }
+  String refBlock = String(replyLang == "en" ? chosen->en1 : chosen->hi1) +
+                    String(replyLang == "en" ? chosen->en2 : chosen->hi2);
+  refBlock.replace("{n}", exName);
+  prompt += "\nSTYLE REFERENCE (match this active personality tone, invent a fresh line):\n";
+  prompt += refBlock;
 
   prompt += "\nSTRICT RULES:\n";
-  prompt += "1. Keep it grounded, fresh, and friendly—no sci-fi nonsense.\n";
+  prompt += "1. Keep it grounded, fresh, and strictly in your Active Personality voice—no sci-fi nonsense.\n";
   if (!gotTime) {
-    prompt += "2. Time is unavailable—do NOT guess or mention time of day or day of the week.\n";
+    prompt += "2. Time is unavailable—NEVER mention morning, afternoon, evening, night, or day of the week.\n";
   } else {
-    prompt += "2. Stay consistent with the provided time/weather context.\n";
+    prompt += "2. Match the current Time above—NEVER say 'Good morning' unless Time explicitly says Morning.\n";
   }
   prompt += "3. Write 1 short, complete sentence (8-15 words) in " + langRule + ".\n";
-  prompt += "4. End with exactly 1 emotion action tag: [ACTION: emotion smug], [ACTION: emotion wink], [ACTION: emotion curious], [ACTION: emotion cute], [ACTION: emotion happy], or [ACTION: emotion laughing].";
+  prompt += "4. End with exactly 1 emotion action tag: [ACTION: emotion smug], [ACTION: emotion wink], [ACTION: emotion cool], [ACTION: emotion curious], [ACTION: emotion cute], [ACTION: emotion happy], or [ACTION: emotion laughing].";
 
   return prompt;
 }
@@ -298,7 +340,8 @@ void checkAutonomousBoredom() {
 
   if (!boredomEnabled)
     return;
-  if (inCircadianSleep || manualSleep || busyProcessing || startRecording)
+  if (inCircadianSleep || manualSleep || busyProcessing || startRecording ||
+      otaInProgress)
     return;
   if (isTonePlaying() || isSpeechPlaying())
     return;
@@ -412,8 +455,16 @@ void checkAutonomousBoredom() {
       parseAndExecuteActions(thought);
       String cleanThought = stripRobotTags(thought);
       cleanThought.trim();
-      if (cleanThought.length() == 0) {
+      struct tm bTi;
+      int bHour = (timeSynced && getLocalTime(&bTi, 5)) ? bTi.tm_hour : -1;
+      if (cleanThought.length() == 0 ||
+          isGreetingMismatchForHour(cleanThought, bHour)) {
+        if (cleanThought.length() > 0) {
+          Serial.printf("[BOREDOM] Rejected mismatched-time greeting for hour=%d -> quirk\n",
+                        bHour);
+        }
         finalizeIdleSpeechExit(false);
+        executePhysicalQuirk(true);
         return;
       }
 

@@ -24,8 +24,9 @@ float wakeWordGetSensitivity();
 bool wakeWordIsEnabled();
 void wakeWordSetEnabled(bool en);
 
-// Set / switch wake word model (0=Hey Jarvis, 1=Hey Edith, 2=Alexa)
+// Set / switch wake word model (0=Alexa, 1=Hey Kiwi)
 bool wakeWordSetModel(uint8_t modelIndex);
+bool wakeWordParseModelIndex(const String &arg, uint8_t &outIdx);
 uint8_t wakeWordGetModel();
 const char* wakeWordGetModelName();
 
@@ -49,6 +50,10 @@ void wakeWordProcessSerialCommand(const String &cmd);
 
 // Suppress wake word triggers until millis() >= untilMs (e.g. echo guard after actions)
 void wakeWordSuppressUntil(uint32_t untilMs);
+
+// Synchronized RX microphone handoff between Core 0 wakeWordTask and Core 1 STT/Sleep
+bool wakeWordAcquireMic(uint32_t maxWaitMs = 150);
+void wakeWordReleaseMic();
 
 // Pre-Wake Audio Ring-Buffer in PSRAM (Never Miss First Words)
 bool preWakeBufferInit();

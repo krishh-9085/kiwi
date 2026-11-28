@@ -4,9 +4,9 @@
 
 Kiwi is powered by local offline neural wake word detection, dual-core multithreaded rendering, an interactive Tamagotchi-style pet hunger system, cloud speech-to-text, multiple LLM reasoning engines (Groq, Google Gemini), and expressive streaming text-to-speech. Its eyes, sounds, RGB LED, and behaviors dynamically react to physical touch, vocal emotions, time of day, room lighting (HyperHDR / WLED), and LLM-driven actions.
 
-- **Firmware Version:** `v1.2` (`FIRMWARE_VERSION` in [AppConfig.h](src/config/AppConfig.h#L8))
-- **Hardware Platform:** ESP32-S3 (Dual-Core Xtensa LX7 @ 240 MHz, 4 MB Flash)
-- **Web UI Platform:** Modern Single-Page App (React 19 + Vite + TailwindCSS + Framer Motion) embedded in PROGMEM Gzip
+- **Firmware Version:** `v2.0` (`FIRMWARE_VERSION` in [AppConfig.h](src/config/AppConfig.h#L8))
+- **Hardware Platform:** ESP32-S3 (Dual-Core Xtensa LX7 @ 240 MHz, 4 MB Flash, Octal/Quad PSRAM)
+- **Web UI Platform:** Modern Single-Page App (React 19 / Preact compat + Vite + Lucide Icons) embedded in PROGMEM Gzip
 - **Build System:** PlatformIO (`default_envs = esp32s3`)
 
 ---
@@ -56,11 +56,14 @@ Configured in [AppConfig.h](src/config/AppConfig.h#L27-L39):
 - **Core 0 — Wake Word Background Worker:** Runs TFLite Micro audio feature extraction and inference in parallel without stalling audio or web requests.
 - **Core 1 — Robot Logic & Networking:** Handles main loop execution, Wi-Fi maintenance, captive SoftAP, REST APIs, TLS client communication, cloud AI pipelines, and touch gesture state machines.
 
-### 2. Local Neural Wake Word Engine (MicroWakeWord)
-- **Offline Hotword Detection:** Runs on-device via TensorFlow Lite Micro and ESPMicroSpeechFeatures frontend.
-- **Optimized Single Active Model:** Dedicated **`Alexa`** model (probability cutoff: `0.90`, sliding window: 5).
+### 2. Local Neural Wake Word Engine (MicroWakeWord v2)
+- **Offline Hotword Detection:** Runs on-device via TensorFlow Lite Micro (`MicroMutableOpResolver<12>`) and the `ESPMicroSpeechFeatures` frontend.
+- **Dual Runtime-Switchable Models:**
+  - **`Hey Kiwi`** *(Default, index `1`)* — Custom MixedNet model trained with [custom_microwakeword_training_kiwi_v4.ipynb](custom_microwakeword_training_kiwi_v4.ipynb) (`57,984` bytes, `probability_cutoff: 0.92`, `sliding_window_size: 5`; calibrated at `94.4%` recall with `0.000` FAPH in streaming ROC evaluation).
+  - **`Alexa`** *(index `0`)* — Shipped MicroWakeWord v2 MixedNet model (`55,856` bytes, `probability_cutoff: 0.90`, `sliding_window_size: 5`).
+- **Live Switching:** Change wake words anytime without rebooting via the Desktop **Wake Word & Sensing** card, Mobile **Quick Modes → Wake Word** dropdown, **Settings → Microphone & Wake-Word Sensitivity**, or Serial CLI (`ww model <0|1>`). Switching models automatically loads that model's calibrated default cutoff unless overridden afterwards.
 - **RAM Optimization:** TensorFlow arena size reduced from 36 KB to **20 KB** (`TENSOR_ARENA_SIZE = 20000`), freeing ~16 KB of static internal SRAM for TLS networking and streaming audio buffers.
-- **Serial Console CLI:** Tune sensitivity, gains, and parameters on the fly via the USB serial monitor without reflashing (e.g. `ww cutoff 0.90`, `ww gain 8.0`, `ww spike 0`).
+- **Serial Console CLI:** Tune active model, sensitivity, gain, spike trigger, and mic slot live via USB serial (`ww model 1`, `ww cutoff 0.92`, `ww gain 8.0`, `ww spike 0`).
 
 ### 3. Onboard WS2812 RGB LED (GPIO 48)
 - **Automatic Mood & State Syncing:**
@@ -176,7 +179,7 @@ When Wi-Fi is unavailable or drops:
 
 ## Modern Web Portal (React 19 SPA)
 
-Kiwi serves an ultra-modern, zero-latency Web Portal built with **React 19, Vite, TailwindCSS, Lucide Icons, and Motion**. The entire frontend is pre-built, inlined, and compressed into a single Gzip byte array in ESP32 flash memory (`dashboard_html_gz.h`, ~163 KB PROGMEM).
+Kiwi serves an ultra-modern, zero-latency Web Portal built with **React 19 (Preact compat production bundle), Vite, and Lucide Icons**. The entire frontend is pre-built, inlined, and compressed into a single Gzip byte array in ESP32 flash memory (`dashboard_html_gz.h`, ~74.9 KB PROGMEM).
 
 Access Kiwi via:
 - `http://kiwi.local` (Local network mDNS)
@@ -189,6 +192,7 @@ Access Kiwi via:
   - **Tactile Segmented Sliders:** Hardware-matched VU-meter sliders for Speaker Volume (Acid Lime), OLED Brightness (Electric Blue matching blue OLED hardware), and NeoPixel LED (Emerald Green).
   - **Instant Mic Trigger & Chat:** Quick text prompt input and one-click voice recording trigger.
   - **Pet Mood & Hunger Deck:** Direct Feed Snack, Make Hungry, Apologize, and Head Pet controls.
+  - **Wake Word Switcher (Desktop & Mobile):** Toggle offline wake-word listening and live-switch between **`Hey Kiwi`** and **`Alexa`** from both the Desktop `Wake Word & Sensing` card and Mobile `Quick Modes` Bento tile.
   - **Audio Soundboard:** 1-click sound effects (Wake Chime, Pet Giggle, Sparkle, Joy Laugh, Fanfare, etc.).
 - **Faces & Studio View:**
   - **Interactive Skin Matrix:** Live SVG silhouettes for all 6 procedural eye skins.
@@ -196,7 +200,7 @@ Access Kiwi via:
   - **Screen Modes:** Interactive 1-click toggles for Clock, Weather, and OLED Marquee text banner.
 - **Settings & AI Configuration:**
   - **AI Engines:** Select providers and models for STT (Sarvam, Groq Whisper), LLM (Groq, Gemini), and TTS (Sarvam, Fish Audio).
-  - **Hardware & Sensing:** Wake word sensitivity and 9-gesture capacitive touch remapping.
+  - **Hardware & Sensing:** Wake word model selector (`Hey Kiwi` / `Alexa`), sensitivity cutoff (`ww_cutoff`), mic boost gain (`ww_gain`), secondary spike clause (`ww_spike`), mic channel lock, and 9-gesture capacitive touch remapping.
   - **Personal Life Diary:** Edit up to 16 persistent memory facts.
 - **Wireless OTA Update View:**
   - **Local Binary Flasher:** Drag and drop `.bin` files with live progress bar and auto-restart.
@@ -251,11 +255,17 @@ board_upload.flash_size = 4MB
 board_build.f_cpu = 240000000L
 board_build.f_flash = 80000000L
 board_build.flash_mode = qio
+board_build.arduino.memory_type = qio_qspi
 build_flags = 
     -Isrc
     -DARDUINO_USB_MODE=1
     -DARDUINO_USB_CDC_ON_BOOT=1
+    -DBOARD_HAS_PSRAM
+    -mfix-esp32-psram-cache-issue
+    -DCONFIG_MBEDTLS_EXTERNAL_MEM_ALLOC=1
     -O2
+    -fno-exceptions
+    -fno-rtti
 lib_deps = 
     adafruit/Adafruit SSD1306@^2.5.9
     adafruit/Adafruit GFX Library@^1.11.9
@@ -319,9 +329,10 @@ Saved NVS flash settings take precedence over code defaults.
 | Circadian Schedule | `circ_start`, `circ_end`| `23`, `7` | 23:00 (11 PM) to 07:00 (7 AM) |
 | Tamagotchi Hunger | `hunger_en` | `true` | `true` / `false` |
 | Wake Word Enabled | `ww_en` | `true` | `true` / `false` |
-| Wake Word Model | `ww_model` | `0` (Alexa) | `0` = Alexa |
-| Wake Word Cutoff | `ww_cutoff` | `0.90` | 0.10 to 0.99 |
+| Wake Word Model | `ww_model` | `1` (Hey Kiwi) | `0` = Alexa, `1` = Hey Kiwi |
+| Wake Word Cutoff | `ww_cutoff` | `0.92` (`Hey Kiwi`) / `0.90` (`Alexa`) | 0.10 to 0.99 (recommended: `0.60–0.98`) |
 | Wake Word Gain | `ww_gain` | `8.0f` | 0.5 to 20.0 |
+| Wake Word Spike Clause | `ww_spike` | `false` | `true` / `false` (pure average vs spike fallback) |
 | WS2812 RGB LED | `rgb_en` | `true` | `true` / `false` |
 | RGB LED Brightness | `rgb_bright` | `160` (~63%) | 0 – 255 |
 | Sound-Reactive Eyes | `snd_react` | `false` | `true` / `false` |
@@ -345,8 +356,8 @@ Type these commands directly into the serial monitor (`115200` baud) for live tu
 ```text
 ww status          # Print current model, cutoff sensitivity, gain, and detection state
 ww gain 8.0        # Set pre-amplifier software gain (default: 8.0)
-ww cutoff 0.90     # Set probability trigger cutoff (0.10 to 0.99)
-ww model 0         # Active model: 0 = Alexa
+ww cutoff 0.92     # Set probability trigger cutoff (0.10 to 0.99)
+ww model 1         # Switch model: 0 = Alexa, 1 = Hey Kiwi (or 'alexa' / 'kiwi')
 ww spike 0         # Toggle secondary voice spike trigger (0 = off, 1 = on)
 ww mic 0           # Set I2S microphone slot (0 = Left, 1 = Right)
 ww lock 1          # Lock microphone slot to prevent automatic channel scan on boot
@@ -360,7 +371,8 @@ ww lock 1          # Lock microphone slot to prevent automatic channel scan on b
 Kiwi.ino                     Main sketch: setup(), loop(), boot watchdog, boot greeting
 platformio.ini               PlatformIO configuration (ESP32-S3, 240 MHz, partitions, libs)
 partitions.csv               4MB Dual OTA layout (app0 1.9MB, app1 1.9MB, NVS, coredump)
-assets/models/               Source WakeWord TFLite model & config (alexa.tflite, alexa.json)
+assets/models/               Source WakeWord TFLite models & configs (hey_kiwi.tflite/.json, alexa.tflite/.json)
+custom_microwakeword_training_kiwi_v4.ipynb  Colab T4 notebook for training Alexa-parity "Hey Kiwi" MicroWakeWord v2 model
 react_ui/                    Preact + Vite single-page web dashboard application
   src/
     components/              HomeView, FacesStudioView, SettingsView, OtaUpdateView, RgbControlCard, ThemeToggle, Tooltip
@@ -379,8 +391,9 @@ src/
     RgbLed.h / .cpp          WS2812 NeoPixel (GPIO 48) state, emotion & custom color sync
     SoundLevel.h / .cpp      Microphone amplitude detector for sound-reactive eyes
     TouchController.h / .cpp 3-pad touch debounce, gesture recognition, tickle & apology combo
-    WakeWordEngine.h / .cpp  MicroWakeWord (20 KB arena) Alexa task on Core 0
-    alexa_model.h            Compiled MicroWakeWord Alexa neural network model weights
+    WakeWordEngine.h / .cpp  MicroWakeWord v2 (20 KB arena) dual-model (Hey Kiwi / Alexa) task on Core 0
+    alexa_model.h            Compiled MicroWakeWord Alexa neural network weights (55,856 bytes)
+    hey_kiwi_model.h         Compiled MicroWakeWord Hey Kiwi neural network weights (57,984 bytes)
   face/
     AnimationEngine.h / .cpp Custom 128x64 OLED frame animation player
     FaceEngine.h / .cpp      OLED refresh loop & Core 0 dedicated 40 FPS task (uiDisplayTask)
@@ -438,7 +451,7 @@ tools/web_dev/               Local Python web dev server, mock simulator, and sy
 ## Troubleshooting
 
 - **Compilation error on Windows ("file name too long"):** Enable long paths in Windows (`New-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem" -Name "LongPathsEnabled" -Value 1 -PropertyType DWORD -Force`).
-- **Wake word not triggering:** Run `ww status` in the serial monitor to verify the engine is listening. Ensure mic slot is detected correctly (`ww mic 0` vs `ww mic 1`). Default probability cutoff for Alexa is `0.90`.
+- **Wake word not triggering:** Run `ww status` in the serial monitor to verify the engine is listening and check the active model. Ensure mic slot is detected correctly (`ww mic 0` vs `ww mic 1`). Default probability cutoff is `0.92` for `Hey Kiwi` (`1`) and `0.90` for `Alexa` (`0`).
 - **Kiwi refuses to chat and displays an angry face:** Kiwi was not fed within 2 minutes of mealtime! Tap **Left → Right → Left → Right** on the cheeks to tickle and reconcile, click **Apologize** in the web portal, or say *"sorry kiwi"*.
 - **No audio from speaker:** Check MAX98357A `DIN` (GPIO 1), `BCLK` (GPIO 43), `WS` (GPIO 44), 5V power, and GND. Test audio output by triggering a sound effect from the Web Portal.
 - **Web Portal unreachable during sleep:** Normal behavior. Kiwi powers down the Wi-Fi radio during deep sleep. Tap the top head pad (GPIO 12) to wake Kiwi.

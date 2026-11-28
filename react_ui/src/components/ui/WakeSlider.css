@@ -30,6 +30,7 @@
   display: flex;
   flex: 1 1 auto;
   align-items: center;
+  justify-content: space-between;
   gap: var(--ws-gap);
   height: var(--ws-height);
   touch-action: none;
@@ -52,9 +53,10 @@
 .wake-slider__bar {
   position: relative;
   flex: 1 1 0;
-  min-width: 0;
+  min-width: 1.5px;
+  max-width: 3.5px;
   height: var(--ws-height);
-  border-radius: 5px;
+  border-radius: 2px;
   background: var(--ws-track);
   transform: scaleY(var(--ws-rest));
   transform-origin: 50% 50%;

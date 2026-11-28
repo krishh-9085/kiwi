@@ -107,6 +107,7 @@ void bootWakeDraw(Adafruit_SSD1306 &d) {
   // Temporarily set currentEyeSkin to wakeSkin so all draw paths strictly use
   // the skin captured at animation start. Any user skin changes mid-boot are
   // preserved and applied when animation completes.
+  DisplayLockGuard lock(80);
   EyeSkin userSkin = currentEyeSkin;
   currentEyeSkin = wakeSkin;
 

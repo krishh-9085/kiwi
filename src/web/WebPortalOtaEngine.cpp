@@ -9,6 +9,7 @@
 #include <WebServer.h>
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
+#include <esp_ota_ops.h>
 
 enum OtaState {
   OTA_IDLE = 0,
@@ -140,7 +141,7 @@ static void otaDownloadTask(void *param) {
   uint32_t lastDataTime = millis();
   uint32_t lastDisplayUpdate = 0;
 
-  while (http.connected() &&
+  while ((http.connected() || stream->available() > 0) &&
          (totalLen <= 0 || s_otaBytesRead < (size_t)totalLen)) {
     size_t avail = stream->available();
     if (avail > 0) {
@@ -185,11 +186,21 @@ static void otaDownloadTask(void *param) {
   free(buff);
   http.end();
 
+  if (s_otaState != OTA_ERROR && totalLen > 0 &&
+      s_otaBytesRead != (size_t)totalLen) {
+    s_otaState = OTA_ERROR;
+    s_otaError = "Incomplete download: got " + String((unsigned)s_otaBytesRead) +
+                 " of " + String(totalLen) + " bytes";
+    Serial.printf("[OTA-URL] %s\n", s_otaError.c_str());
+    Update.abort();
+    otaShowOled("OTA ERROR", "Incomplete File");
+  }
+
   if (s_otaState != OTA_ERROR) {
     s_otaState = OTA_FLASHING;
     otaShowOled("OTA VERIFYING", "Checking flash...");
 
-    if (Update.end(true)) {
+    if (Update.end(totalLen <= 0)) {
       Serial.printf("[OTA-URL] Flashed %u bytes successfully!\n",
                     (unsigned)s_otaBytesRead);
       s_otaProgress = 100;
@@ -321,4 +332,29 @@ void handleOtaInstall() {
 
   server.send(200, "application/json",
               "{\"ok\":true,\"message\":\"OTA update initiated\"}");
+}
+
+void handleOtaRollback() {
+  notifyWebRequest();
+  server.sendHeader("Access-Control-Allow-Origin", "*");
+
+  if (busyProcessing || otaInProgress || s_otaTaskActive) {
+    server.send(409, "application/json",
+                "{\"ok\":false,\"error\":\"Robot is busy or OTA in progress.\"}");
+    return;
+  }
+
+  if (!esp_ota_check_rollback_is_possible()) {
+    server.send(400, "application/json",
+                "{\"ok\":false,\"error\":\"No valid previous firmware partition available for rollback.\"}");
+    return;
+  }
+
+  server.send(200, "application/json",
+              "{\"ok\":true,\"message\":\"Rolling back to previous firmware...\"}");
+  saveConfigImmediate();
+  delay(400);
+  if (esp_ota_mark_app_invalid_rollback_and_reboot() != ESP_OK) {
+    Serial.println("[OTA] Rollback call failed!");
+  }
 }

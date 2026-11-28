@@ -206,6 +206,7 @@ void checkRobotTimer() {
 // SKIN AND SOUND RESOLVERS
 // ============================================================
 bool setEyeSkinByName(const String &nameIn) {
+  DisplayLockGuard lock(80);
   String n = nameIn;
   n.toLowerCase();
   n.trim();
@@ -317,6 +318,50 @@ void triggerPendingSleepAction() {
                  "animation running)");
 }
 
+bool applyPersonalityMode(const String &modeIn, bool resetHistory, bool save,
+                          bool withFeedback) {
+  String norm = normalizePersonalityMode(modeIn);
+  bool changed = (personalityMode != norm);
+  personalityMode = norm;
+
+  if (resetHistory && changed) {
+    clearConversationHistory();
+  }
+
+  Emotion targetEmo = EMOTION_HAPPY;
+  if (norm == "funny")
+    targetEmo = EMOTION_LAUGHING;
+  else if (norm == "serious")
+    targetEmo = EMOTION_COOL;
+  else if (norm == "bakchod")
+    targetEmo = EMOTION_SMUG;
+  else if (norm == "cute")
+    targetEmo = EMOTION_CUTE;
+  else if (norm == "custom")
+    targetEmo = EMOTION_EXCITED;
+
+  if (withFeedback) {
+    // Non-blocking feedback so Core 1 WebServer / loop / WakeWord never stall for 2.6s!
+    setEmotion(targetEmo);
+    if (!busyProcessing) {
+      returnIdleAt = millis() + 2600;
+      soundPetSparkle();
+    } else {
+      emotionAutoReturnAt = millis() + 2600;
+    }
+  }
+  if (save && changed) {
+    if (isConfigDirty()) {
+      saveConfig();
+    } else {
+      savePersonalityNvsOnly();
+    }
+  }
+  Serial.printf("[ACTION] Personality switched to: %s\n", norm.c_str());
+  addTerminalLog("[ACTION] Personality: " + String(getPersonalityLabel(norm)));
+  return true;
+}
+
 bool executeRobotAction(const String &actionCmd) {
   String cmd = actionCmd;
   cmd.trim();
@@ -397,10 +442,13 @@ bool executeRobotAction(const String &actionCmd) {
   if (actionType == "marquee" || actionType == "banner" ||
       actionType == "text") {
     if (param.length() > 0) {
-      bannerText = param;
-      bannerScrollX = SCREEN_WIDTH + 10;
-      bannerLoops = 0;
-      bannerActive = true;
+      {
+        DisplayLockGuard lock(80);
+        bannerText = param;
+        bannerScrollX = SCREEN_WIDTH + 10;
+        bannerLoops = 0;
+        bannerActive = true;
+      }
       soundPetSparkle();
       addTerminalLog("[ACTION] Marquee banner: \"" + param + "\"");
       return true;
@@ -458,6 +506,15 @@ bool executeRobotAction(const String &actionCmd) {
     triggerSoundByName(param);
     addTerminalLog("[ACTION] Played sound: " + param);
     return true;
+  }
+
+  // 12. PERSONALITY MODE SWITCH
+  if (actionType == "personality" || actionType == "persona" ||
+      actionType == "vibe") {
+    if (param.length() > 0) {
+      return applyPersonalityMode(param, true, true, true);
+    }
+    return false;
   }
 
   return false;

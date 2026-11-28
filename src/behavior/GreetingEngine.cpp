@@ -12,6 +12,8 @@
 #include "ai/AiTextTools.h"
 #include "integrations/WeatherService.h"
 #include "memory/MemoryService.h"
+#include "face/FaceDisplay.h"
+#include "web/WebPortal.h"
 #include <WiFi.h>
 #include <time.h>
 
@@ -100,6 +102,55 @@ static bool hasActiveTtsKey() {
   return (ttsKey.length() > 0 || sttKey.length() > 0 || llmKey.length() > 0);
 }
 
+static bool containsWordOrPhrase(const String &hayLower, const char *needle) {
+  size_t nLen = strlen(needle);
+  if (nLen == 0)
+    return false;
+  int from = 0;
+  while (true) {
+    int pos = hayLower.indexOf(needle, from);
+    if (pos < 0)
+      return false;
+    bool leftOk = (pos == 0) || !isAlphaNumeric((unsigned char)hayLower[pos - 1]);
+    int after = pos + (int)nLen;
+    bool rightOk = (after >= (int)hayLower.length()) ||
+                   !isAlphaNumeric((unsigned char)hayLower[after]);
+    if (leftOk && rightOk)
+      return true;
+    from = pos + 1;
+  }
+}
+
+bool isGreetingMismatchForHour(const String &text, int hour) {
+  String low = text;
+  low.toLowerCase();
+
+  bool hasMorning = containsWordOrPhrase(low, "good morning") ||
+                    containsWordOrPhrase(low, "morning") ||
+                    containsWordOrPhrase(low, "subah") ||
+                    containsWordOrPhrase(low, "suprabhat") ||
+                    containsWordOrPhrase(low, "rise and shine");
+  bool hasAfternoon = containsWordOrPhrase(low, "good afternoon") ||
+                      containsWordOrPhrase(low, "dopahar");
+  bool hasEvening = containsWordOrPhrase(low, "good evening");
+  bool hasNight = containsWordOrPhrase(low, "good night") ||
+                  containsWordOrPhrase(low, "goodnight");
+
+  if (hour < 0) {
+    return hasMorning || hasAfternoon || hasEvening || hasNight;
+  }
+  if (hour >= 5 && hour < 12) {
+    return hasAfternoon || hasEvening || hasNight;
+  }
+  if (hour >= 12 && hour < 17) {
+    return hasMorning || hasEvening || hasNight;
+  }
+  if (hour >= 17 && hour < 21) {
+    return hasMorning || hasAfternoon;
+  }
+  return hasMorning || hasAfternoon;
+}
+
 String generateLlmGreeting(int hour, int minute, int wday, const String &ownerName) {
   if (WiFi.status() != WL_CONNECTED) {
     return "";
@@ -111,41 +162,91 @@ String generateLlmGreeting(int hour, int minute, int wday, const String &ownerNa
   const char *DAYS[] = {"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"};
   String dayStr = (wday >= 0 && wday < 7) ? DAYS[wday] : "Today";
 
-  const char *timeOfDay = "day";
-  if (hour >= 5 && hour < 12) timeOfDay = "morning";
-  else if (hour >= 12 && hour < 17) timeOfDay = "afternoon";
-  else if (hour >= 17 && hour < 21) timeOfDay = "evening";
-  else if (hour >= 21 || (hour >= 0 && hour < 5)) timeOfDay = "night";
-
   String target = ownerName.length() ? ownerName : "friend";
+  const char *timeOfDay = "unknown";
+  const char *forbiddenRule = "- Clock time is unknown right now, so give a timeless warm Hi/Hello greeting. NEVER say Good morning, Good afternoon, Good evening, Good night, Subah, Dopahar, or Shaam!";
+  String timeLabel = "Unknown time";
 
-  static const char *const MOOD_SEEDS[] = {
-    "playful & energetic wakeup",
-    "cute sleepy yawn stretching into happiness",
-    "witty & cheeky companion greeting",
-    "affectionate robot excited to see its human",
-    "curious & looking forward to hanging out",
-    "dramatic little robot coming back to life",
-    "cool friendly buddy vibe",
-    "cheerful & enthusiastic wave"
+  static const char *const MORNING_SEEDS[] = {
+    "fresh & energetic morning start",
+    "cute sleepy yawn stretching into morning cheer",
+    "warm chai/coffee morning check-in",
+    "affectionate companion happy to start the day"
   };
-  const char *mood = MOOD_SEEDS[random(sizeof(MOOD_SEEDS) / sizeof(MOOD_SEEDS[0]))];
+  static const char *const AFTERNOON_SEEDS[] = {
+    "sunny midday companion check-in",
+    "witty & energetic afternoon break vibe",
+    "playful lunch/focus companion cheering its owner on",
+    "warm cheerful desk buddy glad to see you"
+  };
+  static const char *const EVENING_SEEDS[] = {
+    "cozy & warm evening unwind vibe",
+    "cheerful evening chai/coffee companion",
+    "affectionate desk buddy thrilled to hang out this evening",
+    "playful evening check-in after a long day"
+  };
+  static const char *const NIGHT_SEEDS[] = {
+    "cozy calm night-owl companion vibe",
+    "warm affectionate late-night desk check-in",
+    "playful soft late-evening companion greeting",
+    "chill night-time desk buddy glad you're around"
+  };
+  static const char *const ANY_SEEDS[] = {
+    "warm & cheerful desk companion saying hello",
+    "witty & affectionate little buddy thrilled to see you",
+    "curious & playful hello ready to hang out",
+    "bright energetic desk pet companion greeting"
+  };
+
+  const char *mood = nullptr;
+  if (hour >= 5 && hour < 12) {
+    timeOfDay = "morning";
+    forbiddenRule = "- It is MORNING right now. NEVER say Good afternoon, Good evening, or Good night.";
+    mood = MORNING_SEEDS[random(sizeof(MORNING_SEEDS) / sizeof(MORNING_SEEDS[0]))];
+  } else if (hour >= 12 && hour < 17) {
+    timeOfDay = "afternoon";
+    forbiddenRule = "- It is AFTERNOON right now. NEVER say Good morning, Morning, Subah, Suprabhat, Good evening, or Good night.";
+    mood = AFTERNOON_SEEDS[random(sizeof(AFTERNOON_SEEDS) / sizeof(AFTERNOON_SEEDS[0]))];
+  } else if (hour >= 17 && hour < 21) {
+    timeOfDay = "evening";
+    forbiddenRule = "- It is EVENING right now. NEVER say Good morning, Morning, Subah, Suprabhat, or Good afternoon.";
+    mood = EVENING_SEEDS[random(sizeof(EVENING_SEEDS) / sizeof(EVENING_SEEDS[0]))];
+  } else if (hour >= 21 || (hour >= 0 && hour < 5)) {
+    timeOfDay = "night";
+    forbiddenRule = "- It is NIGHT right now. NEVER say Good morning, Morning, Subah, Suprabhat, or Good afternoon.";
+    mood = NIGHT_SEEDS[random(sizeof(NIGHT_SEEDS) / sizeof(NIGHT_SEEDS[0]))];
+  } else {
+    mood = ANY_SEEDS[random(sizeof(ANY_SEEDS) / sizeof(ANY_SEEDS[0]))];
+  }
+
+  if (hour >= 0 && hour < 24) {
+    int h12 = hour % 12;
+    if (h12 == 0) h12 = 12;
+    char tb[40];
+    snprintf(tb, sizeof(tb), "%02d:%02d %s (%s, %s)", h12, constrain(minute, 0, 59),
+             (hour >= 12) ? "PM" : "AM", timeOfDay, dayStr.c_str());
+    timeLabel = String(tb);
+  }
   uint32_t seed = random(1000, 9999);
 
-  String prompt = "You are Kiwi, an adorable, witty, affectionate, living desktop AI robot pet companion.\n"
-                  "You just woke up / turned on and saw your owner (" + target + ").\n"
-                  "Mood inspiration for this greeting: " + String(mood) + " (Seed: " + String(seed) + ")\n"
-                  "Time context (for greeting vibe only): " + String(timeOfDay) + " (" + dayStr + ")\n"
+  String greetLangRule = (replyLang == "en")
+                             ? "natural, crisp conversational English."
+                             : "natural, warm, lively conversational Hinglish (Hindi + English) in Roman script.";
+  String prompt = "You are Kiwi, a living desktop AI robot pet.\n"
+                  "You just noticed your owner (" + target + ") at the desk for a greeting.\n"
+                  + getPersonalityStyleHint() + "\n"
+                  "Moment inspiration: " + String(mood) + " (Seed: " + String(seed) + ")\n"
+                  "Verified Current Local Time: " + timeLabel + "\n"
                   "Strict Rules:\n"
-                  "- Speak in natural, warm, lively, modern conversational Hinglish (Hindi + English).\n"
+                  "- Match your Active Personality tone and speak in " + greetLangRule + "\n"
                   "- Be creative, spontaneous, and fresh every time! NEVER repeat the same greeting phrasing.\n"
-                  "- NEVER announce clock time, numbers, temperature, or weather forecasts! You are an adorable pet robot, NOT a news reporter, alarm clock, or weather bot.\n"
-                  "- Give a cute, fresh 1-sentence wakeup greeting suited to the " + String(timeOfDay) + " vibe.\n"
+                  + String(forbiddenRule) + "\n"
+                  "- NEVER announce clock digits, numbers, temperature, or weather forecasts! You are a companion robot, NOT an alarm clock or weather bot.\n"
                   "- Length: STRICTLY 1 single sentence, maximum 10-14 words. Keep it short, punchy, and quick to speak!\n"
                   "- Output ONLY the spoken words. No quotes, no asterisks, no emojis, no explanations.";
 
-  Serial.println("[GREETING] Requesting dynamic LLM wakeup greeting...");
-  String res = askLLM(prompt, nullptr, false); // false = do not pollute chat history
+  Serial.println("[GREETING] Requesting dynamic LLM greeting...");
+  String res = askLLM(prompt, nullptr, false); // false = do not include or pollute chat history
   res = stripRobotTags(res);
   res.replace("\"", "");
   res.replace("*", "");
@@ -169,6 +270,12 @@ String generateLlmGreeting(int hour, int minute, int wday, const String &ownerNa
   }
   if (cut >= 15 && cut < (int)res.length() - 1) {
     res = res.substring(0, cut + 1);
+  }
+
+  if (res.length() > 0 && isGreetingMismatchForHour(res, hour)) {
+    Serial.printf("[GREETING] Rejected mismatched LLM greeting for hour=%d: \"%s\" -> fallback\n",
+                  hour, res.c_str());
+    return "";
   }
 
   Serial.printf("[GREETING] Dynamic LLM greeting generated: \"%s\"\n", res.c_str());
@@ -248,6 +355,7 @@ bool deliverGreeting(int hour, int minute, int wday, const String &ownerName,
   flourish = FL_STAR;
   flourishT0 = millis();
   if (visualText.length() > 0) {
+    DisplayLockGuard lock(80);
     bannerText = visualText;
     bannerScrollX = SCREEN_WIDTH + 10;
     bannerLoops = 0;
@@ -289,7 +397,7 @@ void checkGreetings() {
     return;
 
   // Skip (and retry later) if disabled, busy, sleeping, mid-animation, or displaying a screen
-  if (!greetingsEnabled)
+  if (!greetingsEnabled || otaInProgress)
     return;
   if (busyProcessing || startRecording || isRobotTimerActive() || isRobotTimerRinging())
     return;

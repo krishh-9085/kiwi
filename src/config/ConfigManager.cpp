@@ -170,6 +170,12 @@ void loadConfig() {
   if (systemPrompt.length() == 0) {
     systemPrompt = DEFAULT_PROMPT;
   }
+  if (prefs.isKey("persona")) {
+    personalityMode = normalizePersonalityMode(
+        sanitizeField(prefs.getString("persona", "friendly"), "friendly"));
+  } else {
+    personalityMode = (systemPrompt != DEFAULT_PROMPT) ? "custom" : "friendly";
+  }
 
   llmProvider = sanitizeField(prefs.getString("llmprov", "groq"), "groq");
 
@@ -226,6 +232,8 @@ void loadConfig() {
   ttsVoice = sanitizeField(prefs.getString("ttsvoice", DEFAULT_TTS_VOICE),
                            DEFAULT_TTS_VOICE);
 
+  ttsPace = constrain(prefs.getFloat("tts_pace", 1.0f), 0.75f, 1.35f);
+
   ttsKey = sanitizeField(prefs.getString("ttskey", ""));
 
   fishEndpoint = sanitizeUrl(prefs.getString("fishurl", DEFAULT_FISH_TTS_URL),
@@ -281,26 +289,25 @@ void loadConfig() {
   hungerEnabled = prefs.getBool("hunger_en", true);
   soundReactiveEnabled = prefs.getBool("snd_react", false);
   wakeWordEnabled = prefs.getBool("ww_en", true);
-  wakeWordModel = 0; // Alexa only
+  wakeWordModel = prefs.getUChar("ww_model", WAKE_WORD_HEY_KIWI);
+  if (wakeWordModel > WAKE_WORD_HEY_KIWI)
+    wakeWordModel = WAKE_WORD_HEY_KIWI;
 
-  float defCutoff = 0.90f;
+  float defCutoff = (wakeWordModel == WAKE_WORD_HEY_KIWI) ? 0.92f : 0.90f;
   wakeWordCutoff = prefs.getFloat("ww_cutoff", defCutoff);
-  if (!prefs.getBool("ww_mig_v1", false)) {
-    bool didMig = false;
-    if (fabsf(wakeWordCutoff - 0.40f) < 0.05f ||
-        fabsf(wakeWordCutoff - 0.82f) < 0.005f) {
-      wakeWordCutoff = 0.90f;
-      didMig = true;
-    }
+  if (!prefs.getBool("ww_kiwi_v1", false)) {
+    // One-time activation of newly trained Hey Kiwi model & 0-FAPH cutoff (0.92)
+    wakeWordModel = WAKE_WORD_HEY_KIWI;
+    wakeWordCutoff = 0.92f;
     prefs.end();
     prefs.begin("myrobot", false);
-    if (didMig) {
-      prefs.putFloat("ww_cutoff", 0.90f);
-      Serial.println("[CONFIG] Migrated wake-word cutoff to 0.90 (Alexa)");
-    }
+    prefs.putUChar("ww_model", wakeWordModel);
+    prefs.putFloat("ww_cutoff", wakeWordCutoff);
     prefs.putBool("ww_mig_v1", true);
+    prefs.putBool("ww_kiwi_v1", true);
     prefs.end();
     prefs.begin("myrobot", true);
+    Serial.println("[CONFIG] Activated Hey Kiwi wake-word model (cutoff=0.92)");
   }
 
   rgbLedEnabled = prefs.getBool("rgb_en", true);
@@ -352,19 +359,24 @@ void loadConfig() {
   touchFeedbackSound = prefs.getBool("tch_snd", true);
 
   touchActTopTap =
-      (TouchAction)prefs.getInt("act_top_tap", (int)TOUCH_ACT_LISTEN);
+      (TouchAction)prefs.getInt("act_top_tap", (int)TOUCH_ACT_PET);
   if ((int)touchActTopTap < 0 || (int)touchActTopTap > (int)TOUCH_ACT_NONE) {
-    touchActTopTap = TOUCH_ACT_LISTEN;
+    touchActTopTap = TOUCH_ACT_PET;
   }
   touchActTopDbl =
-      (TouchAction)prefs.getInt("act_top_dbl", (int)TOUCH_ACT_NONE);
+      (TouchAction)prefs.getInt("act_top_dbl", (int)TOUCH_ACT_CLOCK);
   if ((int)touchActTopDbl < 0 || (int)touchActTopDbl > (int)TOUCH_ACT_NONE) {
-    touchActTopDbl = TOUCH_ACT_NONE;
+    touchActTopDbl = TOUCH_ACT_CLOCK;
+  }
+  touchActTopTpl =
+      (TouchAction)prefs.getInt("act_top_tpl", (int)TOUCH_ACT_CYCLE_SKIN);
+  if ((int)touchActTopTpl < 0 || (int)touchActTopTpl > (int)TOUCH_ACT_NONE) {
+    touchActTopTpl = TOUCH_ACT_CYCLE_SKIN;
   }
   touchActTopHold =
-      (TouchAction)prefs.getInt("act_top_hld", (int)TOUCH_ACT_CYCLE_SKIN);
+      (TouchAction)prefs.getInt("act_top_hld", (int)TOUCH_ACT_LISTEN);
   if ((int)touchActTopHold < 0 || (int)touchActTopHold > (int)TOUCH_ACT_NONE) {
-    touchActTopHold = TOUCH_ACT_CYCLE_SKIN;
+    touchActTopHold = TOUCH_ACT_LISTEN;
   }
   touchActLeftTap =
       (TouchAction)prefs.getInt("act_lt_tap", (int)TOUCH_ACT_DISMISS);
@@ -435,6 +447,22 @@ void loadConfig() {
   if (sttMaxSilenceMs < 300 || sttMaxSilenceMs > 5000)
     sttMaxSilenceMs = 1200;
 
+  // One-time migration to Single-Sensor Hold-to-Listen layout (preserves future UI edits)
+  if (!prefs.getBool("top_hold_v2", false)) {
+    touchActTopTap = TOUCH_ACT_PET;
+    touchActTopDbl = TOUCH_ACT_CLOCK;
+    touchActTopTpl = TOUCH_ACT_CYCLE_SKIN;
+    touchActTopHold = TOUCH_ACT_LISTEN;
+    prefs.end();
+    prefs.begin("myrobot", false);
+    prefs.putInt("act_top_tap", (int)touchActTopTap);
+    prefs.putInt("act_top_dbl", (int)touchActTopDbl);
+    prefs.putInt("act_top_tpl", (int)touchActTopTpl);
+    prefs.putInt("act_top_hld", (int)touchActTopHold);
+    prefs.putBool("top_hold_v2", true);
+    Serial.println("[CONFIG] Migrated Top Head to Single-Sensor Hold-to-Listen profile (v2)");
+  }
+
   prefs.end();
 }
 
@@ -443,6 +471,12 @@ bool isConfigDirty() { return configDirty; }
 void saveConfig() {
   configDirty = true;
   configDirtyAt = millis();
+}
+
+void savePersonalityNvsOnly() {
+  prefs.begin("myrobot", false);
+  prefs.putString("persona", personalityMode);
+  prefs.end();
 }
 
 void saveConfigImmediate() {
@@ -469,6 +503,7 @@ void saveConfigImmediate() {
   prefs.putString("groqsttmodel", groqSttModel);
 
   prefs.putString("prompt", systemPrompt);
+  prefs.putString("persona", personalityMode);
 
   prefs.putString("llmprov", llmProvider);
 
@@ -491,6 +526,8 @@ void saveConfigImmediate() {
   prefs.putString("ttsmodel", ttsModel);
 
   prefs.putString("ttsvoice", ttsVoice);
+
+  prefs.putFloat("tts_pace", ttsPace);
 
   prefs.putString("ttskey", ttsKey);
 
@@ -552,6 +589,7 @@ void saveConfigImmediate() {
 
   prefs.putInt("act_top_tap", (int)touchActTopTap);
   prefs.putInt("act_top_dbl", (int)touchActTopDbl);
+  prefs.putInt("act_top_tpl", (int)touchActTopTpl);
   prefs.putInt("act_top_hld", (int)touchActTopHold);
   prefs.putInt("act_lt_tap", (int)touchActLeftTap);
 

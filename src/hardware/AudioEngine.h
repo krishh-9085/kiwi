@@ -8,6 +8,9 @@ extern i2s_chan_handle_t txHandle;
 
 // ---------- Hardware & Driver ----------
 bool startAudio();
+bool audioRxLock(uint32_t waitMs = 150);
+void audioRxUnlock();
+void audioDrainRxDmaOnly();
 void drainMic();
 void detectMicSlot();
 bool setMicSlot(int slot, bool persist = false, bool force = false);
@@ -27,7 +30,7 @@ void audioSleepWake();
 void makeWavHeader(uint8_t *h, uint32_t dataSize);
 
 // ---------- Tone Synthesis Engine ----------
-void playToneQueue(Tone *tones, int count);
+void playToneQueue(Tone *tones, int count, bool lipSync = true);
 void updateTonePlayer();
 void toneStop();
 bool isTonePlaying();

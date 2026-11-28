@@ -14,3 +14,4 @@ bool handleTimerCommand(const String &qIn);
 bool handleLightCommand(const String &qIn);
 bool handleSleepCommand(const String &qIn);
 bool handleHungerCommand(const String &qIn);
+bool handlePersonalityCommand(const String &qIn);

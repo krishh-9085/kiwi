@@ -1,4 +1,6 @@
 #include "behavior/InteractionManager.h"
+#include "ai/AiService.h"
+#include "ai/AiTextTools.h"
 #include "commands/ActionExecutor.h"
 #include "commands/CommandHandler.h"
 #include "config/AppConfig.h"
@@ -10,7 +12,6 @@
 #include "hardware/RgbLed.h"
 #include "hardware/TouchController.h"
 #include "power/PowerManager.h"
-#include "ai/AiService.h"
 #include "web/WebPortal.h"
 
 // ============================================================
@@ -146,8 +147,8 @@ Emotion detectVocalEmotion(const String &text) {
   if (hasTag("shocked")) {
     return EMOTION_SHOCKED;
   }
-  if (hasTag("surprised") || hasTag("amazed") ||
-      hasTag("astonished") || hasTag("gasp") || hasTag("gasps")) {
+  if (hasTag("surprised") || hasTag("amazed") || hasTag("astonished") ||
+      hasTag("gasp") || hasTag("gasps")) {
     return EMOTION_SURPRISED;
   }
 
@@ -197,6 +198,9 @@ Emotion detectVocalEmotion(const String &text) {
   }
 
   // 15. Playful / Expressive moods
+  if (hasTag("wink") || hasTag("winking")) {
+    return EMOTION_WINK;
+  }
   if (hasTag("smug")) {
     return EMOTION_SMUG;
   }
@@ -220,6 +224,236 @@ Emotion detectVocalEmotion(const String &text) {
   }
 
   return EMOTION_SPEAKING;
+}
+
+static bool isFishVocalTag(const String &tagLower) {
+  static const char *const kFishTags[] = {
+      "laugh",     "laughs",  "laughing", "chuckle",  "chuckles",   "chuckling",
+      "giggle",    "giggles", "giggling", "sob",      "sobbing",    "angry",
+      "sad",       "excited", "curious",  "shy",      "proud",      "surprised",
+      "scared",    "cute",    "whisper",  "whispers", "whispering", "sigh",
+      "sighs",     "sighing", "gasp",     "gasps",    "calm",       "nervous",
+      "confident", "worried", "soft",     "breathy",  "delighted",  "satisfied",
+      nullptr};
+  for (int i = 0; kFishTags[i] != nullptr; i++) {
+    if (tagLower == kFishTags[i])
+      return true;
+  }
+  return false;
+}
+
+static Emotion inferFallbackTextEmotion(const String &plainText) {
+  String low = stripAudioCues(plainText);
+  low.trim();
+  low.toLowerCase();
+  if (!low.length())
+    return EMOTION_SPEAKING;
+
+  String padded = " " + low + " ";
+  if (low.indexOf("haha") >= 0 || low.indexOf("hehe") >= 0 ||
+      low.indexOf("hihi") >= 0 || padded.indexOf(" lol ") >= 0 ||
+      padded.indexOf(" lol!") >= 0 || padded.indexOf(" rofl ") >= 0 ||
+      padded.indexOf(" lmao ") >= 0) {
+    return EMOTION_LAUGHING;
+  }
+  if (low.indexOf('?') >= 0) {
+    return EMOTION_CURIOUS;
+  }
+  if (low.indexOf("!!") >= 0 || padded.indexOf(" wow") >= 0 ||
+      padded.indexOf(" whoa") >= 0 || padded.indexOf(" omg") >= 0 ||
+      low.indexOf("kya baat") >= 0 || low.indexOf("bawal") >= 0) {
+    return EMOTION_EXCITED;
+  }
+  if (low.indexOf('!') >= 0) {
+    return EMOTION_HAPPY;
+  }
+  return EMOTION_SPEAKING;
+}
+
+static bool speakExpressiveSegments(const String &rawText,
+                                    bool holdFaceEmotion = false,
+                                    String *unspokenOut = nullptr,
+                                    bool *anySpokenOut = nullptr) {
+  if (unspokenOut)
+    *unspokenOut = "";
+  if (anySpokenOut)
+    *anySpokenOut = false;
+
+  String clean = stripRobotTags(rawText);
+  clean.trim();
+  if (!clean.length())
+    return false;
+
+  struct ExpressiveSegment {
+    Emotion emo = EMOTION_SPEAKING;
+    bool explicitTag = false;
+    String fishPrefix = "";
+    String rawTagToken = "";
+    String text = "";
+  };
+
+  static constexpr int kMaxSegments = 12;
+  ExpressiveSegment segs[kMaxSegments];
+  int segCount = 0;
+
+  bool useFish = (ttsProvider == "fish" || ttsProvider == "fishaudio");
+  Emotion activeEmo = EMOTION_SPEAKING;
+  bool activeExplicit = false;
+  String pendingFishPrefix = "";
+  String pendingTagToken = "";
+  bool pendingTagNeedsText = false;
+
+  auto pushTextChunk = [&](const String &chunkRaw) {
+    String chunk = chunkRaw;
+    chunk.trim();
+    if (!chunk.length())
+      return;
+    if (segCount == 0 || pendingTagNeedsText ||
+        segs[segCount - 1].emo != activeEmo ||
+        segs[segCount - 1].explicitTag != activeExplicit) {
+      if (segCount < kMaxSegments) {
+        segs[segCount].emo = activeEmo;
+        segs[segCount].explicitTag = activeExplicit;
+        segs[segCount].fishPrefix = pendingFishPrefix;
+        segs[segCount].rawTagToken = pendingTagToken;
+        segs[segCount].text = chunk;
+        segCount++;
+      } else {
+        if (pendingFishPrefix.length() > 0)
+          segs[segCount - 1].text += " " + pendingFishPrefix;
+        segs[segCount - 1].text += " " + chunk;
+      }
+      pendingFishPrefix = "";
+      pendingTagNeedsText = false;
+    } else {
+      segs[segCount - 1].text += " " + chunk;
+    }
+  };
+
+  int pos = 0;
+  const int len = (int)clean.length();
+  while (pos < len) {
+    int b1 = clean.indexOf('[', pos);
+    if (b1 < 0) {
+      pushTextChunk(clean.substring(pos));
+      break;
+    }
+    if (b1 > pos) {
+      pushTextChunk(clean.substring(pos, b1));
+    }
+    int b2 = clean.indexOf(']', b1);
+    if (b2 < 0) {
+      pushTextChunk(clean.substring(b1));
+      break;
+    }
+
+    String rawTag = clean.substring(b1 + 1, b2);
+    rawTag.trim();
+    String lowerTag = rawTag;
+    lowerTag.toLowerCase();
+    Emotion tagEmo = detectVocalEmotion("[" + lowerTag + "]");
+
+    if (tagEmo == EMOTION_SPEAKING) {
+      // Non-emotion literal bracket: keep inside current spoken segment
+      pushTextChunk(clean.substring(b1, b2 + 1));
+      pos = b2 + 1;
+      continue;
+    }
+
+    activeEmo = tagEmo;
+    activeExplicit = true;
+    pendingTagToken = "[" + lowerTag + "] ";
+    pendingFishPrefix =
+        (useFish && isFishVocalTag(lowerTag)) ? pendingTagToken : "";
+    pendingTagNeedsText = true;
+    pos = b2 + 1;
+  }
+
+  // Handle legacy trailing tag (e.g. "Wah mazaa aa gaya! [happy]")
+  if (pendingTagNeedsText && segCount > 0 && !segs[segCount - 1].explicitTag) {
+    segs[segCount - 1].emo = activeEmo;
+    segs[segCount - 1].explicitTag = true;
+    segs[segCount - 1].rawTagToken = pendingTagToken;
+    if (pendingFishPrefix.length() > 0 &&
+        !segs[segCount - 1].fishPrefix.length()) {
+      segs[segCount - 1].fishPrefix = pendingFishPrefix;
+    }
+  }
+
+  if (segCount == 0)
+    return false;
+
+  // Resolve untagged segments using lightweight punctuation/laughter cues
+  for (int i = 0; i < segCount; i++) {
+    if (segs[i].emo == EMOTION_SPEAKING) {
+      segs[i].emo = inferFallbackTextEmotion(segs[i].text);
+    }
+  }
+
+  // Merge consecutive segments sharing the exact same facial emotion to save
+  // unnecessary TTS HTTP round-trips.
+  int mergedCount = 0;
+  for (int i = 0; i < segCount; i++) {
+    String spokenCheck = stripAudioCues(segs[i].text);
+    spokenCheck.trim();
+    if (!spokenCheck.length())
+      continue;
+
+    if (mergedCount > 0 && segs[i].emo == segs[mergedCount - 1].emo) {
+      segs[mergedCount - 1].text += " ";
+      if (segs[i].fishPrefix.length() > 0)
+        segs[mergedCount - 1].text += segs[i].fishPrefix;
+      segs[mergedCount - 1].text += segs[i].text;
+    } else {
+      if (mergedCount != i) {
+        segs[mergedCount] = segs[i];
+      }
+      if (segs[mergedCount].fishPrefix.length() > 0) {
+        segs[mergedCount].text =
+            segs[mergedCount].fishPrefix + segs[mergedCount].text;
+        segs[mergedCount].fishPrefix = "";
+      }
+      mergedCount++;
+    }
+  }
+
+  if (mergedCount == 0)
+    return false;
+
+  bool anyOk = false;
+  for (int i = 0; i < mergedCount; i++) {
+    if (cancelRequest)
+      break;
+    if (!holdFaceEmotion) {
+      setEmotion(segs[i].emo);
+    }
+    bool ok = speakText(segs[i].text);
+    if (cancelRequest) {
+      if (anySpokenOut)
+        *anySpokenOut = anyOk;
+      return anyOk;
+    }
+    if (!ok) {
+      if (unspokenOut) {
+        String rem;
+        for (int j = i; j < mergedCount; j++) {
+          if (rem.length() > 0)
+            rem += " ";
+          if (!useFish && segs[j].rawTagToken.length() > 0)
+            rem += segs[j].rawTagToken;
+          rem += segs[j].text;
+        }
+        *unspokenOut = rem;
+      }
+      if (anySpokenOut)
+        *anySpokenOut = anyOk;
+      return false;
+    }
+    anyOk = true;
+  }
+  if (anySpokenOut)
+    *anySpokenOut = anyOk;
+  return anyOk;
 }
 
 #if LLM_STREAM_TTS
@@ -271,26 +505,26 @@ static void streamSentenceCallback(const String &sentence, bool isFinal) {
         streamSpk.pending += " ";
       }
       streamSpk.pending += sentence;
-      Emotion vocalEmotion = detectVocalEmotion(streamSpk.pending);
-      if (vocalEmotion != EMOTION_SPEAKING) {
-        setEmotion(vocalEmotion);
-      } else {
-        setEmotion(EMOTION_SPEAKING);
-      }
       robotStateDesc = "Speaking...";
       Serial.printf(
           "[LATENCY] question->first_audio=%lu ms (PSRAM 1-turn direct)\n",
           (unsigned long)(millis() - streamSpk.questionStartedAt));
       streamSpk.firstSpoken = true;
       streamSpk.ttsInProgress = true;
-      bool ok = speakText(streamSpk.pending);
+      String remaining;
+      bool anySegSpoken = false;
+      bool ok = speakExpressiveSegments(streamSpk.pending, false, &remaining,
+                                        &anySegSpoken);
       streamSpk.ttsInProgress = false;
-      if (ok) {
+      if (anySegSpoken) {
         streamSpk.anySpoken = true;
+      }
+      if (ok) {
+        streamSpk.pending = "";
       } else {
         streamSpk.ttsFailed = true;
+        streamSpk.pending = remaining;
       }
-      streamSpk.pending = "";
       return;
     }
 
@@ -354,12 +588,6 @@ static void streamSentenceCallback(const String &sentence, bool isFinal) {
       return;
     }
 
-    Emotion vocalEmotion = detectVocalEmotion(sentence);
-    if (vocalEmotion != EMOTION_SPEAKING) {
-      setEmotion(vocalEmotion);
-    } else {
-      setEmotion(EMOTION_SPEAKING);
-    }
     robotStateDesc = "Speaking...";
 
     Serial.printf(
@@ -368,25 +596,28 @@ static void streamSentenceCallback(const String &sentence, bool isFinal) {
 
     streamSpk.firstSpoken = true;
     streamSpk.ttsInProgress = true;
-    bool ok = speakText(sentence);
+    String remaining;
+    bool anySegSpoken = false;
+    bool ok =
+        speakExpressiveSegments(sentence, false, &remaining, &anySegSpoken);
     streamSpk.ttsInProgress = false;
 
-    if (ok) {
+    if (anySegSpoken) {
       streamSpk.anySpoken = true;
-    } else {
+    }
+    if (!ok) {
       streamSpk.ttsFailed = true;
+      String appendRem = remaining.length() > 0 ? remaining : sentence;
       if (streamSpk.pending.length() > 0) {
         streamSpk.pending += " ";
       }
-      streamSpk.pending += sentence;
+      streamSpk.pending += appendRem;
     }
     return;
   }
 
-  //      - Later sentences: append to pending. Flush pending with speakText()
-  //        only when pending.length() >= threshold AND heap is safe.
-  //        Do not call speakText on every sentence (each call is a new TLS
-  //        handshake).
+  //      - Later sentences: append to pending. Flush pending with per-segment
+  //        expressive OLED animation when pending.length() >= threshold.
   if (streamSpk.pending.length() > 0) {
     streamSpk.pending += " ";
   }
@@ -407,19 +638,21 @@ static void streamSentenceCallback(const String &sentence, bool isFinal) {
                     (unsigned)STREAM_TTS_MIN_MAX_ALLOC);
       return;
     }
-    Emotion vocalEmotion = detectVocalEmotion(streamSpk.pending);
-    if (vocalEmotion != EMOTION_SPEAKING) {
-      setEmotion(vocalEmotion);
-    }
     streamSpk.ttsInProgress = true;
-    bool ok = speakText(streamSpk.pending);
+    String remaining;
+    bool anySegSpoken = false;
+    bool ok = speakExpressiveSegments(streamSpk.pending, false, &remaining,
+                                      &anySegSpoken);
     streamSpk.ttsInProgress = false;
 
-    if (ok) {
+    if (anySegSpoken) {
       streamSpk.anySpoken = true;
+    }
+    if (ok) {
       streamSpk.pending = "";
     } else {
       streamSpk.ttsFailed = true;
+      streamSpk.pending = remaining;
     }
   }
 }
@@ -455,6 +688,8 @@ void handleQuestion(const String &qIn) {
   if (handleEmotionCommand(q))
     return;
   if (handleHungerCommand(q))
+    return;
+  if (handlePersonalityCommand(q))
     return;
   if (hasAny(q, {"new topic", "naya topic", "naya sawal", "reset chat",
                  "clear memory", "bhool jao", "forget that",
@@ -493,14 +728,12 @@ void handleQuestion(const String &qIn) {
   if (!answer.length()) {
 #if LLM_STREAM_TTS
     if (!cancelRequest && streamSpk.pending.length() > 0) {
-      Emotion vocalEmotion = detectVocalEmotion(streamSpk.pending);
-      if (vocalEmotion != EMOTION_SPEAKING) {
-        setEmotion(vocalEmotion);
-      }
       streamSpk.ttsInProgress = true;
-      bool ok = speakText(streamSpk.pending);
+      bool anySegSpoken = false;
+      bool ok = speakExpressiveSegments(streamSpk.pending, false, nullptr,
+                                        &anySegSpoken);
       streamSpk.ttsInProgress = false;
-      if (ok) {
+      if (ok || anySegSpoken) {
         streamSpk.anySpoken = true;
       }
       streamSpk.pending = "";
@@ -536,22 +769,33 @@ void handleQuestion(const String &qIn) {
 
   Serial.print("[ROBOT] A: ");
   Serial.println(answer);
-  lastLlmAnswer = answer;
-  addTerminalLog("[LLM] Answer: \"" + answer + "\"");
+  String displayAns = stripAudioCues(stripRobotTags(answer));
+  displayAns.trim();
+  lastLlmAnswer = displayAns.length() ? displayAns : answer;
+  addTerminalLog("[LLM] Answer: \"" + lastLlmAnswer + "\"");
 
   robotStateDesc = "Speaking...";
   {
     uint32_t nowMs = millis();
     bool actionHeldEmotion =
         ((returnIdleAt != 0 && (int32_t)(returnIdleAt - nowMs) > 0) ||
-         (emotionAutoReturnAt != 0 && (int32_t)(emotionAutoReturnAt - nowMs) > 0)) &&
+         (emotionAutoReturnAt != 0 &&
+          (int32_t)(emotionAutoReturnAt - nowMs) > 0)) &&
         currentEmotion != EMOTION_THINKING &&
         currentEmotion != EMOTION_LISTENING && currentEmotion != EMOTION_IDLE;
-    Emotion vocalEmotion = detectVocalEmotion(answer);
-    if (actionHeldEmotion) {
-      vocalEmotion = currentEmotion; // Retain timed emotion set by [ACTION: emotion/sound ...]
+#if LLM_STREAM_TTS
+    bool alreadySpoken = streamSpk.anySpoken;
+#else
+    bool alreadySpoken = false;
+#endif
+    if (!actionHeldEmotion && !alreadySpoken) {
+      Emotion vocalEmotion = detectVocalEmotion(answer);
+      if (vocalEmotion != EMOTION_SPEAKING) {
+        setEmotion(vocalEmotion);
+      } else {
+        setEmotion(EMOTION_SPEAKING);
+      }
     }
-    setEmotion(vocalEmotion);
 
     // Bedtime / sleep fallback: If user asked to sleep or answer says good
     // night / shubh ratri, queue sleep action so Kiwi falls asleep as soon as
@@ -591,14 +835,12 @@ void handleQuestion(const String &qIn) {
     //    - If pending is non-empty and !cancelRequest -> speakText(pending)
     //    once.
     if (!cancelRequest && streamSpk.pending.length() > 0) {
-      Emotion vocalEmotion = detectVocalEmotion(streamSpk.pending);
-      if (vocalEmotion != EMOTION_SPEAKING) {
-        setEmotion(vocalEmotion);
-      }
       streamSpk.ttsInProgress = true;
-      bool ok = speakText(streamSpk.pending);
+      bool anySegSpoken = false;
+      bool ok = speakExpressiveSegments(streamSpk.pending, actionHeldEmotion,
+                                        nullptr, &anySegSpoken);
       streamSpk.ttsInProgress = false;
-      if (ok) {
+      if (ok || anySegSpoken) {
         streamSpk.anySpoken = true;
       }
       streamSpk.pending = "";
@@ -612,10 +854,12 @@ void handleQuestion(const String &qIn) {
     //      nothing was spoken at all and answer is non-empty (keeps the old
     //      path).
     if (!streamSpk.anySpoken && !cancelRequest && answer.length() > 0) {
-      bool ok = speakText(answer);
+      bool anySegSpoken = false;
+      bool ok = speakExpressiveSegments(answer, actionHeldEmotion, nullptr,
+                                        &anySegSpoken);
       if (cancelRequest)
         return;
-      if (!ok) {
+      if (!ok && !anySegSpoken) {
         robotStateDesc = "TTS Failed";
         addTerminalLog("[TTS] Playback error or offline");
         Serial.println("[ROBOT] TTS failed");
@@ -626,10 +870,12 @@ void handleQuestion(const String &qIn) {
     }
 #else
     cancelRequest = false;
-    bool ok = speakText(answer);
+    bool anySegSpoken = false;
+    bool ok = speakExpressiveSegments(answer, actionHeldEmotion, nullptr,
+                                      &anySegSpoken);
     if (cancelRequest)
       return;
-    if (!ok) {
+    if (!ok && !anySegSpoken) {
       robotStateDesc = "TTS Failed";
       addTerminalLog("[TTS] Playback error or offline");
       Serial.println("[ROBOT] TTS failed");
@@ -648,14 +894,16 @@ void handleQuestion(const String &qIn) {
       return;
     }
 
-    // Turn completed: linger briefly if an expressive emotion was active, then return to IDLE
+    // Turn completed: linger briefly if an expressive emotion was active, then
+    // return to IDLE
     uint32_t endNow = millis();
     if (!actionHeldEmotion && currentEmotion != EMOTION_IDLE &&
         currentEmotion != EMOTION_SPEAKING && returnIdleAt == 0 &&
         emotionAutoReturnAt == 0) {
       returnIdleAt = endNow + 1200;
     } else if ((returnIdleAt == 0 || (int32_t)(endNow - returnIdleAt) >= 0) &&
-               (emotionAutoReturnAt == 0 || (int32_t)(endNow - emotionAutoReturnAt) >= 0)) {
+               (emotionAutoReturnAt == 0 ||
+                (int32_t)(endNow - emotionAutoReturnAt) >= 0)) {
       setEmotion(EMOTION_IDLE);
       returnIdleAt = 0;
       emotionAutoReturnAt = 0;

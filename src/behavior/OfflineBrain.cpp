@@ -1,4 +1,5 @@
 #include "behavior/OfflineBrain.h"
+#include "behavior/CircadianEngine.h"
 #include "behavior/InteractionManager.h"
 #include "config/AppConfig.h"
 #include "core/CoreTypes.h"
@@ -9,6 +10,7 @@
 #include "face/FaceScreens.h"
 #include "hardware/AudioEngine.h"
 #include "hardware/TouchController.h"
+#include "web/WebPortal.h"
 #include <WiFi.h>
 
 static bool offlineModeActive = false;
@@ -44,7 +46,8 @@ void updateOfflineBrain() {
     Serial.println(
         "[OFFLINE BRAIN] Connection dropped -> Offline Mode Activated");
     addTerminalLog("[OFFLINE] Wi-Fi lost -> Offline Mode Active");
-    soundPetSparkle();
+    if (!inCircadianSleep && !manualSleep && !otaInProgress)
+      soundPetSparkle();
   }
   // Transition from OFFLINE to ONLINE
   else if (!wasOnline && online) {
@@ -52,7 +55,8 @@ void updateOfflineBrain() {
     offlineModeActive = false;
     Serial.println("[OFFLINE BRAIN] Wi-Fi reconnected!");
     addTerminalLog("[NET] Wi-Fi reconnected!");
-    soundPetSparkle();
+    if (!inCircadianSleep && !manualSleep && !otaInProgress)
+      soundPetSparkle();
   }
 }
 

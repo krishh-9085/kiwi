@@ -101,6 +101,7 @@ export default function RgbControlCard({
   onClearOverride,
   onToggleRgb,
   initialColor = '#38BDF8',
+  rgbOverride = false,
   currentEmotion = 'idle',
   rgbEnabled = true,
   variant = 'dark',
@@ -112,7 +113,7 @@ export default function RgbControlCard({
 }) {
   const [hsv, setHsv] = useState(() => hexToHsv(initialColor))
   const [isOpen, setIsOpen] = useState(false)
-  const [isOverride, setIsOverride] = useState(false)
+  const [isOverride, setIsOverride] = useState(() => Boolean(rgbOverride))
 
   const containerRef = useRef(null)
   const popoverRef = useRef(null)
@@ -122,6 +123,13 @@ export default function RgbControlCard({
   const lastSentRef = useRef(0)
   const pendingTimerRef = useRef(null)
   const lastHexRef = useRef('')
+
+  useEffect(() => {
+    setIsOverride(Boolean(rgbOverride))
+    if (rgbOverride && initialColor && !isOpen) {
+      setHsv(hexToHsv(initialColor))
+    }
+  }, [rgbOverride, initialColor, isOpen])
 
   const curRgb = hsvToRgb(hsv.h, hsv.s, hsv.v)
   const hexString = rgbToHex(curRgb.r, curRgb.g, curRgb.b)

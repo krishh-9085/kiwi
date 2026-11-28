@@ -1,5 +1,6 @@
 #include "face/FaceIdle.h"
 #include "config/AppConfig.h"
+#include "face/FaceDisplay.h"
 #include "face/FaceExpressions.h"
 #include <math.h>
 #include <time.h>
@@ -248,44 +249,50 @@ void updateIdleVariety() {
   // 1. Natural eye squeeze / squint (soft organic eyelid contraction, NO mouth
   // or face mutation)
   if (idleSqueezeEnd > 0 && now >= idleSqueezeEnd) {
-    faceTgt.lidIn = 0;
-    faceTgt.lidOut = 0;
-    faceTgt.lidInR = 0;
-    faceTgt.lidOutR = 0;
-    faceTgt.hR = 1.0f;
-    faceTgt.headTilt = 0.0f;
-    idleSqueezeEnd = 0;
-    nextIdleSqueezeAt = now + 4500 + random(0, 5000);
+    if (displayLock(15)) {
+      faceTgt.lidIn = 0;
+      faceTgt.lidOut = 0;
+      faceTgt.lidInR = 0;
+      faceTgt.lidOutR = 0;
+      faceTgt.hR = 1.0f;
+      faceTgt.headTilt = 0.0f;
+      displayUnlock();
+      idleSqueezeEnd = 0;
+      nextIdleSqueezeAt = now + 4500 + random(0, 5000);
+    }
   }
 
   if (nextIdleSqueezeAt == 0) {
     nextIdleSqueezeAt = now + 3000 + random(0, 4000);
   } else if (now >= nextIdleSqueezeAt && idleSqueezeEnd == 0 && idleYawnStartAt == 0) {
-    int sqType = random(0, 4);
-    if (sqType == 0) {
-      faceTgt.lidIn = 5.0f;
-      faceTgt.lidOut = 5.0f;
-      faceTgt.lidInR = 5.0f;
-      faceTgt.lidOutR = 5.0f;
-    } else if (sqType == 1) {
-      faceTgt.hR = 0.82f;
-      faceTgt.lidIn = 3.0f;
-      faceTgt.lidOut = 3.0f;
-      faceTgt.lidInR = 5.0f;
-      faceTgt.lidOutR = 5.0f;
-      faceTgt.headTilt = -1.5f;
-    } else if (sqType == 2) {
-      faceTgt.lidIn = 6.0f;
-      faceTgt.lidOut = 2.0f;
-      faceTgt.lidInR = 2.0f;
-      faceTgt.lidOutR = 1.0f;
-      faceTgt.headTilt = 1.5f;
-    } else {
-      faceTgt.headTilt = (random(0, 2) == 0) ? -2.0f : 2.0f;
+    if (displayLock(15)) {
+      int sqType = random(0, 4);
+      if (sqType == 0) {
+        faceTgt.lidIn = 5.0f;
+        faceTgt.lidOut = 5.0f;
+        faceTgt.lidInR = 5.0f;
+        faceTgt.lidOutR = 5.0f;
+      } else if (sqType == 1) {
+        faceTgt.hR = 0.82f;
+        faceTgt.lidIn = 3.0f;
+        faceTgt.lidOut = 3.0f;
+        faceTgt.lidInR = 5.0f;
+        faceTgt.lidOutR = 5.0f;
+        faceTgt.headTilt = -1.5f;
+      } else if (sqType == 2) {
+        faceTgt.lidIn = 6.0f;
+        faceTgt.lidOut = 2.0f;
+        faceTgt.lidInR = 2.0f;
+        faceTgt.lidOutR = 1.0f;
+        faceTgt.headTilt = 1.5f;
+      } else {
+        faceTgt.headTilt = (random(0, 2) == 0) ? -2.0f : 2.0f;
+      }
+      displayUnlock();
+      uint32_t dur = 450 + random(0, 450);
+      idleSqueezeEnd = now + dur;
+      nextIdleSqueezeAt = idleSqueezeEnd + 5000 + random(0, 6000);
     }
-    uint32_t dur = 450 + random(0, 450);
-    idleSqueezeEnd = now + dur;
-    nextIdleSqueezeAt = idleSqueezeEnd + 5000 + random(0, 6000);
   }
 
   // 2. Periodic idle mood rotation (full emotion presets via emotionAutoReturnAt)

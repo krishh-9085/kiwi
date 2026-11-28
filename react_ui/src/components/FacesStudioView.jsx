@@ -9,10 +9,26 @@ import {
 } from '../data/faceData'
 import {
   Smile, EyeOff, MessageSquare, Send, StopCircle, Clock, CloudSun,
-  Sparkles, Check, Search, RotateCcw, X
+  Eye, Check, Search, RotateCcw, X, AudioLines
 } from 'lucide-react'
 
 const QUICK_BANNERS = ['HELLO KIWI', 'FOCUS MODE', 'COFFEE BREAK', 'GG EZ']
+const SOUND_FX_BUTTONS = [
+  { id: 'coin', label: 'Coin' },
+  { id: 'giggle', label: 'Giggle' },
+  { id: 'laser', label: 'Laser' },
+  { id: 'fanfare', label: 'Fanfare' },
+  { id: 'sparkle', label: 'Sparkle' },
+  { id: 'love', label: 'Love' },
+  { id: 'kiss', label: 'Kiss' },
+  { id: 'surprised', label: 'Surprised' },
+  { id: 'violin', label: 'Sad Violin' },
+  { id: 'sleepy', label: 'Yawn' },
+  { id: 'laugh', label: 'Laugh' },
+  { id: 'cry', label: 'Cry' },
+  { id: 'chime', label: 'Chime' },
+  { id: 'fart', label: 'Cheeky' }
+]
 
 // Mini OLED Aperture Screen with CRT scanlines & vector glow - Expands to fill outer container
 const FaceAperture = React.memo(function FaceAperture({ svgContent, color = '#38BDF8', width = '100%', height = 'auto', active = false, style = {} }) {
@@ -85,6 +101,7 @@ const PresetTile = React.memo(function PresetTile({
     <button
       type="button"
       onClick={() => onSelect(item)}
+      className={`flux-preset-tile${isActive ? ' is-active' : ''}`}
       style={{
         padding: compact ? '6px 6px 8px' : '8px 8px 10px',
         borderRadius: compact ? '14px' : '16px',
@@ -102,18 +119,6 @@ const PresetTile = React.memo(function PresetTile({
         minWidth: 0,
         boxSizing: 'border-box',
         fontFamily: 'inherit'
-      }}
-      onMouseEnter={(e) => {
-        if (!isActive) {
-          e.currentTarget.style.transform = 'translateY(-2px)'
-          e.currentTarget.style.borderColor = 'var(--border-dark)'
-        }
-      }}
-      onMouseLeave={(e) => {
-        if (!isActive) {
-          e.currentTarget.style.transform = 'translateY(0)'
-          e.currentTarget.style.borderColor = 'var(--border-light)'
-        }
       }}
     >
       <FaceAperture
@@ -200,14 +205,24 @@ export default function FacesStudioView({
     [currentSkin]
   )
 
+  const notifyAction = useCallback((res, okMsg) => {
+    if (!res || res.ok === false) {
+      onToast('Device offline — command did not reach Kiwi.')
+      return false
+    }
+    onToast(okMsg)
+    return true
+  }, [onToast])
+
   const sendBannerText = useCallback(async (rawText) => {
     const txt = rawText.trim()
     if (!txt) return
-    setActiveScreen(null)
     setBannerText(txt)
-    await onTriggerAction(`/do?banner=${encodeURIComponent(txt)}`)
-    onToast(`Scrolling "${txt}" on OLED display`)
-  }, [onTriggerAction, onToast, setActiveScreen])
+    const res = await onTriggerAction(`/do?banner=${encodeURIComponent(txt)}`)
+    if (notifyAction(res, `Scrolling "${txt}" on OLED display`)) {
+      setActiveScreen(null)
+    }
+  }, [onTriggerAction, notifyAction, setActiveScreen])
 
   const handleSendBanner = async (e) => {
     e.preventDefault()
@@ -215,46 +230,57 @@ export default function FacesStudioView({
   }
 
   const handleStopBanner = async () => {
-    setActiveScreen(null)
-    await onTriggerAction('/do?stopbanner=1')
-    onToast('OLED banner stopped.')
+    const res = await onTriggerAction('/do?stopbanner=1')
+    if (notifyAction(res, 'OLED banner stopped.')) {
+      setActiveScreen(null)
+    }
   }
 
   const handleToggleMouth = async () => {
     const nextVal = showMouth ? '0' : '1'
-    await onTriggerAction(`/do?mouth=${nextVal}`)
-    onToast(showMouth ? 'Mouth hidden (speaking only)' : 'Mouth & Lips visible on OLED')
+    const res = await onTriggerAction(`/do?mouth=${nextVal}`)
+    notifyAction(res, showMouth ? 'Mouth hidden (speaking only)' : 'Mouth & Lips visible on OLED')
   }
 
   const handleScreenToggle = async (mode, label, toastMsg) => {
     if (activeScreen === mode) {
-      setActiveScreen(null)
-      await onTriggerAction('/do?e=idle&s=1')
-      onToast(`${label} hidden. Normal face restored!`)
+      const res = await onTriggerAction('/do?e=idle&s=1')
+      if (notifyAction(res, `${label} hidden. Normal face restored!`)) {
+        setActiveScreen(null)
+      }
     } else {
-      setActiveScreen(mode)
-      await onTriggerAction(`/do?e=${mode}&s=1`)
-      onToast(toastMsg)
+      const res = await onTriggerAction(`/do?e=${mode}&s=1`)
+      if (notifyAction(res, toastMsg)) {
+        setActiveScreen(mode)
+      }
     }
   }
 
   const handleRestoreNormal = async () => {
-    setActiveScreen(null)
-    await onTriggerAction('/do?e=idle&s=1')
-    onToast('Restored normal Kiwi face!')
+    const res = await onTriggerAction('/do?e=idle&s=1')
+    if (notifyAction(res, 'Restored normal Kiwi face!')) {
+      setActiveScreen(null)
+    }
   }
 
   const handleTriggerEmotion = useCallback(async (emo) => {
-    setActiveScreen(null)
-    await onTriggerAction(`/do?e=${encodeURIComponent(emo.id)}&s=1`)
-    onToast(`Emotion triggered: ${emo.title}`)
-  }, [onTriggerAction, onToast, setActiveScreen])
+    const res = await onTriggerAction(`/do?e=${encodeURIComponent(emo.id)}&s=1`)
+    if (notifyAction(res, `Emotion triggered: ${emo.title}`)) {
+      setActiveScreen(null)
+    }
+  }, [onTriggerAction, notifyAction, setActiveScreen])
 
   const handleSwitchSkin = useCallback(async (skin) => {
-    setActiveScreen(null)
-    await onTriggerAction(`/do?skin=${encodeURIComponent(skin.id)}`)
-    onToast(`Switched eye skin to ${skin.label}`)
-  }, [onTriggerAction, onToast, setActiveScreen])
+    const res = await onTriggerAction(`/do?skin=${encodeURIComponent(skin.id)}`)
+    if (notifyAction(res, `Switched eye skin to ${skin.label}`)) {
+      setActiveScreen(null)
+    }
+  }, [onTriggerAction, notifyAction, setActiveScreen])
+
+  const handleTriggerSoundFx = useCallback(async (fx) => {
+    const res = await onTriggerAction(`/do?sound=${encodeURIComponent(fx.id)}`)
+    notifyAction(res, `Played FX: ${fx.label}`)
+  }, [onTriggerAction, notifyAction])
 
   const categoryCounts = useMemo(() => {
     const counts = { All: ALL_42_EMOTIONS.length }
@@ -320,7 +346,7 @@ export default function FacesStudioView({
                 transition: 'all 0.15s ease'
               }}
             >
-              {activeScreen === 'clock' ? <EyeOff size={14} color="#FFFFFF" /> : <Clock size={14} color="#38BDF8" />}
+              {activeScreen === 'clock' ? <EyeOff size={14} color="#FFFFFF" /> : <Clock size={14} color="var(--text-muted)" />}
               <span>{activeScreen === 'clock' ? 'Hide Clock' : 'Clock'}</span>
             </button>
           </Tooltip>
@@ -347,7 +373,7 @@ export default function FacesStudioView({
                 transition: 'all 0.15s ease'
               }}
             >
-              {activeScreen === 'weather' ? <EyeOff size={14} color="#FFFFFF" /> : <CloudSun size={14} color="#FBBF24" />}
+              {activeScreen === 'weather' ? <EyeOff size={14} color="#FFFFFF" /> : <CloudSun size={14} color="var(--text-muted)" />}
               <span>{activeScreen === 'weather' ? 'Hide Weather' : 'Weather'}</span>
             </button>
           </Tooltip>
@@ -382,7 +408,7 @@ export default function FacesStudioView({
       <div className="flux-white-card" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
         <div className="flux-card-header" style={{ marginBottom: 0 }}>
           <span className="flux-card-title">
-            <MessageSquare size={15} style={{ color: '#38BDF8' }} />
+            <MessageSquare size={15} />
             <span>OLED Marquee Banner</span>
           </span>
           <span
@@ -511,12 +537,49 @@ export default function FacesStudioView({
         </div>
       </div>
 
-      {/* Eye Skins Card (Horizontal swipe strip on mobile, 5-up row on desktop) */}
+      {/* Soundboard FX Card */}
+      <div className="flux-white-card" style={{ padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+        <div className="flux-card-header" style={{ marginBottom: 0 }}>
+          <span className="flux-card-title">
+            <AudioLines size={15} />
+            <span>Soundboard FX</span>
+          </span>
+          <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-muted)' }}>
+            Synced face + buzzer
+          </span>
+        </div>
+        <div className="flux-chip-row">
+          {SOUND_FX_BUTTONS.map((fx) => (
+            <button
+              key={fx.id}
+              type="button"
+              onClick={() => handleTriggerSoundFx(fx)}
+              style={{
+                padding: '6px 12px',
+                borderRadius: '999px',
+                background: 'var(--card-subtle)',
+                border: '1px solid var(--border-light)',
+                color: 'var(--text-dark)',
+                fontSize: '11.5px',
+                fontWeight: 700,
+                fontFamily: 'inherit',
+                cursor: 'pointer',
+                whiteSpace: 'nowrap',
+                flexShrink: 0
+              }}
+            >
+              {fx.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Eye Skins Card (Horizontal swipe strip on mobile, 6-up row on desktop) */}
       <div className="flux-white-card" style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
         <div className="flux-card-header" style={{ marginBottom: 0, gap: '10px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0, flexWrap: 'wrap' }}>
             <span className="flux-card-title">
-              <Sparkles size={15} style={{ color: '#0EA5E9' }} />
+              <Eye size={15} />
               <span>Eye Skins</span>
             </span>
             <span
@@ -592,7 +655,7 @@ export default function FacesStudioView({
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <span className="flux-card-title">
-              <Smile size={15} style={{ color: '#0EA5E9' }} />
+              <Smile size={15} />
               <span>Expressions</span>
             </span>
             <span

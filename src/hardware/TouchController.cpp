@@ -15,15 +15,16 @@
 #include "ai/AiService.h"
 #include "integrations/WeatherService.h"
 #include "net/WifiManager.h"
+#include "web/WebPortal.h"
 #include <WiFi.h>
 #include <esp_sleep.h>
 
 TouchSensor touchL = {PIN_TOUCH_LEFT, false, false, 0, 0,
-                      false,          false, false, 0, false};
+                      false,          false, false, 0, 0};
 TouchSensor touchR = {PIN_TOUCH_RIGHT, false, false, 0, 0,
-                      false,           false, false, 0, false};
+                      false,           false, false, 0, 0};
 TouchSensor touchT = {PIN_TOUCH_TOP, false, false, 0, 0,
-                      false,         false, false, 0, false};
+                      false,         false, false, 0, 0};
 
 void triggerPetReaction();
 
@@ -52,10 +53,17 @@ float getTopTouchHoldProgress() {
     return 0.0f;
   }
   uint32_t held = millis() - tStarted;
-  if (held < 450 || tSleep)
+  if (tSleep)
+    return 0.0f;
+  if ((isKiwiHungry() || isKiwiAngry()) && !tHold && held < 1200) {
+    if (held < 250)
+      return 0.0f;
+    return (float)(held - 250) / (float)(1200 - 250);
+  }
+  if (held < 350)
     return 0.0f;
   if (!tHold && held < TOUCH_CLOCK_MS) {
-    return (float)(held - 450) / (float)(TOUCH_CLOCK_MS - 450);
+    return (float)(held - 350) / (float)(TOUCH_CLOCK_MS - 350);
   }
   if (held >= TOUCH_CLOCK_MS && held < SLEEP_HOLD_MS) {
     return (float)(held - TOUCH_CLOCK_MS) / (float)(SLEEP_HOLD_MS - TOUCH_CLOCK_MS);
@@ -80,7 +88,7 @@ void triggerTickleMode() {
   static const char *const tickleReplies[] = {
       "Arey arey gudgudi ho rahi hai, chhodo mujhe!",
       "Haha bas karo bhai, bohot ticklish hoon main!",
-      "Hehe haha! Cheeks mat chhedo, gudgudi lagti hai!"};
+      "Hehe haha! Sar pe itni tez gudgudi mat karo!"};
   int idx = random(0, 3);
   speakText(tickleReplies[idx]);
   bool wasCancelled = cancelRequest;
@@ -109,8 +117,13 @@ void initTouch() {
 #else
   esp_sleep_enable_ext0_wakeup((gpio_num_t)PIN_TOUCH_TOP, 1);
 #endif
+#if ENABLE_CHEEK_SENSORS
   touchL.armed = true;
   touchR.armed = true;
+#else
+  touchL.armed = false;
+  touchR.armed = false;
+#endif
   touchT.armed = true;
 }
 
@@ -124,21 +137,24 @@ static void resyncOneTouch(TouchSensor &ts, uint32_t now) {
   ts.changedAt = now;
   ts.startedAt = raw ? now : 0;
   ts.lastReleaseAt = 0;
-  ts.pendingSingleTap = false;
+  ts.tapCount = 0;
   portEXIT_CRITICAL(&s_touchMux);
 }
 
 void resyncTouch() {
   uint32_t now = millis();
+#if ENABLE_CHEEK_SENSORS
   resyncOneTouch(touchL, now);
   resyncOneTouch(touchR, now);
+#endif
   resyncOneTouch(touchT, now);
 }
 
 // ---------- Touch Gesture Action Dispatcher ----------
-// Calibrated double-tap window: 300ms for snappy single-tap dispatch while
-// keeping reliable double-tap detection on capacitive sensors.
-constexpr uint32_t DOUBLE_TAP_WINDOW_MS = 300;
+// Calibrated multi-tap window & single-sensor top-hold thresholds.
+constexpr uint32_t DOUBLE_TAP_WINDOW_MS = 430;
+constexpr uint32_t TOP_HUNGER_HOLD_MS = 1200;
+static bool s_topHoldCuePlayed = false;
 
 TouchAction getSingleTapAction(uint8_t pin) {
   if (pin == PIN_TOUCH_TOP)
@@ -157,6 +173,12 @@ TouchAction getDoubleTapAction(uint8_t pin) {
     return touchActLeftDbl;
   if (pin == PIN_TOUCH_RIGHT)
     return touchActRightDbl;
+  return TOUCH_ACT_NONE;
+}
+
+TouchAction getTripleTapAction(uint8_t pin) {
+  if (pin == PIN_TOUCH_TOP)
+    return touchActTopTpl;
   return TOUCH_ACT_NONE;
 }
 
@@ -332,8 +354,12 @@ void executeTouchAction(TouchAction act, uint8_t pin) {
     break;
 
   case TOUCH_ACT_CYCLE_SKIN: {
-    int nextSkin = ((int)currentEyeSkin + 1) % SKIN_COUNT;
-    currentEyeSkin = (EyeSkin)nextSkin;
+    int nextSkin = 0;
+    {
+      DisplayLockGuard lock(80);
+      nextSkin = ((int)currentEyeSkin + 1) % SKIN_COUNT;
+      currentEyeSkin = (EyeSkin)nextSkin;
+    }
     soundCoin();
     saveConfig();
     Serial.printf("[TOUCH] Action CYCLE_SKIN -> Skin %d\n", nextSkin);
@@ -341,6 +367,10 @@ void executeTouchAction(TouchAction act, uint8_t pin) {
   }
 
   case TOUCH_ACT_PET:
+    if (isKiwiAngry()) {
+      handleAngryRejection();
+      break;
+    }
     triggerPetReaction();
     break;
 
@@ -372,10 +402,13 @@ void executeTouchAction(TouchAction act, uint8_t pin) {
           "[TOUCH] Action DISMISS -> Cancel current request / listening");
       cancelRequest = true;
       startRecording = false;
+      toneStop();
+      spkAbortSpeech();
       setEmotion(EMOTION_IDLE);
     } else if (startRecording) {
       Serial.println("[TOUCH] Action DISMISS -> Cancel pending listen");
       startRecording = false;
+      toneStop();
       soundPetSparkle();
       setEmotion(EMOTION_IDLE);
     } else if (showClockScreen) {
@@ -390,6 +423,7 @@ void executeTouchAction(TouchAction act, uint8_t pin) {
       returnIdleAt = 0;
       soundPetSparkle();
     } else if (!busyProcessing) {
+      DisplayLockGuard lock(80);
       gazeTgtX = (pin == PIN_TOUCH_LEFT) ? -8.0f : 8.0f;
       gazeTgtY = 0;
       gazeLockUntil = now + 2500;
@@ -403,13 +437,66 @@ void executeTouchAction(TouchAction act, uint8_t pin) {
   }
 }
 
-void checkPendingSingleTap(TouchSensor &ts, uint32_t now) {
-  // Only confirm single-tap if the sensor is NOT currently being touched/pressed (!ts.state)
-  // and the double-tap window has elapsed since release.
-  if (ts.pendingSingleTap && !ts.state && (now - ts.lastReleaseAt > DOUBLE_TAP_WINDOW_MS)) {
-    ts.pendingSingleTap = false;
-    Serial.printf("[TOUCH] Pin %d SINGLE TAP confirmed\n", ts.pin);
-    executeTouchAction(getSingleTapAction(ts.pin), ts.pin);
+static void dispatchTopMultiTap(uint8_t taps) {
+  if (taps >= 4) {
+    Serial.println("[TOUCH] Top 4x RAPID TAP -> Tickle / Reconcile!");
+    if (isKiwiAngry()) {
+      reconcileKiwi();
+    } else if (isKiwiHungry()) {
+      feedKiwi();
+    } else if (!busyProcessing && !s_inTickleSpeech && !isSpeechPlaying()) {
+      triggerTickleMode();
+    }
+    return;
+  }
+
+  if (taps == 3) {
+    TouchAction tplAct = getTripleTapAction(PIN_TOUCH_TOP);
+    Serial.printf("[TOUCH] Top TRIPLE TAP confirmed (act=%d)\n", (int)tplAct);
+    if (tplAct != TOUCH_ACT_NONE) {
+      executeTouchAction(tplAct, PIN_TOUCH_TOP);
+    } else {
+      TouchAction dblAct = getDoubleTapAction(PIN_TOUCH_TOP);
+      executeTouchAction((dblAct != TOUCH_ACT_NONE) ? dblAct : getSingleTapAction(PIN_TOUCH_TOP),
+                         PIN_TOUCH_TOP);
+    }
+    return;
+  }
+
+  if (taps == 2) {
+    if (isKiwiHungry()) {
+      Serial.println("[TOUCH] Top DOUBLE TAP while hungry -> Feed Kiwi!");
+      feedKiwi();
+      return;
+    }
+    if (isKiwiAngry()) {
+      Serial.println("[TOUCH] Top DOUBLE TAP while angry -> Reconcile Kiwi!");
+      reconcileKiwi();
+      return;
+    }
+    TouchAction dblAct = getDoubleTapAction(PIN_TOUCH_TOP);
+    Serial.printf("[TOUCH] Top DOUBLE TAP confirmed (act=%d)\n", (int)dblAct);
+    executeTouchAction((dblAct != TOUCH_ACT_NONE) ? dblAct : getSingleTapAction(PIN_TOUCH_TOP),
+                       PIN_TOUCH_TOP);
+    return;
+  }
+
+  Serial.printf("[TOUCH] Pin %d SINGLE TAP confirmed\n", PIN_TOUCH_TOP);
+  executeTouchAction(getSingleTapAction(PIN_TOUCH_TOP), PIN_TOUCH_TOP);
+}
+
+void checkPendingMultiTap(TouchSensor &ts, uint32_t now) {
+  // Wait for release AND debounce-raw LOW so the next touch press isn't cut off mid-debounce
+  if (ts.tapCount > 0 && !ts.state && !ts.lastRaw &&
+      (now - ts.lastReleaseAt > DOUBLE_TAP_WINDOW_MS)) {
+    uint8_t taps = ts.tapCount;
+    ts.tapCount = 0;
+    if (ts.pin == PIN_TOUCH_TOP) {
+      dispatchTopMultiTap(taps);
+    } else {
+      Serial.printf("[TOUCH] Pin %d SINGLE TAP confirmed\n", ts.pin);
+      executeTouchAction(getSingleTapAction(ts.pin), ts.pin);
+    }
   }
 }
 
@@ -432,6 +519,9 @@ static void updateOneTouch(TouchSensor &ts, uint32_t now) {
       ts.holdHandled = false;
       ts.sleepHandled = false;
       portEXIT_CRITICAL(&s_touchMux);
+      if (ts.pin == PIN_TOUCH_TOP) {
+        s_topHoldCuePlayed = false;
+      }
       returnIdleAt = 0;
       if (bootInfoUntil > 0) {
         bootInfoUntil = 0;
@@ -446,7 +536,7 @@ static void updateOneTouch(TouchSensor &ts, uint32_t now) {
         stopRobotTimerAlarm();
         ts.holdHandled = true;
         ts.sleepHandled = true;
-        ts.pendingSingleTap = false;
+        ts.tapCount = 0;
         return;
       }
 
@@ -459,7 +549,7 @@ static void updateOneTouch(TouchSensor &ts, uint32_t now) {
         updateDisplayBrightnessMode();
         ts.holdHandled = true;
         ts.sleepHandled = true;
-        ts.pendingSingleTap = false;
+        ts.tapCount = 0;
         bool isCheek = (ts.pin == PIN_TOUCH_LEFT || ts.pin == PIN_TOUCH_RIGHT);
         if (isCheek && !isKiwiAngry() && !busyProcessing &&
             !inCircadianSleep && !manualSleep &&
@@ -502,8 +592,8 @@ static void updateOneTouch(TouchSensor &ts, uint32_t now) {
         // until reconciled so simultaneous dual-cheek hold can trigger handleAngryFeedAttempt)
         if (isKiwiAngry() &&
             (ts.pin == PIN_TOUCH_LEFT || ts.pin == PIN_TOUCH_RIGHT)) {
-          touchL.pendingSingleTap = false;
-          touchR.pendingSingleTap = false;
+          touchL.tapCount = 0;
+          touchR.tapCount = 0;
           cheekTapCount = 0;
           if (checkCheekComboLRLR()) {
             Serial.println("[TOUCH] Alternating cheek combo triggered! "
@@ -534,8 +624,8 @@ static void updateOneTouch(TouchSensor &ts, uint32_t now) {
             showClockScreen = false;
             showWeatherScreen = false;
             updateDisplayBrightnessMode();
-            touchL.pendingSingleTap = false;
-            touchR.pendingSingleTap = false;
+            touchL.tapCount = 0;
+            touchR.tapCount = 0;
             ts.holdHandled = true;
             ts.sleepHandled = true;
             triggerTickleMode();
@@ -561,31 +651,61 @@ static void updateOneTouch(TouchSensor &ts, uint32_t now) {
       if (!ts.holdHandled && !ts.sleepHandled && held < tapMax) {
         if (inCircadianSleep || manualSleep || sleepyFallAsleepIsActive()) {
           executeTouchAction(TOUCH_ACT_DISMISS, ts.pin);
-          ts.pendingSingleTap = false;
+          ts.tapCount = 0;
           return;
         }
         if (isKiwiAngry() &&
             (ts.pin == PIN_TOUCH_LEFT || ts.pin == PIN_TOUCH_RIGHT)) {
-          ts.pendingSingleTap = false;
+          ts.tapCount = 0;
           return;
         }
 
-        TouchAction dblAct = getDoubleTapAction(ts.pin);
-        bool isSecondTap = ts.pendingSingleTap &&
-                           (dblAct != TOUCH_ACT_NONE) &&
-                           ((ts.startedAt - ts.lastReleaseAt <= DOUBLE_TAP_WINDOW_MS) ||
-                            (now - ts.lastReleaseAt <= DOUBLE_TAP_WINDOW_MS + 250));
-
-        if (isSecondTap) {
-          ts.pendingSingleTap = false;
-          Serial.printf("[TOUCH] Pin %d DOUBLE TAP triggered!\n", ts.pin);
-          executeTouchAction(dblAct, ts.pin);
-        } else if (dblAct == TOUCH_ACT_NONE) {
-          executeTouchAction(getSingleTapAction(ts.pin), ts.pin);
-        } else {
-          ts.pendingSingleTap = true;
+        if (ts.pin == PIN_TOUCH_TOP) {
+          // Instant 0ms interrupt/cancel when speaking, listening, or processing
+          if (busyProcessing || startRecording || isSpeechPlaying() ||
+              currentEmotion == EMOTION_SPEAKING) {
+            ts.tapCount = 0;
+            TouchAction single = getSingleTapAction(ts.pin);
+            executeTouchAction((single == TOUCH_ACT_LISTEN) ? TOUCH_ACT_LISTEN : TOUCH_ACT_DISMISS,
+                               ts.pin);
+            return;
+          }
+          if (ts.tapCount < 4)
+            ts.tapCount++;
           ts.lastReleaseAt = now;
+          if (ts.tapCount >= 4) {
+            ts.tapCount = 0;
+            dispatchTopMultiTap(4);
+          }
+        } else {
+          TouchAction dblAct = getDoubleTapAction(ts.pin);
+          bool isSecondTap = (ts.tapCount > 0) &&
+                             (dblAct != TOUCH_ACT_NONE) &&
+                             ((ts.startedAt - ts.lastReleaseAt <= DOUBLE_TAP_WINDOW_MS) ||
+                              (now - ts.lastReleaseAt <= DOUBLE_TAP_WINDOW_MS + 250));
+
+          if (isSecondTap) {
+            ts.tapCount = 0;
+            Serial.printf("[TOUCH] Pin %d DOUBLE TAP triggered!\n", ts.pin);
+            executeTouchAction(dblAct, ts.pin);
+          } else if (dblAct == TOUCH_ACT_NONE) {
+            executeTouchAction(getSingleTapAction(ts.pin), ts.pin);
+          } else {
+            ts.tapCount = 1;
+            ts.lastReleaseAt = now;
+          }
         }
+      } else if (ts.pin == PIN_TOUCH_TOP && !ts.holdHandled && !ts.sleepHandled &&
+                 held >= TOUCH_CLOCK_MS && held < SLEEP_HOLD_MS &&
+                 !busyProcessing && !inCircadianSleep && !manualSleep &&
+                 !sleepyFallAsleepIsActive()) {
+        // Defer top 1.5s hold action until release so holding 7s to sleep never triggers it first
+        ts.tapCount = 0;
+        ts.holdHandled = true;
+        Serial.println("[TOUCH] Top Held 1.5s -> Listen / Hold Action!");
+        executeTouchAction(touchActTopHold, ts.pin);
+      } else {
+        ts.tapCount = 0;
       }
     }
   }
@@ -593,6 +713,9 @@ static void updateOneTouch(TouchSensor &ts, uint32_t now) {
     lastUserInteractionAt = now;
     extendTempWakeIfActive(CIRCADIAN_TEMP_WAKE_MS);
     uint32_t held = now - ts.startedAt;
+    if (held >= 400) {
+      ts.tapCount = 0;
+    }
 
     // Directional Gazing: Eyes look towards the touched cheek or head
     if (!busyProcessing && !inCircadianSleep && !manualSleep) {
@@ -641,15 +764,34 @@ static void updateOneTouch(TouchSensor &ts, uint32_t now) {
       executeTouchAction(touchActRightHold, ts.pin);
     }
 
-    // Hold 3s on Top -> Instantly Change Face Skin (Cycle Face Theme)
-    if (ts.pin == PIN_TOUCH_TOP && held >= TOUCH_CLOCK_MS && !ts.holdHandled &&
-        !ts.sleepHandled && !busyProcessing && !inCircadianSleep &&
-        !manualSleep && !sleepyFallAsleepIsActive()) {
+    // Single-sensor Top Hold (1.2s) feeds Hungry Kiwi or reconciles Angry Kiwi
+    if (ts.pin == PIN_TOUCH_TOP && (isKiwiHungry() || isKiwiAngry()) &&
+        held >= TOP_HUNGER_HOLD_MS && !ts.holdHandled && !busyProcessing &&
+        !isSpeechPlaying() && !inCircadianSleep && !manualSleep &&
+        !sleepyFallAsleepIsActive()) {
       ts.holdHandled = true;
-      Serial.println("[TOUCH] Top Held 3s -> Instant Skin Cycle!");
-      executeTouchAction(touchActTopHold, ts.pin);
+      if (isKiwiHungry()) {
+        Serial.println("[TOUCH] Top Hold 1.2s while hungry -> Feed Kiwi!");
+        feedKiwi();
+      } else {
+        Serial.println("[TOUCH] Top Hold 1.2s while angry -> Reconcile Kiwi!");
+        reconcileKiwi();
+      }
+      return;
     }
+
+    // Gentle blip cue when Top hold crosses 1.5s ("release now for Listen, or keep holding 7s for Sleep")
+    if (ts.pin == PIN_TOUCH_TOP && held >= TOUCH_CLOCK_MS &&
+        !ts.holdHandled && !ts.sleepHandled && !s_topHoldCuePlayed &&
+        !busyProcessing && !inCircadianSleep && !manualSleep &&
+        !sleepyFallAsleepIsActive()) {
+      s_topHoldCuePlayed = true;
+      soundTouchBlip();
+      updateTonePlayer();
+    }
+
     // Hold 2s while asleep (or 7s while awake) on Top -> Sleep Mode Toggle!
+    // (1.5s Listen/Hold fires on release between 1.5s and 7s so sleep-hold never triggers it first.)
     uint32_t sleepHoldRequired =
         (inCircadianSleep || manualSleep || sleepyFallAsleepIsActive())
             ? 2000
@@ -674,12 +816,18 @@ static void updateOneTouch(TouchSensor &ts, uint32_t now) {
 }
 
 void updateTouch() {
+  if (otaInProgress)
+    return;
+#if ENABLE_CHEEK_SENSORS
   updateOneTouch(touchL, millis());
   updateOneTouch(touchR, millis());
+#endif
   updateOneTouch(touchT, millis());
 
   uint32_t now = millis();
-  checkPendingSingleTap(touchL, now);
-  checkPendingSingleTap(touchR, now);
-  checkPendingSingleTap(touchT, now);
+#if ENABLE_CHEEK_SENSORS
+  checkPendingMultiTap(touchL, now);
+  checkPendingMultiTap(touchR, now);
+#endif
+  checkPendingMultiTap(touchT, now);
 }

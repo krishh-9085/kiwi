@@ -54,6 +54,96 @@
 #include <Arduino.h>
 #include <ESPmDNS.h>
 #include <WiFi.h>
+#include <esp_core_dump.h>
+#include <esp_ota_ops.h>
+#include <esp_system.h>
+#include <esp_task_wdt.h>
+
+extern "C" bool verifyRollbackLater() { return true; }
+
+static bool s_otaRollbackConfirmed = false;
+
+static const char *resetReasonName(esp_reset_reason_t r) {
+  switch (r) {
+  case ESP_RST_POWERON:
+    return "POWERON";
+  case ESP_RST_EXT:
+    return "EXT";
+  case ESP_RST_SW:
+    return "SW";
+  case ESP_RST_PANIC:
+    return "PANIC";
+  case ESP_RST_INT_WDT:
+    return "INT_WDT";
+  case ESP_RST_TASK_WDT:
+    return "TASK_WDT";
+  case ESP_RST_WDT:
+    return "WDT";
+  case ESP_RST_DEEPSLEEP:
+    return "DEEPSLEEP";
+  case ESP_RST_BROWNOUT:
+    return "BROWNOUT";
+  case ESP_RST_SDIO:
+    return "SDIO";
+  default:
+    return "UNKNOWN";
+  }
+}
+
+static void initBootDiagnostics() {
+  bootResetReason = resetReasonName(esp_reset_reason());
+  Serial.printf("[BOOT] Reset reason: %s\n", bootResetReason.c_str());
+
+  if (esp_core_dump_image_check() == ESP_OK) {
+    bootHasCoredump = true;
+    char panicBuf[160] = {0};
+    if (esp_core_dump_get_panic_reason(panicBuf, sizeof(panicBuf)) == ESP_OK &&
+        panicBuf[0]) {
+      bootCoredumpReason = String(panicBuf);
+    }
+    esp_core_dump_summary_t *summary =
+        (esp_core_dump_summary_t *)malloc(sizeof(esp_core_dump_summary_t));
+    if (summary) {
+      if (esp_core_dump_get_summary(summary) == ESP_OK) {
+        summary->exc_task[15] = '\0';
+        bootCoredumpTask = String(summary->exc_task);
+      }
+      free(summary);
+    }
+    Serial.printf("[COREDUMP] Crash dump present! task='%s' reason='%s'\n",
+                  bootCoredumpTask.c_str(), bootCoredumpReason.c_str());
+  } else {
+    bootHasCoredump = false;
+  }
+}
+
+static void confirmOtaRollbackIfReady() {
+  if (s_otaRollbackConfirmed || !bootCompleted || otaInProgress)
+    return;
+  s_otaRollbackConfirmed = true;
+  const esp_partition_t *running = esp_ota_get_running_partition();
+  esp_ota_img_states_t state = ESP_OTA_IMG_UNDEFINED;
+  if (running && esp_ota_get_state_partition(running, &state) == ESP_OK &&
+      state == ESP_OTA_IMG_PENDING_VERIFY) {
+    if (esp_ota_mark_app_valid_cancel_rollback() == ESP_OK) {
+      Serial.printf("[OTA] App confirmed valid on slot %s (rollback cancelled)\n",
+                    running->label);
+    }
+  }
+}
+
+static void initCore1Watchdog() {
+  esp_task_wdt_config_t wdtCfg = {
+      .timeout_ms = 20000,
+      .idle_core_mask = (1U << 0),
+      .trigger_panic = true};
+  if (esp_task_wdt_reconfigure(&wdtCfg) == ESP_ERR_INVALID_STATE) {
+    esp_task_wdt_init(&wdtCfg);
+  }
+  enableLoopWDT();
+  feedLoopWDT();
+  Serial.println("[WDT] Core 1 Task Watchdog armed (20s timeout)");
+}
 
 
 // ============================================================
@@ -89,6 +179,7 @@ void setup() {
   Serial.println("==========================================");
   Serial.println("  MYROBOT (KIWI) - MODULAR ARCHITECTURE   ");
   Serial.println("==========================================");
+  initBootDiagnostics();
   if (psramFound()) {
     Serial.printf("[PSRAM] Hardware 2MB PSRAM Initialized! Total: %u KB, Free: %u KB\n",
                   (unsigned)(ESP.getPsramSize() / 1024),
@@ -172,6 +263,7 @@ void setup() {
 #endif
 
   lastUserInteractionAt = millis();
+  initCore1Watchdog();
 #if BOOT_TIMING_LOG
   Serial.printf("[BOOT_T] setup_exit t=%lu ms\n",
                 (unsigned long)(millis() - bootSetupEnterAt));
@@ -331,10 +423,15 @@ static void checkBootGreeting() {
   if (isTonePlaying() || isSpeechPlaying())
     return;
 
-  // Give up to 10 seconds for WiFi NTP time sync so the greeting matches the
-  // exact time of day
-  if (!timeSynced && (millis() - bootStartAt) < 10000UL)
-    return;
+  // Wait up to 15s when Wi-Fi is connected (or 10s while connecting) so NTP
+  // syncs local time before choosing the boot greeting time-of-day.
+  uint32_t waitMs = (millis() - bootStartAt);
+  if (!timeSynced) {
+    if (WiFi.status() == WL_CONNECTED && waitMs < 15000UL)
+      return;
+    if (isWifiConnecting() && waitMs < 10000UL)
+      return;
+  }
 
   greetingTriggered = true;
 
@@ -375,7 +472,8 @@ void loop() {
     return;
   }
 
-  // Once boot is complete, offload Display rendering and NeoPixel LED to dedicated Core 0 task
+  // Once boot is complete, confirm any pending OTA image & offload Display/LED to Core 0
+  confirmOtaRollbackIfReady();
   if (!uiTaskRunning) {
     startUiDisplayTask();
   }

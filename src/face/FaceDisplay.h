@@ -24,5 +24,21 @@ void markDisplayDirty();
 bool displayLock(uint32_t waitMs = 50);
 void displayUnlock();
 
+class DisplayLockGuard {
+public:
+  explicit DisplayLockGuard(uint32_t waitMs = 80)
+      : locked_(displayLock(waitMs)) {}
+  ~DisplayLockGuard() {
+    if (locked_)
+      displayUnlock();
+  }
+  DisplayLockGuard(const DisplayLockGuard &) = delete;
+  DisplayLockGuard &operator=(const DisplayLockGuard &) = delete;
+  bool locked() const { return locked_; }
+
+private:
+  bool locked_;
+};
+
 extern bool displayPowerState;
 extern uint8_t currentAppliedBrightness;

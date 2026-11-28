@@ -7,6 +7,7 @@ extern int maxChatHistory;
 struct ChatTurn {
   String question;
   String answer;
+  String persona;
 };
 
 void clearConversationHistory();

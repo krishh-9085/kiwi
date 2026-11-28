@@ -59,15 +59,24 @@ void soundLevelTick() {
     return;
   }
 
-  // If wake-word engine or pre-wake bridge is actively reading I2S, don't
+  // If wake-word engine, STT recording, or pre-wake bridge owns I2S RX, don't
   // compete for rxHandle
-  if (wakeWordIsListening() || preWakeIsBridgeActive()) {
+  if (wakeWordIsListening() || preWakeIsBridgeActive() || busyProcessing ||
+      startRecording) {
     return;
   }
 
   static int32_t buf[64 * 2];
   size_t br = 0;
-  esp_err_t err = i2s_channel_read(rxHandle, buf, sizeof(buf), &br, 0);
+  if (!audioRxLock(0)) {
+    return;
+  }
+  esp_err_t err = ESP_FAIL;
+  if (!wakeWordIsListening() && !preWakeIsBridgeActive() && !busyProcessing &&
+      !startRecording && rxHandle) {
+    err = i2s_channel_read(rxHandle, buf, sizeof(buf), &br, 0);
+  }
+  audioRxUnlock();
   if (err != ESP_OK || br == 0) {
     return;
   }

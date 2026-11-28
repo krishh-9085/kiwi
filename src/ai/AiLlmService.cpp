@@ -27,6 +27,41 @@
 #include <HTTPClient.h>
 
 #include <WiFiClientSecure.h>
+#include <time.h>
+
+static String getLlmTimeContextPrompt() {
+  struct tm ti;
+  if (timeSynced && getLocalTime(&ti, 5)) {
+    const char *DAYS[] = {"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"};
+    const char *dayStr = (ti.tm_wday >= 0 && ti.tm_wday < 7) ? DAYS[ti.tm_wday] : "";
+    const char *period = "Night";
+    if (ti.tm_hour >= 5 && ti.tm_hour < 12) period = "Morning";
+    else if (ti.tm_hour >= 12 && ti.tm_hour < 17) period = "Afternoon";
+    else if (ti.tm_hour >= 17 && ti.tm_hour < 21) period = "Evening";
+    int h12 = ti.tm_hour % 12;
+    if (h12 == 0) h12 = 12;
+    char buf[48];
+    snprintf(buf, sizeof(buf), "%02d:%02d %s (%s, %s)", h12, ti.tm_min,
+             (ti.tm_hour >= 12) ? "PM" : "AM", period, dayStr);
+    return String(" [CLOCK: Current local time is ") + buf +
+           ". Use matching greetings (NEVER say Good morning outside Morning); only mention exact clock time if asked.]";
+  }
+  return " [CLOCK: Current local time is unknown; never guess time of day or say Good morning/afternoon/evening/night unless asked.]";
+}
+
+static const char *getReplyLangInstruction() {
+  if (replyLang == "en") {
+    return " LANG: Always reply in natural, crisp conversational English. "
+           "2-4 natural sentences, lively, specific. No markdown.";
+  }
+  if (replyLang == "hi") {
+    return " LANG: Reply in natural Hinglish or Hindi (never switch to pure English). "
+           "2-4 natural sentences, lively, specific. No markdown.";
+  }
+  return " LANG: Reply in the same language as user (Hindi/Hinglish/English). "
+         "Never switch to English if user speaks Hindi/Hinglish. "
+         "2-4 natural sentences, lively, specific. No markdown.";
+}
 
 static String getSmartActionInstruction() {
   return " ACTIONS: Append [ACTION: tag] after answer if needed: "
@@ -36,6 +71,7 @@ static String getSmartActionInstruction() {
          "party/evil/shocked] "
          "[ACTION: skin kiwi/pixel/lumina/mecha/emo/kiwi_plus] [ACTION: volume 0-100] "
          "[ACTION: timer SECS] "
+         "[ACTION: personality friendly/funny/serious/bakchod/cute] (only if user explicitly asks to switch mode) "
          "[ACTION: sleep] (if user says so jao/sleep). Reply first, tag at "
          "end.";
 }
@@ -43,25 +79,32 @@ static String getSmartActionInstruction() {
 static String getVoiceExpressionInstruction() {
   if (ttsProvider == "fish" || ttsProvider == "fishaudio") {
     return " VOCAL RULES: "
-           "1. For normal answers, speak naturally in plain text with ZERO "
-           "vocal tags. "
-           "2. CRITICAL: If the user asks you to laugh in ANY way (e.g. 'has "
+           "1. CRITICAL: If the user asks you to laugh in ANY way (e.g. 'has "
            "ke dikhao', 'haso', 'laugh', 'hasi sunao', 'thoda haso'): your "
            "ENTIRE reply MUST BE ONLY '[ACTION: sound laugh]' with ABSOLUTELY "
            "ZERO EXTRA WORDS, NO TALKING, AND NO CONVERSATIONAL FILLER. "
-           "3. ONLY use emotion tags if user explicitly asks (e.g. 'gusse me "
-           "bolo' -> [angry]; 'ro ke bolo' -> [sobbing]; 'has ke bolo' -> "
-           "[laughing]; 'dheere bolo' -> [whisper]). "
-           "Allowed emotion tags: [laughing] [giggle] [sobbing] [angry] [sad] "
-           "[whisper] [excited] [curious] [shy] [proud] [surprised] [scared] "
-           "[cute].";
+           "2. Put an emotion tag at the START of EACH sentence matching its "
+           "tone so Kiwi switches facial expressions dynamically while speaking "
+           "(example: '[curious] Yeh sawal badhiya hai! [laughing] Par bada "
+           "simple scene hai yaar. [proud] Main abhi explain karta hoon!'). "
+           "Switch tags whenever the emotion shifts across sentences. "
+           "3. Use ONLY these supported Fish Audio tags: [laughing] [giggle] "
+           "[sobbing] [angry] [sad] [whisper] [excited] [curious] [shy] "
+           "[proud] [surprised] [scared] [cute].";
   } else {
     return " VOICE & MOOD: Reply in plain spoken text (no markdown). If asked "
            "to laugh, reply ONLY with '[ACTION: sound laugh]' without any "
-           "talking. For expressive replies, you may optionally place ONE mood "
-           "cue tag at the end like [happy], [excited], [curious], [smug], "
-           "[proud], [sad], [angry], [surprised], [shy], [cute], [relieved] "
-           "(Kiwi hides the tag from speech and animates its face).";
+           "talking. Put a fitting mood tag at the START of EACH sentence or "
+           "part so Kiwi switches facial emotions dynamically while speaking! "
+           "Change tags across sentences as the tone shifts (example: "
+           "'[curious] Arre yeh kya pooch liya? [surprised] Sach me bawal "
+           "cheese hai! [laughing] Haha chal mazak side, main samjhata "
+           "hoon. [wink] Bas dhyan se sun!'). Put tags only on full "
+           "sentences, not single-word fragments. Allowed tags: [curious], "
+           "[happy], [excited], [laughing], [smug], [proud], [surprised], "
+           "[shocked], [wink], [cute], [confused], [sad], [angry], [shy], "
+           "[relieved], [cool], [scared]. Kiwi hides tags from speech and uses "
+           "them only for live face expressions.";
   }
 }
 
@@ -279,12 +322,15 @@ static String cleanSentenceForSpeech(const String &s) {
     return "";
   }
 
-  if (ttsProvider != "fish" && ttsProvider != "fishaudio") {
+  // Preserve inline mood tags ([curious], [happy], [laughing], etc.) so
+  // InteractionManager can dynamically animate each segment on the OLED.
+  String cleaned = cleanForSpeech(out, true);
+  String spokenOnly = stripAudioCues(cleaned);
+  spokenOnly.trim();
+  if (!spokenOnly.length())
+    return "";
 
-    out = stripAudioCues(out);
-  }
-
-  return cleanForSpeech(out);
+  return cleaned;
 }
 
 static String extractUrlHost(const String &url, const char *fallbackHost) {
@@ -338,7 +384,12 @@ static String processSseStream(HTTPClient &http, WiFiClient *stream,
   bool sawFirstLine = false;
   bool cleanEof = false;
 
+  bool sawDone = false;
+  uint32_t sawDoneAt = 0;
+
   auto handleSseLine = [&](const String &rawLine) -> bool {
+    if (sawDone)
+      return isChunked;
     String ln = rawLine;
     ln.trim();
     if (ln.length() == 0)
@@ -348,7 +399,11 @@ static String processSseStream(HTTPClient &http, WiFiClient *stream,
       String payload = ln.substring(5);
       payload.trim();
       if (payload == "[DONE]") {
-        return false;
+        sawDone = true;
+        sawDoneAt = millis();
+        // Keep chunked loop alive briefly so the trailing "0\r\n\r\n" chunk
+        // terminator can finish cleanly and preserve Groq TLS keep-alive.
+        return isChunked;
       }
       String delta = extractSseDeltaToken(payload);
       if (delta.length() > 0) {
@@ -398,85 +453,116 @@ static String processSseStream(HTTPClient &http, WiFiClient *stream,
   };
 
   uint32_t tStart = millis();
-  while (millis() - tStart < 20000) {
+  uint8_t sseBuf[256];
+  bool stopLoop = false;
+  while (!stopLoop && millis() - tStart < 20000) {
     if (cancelRequest)
+      break;
+    if (sawDone && millis() - sawDoneAt >= 150)
       break;
     if (!http.connected() && (!stream || !stream->available())) {
       cleanEof = true;
       break;
     }
 
-    if (stream && stream->available()) {
-      char ch = (char)stream->read();
-      tStart = millis();
-      lastProgressAt = tStart;
+    int avail = stream ? stream->available() : 0;
+    if (avail > 0) {
+      int nr = stream->read(sseBuf, avail < (int)sizeof(sseBuf) ? avail
+                                                                : (int)sizeof(sseBuf));
+      if (nr > 0) {
+        tStart = millis();
+        lastProgressAt = tStart;
+      }
+      for (int bi = 0; bi < nr && !stopLoop; bi++) {
+        char ch = (char)sseBuf[bi];
 
-      if (isChunked) {
-        if (chunkLeft == 0) {
-          if (chunkSkipTrailerCrlf) {
+        if (isChunked) {
+          if (chunkLeft == 0) {
+            if (chunkSkipTrailerCrlf) {
+              if (ch == '\r')
+                continue;
+              if (ch == '\n') {
+                chunkSkipTrailerCrlf = false;
+                continue;
+              }
+              chunkSkipTrailerCrlf = false;
+            }
             if (ch == '\r')
               continue;
             if (ch == '\n') {
-              chunkSkipTrailerCrlf = false;
-              continue;
-            }
-            chunkSkipTrailerCrlf = false;
-          }
-          if (ch == '\r')
-            continue;
-          if (ch == '\n') {
-            chunkLenLine.trim();
-            if (chunkLenLine.length() == 0)
-              continue;
-            long sz = strtol(chunkLenLine.c_str(), NULL, 16);
-            chunkLenLine = "";
-            if (sz <= 0) {
-              cleanEof = true;
-              break;
-            }
-            chunkLeft = sz;
-          } else if (chunkLenLine.length() < 16) {
-            chunkLenLine += ch;
-          }
-          continue;
-        }
-        chunkLeft--;
-        if (chunkLeft == 0) {
-          chunkSkipTrailerCrlf = true;
-        }
-      }
-
-      if (ch == '\n') {
-        if (autoDetectPending && !sawFirstLine) {
-          String trimmedFirst = line;
-          trimmedFirst.trim();
-          if (trimmedFirst.length() > 0) {
-            sawFirstLine = true;
-            autoDetectPending = false;
-            if (isHexChunkSizeLine(trimmedFirst)) {
-              isChunked = true;
-              long sz = strtol(trimmedFirst.c_str(), NULL, 16);
-              line = "";
+              chunkLenLine.trim();
+              if (chunkLenLine.length() == 0)
+                continue;
+              long sz = strtol(chunkLenLine.c_str(), NULL, 16);
+              chunkLenLine = "";
               if (sz <= 0) {
                 cleanEof = true;
+                stopLoop = true;
                 break;
               }
               chunkLeft = sz;
-              continue;
+            } else if (chunkLenLine.length() < 16) {
+              chunkLenLine += ch;
             }
+            continue;
+          }
+          chunkLeft--;
+          if (chunkLeft == 0) {
+            chunkSkipTrailerCrlf = true;
           }
         }
-        bool cont = handleSseLine(line);
-        line = "";
-        if (!cont)
-          break;
-        tStart = millis();
-      } else if (ch != '\r') {
-        if (line.length() < 2048)
-          line += ch;
+
+        if (ch == '\n') {
+          if (autoDetectPending && !sawFirstLine) {
+            String trimmedFirst = line;
+            trimmedFirst.trim();
+            if (trimmedFirst.length() > 0) {
+              sawFirstLine = true;
+              autoDetectPending = false;
+              if (isHexChunkSizeLine(trimmedFirst)) {
+                isChunked = true;
+                long sz = strtol(trimmedFirst.c_str(), NULL, 16);
+                line = "";
+                if (sz <= 0) {
+                  cleanEof = true;
+                  stopLoop = true;
+                  break;
+                }
+                chunkLeft = sz;
+                continue;
+              }
+            }
+          }
+          bool cont = handleSseLine(line);
+          line = "";
+          if (!cont) {
+            stopLoop = true;
+            break;
+          }
+          tStart = millis();
+        } else if (ch != '\r') {
+          if (line.length() < 2048)
+            line += ch;
+        }
       }
     } else {
       serviceUi();
+      yield();
+    }
+  }
+
+  // Consume trailing "\r\n" after chunked "0\r\n" so keep-alive buffer is empty
+  if (cleanEof && isChunked && stream) {
+    uint32_t drainEnd = millis() + 20;
+    while (millis() < drainEnd) {
+      int av = stream->available();
+      if (av > 0) {
+        while (av-- > 0)
+          stream->read();
+        break;
+      }
+      if (!http.connected())
+        break;
       yield();
     }
   }
@@ -516,7 +602,7 @@ static String processSseStream(HTTPClient &http, WiFiClient *stream,
 
 // ============================================================
 
-String askGemini(const String &question, SentenceCallback onSentence) {
+String askGemini(const String &question, SentenceCallback onSentence, bool includeHistory) {
 
   String key = llmKey;
 
@@ -534,17 +620,12 @@ String askGemini(const String &question, SentenceCallback onSentence) {
     return "";
   }
 
-  String sys = systemPrompt;
+  String sys = getEffectiveSystemPrompt();
 
-  sys +=
-
-      " LANG: Reply in the same language as user (Hindi/Hinglish/English). "
-
-      "Never switch to English if user speaks Hindi/Hinglish. "
-
-      "2-4 natural sentences, lively, specific. No markdown.";
+  sys += getReplyLangInstruction();
 
   sys += getFormattedMemoryPrompt();
+  sys += getLlmTimeContextPrompt();
   sys += getSmartActionInstruction();
 
   sys += getVoiceExpressionInstruction();
@@ -555,15 +636,22 @@ String askGemini(const String &question, SentenceCallback onSentence) {
 
   body = "{\"contents\":[";
 
-  for (int i = 0; i < chatHistoryCount; i++) {
+  if (includeHistory) {
+    String activePersona = normalizePersonalityMode(personalityMode);
+    for (int i = 0; i < chatHistoryCount; i++) {
+      if (chatHistory[i].persona.length() > 0 &&
+          chatHistory[i].persona != activePersona) {
+        continue;
+      }
 
-    body += "{\"role\":\"user\",\"parts\":[{\"text\":\"" +
+      body += "{\"role\":\"user\",\"parts\":[{\"text\":\"" +
 
-            jsonEscape(chatHistory[i].question) + "\"}]},";
+              jsonEscape(chatHistory[i].question) + "\"}]},";
 
-    body += "{\"role\":\"model\",\"parts\":[{\"text\":\"" +
+      body += "{\"role\":\"model\",\"parts\":[{\"text\":\"" +
 
-            jsonEscape(chatHistory[i].answer) + "\"}]},";
+              jsonEscape(chatHistory[i].answer) + "\"}]},";
+    }
   }
 
   bool isGeminiThinkingModel =
@@ -686,7 +774,7 @@ String askGemini(const String &question, SentenceCallback onSentence) {
   return fullAns;
 }
 
-String askGroq(const String &question, SentenceCallback onSentence) {
+String askGroq(const String &question, SentenceCallback onSentence, bool includeHistory) {
 
   String key = groqKey.length() ? groqKey : llmKey;
 
@@ -708,17 +796,12 @@ String askGroq(const String &question, SentenceCallback onSentence) {
     return "";
   }
 
-  String sys = systemPrompt;
+  String sys = getEffectiveSystemPrompt();
 
-  sys +=
-
-      " LANG: Reply in the same language as user (Hindi/Hinglish/English). "
-
-      "Never switch to English if user speaks Hindi/Hinglish. "
-
-      "2-4 natural sentences, lively, specific. No markdown.";
+  sys += getReplyLangInstruction();
 
   sys += getFormattedMemoryPrompt();
+  sys += getLlmTimeContextPrompt();
   sys += getSmartActionInstruction();
 
   sys += getVoiceExpressionInstruction();
@@ -750,15 +833,22 @@ String askGroq(const String &question, SentenceCallback onSentence) {
 
          jsonEscape(sys) + "\"}";
 
-  for (int i = 0; i < chatHistoryCount; i++) {
+  if (includeHistory) {
+    String activePersona = normalizePersonalityMode(personalityMode);
+    for (int i = 0; i < chatHistoryCount; i++) {
+      if (chatHistory[i].persona.length() > 0 &&
+          chatHistory[i].persona != activePersona) {
+        continue;
+      }
 
-    body += ",{\"role\":\"user\",\"content\":\"" +
+      body += ",{\"role\":\"user\",\"content\":\"" +
 
-            jsonEscape(chatHistory[i].question) + "\"}";
+              jsonEscape(chatHistory[i].question) + "\"}";
 
-    body += ",{\"role\":\"assistant\",\"content\":\"" +
+      body += ",{\"role\":\"assistant\",\"content\":\"" +
 
-            jsonEscape(chatHistory[i].answer) + "\"}";
+              jsonEscape(chatHistory[i].answer) + "\"}";
+    }
   }
 
   body += ",{\"role\":\"user\",\"content\":\"" + jsonEscape(question) +
@@ -872,19 +962,19 @@ String askLLM(const String &question, SentenceCallback onSentence,
 
   if (llmProvider == "groq") {
 
-    Serial.printf("[LLM] Provider = Groq | Memory turns = %d (streaming)\n",
+    Serial.printf("[LLM] Provider = Groq | Memory turns = %d (history=%s, streaming)\n",
 
-                  chatHistoryCount);
+                  chatHistoryCount, saveChatHistory ? "yes" : "no");
 
-    ans = askGroq(question, onSentence);
+    ans = askGroq(question, onSentence, saveChatHistory);
 
   } else {
 
-    Serial.printf("[LLM] Provider = Gemini | Memory turns = %d (streaming)\n",
+    Serial.printf("[LLM] Provider = Gemini | Memory turns = %d (history=%s, streaming)\n",
 
-                  chatHistoryCount);
+                  chatHistoryCount, saveChatHistory ? "yes" : "no");
 
-    ans = askGemini(question, onSentence);
+    ans = askGemini(question, onSentence, saveChatHistory);
   }
 
   restoreWebAndAP(apWasUp);
@@ -895,10 +985,13 @@ String askLLM(const String &question, SentenceCallback onSentence,
     // LLM reply has completed streaming. Therefore, actions (volume, eye skins,
     // timer, etc.) fire after the first sentence (and any streaming sentences)
     // has already been spoken.
+    String personaBeforeActions = personalityMode;
     parseAndExecuteActions(ans);
     parseAndSaveMemoriesFromLlm(ans);
-    if (saveChatHistory) {
-      addChatHistory(question, ans);
+    if (saveChatHistory && personalityMode == personaBeforeActions) {
+      String cleanHistoryAns = stripAudioCues(stripRobotTags(ans));
+      cleanHistoryAns.trim();
+      addChatHistory(question, cleanHistoryAns.length() ? cleanHistoryAns : ans);
     }
   }
 

@@ -104,7 +104,21 @@ static void enterLightSleep(uint64_t wakeUs, const char *reason) {
   esp_sleep_enable_gpio_wakeup();
   esp_sleep_enable_timer_wakeup(wakeUs);
 
+  bool hadLoopWdt = false;
+#if CONFIG_AUTOSTART_ARDUINO
+  extern bool loopTaskWDTEnabled;
+  hadLoopWdt = loopTaskWDTEnabled;
+  if (hadLoopWdt) {
+    disableLoopWDT();
+  }
+#endif
   esp_err_t err = esp_light_sleep_start();
+#if CONFIG_AUTOSTART_ARDUINO
+  if (hadLoopWdt) {
+    enableLoopWDT();
+    feedLoopWDT();
+  }
+#endif
   if (err != ESP_OK) {
     Serial.printf("[POWER] esp_light_sleep_start failed: 0x%x\n", err);
   }

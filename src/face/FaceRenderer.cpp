@@ -450,7 +450,9 @@ static EyeSkin lastEyeSkin = (EyeSkin)-1;
 
 static void drawDizzySpiral(int cx, int cy, int maxR, uint32_t now,
                             bool reverse) {
-  float spin = (float)(now % 600000UL) * (reverse ? -0.014f : 0.014f);
+  float spin = (float)fmod((double)now * 0.014, (double)TWO_PI_F);
+  if (reverse)
+    spin = -spin;
   int prevX = cx, prevY = cy;
   const int STEPS = 36;
   for (int i = 1; i <= STEPS; i++) {

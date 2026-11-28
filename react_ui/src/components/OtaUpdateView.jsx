@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
 import {
-  DownloadCloud, UploadCloud, RefreshCw, FileCode, CheckCircle2, X
+  DownloadCloud, UploadCloud, RefreshCw, FileCode, CheckCircle2, X, RotateCcw
 } from 'lucide-react'
 import { Tooltip } from './Tooltip'
 
 const APP_PARTITION_LIMIT_BYTES = 2031616 // ~1.94 MB (esp32s3 default OTA app partition)
+let cachedCloudRelease = null
 
 function compareVersions(v1, v2) {
   const parse = (v) => String(v || '').replace(/^[vV]/, '').split('.').map((n) => parseInt(n, 10) || 0)
@@ -37,27 +38,38 @@ function formatReleaseNotes(raw) {
     .slice(0, 8)
 }
 
-export default function OtaUpdateView({ status, getBaseUrl, onToast }) {
+export default function OtaUpdateView({ status, getBaseUrl, onToast, onRebootTriggered }) {
   const [file, setFile] = useState(null)
   const [dragOver, setDragOver] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [progress, setProgress] = useState(0)
   const [uploadStatusText, setUploadStatusText] = useState('')
-  const [cloudRelease, setCloudRelease] = useState(null)
+  const [cloudRelease, setCloudRelease] = useState(() => cachedCloudRelease)
   const [checkingCloud, setCheckingCloud] = useState(false)
   const [cloudError, setCloudError] = useState(null)
   const [confirmInstall, setConfirmInstall] = useState(false)
+  const [confirmManual, setConfirmManual] = useState(false)
+  const [confirmRollback, setConfirmRollback] = useState(false)
+  const [rollingBack, setRollingBack] = useState(false)
   const [installingGithub, setInstallingGithub] = useState(false)
   const [otaProgress, setOtaProgress] = useState(null)
   const [otaProgressText, setOtaProgressText] = useState('')
   const fileInputRef = useRef(null)
+  const xhrRef = useRef(null)
   const pollTimerRef = useRef(null)
   const reloadTimerRef = useRef(null)
+  const manualConfirmTimerRef = useRef(null)
+  const rollbackConfirmTimerRef = useRef(null)
 
   const currentVer = (status?.version || '2.0').replace(/^[vV]/, '')
   const displayVersion = `v${currentVer}`
 
-  const checkGithubReleases = useCallback(async () => {
+  const checkGithubReleases = useCallback(async (forceOrEvent = false) => {
+    const force = forceOrEvent === true || (typeof forceOrEvent === 'object' && forceOrEvent !== null)
+    if (!force && cachedCloudRelease) {
+      setCloudRelease(cachedCloudRelease)
+      return
+    }
     setCheckingCloud(true)
     setCloudError(null)
     try {
@@ -73,7 +85,7 @@ export default function OtaUpdateView({ status, getBaseUrl, onToast }) {
       const binAsset = data.assets?.find((a) => a.name?.toLowerCase().endsWith('.bin'))
       const isNewer = compareVersions(cleanVer, currentVer) > 0
 
-      setCloudRelease({
+      const parsedRelease = {
         tag: rawTag,
         version: cleanVer,
         name: data.name || rawTag,
@@ -83,7 +95,9 @@ export default function OtaUpdateView({ status, getBaseUrl, onToast }) {
         noteLines: formatReleaseNotes(data.body),
         updateAvailable: isNewer,
         hasBin: Boolean(binAsset)
-      })
+      }
+      cachedCloudRelease = parsedRelease
+      setCloudRelease(parsedRelease)
     } catch (err) {
       console.warn('Failed to check GitHub releases:', err)
       setCloudError('Unable to check GitHub repository directly.')
@@ -92,13 +106,100 @@ export default function OtaUpdateView({ status, getBaseUrl, onToast }) {
     }
   }, [currentVer])
 
+  const startOtaPoll = useCallback((initialSeen = false) => {
+    if (pollTimerRef.current) clearInterval(pollTimerRef.current)
+    if (reloadTimerRef.current) clearTimeout(reloadTimerRef.current)
+    let sawActive = initialSeen
+    let disconnectCount = 0
+    let idleAfterStartCount = 0
+
+    pollTimerRef.current = setInterval(async () => {
+      try {
+        const sRes = await fetch(`${getBaseUrl()}/ota/status`, {
+          signal: AbortSignal.timeout(2500)
+        })
+        if (sRes.ok) {
+          const sData = await sRes.json()
+          setOtaProgress(sData)
+          if (sData.state === 'starting') {
+            sawActive = true
+            setOtaProgressText('Preparing GitHub OTA download...')
+          } else if (sData.state === 'downloading') {
+            sawActive = true
+            const readKb = ((sData.bytes_read || 0) / 1024).toFixed(0)
+            const totalText = sData.bytes_total > 0
+              ? ` (${readKb} KB / ${(sData.bytes_total / 1024).toFixed(0)} KB)`
+              : ` (${readKb} KB)`
+            setOtaProgressText(`Downloading... ${sData.progress || 0}%${totalText}`)
+          } else if (sData.state === 'flashing') {
+            sawActive = true
+            setOtaProgressText(`Flashing OTA partition... ${sData.progress || 0}%`)
+          } else if (sData.state === 'success') {
+            clearInterval(pollTimerRef.current)
+            pollTimerRef.current = null
+            setOtaProgressText('Update installed! Kiwi is rebooting...')
+            onToast('OTA Update successful! Rebooting...')
+            if (onRebootTriggered) {
+              onRebootTriggered('Wireless OTA installed! Kiwi is rebooting...')
+            } else {
+              reloadTimerRef.current = setTimeout(() => window.location.reload(), 5000)
+            }
+          } else if (sData.state === 'error') {
+            clearInterval(pollTimerRef.current)
+            pollTimerRef.current = null
+            setOtaProgressText(`OTA Error: ${sData.error || 'Download failed'}`)
+            setInstallingGithub(false)
+            onToast(`OTA Error: ${sData.error || 'Failed'}`)
+          } else if (sData.state === 'idle') {
+            if (sawActive || disconnectCount >= 2) {
+              clearInterval(pollTimerRef.current)
+              pollTimerRef.current = null
+              setOtaProgressText('Kiwi rebooted with updated firmware! Reloading...')
+              onToast('OTA update complete! Reloading console...')
+              reloadTimerRef.current = setTimeout(() => window.location.reload(), 1200)
+            } else {
+              idleAfterStartCount += 1
+              if (idleAfterStartCount >= 5) {
+                clearInterval(pollTimerRef.current)
+                pollTimerRef.current = null
+                setOtaProgressText('')
+                setInstallingGithub(false)
+                onToast('OTA session returned idle — check connection and retry.')
+              }
+            }
+          }
+        }
+      } catch {
+        disconnectCount += 1
+        if (sawActive) {
+          setOtaProgressText('Kiwi is rebooting... Waiting for reconnect...')
+        }
+      }
+    }, 800)
+  }, [getBaseUrl, onToast, onRebootTriggered])
+
   useEffect(() => {
     checkGithubReleases()
+    let cancelled = false
+    fetch(`${getBaseUrl()}/ota/status`, { signal: AbortSignal.timeout(2000) })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((sData) => {
+        if (!cancelled && sData?.running) {
+          setInstallingGithub(true)
+          setOtaProgress(sData)
+          setOtaProgressText(`Resuming OTA status (${sData.progress || 0}%)...`)
+          startOtaPoll(true)
+        }
+      })
+      .catch(() => {})
     return () => {
+      cancelled = true
       if (pollTimerRef.current) clearInterval(pollTimerRef.current)
       if (reloadTimerRef.current) clearTimeout(reloadTimerRef.current)
+      if (manualConfirmTimerRef.current) clearTimeout(manualConfirmTimerRef.current)
+      if (rollbackConfirmTimerRef.current) clearTimeout(rollbackConfirmTimerRef.current)
     }
-  }, [checkGithubReleases])
+  }, [checkGithubReleases, getBaseUrl, startOtaPoll])
 
   const selectFirmwareFile = (selected) => {
     if (!selected) return
@@ -106,6 +207,7 @@ export default function OtaUpdateView({ status, getBaseUrl, onToast }) {
       onToast('Please select a compiled firmware .bin file!')
       return
     }
+    setConfirmManual(false)
     setFile(selected)
     onToast(`Selected: ${selected.name} (${(selected.size / 1024 / 1024).toFixed(2)} MB)`)
   }
@@ -126,24 +228,46 @@ export default function OtaUpdateView({ status, getBaseUrl, onToast }) {
 
   const handleClearFile = (e) => {
     e.stopPropagation()
+    setConfirmManual(false)
     setFile(null)
     if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
+  const handleAbortUpload = () => {
+    if (xhrRef.current) {
+      xhrRef.current.abort()
+    }
+  }
+
   const handleUploadFirmware = (e) => {
     e.preventDefault()
-    if (!file) return
+    if (!file || uploading) return
 
     if (file.size > APP_PARTITION_LIMIT_BYTES) {
       onToast('Error: Firmware exceeds 1.94 MB app partition limit!')
       return
     }
 
+    if (status?.busy || installingGithub || otaProgress?.running) {
+      onToast('Kiwi is busy right now — wait or cancel active operation first.')
+      return
+    }
+
+    if (!confirmManual) {
+      setConfirmManual(true)
+      if (manualConfirmTimerRef.current) clearTimeout(manualConfirmTimerRef.current)
+      manualConfirmTimerRef.current = setTimeout(() => setConfirmManual(false), 5000)
+      return
+    }
+
+    if (manualConfirmTimerRef.current) clearTimeout(manualConfirmTimerRef.current)
+    setConfirmManual(false)
     setUploading(true)
     setProgress(0)
     setUploadStatusText('Uploading firmware binary to ESP32-S3...')
 
     const xhr = new XMLHttpRequest()
+    xhrRef.current = xhr
     const url = `${getBaseUrl()}/update`
 
     xhr.upload.addEventListener('progress', (event) => {
@@ -155,13 +279,18 @@ export default function OtaUpdateView({ status, getBaseUrl, onToast }) {
     })
 
     xhr.addEventListener('load', () => {
+      xhrRef.current = null
       if (xhr.status === 200) {
         setProgress(100)
         setUploadStatusText('Firmware flash successful! Kiwi is restarting...')
         onToast('Firmware update complete! Rebooting...')
-        setTimeout(() => {
-          window.location.reload()
-        }, 5000)
+        if (onRebootTriggered) {
+          onRebootTriggered('Firmware flashed! Kiwi is restarting...')
+        } else {
+          setTimeout(() => {
+            window.location.reload()
+          }, 5000)
+        }
       } else {
         setUploadStatusText(`Flash failed: ${xhr.responseText || 'Error ' + xhr.status}`)
         onToast('Firmware flash failed!')
@@ -170,15 +299,60 @@ export default function OtaUpdateView({ status, getBaseUrl, onToast }) {
     })
 
     xhr.addEventListener('error', () => {
+      xhrRef.current = null
       setUploadStatusText('Network error during firmware flash.')
       onToast('Upload network error')
       setUploading(false)
+    })
+
+    xhr.addEventListener('abort', () => {
+      xhrRef.current = null
+      setUploadStatusText('Upload cancelled.')
+      setProgress(0)
+      setUploading(false)
+      onToast('Manual firmware upload cancelled')
     })
 
     const formData = new FormData()
     formData.append('update', file)
     xhr.open('POST', url)
     xhr.send(formData)
+  }
+
+  const handleRollback = async () => {
+    if (rollingBack || uploading || installingGithub) return
+    if (!status?.flash?.canRollback) {
+      onToast('No valid fallback partition slot available.')
+      return
+    }
+    if (!confirmRollback) {
+      setConfirmRollback(true)
+      if (rollbackConfirmTimerRef.current) clearTimeout(rollbackConfirmTimerRef.current)
+      rollbackConfirmTimerRef.current = setTimeout(() => setConfirmRollback(false), 5000)
+      return
+    }
+    if (rollbackConfirmTimerRef.current) clearTimeout(rollbackConfirmTimerRef.current)
+    setConfirmRollback(false)
+    setRollingBack(true)
+    try {
+      const res = await fetch(`${getBaseUrl()}/ota/rollback`, {
+        method: 'POST',
+        signal: AbortSignal.timeout(4000)
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || data.ok === false) {
+        onToast(data.error || 'Rollback failed')
+        setRollingBack(false)
+        return
+      }
+      onToast('Rolling back to previous firmware slot...')
+      if (onRebootTriggered) {
+        onRebootTriggered('Rolling back firmware... Kiwi is rebooting...')
+      }
+    } catch (err) {
+      onToast(`Rollback error: ${err.message}`)
+      setRollingBack(false)
+    }
   }
 
   const handleGithubInstall = async () => {
@@ -218,71 +392,7 @@ export default function OtaUpdateView({ status, getBaseUrl, onToast }) {
       }
 
       onToast('OTA started! Streaming firmware from GitHub...')
-      if (pollTimerRef.current) clearInterval(pollTimerRef.current)
-      if (reloadTimerRef.current) clearTimeout(reloadTimerRef.current)
-      let sawActive = false
-      let disconnectCount = 0
-      let idleAfterStartCount = 0
-
-      pollTimerRef.current = setInterval(async () => {
-        try {
-          const sRes = await fetch(`${getBaseUrl()}/ota/status`, {
-            signal: AbortSignal.timeout(2500)
-          })
-          if (sRes.ok) {
-            const sData = await sRes.json()
-            setOtaProgress(sData)
-            if (sData.state === 'starting') {
-              sawActive = true
-              setOtaProgressText('Preparing GitHub OTA download...')
-            } else if (sData.state === 'downloading') {
-              sawActive = true
-              const readKb = ((sData.bytes_read || 0) / 1024).toFixed(0)
-              const totalText = sData.bytes_total > 0
-                ? ` (${readKb} KB / ${(sData.bytes_total / 1024).toFixed(0)} KB)`
-                : ` (${readKb} KB)`
-              setOtaProgressText(`Downloading... ${sData.progress || 0}%${totalText}`)
-            } else if (sData.state === 'flashing') {
-              sawActive = true
-              setOtaProgressText(`Flashing OTA partition... ${sData.progress || 0}%`)
-            } else if (sData.state === 'success') {
-              clearInterval(pollTimerRef.current)
-              pollTimerRef.current = null
-              setOtaProgressText('Update installed! Kiwi is rebooting...')
-              onToast('OTA Update successful! Rebooting...')
-              reloadTimerRef.current = setTimeout(() => window.location.reload(), 5000)
-            } else if (sData.state === 'error') {
-              clearInterval(pollTimerRef.current)
-              pollTimerRef.current = null
-              setOtaProgressText(`OTA Error: ${sData.error || 'Download failed'}`)
-              setInstallingGithub(false)
-              onToast(`OTA Error: ${sData.error || 'Failed'}`)
-            } else if (sData.state === 'idle') {
-              if (sawActive || disconnectCount >= 2) {
-                clearInterval(pollTimerRef.current)
-                pollTimerRef.current = null
-                setOtaProgressText('Kiwi rebooted with updated firmware! Reloading...')
-                onToast('OTA update complete! Reloading console...')
-                reloadTimerRef.current = setTimeout(() => window.location.reload(), 1200)
-              } else {
-                idleAfterStartCount += 1
-                if (idleAfterStartCount >= 5) {
-                  clearInterval(pollTimerRef.current)
-                  pollTimerRef.current = null
-                  setOtaProgressText('')
-                  setInstallingGithub(false)
-                  onToast('OTA session returned idle — check connection and retry.')
-                }
-              }
-            }
-          }
-        } catch {
-          disconnectCount += 1
-          if (sawActive) {
-            setOtaProgressText('Kiwi is rebooting... Waiting for reconnect...')
-          }
-        }
-      }, 800)
+      startOtaPoll(false)
     } catch (e) {
       onToast(`OTA install error: ${e.message}`)
       setInstallingGithub(false)
@@ -299,8 +409,9 @@ export default function OtaUpdateView({ status, getBaseUrl, onToast }) {
   const fileOverLimit = file ? file.size > APP_PARTITION_LIMIT_BYTES : false
   const partitionPct = file ? Math.min(100, Math.round((file.size / APP_PARTITION_LIMIT_BYTES) * 100)) : 0
 
+  const activeSlot = status?.flash?.slot || null
   const summaryStats = [
-    { label: 'INSTALLED', value: displayVersion, color: 'var(--text-dark)' },
+    { label: 'INSTALLED', value: activeSlot ? `${displayVersion} · ${activeSlot}` : displayVersion, color: 'var(--text-dark)' },
     {
       label: 'CLOUD LATEST',
       value: checkingCloud ? '...' : (cloudRelease?.tag || '—'),
@@ -391,6 +502,102 @@ export default function OtaUpdateView({ status, getBaseUrl, onToast }) {
           </div>
         ))}
       </div>
+
+      {/* Slot & Boot Safety Bar */}
+      {(status?.flash?.canRollback || status?.system?.resetReason || status?.system?.coredump) && (
+        <div
+          className="flux-white-card"
+          style={{
+            padding: '10px 14px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '10px',
+            flexWrap: 'wrap'
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', fontSize: '11.5px', color: 'var(--text-muted)' }}>
+            {activeSlot && (
+              <span>
+                Active slot: <strong style={{ color: 'var(--text-dark)' }}>{activeSlot}</strong>
+              </span>
+            )}
+            {status?.system?.resetReason && (
+              <span>
+                Last boot: <strong style={{ color: 'var(--text-dark)' }}>{status.system.resetReason}</strong>
+              </span>
+            )}
+            {status?.system?.coredump && (
+              <span
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '2px 8px',
+                  borderRadius: '999px',
+                  background: 'rgba(245, 158, 11, 0.14)',
+                  border: '1px solid rgba(245, 158, 11, 0.35)',
+                  color: '#F59E0B',
+                  fontSize: '10.5px',
+                  fontWeight: 700
+                }}
+                title={status.system.coredumpReason || 'Crash dump recorded in flash'}
+              >
+                <span>
+                  Crash dump{status.system.coredumpTask ? ` (${status.system.coredumpTask})` : ''}
+                </span>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    try {
+                      const res = await fetch(`${getBaseUrl()}/do?clearcoredump=1`, { method: 'POST' })
+                      if (res.ok) onToast('Crash dump cleared from flash')
+                    } catch {
+                      onToast('Failed to clear crash dump')
+                    }
+                  }}
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    color: 'inherit',
+                    fontWeight: 800,
+                    fontSize: '10px',
+                    cursor: 'pointer',
+                    padding: 0,
+                    textDecoration: 'underline'
+                  }}
+                >
+                  Clear
+                </button>
+              </span>
+            )}
+          </div>
+          {status?.flash?.canRollback && (
+            <button
+              type="button"
+              onClick={handleRollback}
+              disabled={rollingBack || uploading || installingGithub}
+              className="flux-btn"
+              style={{
+                padding: '6px 12px',
+                fontSize: '11.5px',
+                borderRadius: '999px',
+                background: confirmRollback ? '#D97706' : 'var(--card-muted)',
+                color: confirmRollback ? '#FFFFFF' : 'var(--text-dark)',
+                border: confirmRollback ? '1px solid #F59E0B' : '1px solid var(--border-light)',
+                boxShadow: 'none'
+              }}
+            >
+              <RotateCcw size={12} />
+              <span>
+                {rollingBack
+                  ? 'Rolling Back...'
+                  : (confirmRollback ? 'Tap Again to Rollback' : 'Rollback Previous Slot')}
+              </span>
+            </button>
+          )}
+        </div>
+      )}
 
       <div className="flux-grid-2">
         {/* Manual .bin Upload Card */}
@@ -512,20 +719,46 @@ export default function OtaUpdateView({ status, getBaseUrl, onToast }) {
             </div>
           )}
 
-          <button
-            type="button"
-            onClick={handleUploadFirmware}
-            disabled={!file || uploading || fileOverLimit}
-            className="flux-btn"
-            style={{
-              padding: '11px 16px',
-              justifyContent: 'center',
-              boxShadow: (!file || uploading || fileOverLimit) ? 'none' : undefined
-            }}
-          >
-            <UploadCloud size={15} />
-            <span>{uploading ? `Flashing ${progress}%...` : 'Flash Firmware to Kiwi'}</span>
-          </button>
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+            <button
+              type="button"
+              onClick={handleUploadFirmware}
+              disabled={!file || uploading || fileOverLimit}
+              className="flux-btn"
+              style={{
+                flex: 1,
+                padding: '11px 16px',
+                justifyContent: 'center',
+                background: confirmManual ? '#D97706' : undefined,
+                color: confirmManual ? '#FFFFFF' : undefined,
+                boxShadow: (!file || uploading || fileOverLimit) ? 'none' : undefined
+              }}
+            >
+              <UploadCloud size={15} />
+              <span>
+                {uploading
+                  ? `Flashing ${progress}%...`
+                  : (confirmManual ? 'Tap Again to Flash .bin' : 'Flash Firmware to Kiwi')}
+              </span>
+            </button>
+            {uploading && (
+              <button
+                type="button"
+                onClick={handleAbortUpload}
+                className="flux-btn"
+                style={{
+                  padding: '11px 14px',
+                  background: 'rgba(239, 68, 68, 0.12)',
+                  color: '#EF4444',
+                  border: '1px solid rgba(239, 68, 68, 0.3)',
+                  boxShadow: 'none'
+                }}
+              >
+                <X size={14} />
+                <span>Cancel</span>
+              </button>
+            )}
+          </div>
         </div>
 
         {/* GitHub Wireless Update Card */}

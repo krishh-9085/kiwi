@@ -328,9 +328,9 @@ class DevPortalHandler(BaseHTTPRequestHandler):
                 },
                 "wakeWord": {
                     "enabled": cfg_curr.get("wakeWordEnabled", True),
-                    "model": 0,
-                    "name": "Alexa",
-                    "cutoff": 0.90,
+                    "model": int(cfg_curr.get("wakeWordModel", 1)),
+                    "name": ("Alexa" if int(cfg_curr.get("wakeWordModel", 1)) == 0 else "Hey Kiwi"),
+                    "cutoff": float(cfg_curr.get("wakeWordCutoff", 0.90 if int(cfg_curr.get("wakeWordModel", 1)) == 0 else 0.92)),
                     "listening": True
                 },
                 "timer_active": False,
@@ -496,7 +496,9 @@ class DevPortalHandler(BaseHTTPRequestHandler):
                 elif k == "ww_en":
                     cfg["wakeWordEnabled"] = (val == "1" or val == "true" or val == "on"); cfg_changed = True
                 elif k == "ww_model":
-                    cfg["wakeWordModel"] = 0
+                    m_idx = 0 if str(val).strip().lower() in ("0", "alexa") else 1
+                    cfg["wakeWordModel"] = m_idx
+                    cfg["wakeWordCutoff"] = 0.90 if m_idx == 0 else 0.92
                     cfg_changed = True
                 elif k == "circ_start":
                     cfg["circadianSleepStart"] = int(val); cfg_changed = True
